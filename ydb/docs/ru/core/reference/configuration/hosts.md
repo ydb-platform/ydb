@@ -47,16 +47,14 @@ hosts:
 
 ### Особенности режима bridge {#hosts-bridge}
 
-В [режиме bridge](../../concepts/bridge.md) каждый хост должен быть привязан к одному из pile, объявленных в `bridge_config`. Для этого в разделе `location` укажите поле `bridge_pile_name` с именем pile.
+В [режиме bridge](../../concepts/bridge.md) каждый хост должен быть привязан к одному из pile, объявленных в [`bridge_config`](bridge_config.md). Для этого в разделе `location` укажите поле `bridge_pile_name` с именем pile. Пример:
 
 ```yaml
 hosts:
 - host: hostname1
   host_config_id: 1
   location:
-    unit: '1'
-    data_center: 'zone-a'
-    rack: '1'
+    ...
     bridge_pile_name: 'pile_1'
 ```
 

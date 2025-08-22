@@ -7,7 +7,7 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster bridge failover [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge failover [options...]
 ```
 
 * `global options` — [глобальные параметры](../global-options.md) CLI.
@@ -16,7 +16,7 @@ ydb [global options...] admin cluster bridge failover [options...]
 Просмотр справки по команде:
 
 ```bash
-ydb admin cluster bridge failover --help
+{{ ydb-cli }} admin cluster bridge failover --help
 ```
 
 ## Параметры подкоманды {#options}
@@ -38,13 +38,13 @@ ydb admin cluster bridge failover --help
 Выполнение аварийного отключения для недоступного pile под названием `pile-a`:
 
 ```bash
-ydb admin cluster bridge failover --pile pile-a
+{{ ydb-cli }} admin cluster bridge failover --pile pile-a
 ```
 
 Выполнение аварийного отключения для недоступного `PRIMARY` pile и назначение новым `PRIMARY` синхронизированного pile:
 
 ```bash
-ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
+{{ ydb-cli }} admin cluster bridge failover --pile pile-a --new-primary pile-b
 ```
 
 ### Проверка результата {#verify}
@@ -52,7 +52,7 @@ ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
 С помощью команды [list](list.md) проверьте, что недоступный pile переведён в состояние `DISCONNECTED` и (если был указан `--new-primary`) выбран новый `PRIMARY` pile :
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: DISCONNECTED
 pile-b: PRIMARY

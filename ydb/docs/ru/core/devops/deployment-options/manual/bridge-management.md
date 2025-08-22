@@ -1,13 +1,13 @@
-## Управление кластером bridge
+## Управление кластером в режиме bridge
 
-Ниже приведены типовые операции для кластера в режиме bridge и соответствующие команды {{ ydb-short-name }} CLI. Подробности смотрите в концепции [{#T}](../../../concepts/bridge.md) и в справке по командам bridge [{#T}](../../../reference/ydb-cli/commands/bridge/index.md).
+Ниже приведены типовые операции для кластера в [режиме bridge](../../../concepts/bridge.md) с использованием [соответствующих команд {{ ydb-short-name }} CLI](../../../reference/ydb-cli/commands/bridge/index.md).
 
 ### Посмотреть текущее состояние {#list}
 
-Показывает текущее состояние каждого pile.
+Показывает текущее состояние каждого pile, настроенного на кластере {{ ydb-short-name }}.
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 ```
 
 Пример вывода:
@@ -17,38 +17,68 @@ pile-a: PRIMARY
 pile-b: SYNCHRONIZED
 ```
 
-### Плановая смена PRIMARY (switchover) {#switchover}
+### Плановая смена `PRIMARY` (switchover) {#switchover}
 
-Используйте для планового переключения роли PRIMARY на другой pile, когда он находится в состоянии `SYNCHRONIZED`. Переключение выполняется плавно: роли проходят через `DEMOTED/PROMOTED` и завершаются как `SYNCHRONIZED/PRIMARY`.
+Если известно, что в обозримом будущем запланированы плановые работы в датацентре или на оборудовании, на котором работает текущий `PRIMARY` pile, то рекомендуется заранее переключить кластер на использование другого pile в роли `PRIMARY`. Выберите другой pile в состоянии `SYNCHRONIZED`, чтобы переключить его в состояние `PRIMARY` следующей командой:
 
 ```bash
-ydb admin cluster bridge switchover --new-primary <pile>
+{{ ydb-cli }} admin cluster bridge switchover --new-primary <pile>
 ```
+
+Переключение выполняется плавно: роли проходят через `PRIMARY/PROMOTED` и завершаются в состоянии `SYNCHRONIZED/PRIMARY`.
 
 ### Плановое отключение pile (takedown) {#takedown}
 
-Используйте для вывода pile на обслуживание. Если отключается текущий `PRIMARY`, укажите новый `PRIMARY`, который должен быть в состоянии `SYNCHRONIZED`. При выполнении операции pile переводится в `SUSPENDED`, затем — в `DISCONNECTED`; дальнейшие операции выполняются без участия отключённого pile.
+Если плановые работы приведут к недоступности одного из pile, его необходимо вывести из кластера перед их началом с помощью следующей команды:
 
 ```bash
-ydb admin cluster bridge takedown --pile <pile>
+{{ ydb-cli }} admin cluster bridge takedown --pile <pile>
 # если отключаете текущий PRIMARY:
-ydb admin cluster bridge takedown --pile <current-primary> --new-primary <synchronized-pile>
+{{ ydb-cli }} admin cluster bridge takedown --pile <current-primary> --new-primary <synchronized-pile>
 ```
+
+При выполнении операции pile переводится в `SUSPENDED`, затем — в `DISCONNECTED`; дальнейшие операции с кластером выполняются без участия отключённого pile.
+
+Если отключается текущий `PRIMARY` и не было возможности [сменить его заранее](#switchover), то эти операции можно совместить, указав новый `PRIMARY` в аргументе `--new-primary`, который должен быть в состоянии `SYNCHRONIZED`. 
+
+```bash
+{{ ydb-cli }} admin cluster bridge takedown --pile <pile>
+# если отключаете текущий PRIMARY:
+{{ ydb-cli }} admin cluster bridge takedown --pile <current-primary> --new-primary <synchronized-pile>
+```
+
+{% note warning %}
+
+Перед началом плановых работ обязательно убедитесь через команду [list](#list), что операция вывода pile из кластера завершилась успешно и все pile находятся в ожидаемом состоянии.
+
+{% endnote %}
 
 ### Аварийное отключение недоступного pile (failover) {#failover}
 
-Используйте, когда pile недоступен и требуется продолжить работу кластера. Если недоступен текущий `PRIMARY`, укажите параметр `--new-primary` и выберите pile в состоянии `SYNCHRONIZED`. Недоступный pile будет переведён в `DISCONNECTED`, а при указании нового `PRIMARY` роль переключится.
+Так как между pile работает синхронная репликация, то при неожиданном выходе одного из них из строя работа кластера по умолчанию останавливается, и необходимо принять решение, продолжать ли работу кластера без этого pile. Это решение может принимать как человек (например, дежурный DevOps-инженер), так и внешняя по отношению к кластеру {{ ydb-short-name }} автоматизация.
+
+В случае положительного решения о продолжении работы кластера необходимо выполнить следующую команду:
 
 ```bash
-ydb admin cluster bridge failover --pile <unavailable-pile>
-# если недоступен текущий PRIMARY:
-ydb admin cluster bridge failover --pile <unavailable-primary> --new-primary <synchronized-pile>
+{{ ydb-cli }} admin cluster bridge failover --pile <unavailable-pile>
 ```
+
+Если недоступен текущий `PRIMARY`, необходимо добавить параметр `--new-primary` с указанием имени pile в состоянии `SYNCHRONIZED`:
+
+```bash
+{{ ydb-cli }} admin cluster bridge failover --pile <unavailable-pile>
+# если недоступен текущий PRIMARY:
+{{ ydb-cli }} admin cluster bridge failover --pile <unavailable-primary> --new-primary <synchronized-pile>
+```
+
+Недоступный pile будет переведён в состояние `DISCONNECTED`, а при указании нового `PRIMARY` произойдёт переключение этой роли.
 
 ### Вернуть pile в кластер (rejoin) {#rejoin}
 
-Возвращает ранее отключённый pile после обслуживания или восстановления. Сразу после запуска операции pile переходит в `NOT_SYNCHRONIZED`, запускается синхронизация данных; по завершении pile автоматически становится `SYNCHRONIZED`.
+После завершения плановых работ или устранения причин отказа ранее отключённые pile необходимо явным образом вводить обратно в эксплуатацию следующей командой:
 
 ```bash
-ydb admin cluster bridge rejoin --pile <pile>
+{{ ydb-cli }} admin cluster bridge rejoin --pile <pile>
 ```
+
+Сразу после запуска операции pile переходит в состояние `NOT_SYNCHRONIZED` и запускается фоновый процесс синхронизации данных; по её завершении pile автоматически становится `SYNCHRONIZED`. Дождавшись этого состояния, при необходимости можно [переключить роль `PRIMARY` на данный pile](#switchover).  

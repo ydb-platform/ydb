@@ -7,7 +7,7 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster bridge rejoin [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge rejoin [options...]
 ```
 
 * `global options` — глобальные параметры.
@@ -16,7 +16,7 @@ ydb [global options...] admin cluster bridge rejoin [options...]
 Просмотр справки по команде:
 
 ```bash
-ydb admin cluster bridge rejoin --help
+{{ ydb-cli }} admin cluster bridge rejoin --help
 ```
 
 ## Параметры подкоманды {#options}
@@ -35,7 +35,7 @@ ydb admin cluster bridge rejoin --help
 Возврат pile `pile-a` из состояния `DISCONNECTED`:
 
 ```bash
-ydb admin cluster bridge rejoin --pile pile-a
+{{ ydb-cli }} admin cluster bridge rejoin --pile pile-a
 ```
 
 ## Проверка результата {#verify}
@@ -43,7 +43,7 @@ ydb admin cluster bridge rejoin --pile pile-a
 Сразу после выполнения команды ожидается переход pile в состояние `NOT_SYNCHRONIZED`. Проверьте результат с помощью команды [list](list.md):
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: NOT_SYNCHRONIZED
 pile-b: PRIMARY
@@ -52,7 +52,7 @@ pile-b: PRIMARY
 После завершения синхронизации pile переходит в состояние `SYNCHRONIZED`:
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: SYNCHRONIZED
 pile-b: PRIMARY

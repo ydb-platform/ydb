@@ -7,7 +7,7 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster bridge takedown [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge takedown [options...]
 ```
 
 * `global options` — глобальные параметры.
@@ -16,7 +16,7 @@ ydb [global options...] admin cluster bridge takedown [options...]
 Просмотр справки по команде:
 
 ```bash
-ydb admin cluster bridge takedown --help
+{{ ydb-cli }} admin cluster bridge takedown --help
 ```
 
 ## Параметры подкоманды {#options}
@@ -36,13 +36,13 @@ ydb admin cluster bridge takedown --help
 Вывод `SYNCHRONIZED` pile `pile-b` из кластера:
 
 ```bash
-ydb admin cluster bridge takedown --pile pile-b
+{{ ydb-cli }} admin cluster bridge takedown --pile pile-b
 ```
 
 Вывод `PRIMARY` pile `pile-a` из кластера с переключением pile `pile-b` из состояния `SYNCHRONIZED` в состояние `PRIMARY`:
 
 ```bash
-ydb admin cluster bridge takedown --pile pile-a --new-primary pile-b
+{{ ydb-cli }} admin cluster bridge takedown --pile pile-a --new-primary pile-b
 ```
 
 ## Проверка результата {#verify}
@@ -50,7 +50,7 @@ ydb admin cluster bridge takedown --pile pile-a --new-primary pile-b
 Проверьте итоговые состояния pile с помощью команды [list](list.md):
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: PRIMARY
 pile-b: DISCONNECTED
@@ -59,7 +59,7 @@ pile-b: DISCONNECTED
 Если отключался текущий `PRIMARY` с указанием `--new-primary`, убедитесь, что выбранный pile стал `PRIMARY`:
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: DISCONNECTED
 pile-b: PRIMARY

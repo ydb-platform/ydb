@@ -5,7 +5,7 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster bridge list [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge list [options...]
 ```
 
 * `global options` — [глобальные параметры](../global-options.md) CLI.
@@ -14,7 +14,7 @@ ydb [global options...] admin cluster bridge list [options...]
 Просмотр справки по команде:
 
 ```bash
-ydb admin cluster bridge list --help
+{{ ydb-cli }} admin cluster bridge list --help
 ```
 
 ## Параметры подкоманды {#options}
@@ -29,7 +29,7 @@ ydb admin cluster bridge list --help
 Вывести список pile в человекочитаемом формате:
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: PRIMARY
 pile-b: SYNCHRONIZED
@@ -39,7 +39,7 @@ pile-b: SYNCHRONIZED
 Вывести состояние в формате JSON:
 
 ```bash
-ydb admin cluster bridge list --format json
+{{ ydb-cli }} admin cluster bridge list --format json
 
 {
   "pile-a": "PRIMARY",
@@ -50,7 +50,7 @@ ydb admin cluster bridge list --format json
 Вывести состояние в формате CSV:
 
 ```bash
-ydb admin cluster bridge list --format csv
+{{ ydb-cli }} admin cluster bridge list --format csv
 
 pile,state
 pile-a,PRIMARY

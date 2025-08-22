@@ -7,7 +7,7 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster bridge switchover [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge switchover [options...]
 ```
 
 * `global options` — [глобальные параметры](../global-options.md) CLI.
@@ -16,7 +16,7 @@ ydb [global options...] admin cluster bridge switchover [options...]
 Просмотр справки по команде:
 
 ```bash
-ydb admin cluster bridge switchover --help
+{{ ydb-cli }} admin cluster bridge switchover --help
 ```
 
 ## Параметры подкоманды {#options}
@@ -35,7 +35,7 @@ ydb admin cluster bridge switchover --help
 Переключение pile `pile-b` из состояния `SYNCHRONIZED` в состояние `PRIMARY` через промежуточное состояние `PROMOTED`:
 
 ```bash
-ydb admin cluster bridge switchover --new-primary pile-b
+{{ ydb-cli }} admin cluster bridge switchover --new-primary pile-b
 ```
 
 ## Проверка результата {#verify}
@@ -43,7 +43,7 @@ ydb admin cluster bridge switchover --new-primary pile-b
 Убедитесь, что спустя некоторое время (через несколько минут) состояния pile изменились корректно, с помощью команды [list](list.md):
 
 ```bash
-ydb admin cluster bridge list
+{{ ydb-cli }} admin cluster bridge list
 
 pile-a: SYNCHRONIZED
 pile-b: PRIMARY

@@ -462,7 +462,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 - С использованием systemd
 
-  Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service). 
+  Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
 
   ```ini
   [Unit]
@@ -504,7 +504,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
   {% note info %}
 
-  При использовании режима bridge добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
+  При использовании [режима bridge](../../../concepts/bridge.md) добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
 
   {% endnote %}
   

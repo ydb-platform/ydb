@@ -315,7 +315,7 @@ TOperationId::EKind ParseKind(const std::string_view value) {
         return TOperationId::INCREMENTAL_BACKUP;
     }
 
-    if (value.starts_with("bcrestore")) {
+    if (value.starts_with("restore")) {
         return TOperationId::BACKUP_COLLECTION_RESTORE;
     }
 

@@ -73,7 +73,7 @@ pile-b: SYNCHRONIZED
 {{ ydb-cli }} admin cluster bridge failover --pile <unavailable-primary> --new-primary <synchronized-pile>
 ```
 
-Недоступный pile будет переведён в состояние `DISCONNECTED`, а при указании нового `PRIMARY` произойдёт переключение этой роли.
+Недоступный pile будет переведён в состояние `DISCONNECTED`, а при указании нового `PRIMARY` произойдёт переключение этой роли. Если остальные pile находятся в состояниях, отличных от `SYNCHRONIZED`, аварийное отключение также может быть выполнено. Допустимые переходы зависят от текущей пары состояний и приведены на [диаграмме состояний](../../../concepts/bridge.md#pile-states) и в [таблице переходов](../../../concepts/bridge.md#transitions-between-states).
 
 ### Вернуть pile в кластер (rejoin) {#rejoin}
 

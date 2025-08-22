@@ -2582,6 +2582,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             .SetUseRealThreads(false)
             // Blocked volatile transactions block reads, disable
             .SetEnableDataShardVolatileTransactions(false)
+            .SetEnableDataShardWriteAlwaysVolatile(false)
             .SetAppConfig(app);
 
         const ui64 shardCount = 1;

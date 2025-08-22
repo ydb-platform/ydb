@@ -15,6 +15,7 @@
 #include <util/generic/deque.h>
 
 #include <queue>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -35,6 +36,7 @@ private:
         virtual void DoCall(IBlockDevice &BlockDevice) = 0;
         virtual ~TBlockDeviceAction() = default;
     };
+
     class TBlockDeviceWrite : public TBlockDeviceAction {
     public:
         class TReleaseWriteAction {
@@ -89,7 +91,7 @@ protected:
     std::shared_ptr<TPDiskCtx> PCtx;
 
     bool WithDelayedFlush;
-    std::queue <THolder<TBlockDeviceAction>> BlockDeviceActions;
+    std::queue<THolder<TBlockDeviceAction>> BlockDeviceActions;
     
     void WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
             TCompletionAction *flushAction, ui32 chunkIdx);

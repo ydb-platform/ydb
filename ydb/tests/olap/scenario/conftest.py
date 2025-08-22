@@ -114,8 +114,19 @@ class BaseTestSet:
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
-            extra_feature_flags=["enable_column_store"],
-            column_shard_config={"disabled_on_scheme_shard": False}
+            erasure=Erasure.MIRROR_3_DC,
+            extra_feature_flags={
+                "enable_column_store": True,
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True,
+                "disable_column_shard_bulk_upsert_require_all_columns": True,
+            },
+            column_shard_config={
+                "generate_internal_path_id": True
+            },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            )
         )
 
 

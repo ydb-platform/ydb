@@ -26,6 +26,7 @@ public:
     void LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase);
     void LogOnReceived();
     void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
+    static const NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass MONITORING_LOG_CLASS = NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin;
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
@@ -34,8 +35,6 @@ private:
     TAuditParts Parts;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    TString Subject;
-    TString SanitizedToken;
 };
 
 }

@@ -102,13 +102,16 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
 }
 
 IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket) {
+    auto *ev = new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+            database,
+            ticket ? TMaybe<TString>(ticket) : Nothing(),
+            owner
+        );
+    ev->SetAuditMode(NMonitoring::NAudit::TAuditCtx::MONITORING_LOG_CLASS);
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
-            database,
-            ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner),
+        ev,
         IEventHandle::FlagTrackDelivery
     );
 }

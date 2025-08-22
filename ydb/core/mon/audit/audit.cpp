@@ -122,29 +122,28 @@ void TAuditCtx::AddAuditLogParts(const NKikimr::NGRpcService::TEvRequestAuthAndC
         return;
     }
 
-    for (const auto& [key, value] : result->AuditLogParts) {
-        AddAuditLogPart(key, value);
+    static const THashSet<TString> DATABASE_CLOUD_PARTS = {"cloud_id", "folder_id", "resource_id", "sanitized_token", "subject"};
+
+    for (const auto& [key, value] : result->Context->GetAuditLogParts()) {
+        if (DATABASE_CLOUD_PARTS.contains(key)) {
+            AddAuditLogPart(key, value);
+        }
     }
 
     if (result->UserToken) {
         const auto& userToken = result->UserToken;
         SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
     }
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
-    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
+    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(MONITORING_LOG_CLASS, logPhase, SubjectType);
 
     if (!Auditable || !auditEnabled) {
         return;
     }
 
     AUDIT_LOG(
-        AUDIT_PART("subject", (Subject ? Subject : EMPTY_VALUE));
-        AUDIT_PART("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
-
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }

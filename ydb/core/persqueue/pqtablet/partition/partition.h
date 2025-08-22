@@ -503,7 +503,8 @@ private:
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
-    void SetupPerPartitionCounters(const TActorContext& ctx);
+    ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
+    void SetupPerPartitionCounters();
     void ResetPerPartitionCounters();
 
 public:
@@ -918,10 +919,12 @@ private:
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
 
     // Per partition counters
-    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWrite;
-    NMonitoring::TDynamicCounters::TCounterPtr SourceIdCount;
-    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMs;
-    NMonitoring::TDynamicCounters::TCounterPtr PartitionWriteQuotaUsage;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr PartitionWriteQuotaUsagePerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
 
     TInstant LastCountersUpdate;
 

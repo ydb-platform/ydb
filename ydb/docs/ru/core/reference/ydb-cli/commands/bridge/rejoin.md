@@ -1,6 +1,6 @@
 # admin cluster bridge rejoin
 
-С помощью команды `admin cluster bridge rejoin` можно [вернуть](../../../../concepts/bridge.md#rejoin) указанный pile в кластер после обслуживания или восстановления.
+С помощью команды `admin cluster bridge rejoin` можно [вернуть](../../../../concepts/bridge.md#rejoin) указанный pile в кластер после обслуживания или восстановления. После выполнения команды ожидается переход pile из состояния `DISCONNECTED` в состояние `NOT_SYNCHRONIZED`, последующая автоматическая синхронизация и переход в состояние `SYNCHRONIZED`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -28,12 +28,11 @@ ydb admin cluster bridge rejoin --help
 
 ## Требования {#requirements}
 
-- Pile перед возвращением должен находиться в состоянии `DISCONNECTED` перед возвращением.
-- После выполнения команды ожидается переход в состояние `NOT_SYNCHRONIZED` и последующая автоматическая синхронизация до состояния `SYNCHRONIZED`.
+- Pile перед возвращением должен быть в состоянии `DISCONNECTED`.
 
 ## Примеры {#examples}
 
-Возврат pile в состоянии `DISCONNECTED` в кластер:
+Возврат pile `pile-a` из состояния `DISCONNECTED`:
 
 ```bash
 ydb admin cluster bridge rejoin --pile pile-a

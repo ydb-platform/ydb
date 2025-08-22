@@ -741,11 +741,12 @@ class WorkloadTestBase(LoadSuiteBase):
         result.add_stat(
             workload_name, "planned_duration", self.timeout
         )  # Добавляем плановую длительность отдельно
-        # Timeout не считается неуспешным выполнением, это warning
+        # workload_success = True если workload выполнился успешно
+        # (timeout не влияет на успешность выполнения)
         result.add_stat(
             workload_name,
             "workload_success",
-            (success and not error_found) or is_timeout,
+            success,
         )
         result.add_stat(
             workload_name,
@@ -1708,9 +1709,10 @@ class WorkloadTestBase(LoadSuiteBase):
                             attachment_type=allure.attachment_type.TEXT,
                         )
 
-                    # success=True только если stderr пустой (исключая SSH
-                    # warnings) И нет timeout
-                    success = not bool(stderr.strip()) and not is_timeout
+                    # success=True если stderr пустой (нет ошибок в workload)
+                    # timeout не влияет на success - workload может завершиться успешно,
+                    # но быть прерван по таймауту
+                    success = not bool(stderr.strip())
 
                     execution_time = time_module.time() - run_start_time
 

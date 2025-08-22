@@ -354,8 +354,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
     Y_UNIT_TEST(MultiWriteInTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
-        settings.AppConfig.MutableFeatureFlags()->SetDisableColumnShardBulkUpsertRequireAllColumns(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000).SetColumnShardAlterObjectEnabled(true);;
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();

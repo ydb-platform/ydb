@@ -102,8 +102,15 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
     , ChunkWrite(write)
     , PieceShift(pieceShift)
     , PieceSize(pieceSize)
+    , Completion(MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion))
 {
     ChunkWrite->RegisterPiece();
+    GateId = ChunkWrite->GateId;
+    ChunkWrite->Orbit.Fork(Orbit);
+}
+
+TChunkWritePiece::~TChunkWritePiece() {
+    ChunkWrite->Orbit.Join(Orbit);
 }
 
 void TChunkWritePiece::Process(void*) {

@@ -27,7 +27,7 @@ struct TBuffer;
 // BufferedWriter
 ////////////////////////////////////////////////////////////////////////////
 class TBufferedWriter {
-private: 
+private:
     class TBlockDeviceAction {
     protected:
         TReqId ReqId;
@@ -92,7 +92,7 @@ protected:
 
     bool WithDelayedFlush;
     std::queue<THolder<TBlockDeviceAction>> BlockDeviceActions;
-    
+
     void WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
             TCompletionAction *flushAction, ui32 chunkIdx);
 public:
@@ -477,7 +477,7 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader", 
+            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader",
                     (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }

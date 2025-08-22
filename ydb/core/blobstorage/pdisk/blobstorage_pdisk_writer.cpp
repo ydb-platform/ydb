@@ -11,7 +11,7 @@ namespace NPDisk {
 // TBlockDeviceWrite
 ////////////////////////////////////////////////////////////////////////////
 
-TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr &&buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* ActorSystem) 
+TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr &&buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* ActorSystem)
     : TBlockDeviceAction(ReqId), Deleter(ActorSystem), Buffer(std::unique_ptr<TBuffer, TReleaseWriteAction>(buffer.Release(), Deleter)), StartOffset(StartOffset), DirtyFrom(DirtyFrom), DirtyTo(DirtyTo), TraceId(*TraceId)
 {
 }
@@ -27,7 +27,7 @@ TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::TReleaseWriteAction(TAc
 
 void TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::operator()(TBuffer *buffer) const {
         if (buffer->FlushAction) {
-            //should call "delete this"
+            //frees buffer->FlushAction
             buffer->FlushAction->Release(ActorSystem);
         }
 
@@ -38,7 +38,7 @@ void TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::operator()(TBuffer
 ////////////////////////////////////////////////////////////////////////////
 // TBlockDeviceFlush
 ////////////////////////////////////////////////////////////////////////////
-TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion1, TActorSystem* actorSystem) 
+TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion1, TActorSystem* actorSystem)
     : TBlockDeviceAction(ReqId), Deleter(actorSystem), Completion(std::unique_ptr<TCompletionAction, TReleaseFlushAction>(Completion1, Deleter))
 {
 }
@@ -53,7 +53,7 @@ void TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::operator()(TComple
         if (action->FlushAction) {
             action->FlushAction->Release(ActorSystem);
         }
-        //should call "delete this"
+        //frees action->FlushAction
         action->Release(ActorSystem);
 }
 

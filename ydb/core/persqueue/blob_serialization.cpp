@@ -48,69 +48,84 @@ ui32 WriteTemporaryChunkSize(TBuffer & output)
     return sizeOffset;
 }
 
+TMessageFlags InitFlags(const TClientBlob& blob) {
+    TMessageFlags flags;
+    flags.F.HasCreateTimestamp = 1;
+    flags.F.HasWriteTimestamp = 1;
+    flags.F.HasPartData = !blob.PartData.Empty();
+    flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
+    flags.F.HasKinesisData = !blob.PartitionKey.empty();
+    return flags;
 }
 
+ui32 BlobSize(const TClientBlob& blob) {
+    auto flags = InitFlags(blob);
 
-//
-// TClientBlob
-//
+    size_t size = sizeof(ui32) /* totalSize */ + sizeof(ui64) /* SeqNo */ + sizeof(ui8) /* flags */;
+    if (flags.F.HasPartData) {
+        size += sizeof(ui16) /* PartNo */ + sizeof(ui16) /* TotalParts */ + sizeof(ui32) /* sizeof(ui32) */;
+    }
+    if (flags.F.HasKinesisData) {
+        size += sizeof(ui8) + blob.PartitionKey.size() + sizeof(ui8) + blob.ExplicitHashKey.size();
+    }
+    size += sizeof(ui64) /* WriteTimestamp */ + sizeof(ui64) /* CreateTimestamp */;
+    if (flags.F.HasUncompressedSize) {
+        size += sizeof(ui32);
+    }
+    size += sizeof(ui16) + blob.SourceId.size();
+    size += blob.Data.size();
 
-void TClientBlob::SerializeTo(TBuffer& res) const
-{
-    const ui32 totalSize = GetBlobSize();
-    const ui32 psize = res.Size();
+    return size;
+}
+
+void Serialize(const TClientBlob& blob, TBuffer& res) {
+    const ui32 totalSize = BlobSize(blob);
+    const ui32 expectedSize = res.Size() + totalSize;
+
+    TMessageFlags flags = InitFlags(blob);
 
     res.Reserve(res.Size() + totalSize);
 
     res.Append((const char*)&totalSize, sizeof(ui32));
-    res.Append((const char*)&SeqNo, sizeof(ui64));
-
-    TMessageFlags flags;
-    flags.F.HasCreateTimestamp = 1;
-    flags.F.HasWriteTimestamp = 1;
-    flags.F.HasPartData = !PartData.Empty();
-    flags.F.HasUncompressedSize = UncompressedSize != 0;
-    flags.F.HasKinesisData = !PartitionKey.empty();
-
+    res.Append((const char*)&blob.SeqNo, sizeof(ui64));
     res.Append((const char*)&flags.V, sizeof(char));
 
     if (flags.F.HasPartData) {
-        res.Append((const char*)&(PartData->PartNo), sizeof(ui16));
-        res.Append((const char*)&(PartData->TotalParts), sizeof(ui16));
-        res.Append((const char*)&(PartData->TotalSize), sizeof(ui32));
+        res.Append((const char*)&(blob.PartData->PartNo), sizeof(ui16));
+        res.Append((const char*)&(blob.PartData->TotalParts), sizeof(ui16));
+        res.Append((const char*)&(blob.PartData->TotalSize), sizeof(ui32));
     }
 
     if (flags.F.HasKinesisData) {
-        ui8 partitionKeySize = PartitionKey.size();
+        ui8 partitionKeySize = blob.PartitionKey.size();
         res.Append((const char*)&(partitionKeySize), sizeof(ui8));
-        res.Append(PartitionKey.data(), PartitionKey.size());
+        res.Append(blob.PartitionKey.data(), blob.PartitionKey.size());
 
-        ui8 hashKeySize = ExplicitHashKey.size();
+        ui8 hashKeySize = blob.ExplicitHashKey.size();
         res.Append((const char*)&(hashKeySize), sizeof(ui8));
-        res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
+        res.Append(blob.ExplicitHashKey.data(), blob.ExplicitHashKey.size());
     }
 
-    ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
+    ui64 writeTimestampMs = blob.WriteTimestamp.MilliSeconds();
     res.Append((const char*)&writeTimestampMs, sizeof(ui64));
 
-    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
+    ui64 createTimestampMs = blob.CreateTimestamp.MilliSeconds();
     res.Append((const char*)&createTimestampMs, sizeof(ui64));
 
     if (flags.F.HasUncompressedSize) {
-        res.Append((const char*)&(UncompressedSize), sizeof(ui32));
+        res.Append((const char*)&(blob.UncompressedSize), sizeof(ui32));
     }
 
-    ui16 sz = SourceId.size();
+    ui16 sz = blob.SourceId.size();
     res.Append((const char*)&sz, sizeof(ui16));
-    res.Append(SourceId.data(), SourceId.size());
-    res.Append(Data.data(), Data.size());
+    res.Append(blob.SourceId.data(), blob.SourceId.size());
+    res.Append(blob.Data.data(), blob.Data.size());
 
-    Y_ABORT_UNLESS(res.Size() == psize + totalSize);
+    Y_ABORT_UNLESS(res.Size() == expectedSize);
 }
 
-TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
-{
-    Y_ABORT_UNLESS(size > OVERHEAD);
+TClientBlob DeserializeClientBlob(const char* data, ui32 size) {
+    Y_ABORT_UNLESS(size > TClientBlob::OVERHEAD);
     ui32 totalSize = ReadUnaligned<ui32>(data);
     Y_ABORT_UNLESS(size >= totalSize);
     const char *end = data + totalSize;
@@ -119,8 +134,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     ui64 seqNo = ReadUnaligned<ui64>(data);
     data += sizeof(ui64);
 
-    TMessageFlags flags;
-    flags.V = ReadUnaligned<ui8>(data);
+    TMessageFlags flags(ReadUnaligned<ui8>(data));
     ++data;
 
     TMaybe<TPartData> partData;
@@ -175,6 +189,16 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     TString dt(data, end - data);
 
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
+}
+
+}
+
+//
+// TClientBlob
+//
+
+ui32 TClientBlob::GetBlobSize() const {
+    return BlobSize(*this);
 }
 
 
@@ -372,7 +396,7 @@ void TBatch::Pack() {
         Header.SetFormat(NKikimrPQ::TBatchHeader::EUncompressed);
         PackedData.Clear();
         for (ui32 i = 0; i < Blobs.size(); ++i) {
-            Blobs[i].SerializeTo(PackedData);
+            Serialize(Blobs[i], PackedData);
         }
         Header.SetPayloadSize(PackedData.size());
     }
@@ -608,7 +632,7 @@ void TBatch::UnpackToType0(TVector<TClientBlob> *blobs) const {
 
     for (ui32 i = 0; i < GetCount() + GetInternalPartsCount(); ++i) {
         Y_ABORT_UNLESS(shift < PackedData.size());
-        blobs->push_back(TClientBlob::Deserialize(PackedData.data() + shift, PackedData.size() - shift));
+        blobs->push_back(DeserializeClientBlob(PackedData.data() + shift, PackedData.size() - shift));
         shift += ReadUnaligned<ui32>(PackedData.data() + shift);
     }
     Y_ABORT_UNLESS(shift == PackedData.size());

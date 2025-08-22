@@ -47,16 +47,11 @@ struct TClientBlob {
         const TInstant writeTimestamp, const TInstant createTimestamp,
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey);
 
-    ui32 GetPartDataSize() const;
-    ui32 GetKinesisSize() const;
     ui32 GetBlobSize() const;
     ui16 GetPartNo() const;
     ui16 GetTotalParts() const;
     ui16 GetTotalSize() const;
     bool IsLastPart() const;
-
-    void SerializeTo(TBuffer& buffer) const;
-    static TClientBlob Deserialize(const char *data, ui32 size);
 
     static void CheckBlob(const TKey& key, const TString& blob);
 

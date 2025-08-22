@@ -38,9 +38,11 @@ using namespace Ydb;
 using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOperationRequest,
     Ydb::Operations::GetOperationResponse>;
 
-class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
-                         public TExportConv,
-                         public TBackupCollectionRestoreConv {
+class TGetOperationRPC
+    : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>
+    , public TExportConv
+    , public TBackupCollectionRestoreConv
+{
 
     TStringBuf GetLogPrefix() const override {
         switch (OperationId_.GetKind()) {

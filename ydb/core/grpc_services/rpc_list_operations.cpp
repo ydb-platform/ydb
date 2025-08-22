@@ -32,9 +32,11 @@ using namespace Ydb;
 using TEvListOperationsRequest = TGrpcRequestNoOperationCall<Ydb::Operations::ListOperationsRequest,
     Ydb::Operations::ListOperationsResponse>;
 
-class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, TEvListOperationsRequest>,
-                          public TExportConv,
-                          public TBackupCollectionRestoreConv {
+class TListOperationsRPC
+    : public TRpcOperationRequestActor<TListOperationsRPC, TEvListOperationsRequest>
+    , public TExportConv
+    , public TBackupCollectionRestoreConv
+{
 
     TStringBuf GetLogPrefix() const override {
         switch (ParseKind(GetProtoRequest()->kind())) {

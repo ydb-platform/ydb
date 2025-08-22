@@ -93,10 +93,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetEnableCompactification(true);
             }
             for (auto& u : users) {
-                if (u.second)
-                    partitionConfig->AddImportantClientId(u.first);
-                if (u.first != "user")
-                    tabletConfig->AddReadRules(u.first);
+                auto* consumer = tabletConfig->AddConsumers();
+                consumer->SetName(u.first);
+                consumer->SetImportant(u.second);
             }
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -232,9 +231,9 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
             request->Record.SetTopicName(topic);
             request->Record.SetPath("/Root/" + topic);
             request->Record.SetSchemeShardId(ssId);
-            request->Record.MutableTabletConfig()->AddReadRules("client");
+            request->Record.MutableTabletConfig()->AddConsumers()->SetName("client");
             for (const auto& c : xtraConsumers) {
-                request->Record.MutableTabletConfig()->AddReadRules(c);
+                request->Record.MutableTabletConfig()->AddConsumers()->SetName(c);
             };
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);
             request->Record.MutableTabletConfig()->SetRequireAuthRead(requireAuth);

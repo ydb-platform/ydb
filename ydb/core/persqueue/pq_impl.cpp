@@ -1609,7 +1609,6 @@ void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) cons
             generation = curConfigVersion;
         }
         c.SetGeneration(generation);
-        cfg.AddReadRuleGenerations(generation);
     }
 }
 

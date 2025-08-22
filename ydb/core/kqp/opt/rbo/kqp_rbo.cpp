@@ -4,27 +4,22 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input, 
-    TExprContext& ctx,
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
+bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+                                   TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TPlanProps& props) {
 
     auto output = SimpleTestAndApply(input, ctx, kqpCtx, typeCtx, config, props);
     if (input != output) {
         input = output;
         return true;
-    }
-    else {
+    } else {
         return false;
     }
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
-    for (size_t idx=0; idx < Stages.size(); idx ++ ) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TExprContext& ctx) {
+    for (size_t idx = 0; idx < Stages.size(); idx++) {
         YQL_CLOG(TRACE, CoreDq) << "Running ruleset: " << idx;
-        auto & stage = Stages[idx];
+        auto& stage = Stages[idx];
 
         bool fired = true;
 
@@ -33,7 +28,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
         while (fired && nMatches < 1000) {
             fired = false;
 
-            for (auto iter : root ) {
+            for (auto iter : root) {
                 for (auto rule : stage.Rules) {
                     auto op = iter.Current;
 
@@ -42,8 +37,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
 
                         if (iter.Parent) {
                             iter.Parent->Children[iter.ChildIndex] = op;
-                        }
-                        else {
+                        } else {
                             root.Children[0] = op;
                         }
 
@@ -56,8 +50,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
                             root.Children[0] = newRoot->Children[0];
                         }
 
-
-                        nMatches ++;
+                        nMatches++;
                         break;
                     }
                 }
@@ -75,5 +68,5 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
     return ConvertToPhysical(root, ctx, TypeCtx, TypeAnnTransformer, PeepholeTransformer, Config);
 }
 
-}
-}
+} // namespace NKqp
+} // namespace NKikimr

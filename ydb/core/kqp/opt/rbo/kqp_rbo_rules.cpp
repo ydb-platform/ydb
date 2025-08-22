@@ -2,13 +2,11 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/utils/log/log.h>
 
-
-
 using namespace NYql::NNodes;
 
 namespace {
 using namespace NKikimr;
-using namespace NKikimr::NKqp; 
+using namespace NKikimr::NKqp;
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
     if (input->IsCallable("Member")) {
@@ -19,8 +17,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Name(member.Name())
         .Done().Ptr();
         // clang-format on
-    }
-    else if (input->IsCallable()){
+    } else if (input->IsCallable()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
@@ -32,8 +29,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Seal()
         .Build();
         // clang-format on
-    }
-    else if(input->IsList()){
+    } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
@@ -45,8 +41,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Seal()
         .Build();
         // clang-format on
-    }
-    else {
+    } else {
         return input;
     }
 }
@@ -55,7 +50,7 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
-    if (conjuncts.size()==1) {
+    if (conjuncts.size() == 1) {
         auto body = TExprBase(ReplaceArg(conjuncts[0].FilterBody, arg.Ptr(), ctx));
 
         // clang-format off
@@ -64,12 +59,11 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
             .Body(body)
         .Done().Ptr();
         // clang-format on
-    }
-    else {
+    } else {
         TVector<TExprNode::TPtr> newConjuncts;
 
-        for (auto c : conjuncts ) {
-            newConjuncts.push_back( ReplaceArg(c.FilterBody, arg.Ptr(), ctx));
+        for (auto c : conjuncts) {
+            newConjuncts.push_back(ReplaceArg(c.FilterBody, arg.Ptr(), ctx));
         }
 
         // clang-format off
@@ -105,16 +99,15 @@ bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
     }
     return false;
 }
-}  // namespace
+} // namespace
 
 namespace NKikimr {
 namespace NKqp {
 
-std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
+std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator>& input, TExprContext& ctx,
+                                                               const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+                                                               TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config,
+                                                               TPlanProps& props) {
 
     Y_UNUSED(kqpCtx);
     Y_UNUSED(typeCtx);
@@ -143,7 +136,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
-    
+
     auto conjunctInfo = filter->GetConjuctInfo();
 
     // Check if we need a top level filter
@@ -155,29 +148,24 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     for (auto f : conjunctInfo.Filters) {
         if (!IUSetDiff(f.FilterIUs, leftIUs).size()) {
             pushLeft.push_back(f);
-        }
-        else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
+        } else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
             pushRight.push_back(f);
-        }
-        else {
+        } else {
             topLevelPreds.push_back(f);
         }
     }
 
-    for (auto c: conjunctInfo.JoinConditions) {
+    for (auto c : conjunctInfo.JoinConditions) {
         if (!IUSetDiff({c.LeftIU}, leftIUs).size() && !IUSetDiff({c.RightIU}, rightIUs).size()) {
             joinConditions.push_back(std::make_pair(c.LeftIU, c.RightIU));
-        }
-        else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
+        } else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
             joinConditions.push_back(std::make_pair(c.RightIU, c.LeftIU));
-        }
-        else {
+        } else {
             TVector<TInfoUnit> vars = {c.LeftIU};
             vars.push_back(c.RightIU);
             if (!IUSetDiff(vars, leftIUs).size()) {
                 pushLeft.push_back(TFilterInfo(c.ConjunctExpr, vars));
-            }
-            else {
+            } else {
                 pushRight.push_back(TFilterInfo(c.ConjunctExpr, vars));
             }
         }
@@ -235,11 +223,8 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     }
 }
 
-bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
+bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator>& input, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+                                     TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TPlanProps& props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(kqpCtx);
@@ -256,7 +241,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         return false;
     }
 
-    for (auto & c : input->Children) {
+    for (auto& c : input->Children) {
         if (!c->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
@@ -271,8 +256,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
             input->Props.StageId = newStageId;
             readName = opRead->TableName;
-        }
-        else {
+        } else {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
         }
@@ -296,7 +280,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(isLeftSourceStage));
             props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(isRightSourceStage));
         }
-        
+
         // For inner join (we don't support other joins yet) we build a new stage
         // with GraceJoinCore and connect inputs via Shuffle connections
         else {
@@ -311,8 +295,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, isRightSourceStage));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
-    }
-    else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
+    } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
         auto childOp = input->Children[0];
         auto prevStageId = *(childOp->Props.StageId);
 
@@ -322,19 +305,17 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
-        }
-        else {
+        } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
-    }
-    else if (input->Kind == EOperator::Limit) {
+    } else if (input->Kind == EOperator::Limit) {
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         auto prevStageId = *(input->Children[0]->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId)));
-    }
-    else {
+        props.StageGraph.Connect(prevStageId, newStageId,
+                                 std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId)));
+    } else {
         Y_ENSURE(true, "Unknown operator encountered");
     }
 
@@ -344,5 +325,5 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
 TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TPushFilterRule>()}, true);
 TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()}, false);
 
-}
-}  // namespace NKikimr
+} // namespace NKqp
+} // namespace NKikimr

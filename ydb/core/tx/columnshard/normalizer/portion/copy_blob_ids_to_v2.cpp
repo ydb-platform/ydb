@@ -87,6 +87,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             // Maintaining behavior with previous version
             if (it == portions0.end()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("reason", "unkown portion")("portion_id", chunk.GetPortionId());
+                if (!rowset.Next()) {
+                    return TConclusionStatus::Fail("Not ready");
+                }
                 continue;
             }
             if (chunk.GetBlobIds().empty()) {

@@ -490,7 +490,6 @@ public:
 
 template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
-
     void Sleep() {
         ReplicaSubscriber = TActorId();
         this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));

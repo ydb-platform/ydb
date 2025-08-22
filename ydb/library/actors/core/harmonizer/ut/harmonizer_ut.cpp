@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
                                 additionalThreadsFromLowerPriority[poolIdx2] += 1;
                             }
                         } else if (additionalThreadsFromLowerPriority[poolIdx] > 0.0f) {
-                            for (ui32 poolIdx2 = 2; poolIdx2 >= 0; --poolIdx2) {
+                            for (ui32 poolIdx2 = 2; poolIdx2 > poolIdx; --poolIdx2) {
                                 if (additionalThreads[poolIdx2] > 0.0f) {
                                     additionalThreads[poolIdx2] -= 1;
                                     threadChange[poolIdx2] -= 1;

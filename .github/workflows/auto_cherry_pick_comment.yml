@@ -1,0 +1,56 @@
+name: Auto Cherry-pick Comment Handler
+on:
+  issue_comment:
+    types:
+      - created
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  handle-cherry-pick-comment:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request &&
+      github.event.issue.state == 'closed' &&
+      contains(github.event.comment.body, '/cherry-pick')
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .github
+
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0
+
+      - name: configure
+        shell: bash
+        run: |
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
+            git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: handle cherry-pick command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: "${{ github.event.comment.body }}"
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+        run: |
+          ./.github/scripts/auto_cherry_pick_comment.py \
+            --pr-number="${PR_NUMBER}" \
+            --comment-body="${COMMENT_BODY}" \
+            --comment-author="${COMMENT_AUTHOR}" \
+            --comment-id="${COMMENT_ID}"

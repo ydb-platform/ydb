@@ -680,11 +680,11 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32().time_since_epoch().count();
+                return std::format("{:%FT%TZ}", valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64().time_since_epoch().count();
+                return std::format("{:%FT%TZ}", valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64().time_since_epoch().count();
+                return std::format("{:%FT%TZ}", valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
                 return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:

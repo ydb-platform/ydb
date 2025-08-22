@@ -1793,10 +1793,18 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     bool haveChanges = false;
-    if (SourceIdStorage.GetInMemorySourceIds().size() != PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
-        PartitionCountersLabeled->GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
+
+    {
+        auto count = SourceIdStorage.GetInMemorySourceIds().size();
+
+        if (SourceIdCount) {
+            SourceIdCount->Set(count);
+        }
+        if (count != PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Set(count);
+            PartitionCountersLabeled->GetCounters()[METRIC_NUM_SIDS].Set(count);
+        }
     }
 
     TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
@@ -1852,6 +1860,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     if (TotalPartitionWriteSpeed) {
         ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
+        if (PartitionWriteQuotaUsage) {
+            PartitionWriteQuotaUsage->Set(quotaUsage);
+        }
         if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
             haveChanges = true;
             PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
@@ -1879,10 +1890,18 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
     }
 
-    ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();
-    if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);
+    {
+        ui64 ts = Max<i64>();
+        if (MIN_TIMESTAMP_MS < WriteTimestamp.MilliSeconds()) {
+            ts = WriteTimestamp.MilliSeconds();
+            if (TimeSinceLastWriteMs) {
+                TimeSinceLastWriteMs->Set((Now() - WriteTimestamp).MilliSeconds());
+            }
+        }
+        if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);
+        }
     }
 
     ui64 timeLag = WriteLagMs.GetValue();
@@ -4113,6 +4132,11 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 }
 
 void TPartition::SetupPerPartitionCounters(const TActorContext& ctx) {
+    if (WriteTimeLagMsByLastWrite) {
+        // Don't recreate the counters if they already exist.
+        return;
+    }
+
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
     auto subgroup = [&]() {
         if (fcc) {

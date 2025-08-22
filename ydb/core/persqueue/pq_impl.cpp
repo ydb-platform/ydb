@@ -948,16 +948,7 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
 NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
 {
     NKikimrPQ::TPQTabletConfig partitionConfig = Config;
-
-    partitionConfig.MutableReadRules()->Clear();
-    partitionConfig.MutableReadFromTimestampsMs()->Clear();
-    partitionConfig.MutableConsumerFormatVersions()->Clear();
-    partitionConfig.MutableConsumerCodecs()->Clear();
-    partitionConfig.MutableReadRuleServiceTypes()->Clear();
-    partitionConfig.MutableReadRuleVersions()->Clear();
-    partitionConfig.MutableReadRuleGenerations()->Clear();
     partitionConfig.MutableConsumers()->Clear();
-
     return partitionConfig;
 }
 

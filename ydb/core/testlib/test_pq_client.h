@@ -167,11 +167,11 @@ struct TRequestCreatePQ {
         config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(WriteSpeed);
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
         for (auto& rr : ReadRules) {
-            config->AddReadRules(rr);
-            config->AddReadFromTimestampsMs(0);
-            config->AddConsumerFormatVersions(0);
-            config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs();
+            auto* consumer = config->AddConsumers();
+            consumer->SetName(rr);
+            consumer->SetReadFromTimestampsMs(0);
+            consumer->SetFormatVersion(0);
+            consumer->SetVersion(0);
         }
 //        if (!ReadRules.empty()) {
 //            config->SetRequireAuthRead(true);

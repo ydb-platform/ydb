@@ -151,7 +151,10 @@ public:
 
         bool OmitRow(TState& state, ui64 header, bool isNull) {
 
+            Cerr << header << Endl;
+
             auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+
             bool lastRowInSequence = cookie.LastRow;
             bool firstRowInSequence = cookie.FirstRow;
             ui32 rowId = cookie.RowSeqNo;

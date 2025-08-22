@@ -766,8 +766,7 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
             TReadResultStats rowStats;
-            bool lastRow = (result.UnprocessedResultRow + 1 == result.ReadResult->Get()->GetRowsCount()) && record.GetFinished();
-            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, lastRow, result.ShardId);
+            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, false, result.ShardId);
             YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
             ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
         }
@@ -1077,11 +1076,13 @@ private:
 
         resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
 
-        rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
-        // TODO: use datashard statistics KIKIMR-16924
-        rowStats.ReadBytesCount += storageReadBytes;
-        rowStats.ResultRowsCount += 1;
-        rowStats.ResultBytesCount += leftRowSize + rightRowSize;
+        if (!lastRow) {
+            rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
+            // TODO: use datashard statistics KIKIMR-16924
+            rowStats.ReadBytesCount += storageReadBytes;
+            rowStats.ResultRowsCount += 1;
+            rowStats.ResultBytesCount += leftRowSize + rightRowSize;
+        }
 
         return resultRow;
     }

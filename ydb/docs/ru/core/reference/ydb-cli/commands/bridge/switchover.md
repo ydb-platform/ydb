@@ -1,5 +1,7 @@
 # admin cluster bridge switchover
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 С помощью команды `admin cluster bridge switchover` выполняется плавное, плановое переключение указанного pile в состояние `PRIMARY` через промежуточное состояние `PROMOTED`. Подробнее см. [описание сценария](../../../../concepts/bridge.md#switchover).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}

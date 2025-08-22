@@ -1,5 +1,7 @@
 # admin cluster bridge takedown
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 С помощью команды `admin cluster bridge takedown` можно выполнить [плановое отключение](../../../../concepts/bridge.md#takedown) pile. Если отключается текущий `PRIMARY`, необходимо указать новый `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}

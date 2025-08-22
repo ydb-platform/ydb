@@ -1,5 +1,7 @@
 # admin cluster bridge failover
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 С помощью команды `admin cluster bridge failover` можно выполнить [аварийное отключение](../../../../concepts/bridge.md#failover) pile, когда он недоступен. При необходимости можно указать pile, который станет новым `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}

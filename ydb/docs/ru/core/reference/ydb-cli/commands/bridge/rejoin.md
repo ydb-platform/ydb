@@ -1,5 +1,7 @@
 # admin cluster bridge rejoin
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 С помощью команды `admin cluster bridge rejoin` можно [вернуть](../../../../concepts/bridge.md#rejoin) указанный pile в кластер после обслуживания или восстановления. После выполнения команды ожидается переход pile из состояния `DISCONNECTED` в состояние `NOT_SYNCHRONIZED`, последующая автоматическая синхронизация и переход в состояние `SYNCHRONIZED`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}

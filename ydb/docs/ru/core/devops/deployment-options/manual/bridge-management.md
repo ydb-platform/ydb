@@ -1,5 +1,7 @@
 ## Управление кластером в режиме bridge
 
+{% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
+
 Ниже приведены типовые операции для кластера в [режиме bridge](../../../concepts/bridge.md) с использованием [соответствующих команд {{ ydb-short-name }} CLI](../../../reference/ydb-cli/commands/bridge/index.md).
 
 ### Посмотреть текущее состояние {#list}
@@ -63,7 +65,7 @@ pile-b: SYNCHRONIZED
 {{ ydb-cli }} admin cluster bridge failover --pile <unavailable-pile>
 ```
 
-Если недоступен текущий `PRIMARY`, необходимо добавить параметр `--new-primary` с указанием имени pile в состоянии `SYNCHRONIZED`:
+Если недоступен текущий `PRIMARY`, необходимо добавить параметр `--new-primary` с указанием имени pile в состоянии `SYNCHRONIZED`. Если параметр не указан или указан некорректно, команда завершится с ошибкой без изменений в кластере.
 
 ```bash
 {{ ydb-cli }} admin cluster bridge failover --pile <unavailable-pile>

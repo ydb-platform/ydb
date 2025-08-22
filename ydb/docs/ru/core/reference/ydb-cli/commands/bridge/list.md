@@ -1,5 +1,7 @@
 # admin cluster bridge list
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 С помощью команды `admin cluster bridge list` можно вывести состояние каждого pile в [режиме bridge](../../../../concepts/bridge.md).
 
 Общий вид команды:

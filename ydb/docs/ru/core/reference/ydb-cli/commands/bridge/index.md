@@ -1,5 +1,7 @@
 # Команды управления кластером в режиме bridge
 
+{% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
+
 Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют просматривать состояние [pile](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить pile на обслуживание и возвращать его в кластер.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}

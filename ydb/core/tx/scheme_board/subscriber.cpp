@@ -66,6 +66,14 @@ namespace {
         return valid;
     }
 
+    template <typename TReplicaEvent>
+    bool ClusterStatesMatch(const TClusterState& subscriberState, const TReplicaEvent& replicaEvent) {
+        if (!replicaEvent.HasClusterState()) {
+            return true;
+        }
+        return subscriberState == TClusterState(replicaEvent.GetClusterState());
+    }
+
     struct TPathVersion {
         TPathId PathId;
         ui64 Version;
@@ -501,7 +509,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         if (ev->Sender != ReplicaSubscriber) {
             return;
         }
-        if (const auto& record = ev->Get()->GetRecord(); record.HasClusterState() && TClusterState(record.GetClusterState()) != ClusterState) {
+        if (const auto& record = ev->Get()->GetRecord(); !ClusterStatesMatch(ClusterState, record)) {
             SBS_LOG_D("Cluster state mismatch in replica notification"
                 << ": sender# " << ev->Sender
                 << ", subscriber cluster state# " << ClusterState
@@ -910,8 +918,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         const auto& record = ev->Get()->Record;
-        const bool configMismatch = record.HasClusterState() && ClusterState != TClusterState(record.GetClusterState());
-        if (configMismatch) {
+        const bool clusterStatesMatch = ClusterStatesMatch(ClusterState, record);
+        if (!clusterStatesMatch) {
             SBS_LOG_I("Cluster State mismatch in sync version response"
                 << ": sender# " << ev->Sender
                 << ", cookie# " << ev->Cookie
@@ -923,7 +931,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         PendingSync.erase(it);
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
         // Treat both partial syncs and configuration mismatches as sync failures.
-        ReceivedSync[ev->Sender] = record.GetPartial() || configMismatch;
+        ReceivedSync[ev->Sender] = record.GetPartial() || !clusterStatesMatch;
 
         TVector<ui32> successesByGroup(ProxyGroups.size(), 0);
         TVector<ui32> failuresByGroup(ProxyGroups.size(), 0);

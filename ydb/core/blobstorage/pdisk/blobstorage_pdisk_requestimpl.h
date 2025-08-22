@@ -503,7 +503,7 @@ public:
 // TChunkWrite
 //
 class TCompletionChunkWrite;
-class TCompletionChunkWritePart;
+class TCompletionChunkWritePiece;
 
 class TChunkWrite : public TRequestBase {
 public:
@@ -581,9 +581,10 @@ public:
     ui32 PieceSize;
     ui32 PartOffset = 0;
     THolder<TChunkWriteResult> ChunkWriteResult;
-    THolder<TCompletionChunkWritePart> Completion;
+    THolder<TCompletionChunkWritePiece> Completion;
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
+    ~TChunkWritePiece();
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
@@ -599,7 +600,7 @@ public:
             ChunkWrite->AbortPiece(actorSystem);
         }
     }
-    
+
     void Process(void*) override;
     void MarkReady(const TString& logPrefix);
 };

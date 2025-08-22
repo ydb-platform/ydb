@@ -16,43 +16,42 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-TCompletionChunkWritePart::TCompletionChunkWritePart(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
+TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
     : TCompletionAction()
     , PDisk(piece->PDisk)
     , PieceShift(piece->PieceShift)
     , PieceSize(piece->PieceSize)
     , CumulativeCompletion(cumulativeCompletion)
     , Span(piece->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece.CompletionPart"))
-{}
+{
+}
 
-TCompletionChunkWritePart::~TCompletionChunkWritePart() {
+TCompletionChunkWritePiece::~TCompletionChunkWritePiece() {
     if (CumulativeCompletion) {
         CumulativeCompletion->RemovePart(PDisk->PCtx->ActorSystem);
     }
 }
 
-void TCompletionChunkWritePart::Exec(TActorSystem *actorSystem) {
+void TCompletionChunkWritePiece::Exec(TActorSystem *actorSystem) {
     Span.Event("PDisk.CompletionChunkWritePart.Exec");
-
     Y_VERIFY(actorSystem);
     Y_VERIFY(CumulativeCompletion);
     if (TCompletionAction::Result != EIoResult::Ok) {
         Release(actorSystem);
         return;
     }
-    
-    Y_UNUSED(PieceSize); Y_UNUSED(PieceShift);
-    //double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
-    //LWTRACK(PDiskChunkWritePieceComplete, ChunkWrite->Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
+
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkWritePieceComplete, Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
 
     CumulativeCompletion->CompletePart(actorSystem);
     CumulativeCompletion = nullptr;
-    
+
     Span.Event("PDisk.CompletionChunkWritePart.ExecStop");
     delete this;
 }
 
-void TCompletionChunkWritePart::Release(TActorSystem *actorSystem) {
+void TCompletionChunkWritePiece::Release(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
     Span.EndError("Release");
     delete this;

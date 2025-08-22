@@ -84,7 +84,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV2 chunk(rowset, DsGroupSelector);
             auto it = portions0.find(chunk.GetPortionId());
-            AFL_VERIFY(it != portions0.end());
+            // Maintaining behavior with previous version
+            if (it == portions0.end()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("reason", "unkown portion")("portion_id", chunk.GetPortionId());
+                continue;
+            }
             if (chunk.GetBlobIds().empty()) {
                 blobsByPortion.emplace(chunk.GetPortionAddress(), std::move(it->second));
                 if (blobsByPortion.size() == 10000) {

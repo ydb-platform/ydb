@@ -989,24 +989,30 @@ def test_topic_data():
 
 
 def test_topic_data_cdc():
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'create table table_test_topic_data_cdc(id int64, name text, primary key(id))',
+        'schema': 'multi'
+    })
+
     alter_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': "alter table table1 add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
+        'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
     })
 
     insert_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'insert into table1(id, name) values(11, "elleven")',
+        'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
         'schema': 'multi'
     })
 
     update_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': "update table1 set name = 'ONE' where id = 1",
+        'query': "update table_test_topic_data_cdc set name = 'ONE' where id = 1",
         'schema': 'multi'
     })
 
-    topic_path = '{}/table1/updates_feed'.format(dedicated_db)
+    topic_path = '{}/table_test_topic_data_cdc/updates_feed'.format(dedicated_db)
     data_response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': topic_path,
@@ -1029,42 +1035,49 @@ def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
-    call_viewer("/viewer/query", {
+    create_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
-    result = get_viewer_normalized("/viewer/describe_replication", {
+    time.sleep(3)
+
+    describe_result = get_viewer_normalized("/viewer/describe_replication", {
         'database': dedicated_db,
         'path': '{}/TestAsyncReplication'.format(dedicated_db),
         'include_stats': 'true',
         'enums': 'true'
     })
 
-    return result
+    return {
+        'create_result': create_result,
+        'describe_result': describe_result
+    }
 
 
 def test_transfer_describe():
-    topic_result = call_viewer("/viewer/query", {
+    topic_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE TOPIC TestTransferSourceTopic (CONSUMER OurConsumer)',
         'schema': 'multi'
     })
 
-    table_result = call_viewer("/viewer/query", {
+    table_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
         'schema': 'multi'
     })
 
-    transfer_result = call_viewer("/viewer/query", {
+    transfer_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
             USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
             WITH (CONSUMER='OurConsumer')''',
         'schema': 'multi'
     })
+
+    time.sleep(3)
 
     describe_result = get_viewer_normalized("/viewer/describe_transfer", {
         'database': dedicated_db,

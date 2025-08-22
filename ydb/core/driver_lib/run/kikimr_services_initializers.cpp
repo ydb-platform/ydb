@@ -2155,10 +2155,12 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects)
+        IGlobalObjectStorage& globalObjects,
+        NFq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
+    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2212,6 +2214,33 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        // const auto& sharedReading = Config.GetQueryServiceConfig().GetSharedReading();
+        // if (sharedReading.GetEnabled()) {
+        //     NYql::TPqGatewayServices pqServices(
+        //         YqSharedResources->UserSpaceYdbDriver,
+        //         nullptr,
+        //         nullptr,
+        //         std::make_shared<NYql::TPqGatewayConfig>(),
+        //         nullptr,
+        //         nullptr,
+        //         commonTopicClientSettings
+        //     );
+        //     auto service = NFq::NewRowDispatcherService(
+        //         protoConfig.GetRowDispatcher(),
+        //         NKikimr::CreateYdbCredentialsProviderFactory,
+        //         YqSharedResources,
+        //         credentialsFactory,
+        //         tenant,
+        //         yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
+        //         pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+        //         appData->Mon,
+        //         appData->Counters);
+
+        //     setup->LocalServices.push_back(std::make_pair(
+        //         NFq::RowDispatcherServiceActorId(),
+        //         TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+        // }
     }
 }
 

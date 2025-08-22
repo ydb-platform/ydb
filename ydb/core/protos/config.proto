@@ -1144,6 +1144,48 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
+ message TSharedReadingConfig {
+
+    message TExternalStorage {
+        optional string Endpoint = 1;
+        optional string Database = 2;
+        optional string OAuthFile = 3;
+        optional string Token = 4;
+        optional string TablePrefix = 5;
+        optional string CertificateFile = 6;
+        optional string IamEndpoint = 7;
+        optional string SaKeyFile = 8;
+        optional bool UseLocalMetadataService = 9;
+        optional uint32 ClientTimeoutSec = 10;
+        optional uint32 OperationTimeoutSec = 11;
+        optional uint32 CancelAfterSec = 12;
+        optional bool UseSsl = 13;
+        optional uint32 TableClientMaxActiveSessions = 14;
+    }
+
+    message TJsonParserConfig {
+        optional uint64 BatchSizeBytes = 1;  // default 1 MiB
+        optional uint64 BatchCreationTimeoutMs = 2;
+        optional uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+    }
+    message TCompileServiceConfig {
+        optional uint64 ParallelCompilationLimit = 1;  // 1 by default
+    }
+    message TCoordinatorConfig {
+        optional TExternalStorage Database = 1;
+        optional string CoordinationNodePath = 2;
+        optional bool LocalMode = 3;
+    }
+    optional bool Enabled = 1;
+    optional uint64 TimeoutBeforeStartSessionSec = 2;
+    optional uint64 SendStatusPeriodSec = 3;
+    optional uint64 MaxSessionUsedMemory = 4; 
+    optional bool WithoutConsumer = 5;
+    optional TJsonParserConfig JsonParser = 7;
+    optional TCompileServiceConfig CompileService = 8;
+    optional TCoordinatorConfig Coordinator = 6;
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1169,6 +1211,8 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+
+    optional TSharedReadingConfig SharedReading = 25;
 }
 
 // Config describes immediate controls and allows

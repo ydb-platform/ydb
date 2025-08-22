@@ -31,11 +31,11 @@ jobs:
         run: |
           pip install PyGithub==2.5.0
 
-      - name: configure
+      - name: configure git
         shell: bash
         run: |
-            git config --global user.name YDBot
-            git config --global user.email ydbot@ydb.tech
+            git config --global user.name "YDBot"
+            git config --global user.email "ydbot@ydb.tech"
             git config --local github.token ${{ env.GH_TOKEN }}
 
       - name: handle cherry-pick command

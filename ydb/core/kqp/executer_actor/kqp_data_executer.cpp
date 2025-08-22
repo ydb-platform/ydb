@@ -1884,7 +1884,6 @@ private:
 
         // TODO: move graph restoration outside of executer
         const bool graphRestored = RestoreTasksGraph();
-        size_t sourceScanPartitionsCount = BuildAllTasks<false>(StreamResult || EnableReadsMerge, {});
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
@@ -1930,6 +1929,8 @@ private:
                 }
             }
         }
+
+        size_t sourceScanPartitionsCount = BuildAllTasks<false>(StreamResult || EnableReadsMerge, {});
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Data, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {

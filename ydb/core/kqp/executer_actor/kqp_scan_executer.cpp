@@ -169,8 +169,6 @@ private:
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        BuildAllTasks<true>(false, PreparedQuery);
-
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -184,6 +182,8 @@ private:
                 }
             }
         }
+
+        BuildAllTasks<true>(false, PreparedQuery);
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {

@@ -930,11 +930,7 @@
         {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
-            {% if t.is_sanitizer_issue %}
-                <span class="test_status test_{{ t.status_display.lower() }}_sanitizer">{{ t.status_display }} (SANITIZER)</span>
-            {% else %}
-                <span class="test_status test_{{ t.status_display.lower() }}">{{ t.status_display }}</span>
-            {% endif %}
+            <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
         </td>
         {% if status in has_any_log %}
         <td>

@@ -353,8 +353,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(MultiWriteInTime) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableFeatureFlags()->SetDisableColumnShardBulkUpsertRequireAllColumns(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
@@ -412,9 +413,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
-        settings.AppConfig.MutableFeatureFlags()->SetDisableColumnShardBulkUpsertRequireAllColumns(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();

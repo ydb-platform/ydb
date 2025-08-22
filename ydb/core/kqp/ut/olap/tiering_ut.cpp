@@ -53,11 +53,20 @@ private:
 
 public:
     TTieringTestHelper() {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        Init(runnerSettings);
+    }
+
+    TTieringTestHelper(const TKikimrSettings& settings) {
+        Init(settings);
+    }
+
+private:
+    void Init(const TKikimrSettings& runnerSettings) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
         TestHelper.emplace(runnerSettings);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
@@ -66,6 +75,8 @@ public:
         Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
     }
+
+public:
 
     TTestHelper& GetTestHelper() {
         AFL_VERIFY(TestHelper);
@@ -168,14 +179,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     }
 
     Y_UNIT_TEST(LoadTtlSettings) {
-        TTieringTestHelper tieringHelper;
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetDisableColumnShardBulkUpsertRequireAllColumns(true);
-        auto& csController = tieringHelper.GetCsController();
-        auto& olapHelper = tieringHelper.GetOlapHelper();
-        auto& testHelper = tieringHelper.GetTestHelper();
-        tieringHelper.SetTablePath("/Root/olapTable");
-
+        TTestHelper testHelper(settings);
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
+        TLocalHelper olapHelper(testHelper.GetKikimr());
         olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
@@ -186,11 +196,27 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
-        tieringHelper.WriteSampleData();
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+        }
+
         testHelper.RebootTablets("/Root/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto selectQuery = TStringBuilder();
+        selectQuery << R"(
+            SELECT
+                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
+            FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+            WHERE Activity == 1
+            GROUP BY TierName)";
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
     }
 
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {

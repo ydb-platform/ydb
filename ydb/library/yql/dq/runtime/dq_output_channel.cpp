@@ -254,7 +254,6 @@ public:
             if (!Storage->Pop(blob)) {
                 return false;
             }
-            ++FirstStoredId;
             data = LoadSpilled(std::move(blob));
             SpilledChunkCount -= data.ChunkCount();
         } else if (!Data.empty()) {

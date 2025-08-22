@@ -445,7 +445,8 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession);
         TBoundNode& info = it->second;
         if (inserted) {
-            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), StorageConfig.get(), false);
+            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
+                    StorageConfig ? &StorageConfig.value() : nullptr, false);
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 

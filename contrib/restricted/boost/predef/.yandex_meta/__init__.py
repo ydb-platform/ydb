@@ -9,7 +9,7 @@ def post_install(self):
 boost_predef = NixSourceProject(
     nixattr="boost_predef",
     arcdir=boost.make_arcdir("predef"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

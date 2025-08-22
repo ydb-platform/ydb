@@ -866,13 +866,26 @@ bool TSolomonExporter::FilterDefaultGrid(const std::string& sensorName)
 
 TSharedRef TSolomonExporter::DumpSensors()
 {
+    auto tagSet = TTagSet();
+    if (Config_->Host) {
+        tagSet.AddRequiredTag(TTag("host", *Config_->Host));
+    }
+    for (const auto& [key, value] : Config_->InstanceTags) {
+        tagSet.AddRequiredTag(TTag(key, value));
+    }
+
+    return DumpSensors(std::move(tagSet));
+}
+
+TSharedRef TSolomonExporter::DumpSensors(TTagSet customTagSet)
+{
     auto guard = WaitFor(TAsyncLockWriterGuard::Acquire(&Lock_))
         .ValueOrThrow();
 
     Registry_->ProcessRegistrations();
     Registry_->Collect(OffloadThreadPool_->GetInvoker());
 
-    return SerializeProtoToRef(Registry_->DumpSensors(Config_->Host, Config_->InstanceTags));
+    return SerializeProtoToRef(Registry_->DumpSensors(std::move(customTagSet)));
 }
 
 void TSolomonExporter::AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors)

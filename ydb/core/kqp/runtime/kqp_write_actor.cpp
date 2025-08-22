@@ -3490,6 +3490,9 @@ public:
         if (!traceId) {
             return;
         }
+        if (BufferWriteActorStateSpan) {
+            BufferWriteActorStateSpan.EndOk();
+        }
         BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(*traceId),
             name, NWilson::EFlags::AUTO_END);
         if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {

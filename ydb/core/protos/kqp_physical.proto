@@ -380,7 +380,8 @@ message TKqpExternalSource {
 
     // Partitioning
     string TaskParamKey = 3;
-    repeated string PartitionedTaskParams = 4;
+    reserved 4;
+    repeated bytes PartitionedTaskParams = 8;
 
     string SourceName = 5;
     string AuthInfo = 6;

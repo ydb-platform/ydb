@@ -825,6 +825,10 @@ private:
     std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) {
         Y_ABORT_UNLESS(ResolveNamesResult);
 
+        if (!ResolveNamesResult->ResultSet.empty() && ResolveNamesResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
+            return {};
+        }
         if (ResolveNamesResult->ErrorCount > 0) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "failed to get table schema", ctx);
             return {};
@@ -1004,6 +1008,9 @@ private:
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
         ResolvePartitionsResult = msg->Request;
 
+        if (!ResolvePartitionsResult->ResultSet.empty() && ResolvePartitionsResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheRequest::EStatus::LookupError) {
+            return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
+        }
         if (ResolvePartitionsResult->ErrorCount > 0) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "unknown table", ctx);
         }

@@ -165,7 +165,6 @@ void TBufferedWriter::Obliterate() {
 
 void TBufferedWriter::WriteToBlockDevice() {
     Y_ENSURE(WithDelayedFlush);
-    // Y_ENSURE(BlockDeviceActions.size() == 2);
     while (!BlockDeviceActions.empty()) {
         const auto& action = BlockDeviceActions.front();
         action->DoCall(BlockDevice);
@@ -174,9 +173,7 @@ void TBufferedWriter::WriteToBlockDevice() {
 }
 
 TBufferedWriter::~TBufferedWriter() {
-    while (!BlockDeviceActions.empty()) {
-        BlockDeviceActions.pop();
-    }
+    BlockDeviceActions = {};
     Flush(LastReqId, nullptr, nullptr, 0);
 }
 

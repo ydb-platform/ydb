@@ -36,6 +36,7 @@ ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ClientErrorWithEmptyFilter
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
+ydb/core/kafka_proxy/ut/KafkaProtocol.TopicsWithCleaunpPolicyScenario
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge

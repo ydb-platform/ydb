@@ -47,19 +47,19 @@ Pile не являются самостоятельными кластерами
 
 ### Переходы между состояниями
 
-#|
-|| Состояние до | Состояние после | Как происходит | Пояснение ||
-|| `SYNCHRONIZED` | `PROMOTED` | Вручную — [switchover](../reference/ydb-cli/commands/bridge/switchover.md) | Старт плановой zero-downtime смены `PRIMARY`. ||
-|| `PRIMARY` | `SYNCHRONIZED` | Автоматически | Завершение планового переключения. ||
-|| `PROMOTED` | `PRIMARY` | Автоматически | Завершение планового переключения. ||
-|| `PRIMARY` | `SUSPENDED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение текущего `PRIMARY`. ||
-|| `SYNCHRONIZED` | `SUSPENDED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение ведомого pile. ||
-|| `SUSPENDED` | `DISCONNECTED` | Автоматически | Завершение планового отключения. ||
-|| `PRIMARY` | `DISCONNECTED` | Вручную — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Аварийное отключение недоступного `PRIMARY` с возможным выбором нового `PRIMARY`. ||
-|| `SYNCHRONIZED` | `DISCONNECTED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение ведомого pile. ||
-|| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Вручную — [rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Возврат pile в кластер после обслуживания/восстановления. ||
-|| `NOT_SYNCHRONIZED` | `SYNCHRONIZED` | Автоматически | Завершение синхронизации данных. ||
-|#
+| Состояние до | Состояние после | Как происходит | Пояснение |
+| --- | --- | --- | --- |
+| `PRIMARY` | `SYNCHRONIZED` | Автоматически | Завершение планового переключения. |
+| `PRIMARY` | `DISCONNECTED` | Вручную — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Аварийное отключение недоступного `PRIMARY` с возможным выбором нового `PRIMARY`. |
+| `PRIMARY` | `SUSPENDED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение текущего `PRIMARY`. |
+| `SYNCHRONIZED` | `DISCONNECTED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение ведомого pile. |
+| `SYNCHRONIZED` | `PROMOTED` | Вручную — [switchover](../reference/ydb-cli/commands/bridge/switchover.md) | Старт плановой zero-downtime смены `PRIMARY`. |
+| `SYNCHRONIZED` | `SUSPENDED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Плановое отключение ведомого pile. |
+| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Вручную — [rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Возврат pile в кластер после обслуживания/восстановления. |
+| `NOT_SYNCHRONIZED` | `SYNCHRONIZED` | Автоматически | Завершение синхронизации данных. |
+| `PROMOTED` | `PRIMARY` | Автоматически | Завершение планового переключения. |
+| `SUSPENDED` | `DISCONNECTED` | Автоматически | Завершение планового отключения. |
+
 
 ## Сценарии изменения состояния
 

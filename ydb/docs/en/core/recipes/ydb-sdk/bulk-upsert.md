@@ -4,7 +4,7 @@
 
 {% note warning %}
 
-When you load data to [column-based tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
+When you load data to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
 
 {% endnote %}
 

@@ -169,6 +169,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(LoadTtlSettings) {
         TTieringTestHelper tieringHelper;
+        settings.AppConfig.MutableFeatureFlags()->SetDisableColumnShardBulkUpsertRequireAllColumns(true);
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -185,6 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
+        tieringHelper.WriteSampleData();
         testHelper.RebootTablets("/Root/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));

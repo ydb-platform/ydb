@@ -338,18 +338,14 @@ private:
     }
 
     TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
-                                         const TConclusion<TVector<std::pair<TString, Ydb::Type>>>& reqColumns) {
-        if (reqColumns.IsFail()) {
-            return reqColumns;
-        }
-        
+                                         const TVector<std::pair<TString, Ydb::Type>>& reqColumns) {
         THashSet<TString> allColumnsLeft;
         for (auto&& [_, colInfo] : entry.Columns) {
             allColumnsLeft.insert(colInfo.Name);
         }
 
-        for (size_t pos = 0; pos < reqColumns->size(); ++pos) {
-            auto& name = (*reqColumns)[pos].first;
+        for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
+            auto& name = reqColumns[pos].first;
             allColumnsLeft.erase(name);
         }
 
@@ -574,7 +570,7 @@ private:
 
         TConclusionStatus res = TConclusionStatus::Success();
         if (isColumnTable && !AppData(ctx)->FeatureFlags.GetDisableColumnShardBulkUpsertRequireAllColumns()) {
-            res = CheckRequiredColumns(entry, reqColumns);
+            res = CheckRequiredColumns(entry, *reqColumns);
         }
 
         return res;

@@ -1041,14 +1041,18 @@ def test_async_replication_describe():
         'schema': 'multi'
     })
 
-    time.sleep(3)
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_replication", {
+            'database': dedicated_db,
+            'path': '{}/TestAsyncReplication'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
 
-    describe_result = get_viewer_normalized("/viewer/describe_replication", {
-        'database': dedicated_db,
-        'path': '{}/TestAsyncReplication'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
-    })
+        if "error" in describe_result:
+            break
+
+        time.sleep(1)
 
     return {
         'create_result': create_result,
@@ -1077,14 +1081,18 @@ def test_transfer_describe():
         'schema': 'multi'
     })
 
-    time.sleep(3)
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+            'database': dedicated_db,
+            'path': '{}/TestTransfer'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
 
-    describe_result = get_viewer_normalized("/viewer/describe_transfer", {
-        'database': dedicated_db,
-        'path': '{}/TestTransfer'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
-    })
+        if "running" in describe_result:
+            break
+
+        time.sleep(1)
 
     return {
         'topic_result': topic_result,

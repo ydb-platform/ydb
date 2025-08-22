@@ -254,7 +254,7 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
         if (status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
             PendingTopicResponses.emplace(index, locationResponse);
-        } else if (!Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
+        } else if (!Message->AllowAutoTopicCreationMeta || !Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
             KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));

@@ -467,14 +467,34 @@ void TTable::Join( ui32 bucket, TTable & t1, TTable & t2, EJoinKind joinKind, bo
         bucketStats2->HashtableMatches = ((swapTables ? (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi) : (JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi)) || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion) && !selfJoinSameKeys;
         // In this case, all keys except for NULLs have matched key on other side, and NULLs are handled by AddTuple
 
+        if (PartialJoinIncomplete_) {
+            PartialJoinIncomplete_ = false;
+            UDF_LOG(Logger_, LogComponent_, GRACEJOIN_TRACE, TStringBuilder()
+                    << (const void *)this << '#'
+                    << bucket
+                    << " resume join at "  << ResumeIdx_ << '/' << tuplesNum1
+                    << ", offset " << ResumeOffset_
+                   );
+        } else {
+            ResumeIdx_ = 0;
+            ResumeOffset_ = 0;
+        }
+        auto tuple1Idx = ResumeIdx_;
+
         if (tuplesNum2 == 0) {
             if (needLeftIds) {
-                for (ui32 leftId = 0; leftId != tuplesNum1; ++leftId)
-                    leftIds.push_back(leftId);
+                auto limit = tuple1Idx + std::min((ui32)tuplesNum1 - tuple1Idx, JoinResultsSizeLimit);
+                for (; tuple1Idx != limit; ++tuple1Idx) {
+                    leftIds.push_back(tuple1Idx);
+                }
+                if (tuple1Idx != tuplesNum1) {
+                    PartialJoinIncomplete_ = true;
+                }
+                ResumeIdx_ = tuple1Idx;
             }
             continue;
         }
-        if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
+        if (tuplesNum1 == tuple1Idx && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
             continue;
 
         ui64 slotSize = ComputeJoinSlotsSizeForBucket(*bucket2, *bucketStats2, headerSize2, table2HasKeyStringColumns, table2HasKeyIColumns);
@@ -507,6 +527,7 @@ void TTable::Join( ui32 bucket, TTable & t1, TTable & t2, EJoinKind joinKind, bo
         };
 
         if (initHashTable) {
+            Y_DEBUG_ABORT_UNLESS(!PartialJoinIncomplete_);
             ui32 tuple2Idx = 0;
             auto it2 = bucket2->KeyIntVals.begin();
             for (ui64 keysValSize = headerSize2; it2 != bucket2->KeyIntVals.end(); it2 += keysValSize, ++tuple2Idx) {
@@ -547,8 +568,7 @@ void TTable::Join( ui32 bucket, TTable & t1, TTable & t2, EJoinKind joinKind, bo
 
         if (swapTables) JoinTable2Total_ += tuplesNum1; else JoinTable1Total_ += tuplesNum1;
 
-        ui32 tuple1Idx = 0;
-        auto it1 = bucket1->KeyIntVals.begin();
+        auto it1 = bucket1->KeyIntVals.begin() + ResumeOffset_;
         //  /-------headerSize---------------------------\
         //  hash nulls-bitmap keyInt[] KeyIHash[] strSize| [strPos | strs] slotIdx
         //  \---------------------------------------slotSize ---------------------/
@@ -560,6 +580,17 @@ void TTable::Join( ui32 bucket, TTable & t1, TTable & t2, EJoinKind joinKind, bo
         ui64 bloomLookups = 0;
 
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
+
+            if (Y_UNLIKELY(joinResults.size() + leftIds.size() >= JoinResultsSizeLimit)) {
+                UDF_LOG(Logger_, LogComponent_, GRACEJOIN_TRACE, TStringBuilder()
+                        << (const void *)this << '#'
+                        << bucket
+                        << " suspend join at "  << tuple1Idx << '/' << tuplesNum1
+                        << ", join result size is " << joinResults.size() << " + " << leftIds.size()
+                       );
+                PartialJoinIncomplete_ = true;
+                break;
+            }
 
             if ( table1HasKeyStringColumns || table1HasKeyIColumns ) {
                 keysValSize = headerSize1 + *(it1 + headerSize1 - 1) ;
@@ -649,7 +680,10 @@ void TTable::Join( ui32 bucket, TTable & t1, TTable & t2, EJoinKind joinKind, bo
             }
         }
 
-        if (!hasMoreLeftTuples && !hasMoreRightTuples) {
+        ResumeOffset_ = it1 - bucket1->KeyIntVals.begin();
+        ResumeIdx_ = tuple1Idx;
+
+        if (!hasMoreLeftTuples && !hasMoreRightTuples && !PartialJoinIncomplete_) {
             bloomFilter.Shrink();
 
             if (bucketStats2->HashtableMatches) {
@@ -937,6 +971,7 @@ void TTable::ShrinkResults() {
 void TTable::ClearBucket(ui64 bucket) {
     JoinIds.clear();
     LeftIds.clear();
+    PartialJoinIncomplete_ = false;
     TTableBucket & tb = TableBuckets[bucket];
     tb.KeyIntVals.clear();
     tb.DataIntVals.clear();

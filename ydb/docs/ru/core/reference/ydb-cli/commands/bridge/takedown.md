@@ -39,7 +39,7 @@ ydb admin cluster bridge takedown --help
 ydb admin cluster bridge takedown --pile pile-b
 ```
 
-Вывод `PRIMARY` pile `pile-a` из кластера с переключением `PRIMARY` на `SYNCHRONIZED` pile `pile-b`:
+Вывод `PRIMARY` pile `pile-a` из кластера с переключением pile `pile-b` из состояния `SYNCHRONIZED` в состояние `PRIMARY`:
 
 ```bash
 ydb admin cluster bridge takedown --pile pile-a --new-primary pile-b

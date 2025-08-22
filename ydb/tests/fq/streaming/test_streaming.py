@@ -18,6 +18,7 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
                 SOURCE_TYPE="Ydb",
                 LOCATION="{os.getenv("YDB_ENDPOINT")}",
                 DATABASE_NAME="{os.getenv("YDB_DATABASE")}",
+                SHARED_READING="TRUE",
                 AUTH_METHOD="NONE");""")
 
         sql = f"""SELECT time FROM sourceName.`{self.input_topic}`

@@ -385,17 +385,38 @@ namespace NKikimr {
                         for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
                             const TVDiskIdShort pos(slot->RingIdx, slot->FailDomainIdx, slot->VDiskIdx);
                             if (const auto it = replacedSlots.find(pos); it != replacedSlots.end()) {
+                                TVSlotId fromVSlotId = it->second;
+                                TVSlotId toVSlotId = slot->VSlotId;
+
+                                TPDiskId fromPDiskId = fromVSlotId.ComprisingPDiskId();
+                                TPDiskId toPDiskId = toVSlotId.ComprisingPDiskId();
+
+                                auto *fromPDisk = State.PDisks.Find(fromPDiskId);
+                                auto *toPDisk = State.PDisks.Find(toPDiskId);
+
+                                if (State.Fit.OnlyToLessOccupiedPDisk && fromPDisk && toPDisk) {
+                                    size_t fromPDiskSlots = fromPDisk->VSlotsOnPDisk.size() - 1; // -1 because we are removing the slot
+                                    size_t toPDiskSlots = toPDisk->VSlotsOnPDisk.size();
+                                    if (toPDiskSlots > fromPDiskSlots) {
+                                        throw TExReassignNotViable() << "Reassignment from PDisk# " << fromPDiskId
+                                            << " to PDisk# " << toPDiskId
+                                            << " is not allowed with OnlyToLessOccupiedPDisk=true, target PDisk will have " << toPDiskSlots
+                                            << " slot(s), while source PDisk will have " << fromPDiskSlots << " slot(s)";
+                                    }
+                                }
+
                                 auto *item = Status.AddReassignedItem();
                                 VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation, pos), item->MutableVDiskId());
-                                Serialize(item->MutableFrom(), it->second);
-                                Serialize(item->MutableTo(), slot->VSlotId);
-                                if (auto *pdisk = State.PDisks.Find(it->second.ComprisingPDiskId())) {
-                                    item->SetFromFqdn(std::get<0>(pdisk->HostId));
-                                    item->SetFromPath(pdisk->Path);
+
+                                Serialize(item->MutableFrom(), fromVSlotId);
+                                Serialize(item->MutableTo(), toVSlotId);
+                                if (fromPDisk) {
+                                    item->SetFromFqdn(std::get<0>(fromPDisk->HostId));
+                                    item->SetFromPath(fromPDisk->Path);
                                 }
-                                if (auto *pdisk = State.PDisks.Find(slot->VSlotId.ComprisingPDiskId())) {
-                                    item->SetToFqdn(std::get<0>(pdisk->HostId));
-                                    item->SetToPath(pdisk->Path);
+                                if (toPDisk) {
+                                    item->SetToFqdn(std::get<0>(toPDisk->HostId));
+                                    item->SetToPath(toPDisk->Path);
                                 }
                             }
                         }

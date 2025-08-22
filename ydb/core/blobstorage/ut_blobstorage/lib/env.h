@@ -526,6 +526,41 @@ struct TEnvironmentSetup {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
+    void AlterBox(ui32 itemConfigGeneration, ui32 numDrivesPerNode = 0, ui32 numStorageNodes = 0,
+        NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
+        NKikimrBlobStorage::TConfigRequest request;
+
+        auto *cmd = request.AddCommand()->MutableDefineHostConfig();
+        cmd->SetHostConfigId(1);
+        for (ui32 j = 0; j < (numDrivesPerNode ? numDrivesPerNode : DrivesPerNode); ++j) {
+            auto *drive = cmd->AddDrive();
+            drive->SetPath(Sprintf("SectorMap:%" PRIu32 ":1000", j));
+            drive->SetType(pdiskType);
+        }
+
+        cmd->SetItemConfigGeneration(itemConfigGeneration);
+
+        cmd = request.AddCommand()->MutableDefineHostConfig();
+        cmd->SetHostConfigId(2);
+
+        cmd->SetItemConfigGeneration(itemConfigGeneration);
+
+        auto *cmd1 = request.AddCommand()->MutableDefineBox();
+        cmd1->SetBoxId(1);
+        ui32 index = 0;
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            auto *host = cmd1->AddHost();
+            host->MutableKey()->SetNodeId(nodeId);
+            host->SetHostConfigId(numStorageNodes == 0 || index < numStorageNodes ? 1 : 2);
+            ++index;
+        }
+
+        cmd1->SetItemConfigGeneration(itemConfigGeneration);
+
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName) {
         NKikimrBlobStorage::TConfigRequest request;
 

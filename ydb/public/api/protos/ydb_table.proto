@@ -113,7 +113,61 @@ message GlobalVectorKMeansTreeIndex {
     KMeansTreeSettings vector_settings = 3;
 }
 
-// Represent secondary index
+message FulltextIndexSettings {
+    // enum Layout {
+    //     LAYOUT_UNSPECIFIED = 0;
+    //     FLAT = 1;
+    //     SEGMENTED = 2;
+    // }
+    // Layout layout = 1;
+
+    // Positional index (true stores token positions for phrase/proximity queries)
+    // bool positional = 2;
+
+    // enum Tokenizer {
+    //     TOKENIZER_UNSPECIFIED = 0;
+    //     WHITESPACE = 1;
+    //     STANDARD = 2;
+    //     KEYWORD = 3;
+    //     NGRAM = 4;
+    //     EDGE_NGRAM = 5;
+    // }
+    // Tokenizer tokenizer = 3;
+
+    // enum Analyzer {
+    //     ANALYZER_UNSPECIFIED = 0;
+    //     STANDARD = 1;
+    //     SNOWBALL = 2;
+    //     KEYWORD = 3;
+    //     NGRAM = 4;
+    // }
+    // Analyzer analyzer = 4;
+
+    // Language for morphology, tokenizers, stopwords (e.g., "english", "russian")
+    // string language = 5;
+
+    // Filter flags
+    // bool use_lowercase = 6;
+    // bool use_stopwords = 7;
+    // bool use_snowball = 8;
+    // bool use_length = 9;
+
+    // Additional tokenizer parameters
+    // uint32 tokenizer_max_token_length = 10; // max token length for standard tokenizer
+    // uint32 tokenizer_min_gram = 11;         // min ngram length for ngram/edge_ngram
+    // uint32 tokenizer_max_gram = 12;         // max ngram length for ngram/edge_ngram
+
+    // Additional filter parameters
+    // uint32 filter_length_min = 13;          // min token length for length filter
+    // uint32 filter_length_max = 14;          // max token length for length filter
+}
+
+message GlobalFulltextIndex {
+    GlobalIndexSettings settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+}
+
+// Represent table index
 message TableIndex {
     // Name of index
     string name = 1;
@@ -125,12 +179,13 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
+       GlobalFulltextIndex global_fulltext_index = 8;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
 }
 
-// Represent secondary index with index state
+// Represent table index with index state
 message TableIndexDescription {
     enum Status {
         STATUS_UNSPECIFIED = 0;
@@ -631,7 +686,7 @@ message CreateTableRequest {
     // Table profile
     TableProfile profile = 5;
     Ydb.Operations.OperationParams operation_params = 6;
-    // List of secondary indexes
+    // List of table indexes
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
     TtlSettings ttl_settings = 8;
@@ -709,9 +764,9 @@ message AlterTableRequest {
         TtlSettings set_ttl_settings = 7;
         google.protobuf.Empty drop_ttl_settings = 8;
     }
-    // Add secondary indexes
+    // Add table indexes
     repeated TableIndex add_indexes = 9;
-    // Remove secondary indexes
+    // Remove table indexes
     repeated string drop_indexes = 10;
     // Change table storage settings
     StorageSettings alter_storage_settings = 11;

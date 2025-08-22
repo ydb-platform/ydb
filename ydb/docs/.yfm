@@ -2,20 +2,17 @@ allowHTML: true
 langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
-resources:
-  script:
-    - _assets/gtm.js
 
 docs-viewer:
   project-name: ydb
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light', 'dark']
-  metrika: 88962303
-  favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon/favicon.ico
-
+  favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
-  
+  unrestrict-revision-access: true
+  metrika: 94806704
+
   logo-options:
     url:
       en: https://ydb.tech/
@@ -27,7 +24,7 @@ docs-viewer:
     img-has:
       width: 80px
       offset: true
-  
+
   index-page:
     title: YDB Open Source
     description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД

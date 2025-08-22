@@ -922,7 +922,7 @@ protected:
     }
 
     template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode) {
+    auto BuildAllTasks(bool limitTasksPerNode, TPreparedQueryHolder::TConstPtr preparedQuery) {
         size_t sourceScanPartitionsCount = 0;
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -959,18 +959,18 @@ protected:
 
                 if (buildFromSourceTasks) {
                     switch (stage.GetSources(0).GetTypeCase()) {
-                        case NKqpProto::TKqpSource::kReadRangesSource:
+                        case NKqpProto::TKqpSource::kReadRangesSource: {
                             if (auto partitionsCount = BuildScanTasksFromSource(stageInfo, limitTasksPerNode)) {
                                 sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
-                            break;
+                        } break;
                         case NKqpProto::TKqpSource::kExternalSource: {
-                                auto it = scheduledTaskCount.find(stageIdx);
-                                BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
-                            }
-                            break;
+                            YQL_ENSURE(!isScan);
+                            auto it = scheduledTaskCount.find(stageIdx);
+                            BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                        } break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
                     }
@@ -990,6 +990,17 @@ protected:
                         BuildDatashardTasks(stageInfo);
                     } else {
                         YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
+                    }
+                }
+
+                if constexpr (isScan) {
+                    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                    const bool useLlvm = preparedQuery ? preparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
+                    for (auto& taskId : stageInfo.Tasks) {
+                        GetTask(taskId).SetUseLlvm(useLlvm);
+                    }
+                    if (Stats && CollectProfileStats(Request.StatsMode)) {
+                        Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
                     }
                 }
 

@@ -169,7 +169,7 @@ private:
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        BuildAllTasks<true>(false);
+        BuildAllTasks<true>(false, PreparedQuery);
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
@@ -178,19 +178,6 @@ private:
                 auto& stageInfo = GetTasksGraph().GetStageInfo(TStageId(txIdx, stageIdx));
 
                 Y_DEBUG_ABORT_UNLESS(!stage.GetIsEffectsStage());
-
-                // TODO: task-related, but Scan specific
-                {
-                    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                    const bool useLlvm = PreparedQuery ? PreparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
-                    for (auto& taskId : stageInfo.Tasks) {
-                        GetTask(taskId).SetUseLlvm(useLlvm);
-                    }
-                    if (Stats && CollectProfileStats(Request.StatsMode)) {
-                        Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
-                    }
-
-                }
 
                 if (stage.GetIsSinglePartition()) {
                     YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");

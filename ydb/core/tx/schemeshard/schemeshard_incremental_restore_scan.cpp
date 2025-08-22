@@ -2,6 +2,7 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #if defined LOG_D || \
     defined LOG_W || \
@@ -122,18 +123,35 @@ private:
         CompletedOperationsChanged = changed;
     }
     
-    // Serialize operation IDs for database storage
     TString SerializeOperationIds(const THashSet<TOperationId>& operations) {
-        TStringStream ss;
-        bool first = true;
+        NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
         for (const auto& opId : operations) {
-            if (!first) {
-                ss << ",";
-            }
-            ss << opId.GetTxId().GetValue() << ":" << opId.GetSubTxId();
-            first = false;
+            auto* protoOp = protoList.AddOperations();
+            protoOp->SetTxId(opId.GetTxId().GetValue());
+            protoOp->SetSubTxId(opId.GetSubTxId());
         }
-        return ss.Str();
+        return protoList.SerializeAsString();
+    }
+    
+    THashSet<TOperationId> DeserializeOperationIds(const TString& serializedData, const TActorContext& ctx) {
+        THashSet<TOperationId> operations;
+        if (serializedData.empty()) {
+            return operations;
+        }
+        
+        NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
+        if (!protoList.ParseFromString(serializedData)) {
+            LOG_E("Failed to parse serialized operation IDs data");
+            return operations;
+        }
+        
+        for (const auto& protoOp : protoList.GetOperations()) {
+            TTxId txId(protoOp.GetTxId());
+            TSubTxId subTxId = protoOp.GetSubTxId();
+            operations.insert(TOperationId(txId, subTxId));
+        }
+        
+        return operations;
     }
     
     void CheckForCompletedOperations(TIncrementalRestoreState& state, const TActorContext& ctx) {

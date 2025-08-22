@@ -1139,6 +1139,15 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
+message TIncrementalRestoreOperationId {
+    optional uint64 TxId = 1;
+    optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreOperationsList {
+    repeated TIncrementalRestoreOperationId Operations = 1;
+}
+
 message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }

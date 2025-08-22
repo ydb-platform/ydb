@@ -2,16 +2,7 @@
 
 The {{ ydb-short-name }} CLI contains a set of commands designed to export and import data and descriptions of data schema objects. Data can be exported to create backups for subsequent recovery and for other purposes.
 
-## Backup collections
-
-YDB now supports backup collections with incremental backup capabilities. This provides:
-- Efficient storage with full and incremental backups.
-- Point-in-time recovery (PITR).
-- SQL API for backup operations.
-
-See [Backup collections](../backup-collections/index.md) for details.
-
-## Traditional export/import commands
+## Export/import commands
 
 - [The export file structure](../file-structure.md) is used for exporting data both to the file system and S3-compatible object storage.
 - [Exporting cluster' metadata to the file system using `admin cluster dump`](../tools-dump.md#cluster).

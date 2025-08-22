@@ -17,7 +17,7 @@ General format of the command:
   * `export/s3`: The export to S3 operations.
   * `scriptexec`: The script execution operations.
   * `import/s3`: The import from S3 operations.
-  * `incbackup`: The incremental backup operations. See also [backup collections operations guide](export-import/backup-collections/operations.md).
+  * `incbackup`: The incremental backup operations.
   * `restore`: The restore operations.
 
 View a description of the command to get a list of long-running operations:

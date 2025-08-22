@@ -1,7 +1,0 @@
-items:
-- name: Концепции
-  href: concepts.md
-- name: Операции
-  href: operations.md
-- name: SQL API
-  href: sql-api.md

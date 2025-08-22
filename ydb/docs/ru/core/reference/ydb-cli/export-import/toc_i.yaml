@@ -1,11 +1,6 @@
 items:
 - name: Файловая структура выгрузки
   href: file-structure.md
-- name: Коллекции резервных копий
-  href: backup-collections/index.md
-  include:
-    path: backup-collections/toc_i.yaml
-    mode: link
 - name: Выгрузка в файловую систему
   href: tools-dump.md
 - name: Загрузка из файловой системы
@@ -18,3 +13,5 @@ items:
   href: import-s3.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md
+- name: Коллекции резервных копий
+  href: ../../../maintenance/manual/backup-collections.md

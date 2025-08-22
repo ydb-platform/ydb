@@ -10,7 +10,6 @@ items:
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: ANALYZE,                      href: analyze.md,                    when: backend_name == "YDB" }
-- { name: BACKUP COLLECTION,            href: backup-collections.md,        when: feature_backup_collections }
 - { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
 - { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }

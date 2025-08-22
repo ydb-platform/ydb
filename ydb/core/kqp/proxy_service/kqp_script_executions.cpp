@@ -28,6 +28,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/retry/retry_policy.h>
 
+#include <google/protobuf/util/time_util.h>
 #include <util/generic/guid.h>
 #include <util/generic/utility.h>
 
@@ -106,6 +107,12 @@ void DeserializeBinaryProto(const NJson::TJsonValue& value, TProto& proto) {
         .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64DecodeBytesTransform>());
 
     NProtobufJson::Json2Proto(encodedProto->second, proto, config);
+}
+
+void TimestampToProtoWithSaturation(google::protobuf::Timestamp* proto, TInstant timestamp) {
+    *proto = google::protobuf::util::TimeUtil::MicrosecondsToTimestamp(
+        std::min(timestamp.MicroSeconds(), static_cast<ui64>(std::numeric_limits<i64>::max()))
+    );
 }
 
 class TQueryBase : public NKikimr::TQueryBase {
@@ -600,11 +607,11 @@ private:
         SetDuration(resultsTtl, *meta.MutableResultsTtl());
 
         if (const auto timeout = TDuration::MilliSeconds(request.GetTimeoutMs())) {
-            *meta.MutableTimeoutAt() = NProtoInterop::CastToProto(TInstant::Now() + timeout);
+            TimestampToProtoWithSaturation(meta.MutableTimeoutAt(), TInstant::Now() + timeout);
         }
 
         if (const auto cancelAfter = TDuration::MilliSeconds(request.GetCancelAfterMs())) {
-            *meta.MutableCancelAt() = NProtoInterop::CastToProto(TInstant::Now() + cancelAfter);
+            TimestampToProtoWithSaturation(meta.MutableCancelAt(), TInstant::Now() + cancelAfter);
         }
 
         return meta;

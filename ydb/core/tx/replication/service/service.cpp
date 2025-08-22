@@ -100,7 +100,7 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
-        auto res = Workers.emplace(id, ops->Register(actor));
+        auto res = Workers.emplace(id, ops->Register(actor, TMailboxType::HTSwap, AppData()->BatchPoolId));
         Y_ABORT_UNLESS(res.second);
 
         const auto actorId = res.first->second;

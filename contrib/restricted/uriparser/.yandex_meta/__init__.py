@@ -23,7 +23,7 @@ def uriparser_post_install(self):
 
 
 uriparser = CMakeNinjaNixProject(
-    owners=["g:mds", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/restricted/uriparser",
     nixattr="uriparser",
     put={"testrunner": "test"},

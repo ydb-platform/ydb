@@ -780,9 +780,6 @@ private:
         if (DeferredRestoreFromCheckpointEvent) {
             ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
         }
-        if (DeferredStart) {
-            Start();
-        }
 
         ContinueExecute(EResumeSource::CATaskRunnerCreated);
     }
@@ -875,14 +872,6 @@ private:
         if (--ProcessSourcesState.Inflight == 0) {
             CA_LOG_T("Send TEvContinueRun on OnAsyncInputPushFinished");
             AskContinueRun(Nothing(), false);
-        }
-    }
-
-    void Start() override {
-        if (TypeEnv) { // Got answer from TaskRunner
-            TBase::Start();
-        } else {
-            DeferredStart = true;
         }
     }
 
@@ -1292,7 +1281,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
     NDqProto::TEvComputeActorState ComputeActorState;
     TMaybe<EResumeSource> LastPollResult;
-    bool DeferredStart = false;
 };
 
 

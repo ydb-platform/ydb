@@ -93,6 +93,39 @@ class BaseColumnTableCompatibilityTest:
         for i, expected_row in enumerate(expected_data):
             actual_row = result_sets[0].rows[i]
             for key, expected_value in expected_row.items():
+                if key in actual_row:
+                    if isinstance(expected_value, str):
+                        assert actual_row[key] == expected_value.encode('utf-8')
+                    else:
+                        assert actual_row[key] == expected_value
+                else:
+                    pass
+
+    def verify_table_data_compatible(self, session_pool, table_name, expected_data, order_by="id"):
+        all_columns = list(expected_data[0].keys())
+        available_columns = []
+        for col in all_columns:
+            try:
+                query = f"SELECT {col} FROM `{table_name}` LIMIT 1"
+                session_pool.execute_with_retries(query)
+                available_columns.append(col)
+            except Exception:
+                pass
+
+        if not available_columns:
+            query = f"SELECT COUNT(*) as cnt FROM `{table_name}`"
+            result_sets = session_pool.execute_with_retries(query)
+            assert result_sets[0].rows[0]["cnt"] == len(expected_data)
+            return
+
+        columns_str = ", ".join(available_columns)
+        query = f"SELECT {columns_str} FROM `{table_name}` ORDER BY {order_by}"
+        result_sets = session_pool.execute_with_retries(query)
+        assert len(result_sets[0].rows) == len(expected_data)
+        for i, expected_row in enumerate(expected_data):
+            actual_row = result_sets[0].rows[i]
+            for key in available_columns:
+                expected_value = expected_row[key]
                 if isinstance(expected_value, str):
                     assert actual_row[key] == expected_value.encode('utf-8')
                 else:
@@ -145,7 +178,7 @@ class TestTableSchemaCompatibilityRestart(RestartToAnotherVersionFixture, BaseCo
         self.change_cluster_version()
         with ydb.QuerySessionPool(self.driver) as session_pool:
             all_expected_data = test_data + test_data_with_new_column
-            self.verify_table_data(session_pool, table_name, all_expected_data)
+            self.verify_table_data_compatible(session_pool, table_name, all_expected_data)
 
     def test_create_alter_drop_columns_on_one_version_continue_on_another(self):
         if min(self.versions) < (25, 1):

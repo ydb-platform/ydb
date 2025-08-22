@@ -2,11 +2,13 @@ SUBSCRIBER(g:ymake)
 
 PY23_TEST()
 
-IF (PYTHON2)
+IF (PY2)
     TEST_SRCS(
         build_catboost.py
+        collect_java_srcs.py
         compile_cuda.py
         coverage-info.py
+        copy_clang_profile_rt.py
         create_jcoverage_report.py
         custom_link_green_mysql.py
         f2c.py
@@ -31,11 +33,7 @@ IF (PYTHON2)
         with_crash_on_timeout.py
         yndexer.py
     )
-ELSEIF (PYTHON3)
-    PEERDIR(
-        contrib/python/PyYAML
-    )
-
+ELSEIF (PY3)
     STYLE_PYTHON()
     TEST_SRCS(
         append_file.py
@@ -54,7 +52,6 @@ ELSEIF (PYTHON3)
         compile_pysrc.py
         configure_file.py
         container.py
-        copy_clang_profile_rt.py
         copy_docs_files.py
         copy_docs_files_to_dir.py
         copy_files_to_dir.py

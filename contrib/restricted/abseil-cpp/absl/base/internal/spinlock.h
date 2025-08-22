@@ -19,7 +19,7 @@
 //   - for use by Abseil internal code that Mutex itself depends on
 //   - for async signal safety (see below)
 
-// SpinLock with a SchedulingMode::SCHEDULE_KERNEL_ONLY is async
+// SpinLock with a base_internal::SchedulingMode::SCHEDULE_KERNEL_ONLY is async
 // signal safe. If a spinlock is used within a signal handler, all code that
 // acquires the lock must ensure that the signal cannot arrive while they are
 // holding the lock. Typically, this is done by blocking the signal.
@@ -31,16 +31,14 @@
 
 #include <atomic>
 #include <cstdint>
-#include <type_traits>
 
 #include "absl/base/attributes.h"
-#include "absl/base/config.h"
 #include "absl/base/const_init.h"
+#include "absl/base/dynamic_annotations.h"
 #include "absl/base/internal/low_level_scheduling.h"
 #include "absl/base/internal/raw_logging.h"
 #include "absl/base/internal/scheduling_mode.h"
 #include "absl/base/internal/tsan_mutex_interface.h"
-#include "absl/base/macros.h"
 #include "absl/base/thread_annotations.h"
 
 namespace tcmalloc {
@@ -57,31 +55,17 @@ namespace base_internal {
 
 class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
  public:
-  constexpr SpinLock() : lockword_(kSpinLockCooperative) { RegisterWithTsan(); }
+  SpinLock() : lockword_(kSpinLockCooperative) {
+    ABSL_TSAN_MUTEX_CREATE(this, __tsan_mutex_not_static);
+  }
 
   // Constructors that allow non-cooperative spinlocks to be created for use
   // inside thread schedulers.  Normal clients should not use these.
-  constexpr explicit SpinLock(SchedulingMode mode)
-      : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {
-    RegisterWithTsan();
-  }
-
-#if ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(_WIN32)
-  // Constructor to inline users of the default scheduling mode.
-  //
-  // This only needs to exists for inliner runs, but doesn't work correctly in
-  // clang+windows builds, likely due to mangling differences.
-  ABSL_DEPRECATE_AND_INLINE()
-  constexpr explicit SpinLock(SchedulingMode mode)
-      __attribute__((enable_if(mode == SCHEDULE_COOPERATIVE_AND_KERNEL,
-                               "Cooperative use default constructor")))
-      : SpinLock() {}
-#endif
+  explicit SpinLock(base_internal::SchedulingMode mode);
 
   // Constructor for global SpinLock instances.  See absl/base/const_init.h.
-  ABSL_DEPRECATE_AND_INLINE()
-  constexpr SpinLock(absl::ConstInitType, SchedulingMode mode)
-      : SpinLock(mode) {}
+  constexpr SpinLock(absl::ConstInitType, base_internal::SchedulingMode mode)
+      : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {}
 
   // For global SpinLock instances prefer trivial destructor when possible.
   // Default but non-trivial destructor in some build configurations causes an
@@ -93,7 +77,7 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
 #endif
 
   // Acquire this SpinLock.
-  inline void lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() {
+  inline void Lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() {
     ABSL_TSAN_MUTEX_PRE_LOCK(this, 0);
     if (!TryLockImpl()) {
       SlowLock();
@@ -101,14 +85,11 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
     ABSL_TSAN_MUTEX_POST_LOCK(this, 0, 0);
   }
 
-  ABSL_DEPRECATE_AND_INLINE()
-  inline void Lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() { return lock(); }
-
   // Try to acquire this SpinLock without blocking and return true if the
   // acquisition was successful.  If the lock was not acquired, false is
-  // returned.  If this SpinLock is free at the time of the call, try_lock will
-  // return true with high probability.
-  [[nodiscard]] inline bool try_lock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
+  // returned.  If this SpinLock is free at the time of the call, TryLock
+  // will return true with high probability.
+  [[nodiscard]] inline bool TryLock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
     ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_try_lock);
     bool res = TryLockImpl();
     ABSL_TSAN_MUTEX_POST_LOCK(
@@ -117,20 +98,15 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
     return res;
   }
 
-  ABSL_DEPRECATE_AND_INLINE()
-  [[nodiscard]] inline bool TryLock() ABSL_EXCLUSIVE_TRYLOCK_FUNCTION(true) {
-    return try_lock();
-  }
-
   // Release this SpinLock, which must be held by the calling thread.
-  inline void unlock() ABSL_UNLOCK_FUNCTION() {
+  inline void Unlock() ABSL_UNLOCK_FUNCTION() {
     ABSL_TSAN_MUTEX_PRE_UNLOCK(this, 0);
     uint32_t lock_value = lockword_.load(std::memory_order_relaxed);
     lock_value = lockword_.exchange(lock_value & kSpinLockCooperative,
                                     std::memory_order_release);
 
     if ((lock_value & kSpinLockDisabledScheduling) != 0) {
-      SchedulingGuard::EnableRescheduling(true);
+      base_internal::SchedulingGuard::EnableRescheduling(true);
     }
     if ((lock_value & kWaitTimeMask) != 0) {
       // Collect contentionz profile info, and speed the wakeup of any waiter.
@@ -140,9 +116,6 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
     }
     ABSL_TSAN_MUTEX_POST_UNLOCK(this, 0);
   }
-
-  ABSL_DEPRECATE_AND_INLINE()
-  inline void Unlock() ABSL_UNLOCK_FUNCTION() { unlock(); }
 
   // Determine if the lock is held.  When the lock is held by the invoking
   // thread, true will always be returned. Intended to be used as
@@ -202,16 +175,9 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
       ~(kSpinLockHeld | kSpinLockCooperative | kSpinLockDisabledScheduling);
 
   // Returns true if the provided scheduling mode is cooperative.
-  static constexpr bool IsCooperative(SchedulingMode scheduling_mode) {
-    return scheduling_mode == SCHEDULE_COOPERATIVE_AND_KERNEL;
-  }
-
-  constexpr void RegisterWithTsan() {
-#if ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated)
-    if (!__builtin_is_constant_evaluated()) {
-      ABSL_TSAN_MUTEX_CREATE(this, __tsan_mutex_not_static);
-    }
-#endif
+  static constexpr bool IsCooperative(
+      base_internal::SchedulingMode scheduling_mode) {
+    return scheduling_mode == base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL;
   }
 
   bool IsCooperative() const {
@@ -238,23 +204,17 @@ class ABSL_LOCKABLE ABSL_ATTRIBUTE_WARN_UNUSED SpinLock {
 // the duration of a C++ scope.
 class ABSL_SCOPED_LOCKABLE [[nodiscard]] SpinLockHolder {
  public:
-  inline explicit SpinLockHolder(
-      SpinLock& l ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this))
-      ABSL_EXCLUSIVE_LOCK_FUNCTION(l)
-      : lock_(l) {
-    l.lock();
-  }
-  ABSL_DEPRECATE_AND_INLINE()
   inline explicit SpinLockHolder(SpinLock* l) ABSL_EXCLUSIVE_LOCK_FUNCTION(l)
-      : SpinLockHolder(*l) {}
-
-  inline ~SpinLockHolder() ABSL_UNLOCK_FUNCTION() { lock_.unlock(); }
+      : lock_(l) {
+    l->Lock();
+  }
+  inline ~SpinLockHolder() ABSL_UNLOCK_FUNCTION() { lock_->Unlock(); }
 
   SpinLockHolder(const SpinLockHolder&) = delete;
   SpinLockHolder& operator=(const SpinLockHolder&) = delete;
 
  private:
-  SpinLock& lock_;
+  SpinLock* lock_;
 };
 
 // Register a hook for profiling support.
@@ -283,7 +243,7 @@ inline uint32_t SpinLock::TryLockInternal(uint32_t lock_value,
   if ((lock_value & kSpinLockCooperative) == 0) {
     // For non-cooperative locks we must make sure we mark ourselves as
     // non-reschedulable before we attempt to CompareAndSwap.
-    if (SchedulingGuard::DisableRescheduling()) {
+    if (base_internal::SchedulingGuard::DisableRescheduling()) {
       sched_disabled_bit = kSpinLockDisabledScheduling;
     }
   }
@@ -292,7 +252,7 @@ inline uint32_t SpinLock::TryLockInternal(uint32_t lock_value,
           lock_value,
           kSpinLockHeld | lock_value | wait_cycles | sched_disabled_bit,
           std::memory_order_acquire, std::memory_order_relaxed)) {
-    SchedulingGuard::EnableRescheduling(sched_disabled_bit != 0);
+    base_internal::SchedulingGuard::EnableRescheduling(sched_disabled_bit != 0);
   }
 
   return lock_value;

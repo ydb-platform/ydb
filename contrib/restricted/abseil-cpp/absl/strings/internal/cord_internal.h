@@ -915,6 +915,8 @@ inline CordRep* CordRep::Ref(CordRep* rep) {
 
 inline void CordRep::Unref(CordRep* rep) {
   assert(rep != nullptr);
+  // Expect refcount to be 0. Avoiding the cost of an atomic decrement should
+  // typically outweigh the cost of an extra branch checking for ref == 1.
   if (ABSL_PREDICT_FALSE(!rep->refcount.DecrementExpectHighRefcount())) {
     Destroy(rep);
   }

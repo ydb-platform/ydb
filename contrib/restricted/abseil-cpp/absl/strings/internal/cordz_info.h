@@ -191,7 +191,9 @@ class ABSL_LOCKABLE CordzInfo : public CordzHandle {
   // Global cordz info list. CordzInfo stores a pointer to the global list
   // instance to harden against ODR violations.
   struct List {
-    constexpr explicit List(absl::ConstInitType) {}
+    constexpr explicit List(absl::ConstInitType)
+        : mutex(absl::kConstInit,
+                absl::base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL) {}
 
     SpinLock mutex;
     std::atomic<CordzInfo*> head ABSL_GUARDED_BY(mutex){nullptr};
@@ -290,7 +292,7 @@ inline void CordzInfo::SetCordRep(CordRep* rep) {
 inline void CordzInfo::UnsafeSetCordRep(CordRep* rep) { rep_ = rep; }
 
 inline CordRep* CordzInfo::RefCordRep() const ABSL_LOCKS_EXCLUDED(mutex_) {
-  MutexLock lock(mutex_);
+  MutexLock lock(&mutex_);
   return rep_ ? CordRep::Ref(rep_) : nullptr;
 }
 

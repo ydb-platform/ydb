@@ -93,7 +93,7 @@ def post_install(self):
 libjpeg_turbo = CMakeNinjaNixProject(
     arcdir="contrib/libs/libjpeg-turbo",
     nixattr="libjpeg",
-    owners=["g:cpp-contrib"],
+    owners=["g:cpp-contrib", "g:avatars"],
     ignore_commands={"bash", "sed"},
     use_full_libnames=True,
     install_targets={

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/library/yql/sql/v1)
 
-TAG(ya:manual)
-
 SRCS(
     sql_ut.cpp
     sql_match_recognize_ut.cpp

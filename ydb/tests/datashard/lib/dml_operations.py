@@ -298,7 +298,7 @@ class DMLOperations():
 
         rows = self.query(f"select {", ".join(statements)} from {table_name}")
         count = 0
-        for data_type in all_types.keys():    
+        for data_type in all_types.keys():
             for i in range(len(rows)):
                 self.assert_type(all_types, data_type, i+1, rows[i][count])
             count += 1

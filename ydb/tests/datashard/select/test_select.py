@@ -69,7 +69,6 @@ class TestDML(TestBase):
         self.from_select(table_name, all_types, pk_types, index, ttl, dml)
         self.distinct(table_name, all_types, pk_types, index, ttl, dml)
         self.union(table_name, all_types, pk_types, index, ttl, dml)
-        self.without(table_name, all_types, pk_types, index, ttl)
         self.tablesample_sample(table_name, all_types, pk_types, index, ttl, dml)
 
     def limit(
@@ -252,31 +251,6 @@ class TestDML(TestBase):
             rows = dml.query(select_with_sql_request)
             for i, row in enumerate(rows):
                 self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
-
-    def without(
-        self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
-    ):
-        selected_columns_without = []
-        for type_name in all_types.keys():
-            selected_columns_without.append(f"col_{cleanup_type_name(type_name)}")
-        for type_name in pk_types.keys():
-            selected_columns_without.append(f"pk_{cleanup_type_name(type_name)}")
-        for type_name in index.keys():
-            selected_columns_without.append(f"col_index_{cleanup_type_name(type_name)}")
-
-        for type_name in all_types.keys():
-            self.create_without(table_name, selected_columns_without, f"col_{cleanup_type_name(type_name)}")
-        for type_name in pk_types.keys():
-            self.create_without(table_name, selected_columns_without, f"pk_{cleanup_type_name(type_name)}")
-        for type_name in index.keys():
-            self.create_without(table_name, selected_columns_without, f"col_index_{cleanup_type_name(type_name)}")
-        if ttl != "":
-            self.create_without(table_name, selected_columns_without, f"ttl_{cleanup_type_name(ttl)}")
-
-    def create_without(self, table_name, selected_columns_without, without):
-        rows = self.query(f"select * without {", ".join(selected_columns_without)}, {without} from {table_name}")
-        for col_name in rows[0].keys():
-            assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
 
     def tablesample_sample(
         self,

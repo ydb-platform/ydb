@@ -53,20 +53,11 @@ private:
 
 public:
     TTieringTestHelper() {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        Init(runnerSettings);
-    }
-
-    TTieringTestHelper(const TKikimrSettings& settings) {
-        Init(settings);
-    }
-
-private:
-    void Init(const TKikimrSettings& runnerSettings) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
         TestHelper.emplace(runnerSettings);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
@@ -75,8 +66,6 @@ private:
         Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
     }
-
-public:
 
     TTestHelper& GetTestHelper() {
         AFL_VERIFY(TestHelper);
@@ -179,13 +168,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     }
 
     Y_UNIT_TEST(LoadTtlSettings) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        TTestHelper testHelper(settings);
-        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
-        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
-        csController->SetSkipSpecialCheckForEvict(true);
-        TLocalHelper olapHelper(testHelper.GetKikimr());
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        tieringHelper.SetTablePath("/Root/olapTable");
+        tieringHelper.GetTestHelper().GetKikimr().GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
         olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);

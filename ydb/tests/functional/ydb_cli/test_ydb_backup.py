@@ -102,11 +102,11 @@ def modify_permissions(scheme_client, path):
     )
 
 
-def is_tables_the_same(session, scheme_client, path_left, path_right, check_data=True):
-    if not is_tables_descriptions_the_same(session, path_left, path_right):
+def are_tables_the_same(session, scheme_client, path_left, path_right, check_data=True):
+    if not are_tables_descriptions_the_same(session, path_left, path_right):
         return False
 
-    if not is_permissions_the_same(scheme_client, path_left, path_right):
+    if not are_permissions_the_same_for_two_paths(scheme_client, path_left, path_right):
         return False
 
     if check_data:
@@ -115,7 +115,7 @@ def is_tables_the_same(session, scheme_client, path_left, path_right, check_data
     return True
 
 
-def is_tables_descriptions_the_same(session, path_left, path_right):
+def are_tables_descriptions_the_same(session, path_left, path_right):
     table_desc_left = session.describe_table(path_left)
     table_desc_right = session.describe_table(path_right)
     if (
@@ -170,21 +170,25 @@ def is_data_the_same(session, path_left, path_right):
         right_rows = right_rows[rows_to_process:]
 
 
-def is_permissions_the_same(scheme_client, path_left, path_right):
+def are_permissions_the_same(permissions_string_left, owner_left, permissions_string_right, owner_right):
+    if owner_left != owner_right or permissions_string_left != permissions_string_right:
+        logging.debug("Permissions (are not the same)!" +
+                      "\nleft object has owner# " + owner_left +
+                      " permissions# " + permissions_string_left +
+                      "\nright object has owner# " + owner_right +
+                      " permissions# " + permissions_string_right)
+        return False
+    return True
+
+
+def are_permissions_the_same_for_two_paths(scheme_client, path_left, path_right):
     path_left_desc = scheme_client.describe_path(path_left)
     path_right_desc = scheme_client.describe_path(path_right)
 
     path_left_permissions = permissions_to_string(sort_permissions(path_left_desc.permissions))
     path_right_permsissions = permissions_to_string(sort_permissions(path_right_desc.permissions))
 
-    if path_left_desc.owner != path_right_desc.owner or path_left_permissions != path_right_permsissions:
-        logging.debug("Permissions (is not the same)!" +
-                      "\npath_left# " + path_left + " has owner# " + path_left_desc.owner +
-                      " permissions# " + path_left_permissions +
-                      "\npath_right# " + path_right + " has owner# " + path_right_desc.owner +
-                      " permissions# " + path_right_permsissions)
-        return False
-    return True
+    return are_permissions_the_same(path_left_permissions, path_left_desc.owner, path_right_permsissions, path_right_desc.owner)
 
 
 @enum.unique
@@ -551,7 +555,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored" + postfix + "/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored" + postfix + "/table"),
             is_(True)
         )
         session.drop_table("/Root/restored" + postfix + "/table")
@@ -608,7 +612,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
             contains_inanyorder("folder", "table", ".metadata", ".sys")
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/table"),
             is_(True)
         )
 
@@ -664,7 +668,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
             contains_inanyorder("folder", "table", ".metadata", ".sys")
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/table", False),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/table", False),
             is_(True)
         )
 
@@ -838,7 +842,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(True)
         )
 
@@ -897,7 +901,7 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(True)
         )
 
@@ -950,11 +954,11 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
             contains_inanyorder("folder", "restored")
         )
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
             is_(True)
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
             is_(True)
         )
 
@@ -1042,11 +1046,11 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
         )
 
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
             is_(False)
         )
         assert_that(
-            is_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/folder/table"),
+            are_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/folder/table"),
             is_(True)
         )
         assert_that(
@@ -1054,7 +1058,7 @@ class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupI
             is_(True)
         )
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
             is_(False)
         )
 
@@ -1108,11 +1112,11 @@ class TestPermissionsBackupRestoreSchemeOnly(BaseTestBackupInFiles):
             contains_inanyorder("folder", "restored")
         )
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
             is_(True)
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table", False),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table", False),
             is_(True)
         )
 
@@ -1159,7 +1163,7 @@ class TestPermissionsBackupRestoreEmptyDir(BaseTestBackupInFiles):
             contains_inanyorder("folder", "restored")
         )
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/", "/Root/restored/folder/"),
             is_(True)
         )
 
@@ -1219,7 +1223,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/table"),
+            are_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/table"),
             is_(True)
         )
         assert_that(
@@ -1227,7 +1231,7 @@ class TestRestoreACLOption(BaseTestBackupInFiles):
             is_(True)
         )
         assert_that(
-            is_permissions_the_same(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(False)
         )
 
@@ -1287,7 +1291,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
             is_(["table"])
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table", False),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table", False),
             is_(True)
         )
         assert_that(
@@ -1625,7 +1629,7 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
 class TestRestoreReplaceOption(BaseTestBackupInFiles):
     def ydb_cli(self, args):
-        yatest.common.execute(
+        return yatest.common.execute(
             [
                 backup_bin(),
                 "-vvv",
@@ -1638,7 +1642,7 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
     def try_ydb_cli(self, args):
         try:
             result = self.ydb_cli(args)
-            return True, result.std_out.decode("utf-8")
+            return True, result.stdout.decode("utf-8")
 
         except yatest.common.process.ExecutionError as exception:
             return False, exception.execution_result.std_err.decode("utf-8")
@@ -1674,7 +1678,7 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
         )
         self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir])
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
         )
 
@@ -1684,12 +1688,12 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
             ["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace", "--dry-run"]
         )
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(False),
         )
         self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
         )
 
@@ -1754,6 +1758,208 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
         )
         self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
         assert_that(
-            is_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
+            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
+        )
+
+
+class TestReplaceSysACLOption(BaseTestBackupInFiles):
+    @classmethod
+    def setup_class(cls):
+        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_real_system_view_paths"]))
+        cls.cluster.start()
+        cls.root_dir = '/Root'
+        driver_config = ydb.DriverConfig(
+            database='/Root',
+            endpoint='%s:%s' % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
+        cls.driver = ydb.Driver(driver_config)
+        cls.driver.wait(timeout=4)
+
+    def ydb_cli(self, args):
+        return yatest.common.execute(
+            [
+                backup_bin(),
+                '-vvv',
+                '--endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port,
+                '--database', '/Root',
+            ]
+            + args
+        )
+
+    def try_ydb_cli(self, args):
+        try:
+            result = self.ydb_cli(args)
+            return True, result.stdout.decode('utf-8')
+
+        except yatest.common.process.ExecutionError as exception:
+            return False, exception.execution_result.std_err.decode('utf-8')
+
+    def test_disabled_option(self):
+        # Create folder
+        self.driver.scheme_client.make_directory('/Root/folder')
+
+        # Modify permissions on '.sys' dir and 'partition_stats' sys view
+        modify_permissions(self.driver.scheme_client, '.sys')
+        modify_permissions(self.driver.scheme_client, '.sys/partition_stats')
+
+        sys_dir_desc = self.driver.scheme_client.describe_path('/Root/.sys')
+        sys_dir_dumped_permissions = permissions_to_string(sort_permissions(sys_dir_desc.permissions))
+        sys_dir_dumped_owner = sys_dir_desc.owner
+
+        sysview_desc = self.driver.scheme_client.describe_path('/Root/.sys/partition_stats')
+        sysview_dumped_permissions = permissions_to_string(sort_permissions(sysview_desc.permissions))
+        sysview_dumped_owner = sysview_desc.owner
+
+        # Backup the domain
+        backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
+        self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
+        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+
+        # Remove directory
+        self.driver.scheme_client.remove_directory('/Root/folder')
+
+        # Modify permissions on '.sys' dir and 'partition_stats' sys view
+        new_permissions_settings = ydb.ModifyPermissionsSettings()\
+            .clear_permissions()\
+            .change_owner('user1')
+
+        self.driver.scheme_client.modify_permissions('/Root/.sys', new_permissions_settings)
+        self.driver.scheme_client.modify_permissions('/Root/.sys/partition_stats', new_permissions_settings)
+
+        # Restore the domain
+        self.ydb_cli(['tools', 'restore', '--path', '/Root', '--input', backup_files_dir, '--replace-sys-acl', 'false'])
+
+        # Check the restored directory
+        assert_that(
+            self.scheme_listdir('/Root'),
+            contains_inanyorder('folder')
+        )
+
+        sys_dir_desc = self.driver.scheme_client.describe_path('/Root/.sys')
+        sys_dir_restored_permissions = permissions_to_string(sort_permissions(sys_dir_desc.permissions))
+        sys_dir_restored_owner = sys_dir_desc.owner
+
+        sysview_desc = self.driver.scheme_client.describe_path('/Root/.sys/partition_stats')
+        sysview_restored_permissions = permissions_to_string(sort_permissions(sysview_desc.permissions))
+        sysview_restored_owner = sysview_desc.owner
+
+        # Check '.sys' restored permissions
+        assert_that(
+            are_permissions_the_same(
+                sys_dir_restored_permissions, sys_dir_restored_owner,
+                sys_dir_dumped_permissions, sys_dir_dumped_owner
+            ),
+            is_(False),
+        )
+
+        # Check sys view 'partition_stats' restored permissions
+        assert_that(
+            are_permissions_the_same(
+                sysview_restored_permissions, sysview_restored_owner,
+                sysview_dumped_permissions, sysview_dumped_owner
+            ),
+            is_(False),
+        )
+
+        # Restore the domain in ordinary directory
+        assert_that(
+            self.try_ydb_cli(
+                ['tools', 'restore', '--path', '/Root/restored', '--input', backup_files_dir, '--replace-sys-acl', 'false']
+            )[0],
+            is_(True),
+        )
+
+        # Check the restored directory
+        assert_that(
+            self.scheme_listdir('/Root/restored'),
+            contains_inanyorder('folder')
+        )
+
+    def test_enabled_option(self):
+        # Create folder
+        self.driver.scheme_client.make_directory('/Root/folder')
+
+        # Modify permissions on '.sys' dir and 'partition_stats' sys view
+        modify_permissions(self.driver.scheme_client, '.sys')
+        modify_permissions(self.driver.scheme_client, '.sys/partition_stats')
+
+        sys_dir_desc = self.driver.scheme_client.describe_path('/Root/.sys')
+        sys_dir_dumped_permissions = permissions_to_string(sort_permissions(sys_dir_desc.permissions))
+        sys_dir_dumped_owner = sys_dir_desc.owner
+
+        sysview_desc = self.driver.scheme_client.describe_path('/Root/.sys/partition_stats')
+        sysview_dumped_permissions = permissions_to_string(sort_permissions(sysview_desc.permissions))
+        sysview_dumped_owner = sysview_desc.owner
+
+        # Backup the domain
+        backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
+        self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
+        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+
+        # Remove directory
+        self.driver.scheme_client.remove_directory('/Root/folder')
+
+        # Modify permissions on '.sys' dir and 'partition_stats' sys view
+        new_permissions_settings = ydb.ModifyPermissionsSettings()\
+            .clear_permissions()\
+            .change_owner('user1')
+
+        self.driver.scheme_client.modify_permissions('/Root/.sys', new_permissions_settings)
+        self.driver.scheme_client.modify_permissions('/Root/.sys/partition_stats', new_permissions_settings)
+
+        # Restore the domain
+        self.ydb_cli(['tools', 'restore', '--path', '/Root', '--input', backup_files_dir])
+
+        # Check the restored directory
+        assert_that(
+            self.scheme_listdir('/Root'),
+            contains_inanyorder('folder')
+        )
+
+        sys_dir_desc = self.driver.scheme_client.describe_path('/Root/.sys')
+        sys_dir_restored_permissions = permissions_to_string(sort_permissions(sys_dir_desc.permissions))
+        sys_dir_restored_owner = sys_dir_desc.owner
+
+        sysview_desc = self.driver.scheme_client.describe_path('/Root/.sys/partition_stats')
+        sysview_restored_permissions = permissions_to_string(sort_permissions(sysview_desc.permissions))
+        sysview_restored_owner = sysview_desc.owner
+
+        # Check '.sys' restored permissions
+        assert_that(
+            are_permissions_the_same(
+                sys_dir_restored_permissions, sys_dir_restored_owner,
+                sys_dir_dumped_permissions, sys_dir_dumped_owner
+            ),
+            is_(True),
+        )
+
+        # Check sys view 'partition_stats' restored permissions
+        assert_that(
+            are_permissions_the_same(
+                sysview_restored_permissions, sysview_restored_owner,
+                sysview_dumped_permissions, sysview_dumped_owner
+            ),
+            is_(True),
+        )
+
+        # Check the sys views compatibility
+        assert_that(
+            self.try_ydb_cli(
+                ["tools", "restore", "--path", "/Root", "--input", backup_files_dir, "--dry-run"]
+            )[0],
+            is_(True),
+        )
+
+        # Restore the domain in ordinary directory
+        assert_that(
+            self.try_ydb_cli(
+                ['tools', 'restore', '--path', '/Root/restored', '--input', backup_files_dir]
+            )[0],
+            is_(True),
+        )
+
+        # Check the restored directory
+        assert_that(
+            self.scheme_listdir('/Root/restored'),
+            contains_inanyorder('folder')
         )

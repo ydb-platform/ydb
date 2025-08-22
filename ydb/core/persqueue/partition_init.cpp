@@ -978,7 +978,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     if (!IsSupportive()) {
         if (Config.GetEnablePerPartitionCounters()) {
-            SetupPerPartitionCounters(ctx);
+            SetupPerPartitionCounters();
         }
 
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

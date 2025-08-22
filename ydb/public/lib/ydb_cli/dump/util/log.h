@@ -4,7 +4,7 @@
 
 #define LOG_IMPL(log, level, message) \
     if (log->FiltrationLevel() >= level) { \
-        log->Write(level, TStringBuilder() << message); \
+        log->Write(level, TStringBuilder() << message << Endl); \
     } \
     Y_SEMICOLON_GUARD
 

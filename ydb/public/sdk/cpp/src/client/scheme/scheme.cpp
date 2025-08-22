@@ -146,6 +146,10 @@ void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request)
 }
 
 TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+    if (request.clear_permissions()) {
+        AddClearAcl();
+    }
+
     for (const auto& action : request.actions()) {
         switch (action.action_case()) {
             case Ydb::Scheme::PermissionsAction::kGrant:

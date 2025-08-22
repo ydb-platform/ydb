@@ -39,6 +39,17 @@ TStatus DescribeExternalDataSource(TTableClient& client, const TString& path, Yd
     return status;
 }
 
+TStatus DescribeSystemView(TTableClient& client, const TString& path, Ydb::Table::DescribeSystemViewResult& out) {
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeSystemView(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            out = TProtoAccessor::GetProto(result.GetSystemViewDescription());
+        }
+        return result;
+    });
+    return status;
+}
+
 TStatus DescribeReplication(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TReplicationDescription>& out) {
     out.Clear();
 

@@ -434,9 +434,9 @@ HelpMode HandleUsageFlags(std::ostream& out,
 
 namespace {
 
-absl::Mutex& HelpAttributesMutex() {
+absl::Mutex* HelpAttributesMutex() {
   static absl::NoDestructor<absl::Mutex> mutex;
-  return *mutex;
+  return mutex.get();
 }
 ABSL_CONST_INIT std::string* match_substr ABSL_GUARDED_BY(HelpAttributesMutex())
     ABSL_PT_GUARDED_BY(HelpAttributesMutex()) = nullptr;

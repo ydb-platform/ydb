@@ -145,14 +145,6 @@ CpuType GetIntelCpuType() {
               }
             case 0x5e:  // Skylake (client)
               return CpuType::kIntelSkylake;
-            case 0x6a:  // Ice Lake
-              return CpuType::kIntelIcelake;
-            case 0x8f:  // Sapphire Rapids
-              return CpuType::kIntelSapphirerapids;
-            case 0xcf:  // Emerald Rapids
-              return CpuType::kIntelEmeraldrapids;
-            case 0xad:  // Granite Rapids
-              return CpuType::kIntelGraniterapidsap;
             default:
               return CpuType::kUnknown;
           }
@@ -218,14 +210,6 @@ CpuType GetAmdCpuType() {
           return CpuType::kUnknown;
       }
       break;
-    case 0x1A:
-      switch (model_num) {
-        case 0x2:
-          return CpuType::kAmdTurin;
-        default:
-          return CpuType::kUnknown;
-      }
-      break;
     default:
       return CpuType::kUnknown;
   }
@@ -275,7 +259,6 @@ CpuType GetCpuType() {
           case 0xd40: return CpuType::kArmNeoverseV1;
           case 0xd49: return CpuType::kArmNeoverseN2;
           case 0xd4f: return CpuType::kArmNeoverseV2;
-          case 0xd8e: return CpuType::kArmNeoverseN3;
           default:
             return CpuType::kUnknown;
         }

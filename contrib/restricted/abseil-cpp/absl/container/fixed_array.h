@@ -392,7 +392,8 @@ class ABSL_ATTRIBUTE_WARN_UNUSED FixedArray {
 
   template <typename H>
   friend H AbslHashValue(H h, const FixedArray& v) {
-    return H::combine_contiguous(std::move(h), v.data(), v.size());
+    return H::combine(H::combine_contiguous(std::move(h), v.data(), v.size()),
+                      hash_internal::WeaklyMixedInteger{v.size()});
   }
 
  private:

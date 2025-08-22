@@ -66,7 +66,6 @@
 #include "absl/base/attributes.h"
 #include "absl/base/config.h"
 #include "absl/base/macros.h"
-#include "absl/base/nullability.h"
 #include "absl/base/optimization.h"
 #include "absl/meta/type_traits.h"
 #include "absl/utility/utility.h"
@@ -76,7 +75,7 @@ ABSL_NAMESPACE_BEGIN
 
 // Defined in functional/any_invocable.h
 template <class Sig>
-class ABSL_NULLABILITY_COMPATIBLE AnyInvocable;
+class AnyInvocable;
 
 namespace internal_any_invocable {
 

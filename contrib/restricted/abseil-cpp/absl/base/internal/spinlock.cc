@@ -16,18 +16,15 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstdint>
 #include <limits>
 
 #include "absl/base/attributes.h"
-#include "absl/base/call_once.h"
 #include "absl/base/config.h"
 #include "absl/base/internal/atomic_hook.h"
 #include "absl/base/internal/cycleclock.h"
-#include "absl/base/internal/scheduling_mode.h"
 #include "absl/base/internal/spinlock_wait.h"
 #include "absl/base/internal/sysinfo.h" /* For NumCPUs() */
-#include "absl/base/internal/tsan_mutex_interface.h"
+#include "absl/base/call_once.h"
 
 // Description of lock-word:
 //  31..00: [............................3][2][1][0]
@@ -61,13 +58,19 @@ namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES static AtomicHook<void (*)(
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES static base_internal::AtomicHook<void (*)(
     const void *lock, int64_t wait_cycles)>
     submit_profile_data;
 
 void RegisterSpinLockProfiler(void (*fn)(const void *contendedlock,
                                          int64_t wait_cycles)) {
   submit_profile_data.Store(fn);
+}
+
+// Uncommon constructors.
+SpinLock::SpinLock(base_internal::SchedulingMode mode)
+    : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {
+  ABSL_TSAN_MUTEX_CREATE(this, __tsan_mutex_not_static);
 }
 
 // Monitor the lock to see if its value changes within some time period
@@ -78,8 +81,9 @@ uint32_t SpinLock::SpinLoop() {
   // adaptive_spin_count here.
   ABSL_CONST_INIT static absl::once_flag init_adaptive_spin_count;
   ABSL_CONST_INIT static int adaptive_spin_count = 0;
-  LowLevelCallOnce(&init_adaptive_spin_count,
-                   []() { adaptive_spin_count = NumCPUs() > 1 ? 1000 : 1; });
+  base_internal::LowLevelCallOnce(&init_adaptive_spin_count, []() {
+    adaptive_spin_count = base_internal::NumCPUs() > 1 ? 1000 : 1;
+  });
 
   int c = adaptive_spin_count;
   uint32_t lock_value;
@@ -96,11 +100,11 @@ void SpinLock::SlowLock() {
     return;
   }
 
-  SchedulingMode scheduling_mode;
+  base_internal::SchedulingMode scheduling_mode;
   if ((lock_value & kSpinLockCooperative) != 0) {
-    scheduling_mode = SCHEDULE_COOPERATIVE_AND_KERNEL;
+    scheduling_mode = base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL;
   } else {
-    scheduling_mode = SCHEDULE_KERNEL_ONLY;
+    scheduling_mode = base_internal::SCHEDULE_KERNEL_ONLY;
   }
 
   // The lock was not obtained initially, so this thread needs to wait for
@@ -130,7 +134,7 @@ void SpinLock::SlowLock() {
         // new lock state will be the number of cycles this thread waited if
         // this thread obtains the lock.
         lock_value = TryLockInternal(lock_value, wait_cycles);
-        continue;  // Skip the delay at the end of the loop.
+        continue;   // Skip the delay at the end of the loop.
       } else if ((lock_value & kWaitTimeMask) == 0) {
         // The lock is still held, without a waiter being marked, but something
         // else about the lock word changed, causing our CAS to fail. For
@@ -146,8 +150,8 @@ void SpinLock::SlowLock() {
     // synchronization there to avoid false positives.
     ABSL_TSAN_MUTEX_PRE_DIVERT(this, 0);
     // Wait for an OS specific delay.
-    SpinLockDelay(&lockword_, lock_value, ++lock_wait_call_count,
-                  scheduling_mode);
+    base_internal::SpinLockDelay(&lockword_, lock_value, ++lock_wait_call_count,
+                                 scheduling_mode);
     ABSL_TSAN_MUTEX_POST_DIVERT(this, 0);
     // Spin again after returning from the wait routine to give this thread
     // some chance of obtaining the lock.
@@ -158,8 +162,8 @@ void SpinLock::SlowLock() {
 }
 
 void SpinLock::SlowUnlock(uint32_t lock_value) {
-  SpinLockWake(&lockword_,
-               false);  // wake waiter if necessary
+  base_internal::SpinLockWake(&lockword_,
+                              false);  // wake waiter if necessary
 
   // If our acquisition was contended, collect contentionz profile info.  We
   // reserve a unitary wait time to represent that a waiter exists without our

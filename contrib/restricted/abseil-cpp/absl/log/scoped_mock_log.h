@@ -160,13 +160,7 @@ class ScopedMockLog final {
   // from the log message text, log message path and log message severity.
   //
   // If no expectations are specified for this mock, the default action is to
-  // forward the call to the `Log` mock.  Tests using `Send` are advised to call
-  //
-  //   `EXPECT_CALL(sink, Send).Times(0);`
-  //
-  // prior to specifying other expectations to suppress forwarding to `Log`.
-  // That way, unexpected calls show up as calls to `Send` with complete data
-  // and metadata for easier debugging.
+  // forward the call to the `Log` mock.
   MOCK_METHOD(void, Send, (const absl::LogEntry&));
 
   // Implements the mock method:

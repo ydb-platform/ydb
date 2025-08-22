@@ -226,7 +226,7 @@ static bool AtomicSetBits(std::atomic<intptr_t>* pv, intptr_t bits,
 
 // Data for doing deadlock detection.
 ABSL_CONST_INIT static absl::base_internal::SpinLock deadlock_graph_mu(
-    base_internal::SCHEDULE_KERNEL_ONLY);
+    absl::kConstInit, base_internal::SCHEDULE_KERNEL_ONLY);
 
 // Graph used to detect deadlocks.
 ABSL_CONST_INIT static GraphCycles* deadlock_graph
@@ -292,7 +292,7 @@ static const struct {
 };
 
 ABSL_CONST_INIT static absl::base_internal::SpinLock synch_event_mu(
-    base_internal::SCHEDULE_KERNEL_ONLY);
+    absl::kConstInit, base_internal::SCHEDULE_KERNEL_ONLY);
 
 // Hash table size; should be prime > 2.
 // Can't be too small, as it's used for deadlock detection information.
@@ -330,7 +330,7 @@ static SynchEvent* EnsureSynchEvent(std::atomic<intptr_t>* addr,
                                     const char* name, intptr_t bits,
                                     intptr_t lockbit) {
   uint32_t h = reinterpret_cast<uintptr_t>(addr) % kNSynchEvent;
-  synch_event_mu.lock();
+  synch_event_mu.Lock();
   // When a Mutex/CondVar is destroyed, we don't remove the associated
   // SynchEvent to keep destructors empty in release builds for performance
   // reasons. If the current call is the first to set bits (kMuEvent/kCVEvent),
@@ -392,16 +392,16 @@ static SynchEvent* EnsureSynchEvent(std::atomic<intptr_t>* addr,
   } else {
     e->refcount++;  // for return value
   }
-  synch_event_mu.unlock();
+  synch_event_mu.Unlock();
   return e;
 }
 
 // Decrement the reference count of *e, or do nothing if e==null.
 static void UnrefSynchEvent(SynchEvent* e) {
   if (e != nullptr) {
-    synch_event_mu.lock();
+    synch_event_mu.Lock();
     bool del = (--(e->refcount) == 0);
-    synch_event_mu.unlock();
+    synch_event_mu.Unlock();
     if (del) {
       base_internal::LowLevelAlloc::Free(e);
     }
@@ -414,7 +414,7 @@ static void UnrefSynchEvent(SynchEvent* e) {
 static SynchEvent* GetSynchEvent(const void* addr) {
   uint32_t h = reinterpret_cast<uintptr_t>(addr) % kNSynchEvent;
   SynchEvent* e;
-  synch_event_mu.lock();
+  synch_event_mu.Lock();
   for (e = synch_event[h];
        e != nullptr && e->masked_addr != base_internal::HidePtr(addr);
        e = e->next) {
@@ -422,7 +422,7 @@ static SynchEvent* GetSynchEvent(const void* addr) {
   if (e != nullptr) {
     e->refcount++;
   }
-  synch_event_mu.unlock();
+  synch_event_mu.Unlock();
   return e;
 }
 
@@ -509,10 +509,10 @@ struct SynchWaitParams {
   const Condition* cond;   // The condition that this thread is waiting for.
                            // In Mutex, this field is set to zero if a timeout
                            // expires.
-  KernelTimeout timeout;   // timeout expiry---absolute time
-                           // In Mutex, this field is set to zero if a timeout
-                           // expires.
-  Mutex* const cvmu;       // used for transfer from cond var to mutex
+  KernelTimeout timeout;  // timeout expiry---absolute time
+                          // In Mutex, this field is set to zero if a timeout
+                          // expires.
+  Mutex* const cvmu;      // used for transfer from cond var to mutex
   PerThreadSynch* const thread;  // thread that is waiting
 
   // If not null, thread should be enqueued on the CondVar whose state
@@ -1223,8 +1223,9 @@ static GraphId GetGraphIdLocked(Mutex* mu)
 }
 
 static GraphId GetGraphId(Mutex* mu) ABSL_LOCKS_EXCLUDED(deadlock_graph_mu) {
-  base_internal::SpinLockHolder l(deadlock_graph_mu);
+  deadlock_graph_mu.Lock();
   GraphId id = GetGraphIdLocked(mu);
+  deadlock_graph_mu.Unlock();
   return id;
 }
 
@@ -1326,7 +1327,8 @@ static char* StackString(void** pcs, int n, char* buf, int maxlen,
   char sym[kSymLen];
   int len = 0;
   for (int i = 0; i != n; i++) {
-    if (len >= maxlen) return buf;
+    if (len >= maxlen)
+      return buf;
     size_t count = static_cast<size_t>(maxlen - len);
     if (symbolize) {
       if (!absl::Symbolize(pcs[i], sym, kSymLen)) {
@@ -1385,7 +1387,7 @@ static GraphId DeadlockCheck(Mutex* mu) {
 
   SynchLocksHeld* all_locks = Synch_GetAllLocks();
 
-  absl::base_internal::SpinLockHolder lock(deadlock_graph_mu);
+  absl::base_internal::SpinLockHolder lock(&deadlock_graph_mu);
   const GraphId mu_id = GetGraphIdLocked(mu);
 
   if (all_locks->n == 0) {
@@ -1455,7 +1457,7 @@ static GraphId DeadlockCheck(Mutex* mu) {
       }
       if (synch_deadlock_detection.load(std::memory_order_acquire) ==
           OnDeadlockCycle::kAbort) {
-        deadlock_graph_mu.unlock();  // avoid deadlock in fatal sighandler
+        deadlock_graph_mu.Unlock();  // avoid deadlock in fatal sighandler
         ABSL_RAW_LOG(FATAL, "dying due to potential deadlock");
         return mu_id;
       }
@@ -1480,11 +1482,11 @@ static inline GraphId DebugOnlyDeadlockCheck(Mutex* mu) {
 void Mutex::ForgetDeadlockInfo() {
   if (kDebugMode && synch_deadlock_detection.load(std::memory_order_acquire) !=
                         OnDeadlockCycle::kIgnore) {
-    deadlock_graph_mu.lock();
+    deadlock_graph_mu.Lock();
     if (deadlock_graph != nullptr) {
       deadlock_graph->RemoveNode(this);
     }
-    deadlock_graph_mu.unlock();
+    deadlock_graph_mu.Unlock();
   }
 }
 
@@ -1526,7 +1528,7 @@ static bool TryAcquireWithSpinning(std::atomic<intptr_t>* mu) {
   return false;
 }
 
-void Mutex::lock() {
+void Mutex::Lock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, 0);
   GraphId id = DebugOnlyDeadlockCheck(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1544,7 +1546,7 @@ void Mutex::lock() {
   ABSL_TSAN_MUTEX_POST_LOCK(this, 0, 0);
 }
 
-void Mutex::lock_shared() {
+void Mutex::ReaderLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_read_lock);
   GraphId id = DebugOnlyDeadlockCheck(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1604,7 +1606,7 @@ bool Mutex::AwaitCommon(const Condition& cond, KernelTimeout t) {
   return res;
 }
 
-bool Mutex::try_lock() {
+bool Mutex::TryLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_try_lock);
   intptr_t v = mu_.load(std::memory_order_relaxed);
   // Try fast acquire.
@@ -1642,7 +1644,7 @@ ABSL_ATTRIBUTE_NOINLINE bool Mutex::TryLockSlow() {
   return false;
 }
 
-bool Mutex::try_lock_shared() {
+bool Mutex::ReaderTryLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this,
                            __tsan_mutex_read_lock | __tsan_mutex_try_lock);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1704,7 +1706,7 @@ ABSL_ATTRIBUTE_NOINLINE bool Mutex::ReaderTryLockSlow() {
   return false;
 }
 
-void Mutex::unlock() {
+void Mutex::Unlock() {
   ABSL_TSAN_MUTEX_PRE_UNLOCK(this, 0);
   DebugOnlyLockLeave(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1774,7 +1776,7 @@ static bool ExactlyOneReader(intptr_t v) {
   return (v & kMuMultipleWaitersMask) == 0;
 }
 
-void Mutex::unlock_shared() {
+void Mutex::ReaderUnlock() {
   ABSL_TSAN_MUTEX_PRE_UNLOCK(this, __tsan_mutex_read_lock);
   DebugOnlyLockLeave(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -2284,7 +2286,7 @@ ABSL_ATTRIBUTE_NOINLINE void Mutex::UnlockSlow(SynchWaitParams* waitp) {
         // set up to walk the list
         PerThreadSynch* w_walk;   // current waiter during list walk
         PerThreadSynch* pw_walk;  // previous waiter during list walk
-        if (old_h != nullptr) {   // we've searched up to old_h before
+        if (old_h != nullptr) {  // we've searched up to old_h before
           pw_walk = old_h;
           w_walk = old_h->next;
         } else {  // no prior search, start at beginning
@@ -2760,7 +2762,7 @@ void CondVar::SignalAll() {
 void ReleasableMutexLock::Release() {
   ABSL_RAW_CHECK(this->mu_ != nullptr,
                  "ReleasableMutexLock::Release may only be called once");
-  this->mu_->unlock();
+  this->mu_->Unlock();
   this->mu_ = nullptr;
 }
 

@@ -22,27 +22,19 @@ def is_sanitizer_issue(error_text):
     if not error_text:
         return False
     
-    # Comprehensive sanitizer error patterns
+    # Sanitizer error patterns - designed from scratch for comprehensive coverage
     sanitizer_patterns = [
-        # General pattern for all sanitizer types with different severity levels
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer)',
+        # Main sanitizer patterns with severity levels (covers most cases)
+        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
         
-        # Patterns with process ID prefix
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer)',
+        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
+        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
         
-        # UndefinedBehaviorSanitizer patterns
+        # UndefinedBehaviorSanitizer runtime errors
         r'runtime error:',
         r'==\d+==.*runtime error:',
         
-        # Legacy patterns for backward compatibility
-        r'ERROR: AddressSanitizer',
-        r'WARNING: MemorySanitizer',
-        r'WARNING: ThreadSanitizer',
-        r'==\d+==.*AddressSanitizer',
-        r'==\d+==.*MemorySanitizer',   
-        r'==\d+==.*ThreadSanitizer',
-        
-        # Specific LeakSanitizer patterns
+        # Memory leak detection (specific LeakSanitizer output)
         r'detected memory leaks',
         r'==\d+==.*detected memory leaks',
     ]

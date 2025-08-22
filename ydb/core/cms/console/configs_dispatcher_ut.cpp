@@ -943,6 +943,8 @@ config:
     cluster_uuid: cluster1
   log_config:
     default_level: 5
+allowed_labels: {}
+selector_config: []
 )";
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
         UNIT_ASSERT(notifications == 0);
@@ -960,6 +962,8 @@ config:
   log_config:
     default_level: 5
   yaml_config_enabled: true
+allowed_labels: {}
+selector_config: []
 )";
 
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
@@ -996,6 +1000,8 @@ config:
     accept_uuid: [test3]
     cluster_uuid: test
   yaml_config_enabled: true
+allowed_labels: {}
+selector_config: []
 )";
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig3);
 

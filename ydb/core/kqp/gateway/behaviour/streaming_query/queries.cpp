@@ -1750,6 +1750,7 @@ private:
         ev->RetryMapping = CreateRetryMapping();
         ev->ExecutionId = State.GetCurrentExecutionId();
         ev->DisableDefaultTimeout = true;
+        ev->ForgetAfter = TDuration::Max();
 
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());

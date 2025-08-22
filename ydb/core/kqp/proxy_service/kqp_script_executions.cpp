@@ -3936,7 +3936,7 @@ public:
                 .OptionalUtf8(astCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
-                .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))
+                .Interval(std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1))
                 .Build()
             .AddParam("$customer_supplied_id")
                 .Utf8(Response->CustomerSuppliedId)

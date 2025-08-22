@@ -826,7 +826,7 @@ private:
         Y_ABORT_UNLESS(ResolveNamesResult);
 
         if (!ResolveNamesResult->ResultSet.empty() && ResolveNamesResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
-            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later");
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
             return {};
         }
         if (ResolveNamesResult->ErrorCount > 0) {
@@ -1009,7 +1009,7 @@ private:
         ResolvePartitionsResult = msg->Request;
 
         if (!ResolvePartitionsResult->ResultSet.empty() && ResolvePartitionsResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheRequest::EStatus::LookupError) {
-            return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later");
+            return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
         }
         if (ResolvePartitionsResult->ErrorCount > 0) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "unknown table", ctx);

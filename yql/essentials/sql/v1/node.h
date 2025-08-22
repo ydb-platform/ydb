@@ -1183,6 +1183,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Data;
         TNodePtr Compression;
         TNodePtr CompressionLevel;
+        TNodePtr CacheMode;
     };
 
     struct TVectorIndexSettings {

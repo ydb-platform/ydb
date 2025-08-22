@@ -8812,6 +8812,54 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 
+    Y_UNIT_TEST(FieldCacheModeCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                Value String FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     CACHE_MODE = "regular"
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     CACHE_MODE = "in_memory"
+                )
+            );
+        )sql");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cache_mode"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("regular"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("in_memory"));
+            }
+        };
+
+        TWordCountHive elementStat = { { TString("Write"), 0 }, { TString("cache_mode"), 0 } };
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["cache_mode"]);
+    }
+
+    Y_UNIT_TEST(FieldCacheModeIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     CACHE_MODE = 42
+                )
+            );
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "CACHE_MODE value should be a string literal");
+    }
+
     Y_UNIT_TEST(AlterCompressionCorrectUsage) {
         NYql::TAstParseResult res = SqlToYql(R"( use plato;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
@@ -8848,6 +8896,45 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldRedefinition) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            ALTER TABLE tableName
+                ALTER FAMILY default SET COMPRESSION_LEVEL 3,
+                ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Redefinition of COMPRESSION_LEVEL setting");
+    }
+
+    Y_UNIT_TEST(AlterCacheModeCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET CACHE_MODE "in_memory";
+        )sql");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCacheModeFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET CACHE_MODE 42;
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "CACHE_MODE value should be a string literal");
+    }
+
+    Y_UNIT_TEST(AlterCacheModeFieldRedefinition) {
+        NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+            ALTER TABLE tableName
+                ALTER FAMILY default SET CACHE_MODE "in_memory",
+                ALTER FAMILY default SET CACHE_MODE "regular";
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Redefinition of CACHE_MODE setting");
     }
 }
 

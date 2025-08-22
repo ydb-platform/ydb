@@ -1141,6 +1141,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
@@ -1545,6 +1548,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1563,6 +1569,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }

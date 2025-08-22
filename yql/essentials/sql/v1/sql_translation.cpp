@@ -1691,6 +1691,11 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "cache_mode") {
+        if (!StoreString(value, family.CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;

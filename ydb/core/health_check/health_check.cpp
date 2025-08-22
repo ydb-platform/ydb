@@ -115,6 +115,9 @@ struct TEvPrivate {
     };
 };
 
+template <typename TFinder, typename TContext>
+concept CReasonFinder = requires(TFinder finder, const TContext* context) { {finder(context)} -> std::ranges::range; }; // range of issue records
+
 class TSelfCheckRequest : public TActorBootstrapped<TSelfCheckRequest> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MONITORING_REQUEST; }
@@ -154,6 +157,7 @@ public:
         QuotaUsage,
         BridgeGroupState,
         PileComputeState,
+        BridgePileState,
     };
 
     enum ETimeoutTag {
@@ -360,23 +364,20 @@ public:
             return id.Str();
         }
 
+        struct TNoReason {
+            auto operator()(const TSelfCheckResult*) {
+                return std::views::empty<TIssueRecord>;
+            }
+        };
+
         void ReportStatus(Ydb::Monitoring::StatusFlag::Status status,
-                          const TString& message = {},
-                          ETags setTag = ETags::None,
-                          std::initializer_list<ETags> includeTags = {}) {
+                          const TString& message,
+                          ETags setTag,
+                          CReasonFinder<TSelfCheckResult> auto&& reasonFinder) {
             OverallStatus = MaxStatus(OverallStatus, status);
             if (IsErrorStatus(status)) {
-                std::vector<TString> reason;
-                if (includeTags.size() != 0) {
-                    for (const TIssueRecord& record : IssueRecords) {
-                        for (const ETags& tag : includeTags) {
-                            if (record.Tag == tag) {
-                                reason.push_back(record.IssueLog.id());
-                                break;
-                            }
-                        }
-                    }
-                }
+                auto reasonRange = reasonFinder(this) | std::views::transform([](auto&& record) { return record.IssueLog.id(); });
+                std::vector<TString> reason(reasonRange.begin(), reasonRange.end());
                 std::sort(reason.begin(), reason.end());
                 reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
                 TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.end()));
@@ -402,6 +403,12 @@ public:
             }
         }
 
+        void ReportStatus(Ydb::Monitoring::StatusFlag::Status status,
+                          const TString& message = {},
+                          ETags setTag = ETags::None) {
+            ReportStatus(status, message, setTag, TNoReason());
+        }
+
         bool HasTags(std::initializer_list<ETags> tags) const {
             for (const TIssueRecord& record : IssueRecords) {
                 for (const ETags tag : tags) {
@@ -413,23 +420,16 @@ public:
             return false;
         }
 
-        Ydb::Monitoring::StatusFlag::Status FindMaxStatus(std::initializer_list<ETags> tags) const {
-            Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREY;
-            for (const TIssueRecord& record : IssueRecords) {
-                for (const ETags tag : tags) {
-                    if (record.Tag == tag) {
-                        status = MaxStatus(status, record.IssueLog.status());
-                    }
-                }
-            }
-            return status;
+        Ydb::Monitoring::StatusFlag::Status FindMaxStatus(CReasonFinder<TSelfCheckResult> auto&& reasonFinder) const {
+            auto statuses = reasonFinder(this) | std::views::transform([](auto&& issue) {return issue.IssueLog.status(); });
+            return std::reduce(statuses.begin(), statuses.end(), Ydb::Monitoring::StatusFlag::GREY, MaxStatus);
         }
 
-        void ReportWithMaxChildStatus(const TString& message = {},
-                                        ETags setTag = ETags::None,
-                                        std::initializer_list<ETags> includeTags = {}) {
-            if (HasTags(includeTags)) {
-                ReportStatus(FindMaxStatus(includeTags), message, setTag, includeTags);
+        void ReportWithMaxChildStatus(const TString& message,
+                                        ETags setTag,
+                                        CReasonFinder<TSelfCheckResult> auto&& reasonFinder) {
+            if (!std::ranges::empty(reasonFinder(this))) {
+                ReportStatus(FindMaxStatus(reasonFinder), message, setTag, reasonFinder);
             }
         }
 
@@ -473,6 +473,25 @@ public:
             if (Upper) {
                 Upper->InheritFrom(*this);
             }
+        }
+    };
+
+    struct TIncludeTags {
+        std::initializer_list<ETags> Tags;
+
+        TIncludeTags(std::initializer_list<ETags> tags) : Tags(tags) {}
+
+        bool Check(const TSelfCheckResult::TIssueRecord& record) {
+            for (auto tag : Tags) {
+                if (record.Tag == tag) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        auto operator()(const TSelfCheckResult* result) {
+            return result->IssueRecords | std::views::filter([this](auto&& record) { return Check(record); });
         }
     };
 
@@ -2120,9 +2139,9 @@ public:
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
         auto report = [](TSelfCheckContext& context, ETags tag) {
-            context.ReportWithMaxChildStatus("Some nodes are restarting too often", tag, {ETags::Uptime});
-            context.ReportWithMaxChildStatus("Compute is overloaded", tag, {ETags::OverloadState});
-            context.ReportWithMaxChildStatus("Compute quota usage", tag, {ETags::QuotaUsage});
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", tag, TIncludeTags{ETags::Uptime});
+            context.ReportWithMaxChildStatus("Compute is overloaded", tag, TIncludeTags{ETags::OverloadState});
+            context.ReportWithMaxChildStatus("Compute quota usage", tag, TIncludeTags{ETags::QuotaUsage});
         };
         if (databaseState.ResourcePathId
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
@@ -2188,22 +2207,22 @@ public:
         }
         Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
         if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
-            context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
+            context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, TIncludeTags{ETags::SystemTabletState});
         }
         FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
         if (bridgeMode) {
-            context.ReportWithMaxChildStatus("There are compute issues", ETags::ComputeState, {ETags::PileComputeState});
+            context.ReportWithMaxChildStatus("There are compute issues", ETags::ComputeState, TIncludeTags{ETags::PileComputeState});
         } else {
             report(context, ETags::ComputeState);
         }
-        context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
+        context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, TIncludeTags{ETags::SyncState});
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         computeNodeIds->push_back(0); // for tablets without node
         for (TNodeId nodeId : *computeNodeIds) {
             tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
         }
         if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-            context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
+            context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, TIncludeTags{ETags::TabletState});
         }
         if (ReturnHints) {
             auto schemeShardId = databaseState.SchemeShardId;
@@ -2481,7 +2500,7 @@ public:
         auto statusEnum = static_cast<NKikimrBlobStorage::EVDiskStatus>(status->number());
         if (statusEnum == NKikimrBlobStorage::ERROR) {
             // the disk is not operational at all
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState, TIncludeTags{ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -2588,7 +2607,7 @@ public:
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "PDisk is not available",
                                  ETags::PDiskState,
-                                 {ETags::NodeState});
+                                 TIncludeTags{ETags::NodeState});
         }
 
         storagePDiskStatus.set_overall(context.GetOverallStatus());
@@ -2611,7 +2630,7 @@ public:
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "VDisk is not available",
                                  ETags::VDiskState,
-                                 {ETags::PDiskState});
+                                 TIncludeTags{ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -2634,7 +2653,7 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
                                      ETags::VDiskState,
-                                     {ETags::PDiskState});
+                                     TIncludeTags{ETags::PDiskState});
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
         }
@@ -2655,20 +2674,20 @@ public:
                         context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
                                             TStringBuilder() << "VDisk is degraded",
                                             ETags::VDiskState,
-                                            {ETags::PDiskSpace});
+                                            TIncludeTags{ETags::PDiskSpace});
                     }
                     break;
                 case NKikimrWhiteboard::EFlag::Red:
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
                                          ETags::VDiskState,
-                                         {ETags::PDiskSpace});
+                                         TIncludeTags{ETags::PDiskSpace});
                     break;
                 default:
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
                                          ETags::VDiskSpace,
-                                         {ETags::PDiskSpace});
+                                         TIncludeTags{ETags::PDiskSpace});
                     break;
             }
         }
@@ -2724,30 +2743,30 @@ public:
             }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, TIncludeTags{ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
                 if (FailedDisks > 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, TIncludeTags{ETags::VDiskState});
                 } else if (FailedDisks > 1) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, TIncludeTags{ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, TIncludeTags{ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, TIncludeTags{ETags::VDiskState});
                     }
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
                 if (FailedRealms.size() > 2 || (FailedRealms.size() == 2 && FailedRealms[0].second > 1 && FailedRealms[1].second > 1)) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, TIncludeTags{ETags::VDiskState});
                 } else if (FailedRealms.size() == 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, TIncludeTags{ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, TIncludeTags{ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, TIncludeTags{ETags::VDiskState});
                     }
                 }
             }
@@ -3167,7 +3186,7 @@ public:
                 } else {
                     issue << " in some piles";
                 }
-                context.ReportStatus(status, issue, ETags::GroupState, {ETags::BridgeGroupState});
+                context.ReportStatus(status, issue, ETags::GroupState, TIncludeTags{ETags::BridgeGroupState});
             }
         }
 
@@ -3206,13 +3225,13 @@ public:
         switch (context.GetOverallStatus()) {
             case Ydb::Monitoring::StatusFlag::BLUE:
             case Ydb::Monitoring::StatusFlag::YELLOW:
-                context.ReportStatus(context.GetOverallStatus(), "Pool degraded", ETags::PoolState, {ETags::GroupState});
+                context.ReportStatus(context.GetOverallStatus(), "Pool degraded", ETags::PoolState, TIncludeTags{ETags::GroupState});
                 break;
             case Ydb::Monitoring::StatusFlag::ORANGE:
-                context.ReportStatus(context.GetOverallStatus(), "Pool has no redundancy", ETags::PoolState, {ETags::GroupState});
+                context.ReportStatus(context.GetOverallStatus(), "Pool has no redundancy", ETags::PoolState, TIncludeTags{ETags::GroupState});
                 break;
             case Ydb::Monitoring::StatusFlag::RED:
-                context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, {ETags::GroupState});
+                context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, TIncludeTags{ETags::GroupState});
                 break;
             default:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -3245,13 +3264,13 @@ public:
             switch (context.GetOverallStatus()) {
                 case Ydb::Monitoring::StatusFlag::BLUE:
                 case Ydb::Monitoring::StatusFlag::YELLOW:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage degraded", ETags::StorageState, {ETags::PoolState});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage degraded", ETags::StorageState, TIncludeTags{ETags::PoolState});
                     break;
                 case Ydb::Monitoring::StatusFlag::ORANGE:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage has no redundancy", ETags::StorageState, {ETags::PoolState});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage has no redundancy", ETags::StorageState, TIncludeTags{ETags::PoolState});
                     break;
                 case Ydb::Monitoring::StatusFlag::RED:
-                    context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, {ETags::PoolState});
+                    context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, TIncludeTags{ETags::PoolState});
                     break;
                 default:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -3325,6 +3344,64 @@ public:
         }
     };
 
+    struct TPileAggregator {
+        using TIssueRecord = TSelfCheckResult::TIssueRecord;
+
+        std::unordered_map<TString, std::vector<const TIssueRecord*>> PileIssues;
+        std::unordered_set<TString> ChildIssues;
+
+        std::optional<TString> GetPileName(const Ydb::Monitoring::Location& location) {
+            if (location.storage().pool().group().has_pile()) {
+                return location.storage().pool().group().pile().name();
+            }
+            if (location.compute().has_pile()) {
+                return location.compute().pile().name();
+            }
+            if (location.node().has_pile()) {
+                return location.node().pile().name();
+            }
+            if (location.has_pile()) {
+                return location.pile().name();
+            }
+            return std::nullopt;
+        }
+
+        void Scan(const TList<TIssueRecord>& records) {
+            for (const auto& record : records) {
+                auto pile = GetPileName(record.IssueLog.location());
+                if (pile) {
+                    PileIssues[std::move(*pile)].push_back(&record);
+                    for (const auto& child : record.IssueLog.reason()) {
+                        ChildIssues.insert(child);
+                    }
+                }
+            }
+        }
+
+        // CReasonFinder, returns top-level issues for given pile
+        auto operator()(const TSelfCheckResult* context) {
+            auto pile = GetPileName(context->Location);
+            Y_DEBUG_ABORT_UNLESS(pile);
+            return PileIssues[pile.value_or("")]
+                | std::views::transform([](auto* ptr) { return *ptr; })
+                | std::views::filter([this] (auto&& issue) { return !ChildIssues.contains(issue.IssueLog.id()); });
+        }
+    };
+
+    void FillPiles(TSelfCheckResult& context) {
+        if (!NodeWardenStorageConfig || !NodeWardenStorageConfig->Get()->BridgeInfo) {
+            return;
+        }
+        TPileAggregator aggregator;
+        aggregator.Scan(context.IssueRecords);
+
+        for (const auto& pile : NodeWardenStorageConfig->Get()->BridgeInfo->Piles) {
+            TSelfCheckContext pileContext{&context, "BRIDGE_PILE"};
+            pileContext.Location.mutable_pile()->set_name(pile.Name);
+            pileContext.ReportWithMaxChildStatus("Bridge pile has issues", ETags::BridgePileState, aggregator);
+        }
+    }
+
     void FillDatabaseResult(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
         Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
         TSelfCheckResult dbContext;
@@ -3335,14 +3412,15 @@ public:
         databaseStatus.set_name(path);
         FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
         FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});
+        FillPiles(dbContext);
         if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
                 && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
-                "Database has multiple issues", ETags::DBState, { ETags::ComputeState, ETags::StorageState});
+                "Database has multiple issues", ETags::DBState, TIncludeTags{ ETags::ComputeState, ETags::StorageState});
         } else if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", ETags::DBState, {ETags::ComputeState});
+            dbContext.ReportStatus(databaseStatus.compute().overall(), "Database has compute issues", ETags::DBState, TIncludeTags{ETags::ComputeState});
         } else if (databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
-            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", ETags::DBState, {ETags::StorageState});
+            dbContext.ReportStatus(databaseStatus.storage().overall(), "Database has storage issues", ETags::DBState, TIncludeTags{ETags::StorageState});
         }
         databaseStatus.set_overall(dbContext.GetOverallStatus());
         context.UpdateMaxStatus(dbContext.GetOverallStatus());

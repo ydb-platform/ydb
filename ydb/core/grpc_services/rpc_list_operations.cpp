@@ -52,7 +52,7 @@ class TListOperationsRPC
             return "[SchemeShardTasks]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[ListIncrementalBackups]";
-        case TOperationId::BACKUP_COLLECTION_RESTORE:
+        case TOperationId::RESTORE:
             return "[ListBackupCollectionRestores]";
         default:
             return "[Untagged]";
@@ -73,7 +73,7 @@ class TListOperationsRPC
             return new TEvIndexBuilder::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::INCREMENTAL_BACKUP:
             return new TEvBackup::TEvListIncrementalBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
-        case TOperationId::BACKUP_COLLECTION_RESTORE:
+        case TOperationId::RESTORE:
             return new TEvBackup::TEvListBackupCollectionRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
@@ -219,7 +219,7 @@ public:
         case TOperationId::BUILD_INDEX:
         case TOperationId::SS_BG_TASKS:
         case TOperationId::INCREMENTAL_BACKUP:
-        case TOperationId::BACKUP_COLLECTION_RESTORE:
+        case TOperationId::RESTORE:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();

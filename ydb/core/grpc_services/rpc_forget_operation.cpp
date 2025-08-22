@@ -39,7 +39,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetScriptExecution]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[ForgetIncrementalBackup]";
-        case TOperationId::BACKUP_COLLECTION_RESTORE:
+        case TOperationId::RESTORE:
             return "[ForgetBackupCollectionRestore]";
         default:
             return "[Untagged]";
@@ -56,7 +56,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvIndexBuilder::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::INCREMENTAL_BACKUP:
             return new TEvBackup::TEvForgetIncrementalBackupRequest(TxId, GetDatabaseName(), RawOperationId);
-        case TOperationId::BACKUP_COLLECTION_RESTORE:
+        case TOperationId::RESTORE:
             return new TEvBackup::TEvForgetBackupCollectionRestoreRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
@@ -69,7 +69,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX
             || kind == TOperationId::INCREMENTAL_BACKUP
-            || kind == TOperationId::BACKUP_COLLECTION_RESTORE;
+            || kind == TOperationId::RESTORE;
     }
 
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
@@ -143,7 +143,7 @@ public:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
             case TOperationId::INCREMENTAL_BACKUP:
-            case TOperationId::BACKUP_COLLECTION_RESTORE:
+            case TOperationId::RESTORE:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }

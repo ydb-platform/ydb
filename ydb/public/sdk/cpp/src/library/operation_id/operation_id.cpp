@@ -316,7 +316,7 @@ TOperationId::EKind ParseKind(const std::string_view value) {
     }
 
     if (value.starts_with("restore")) {
-        return TOperationId::BACKUP_COLLECTION_RESTORE;
+        return TOperationId::RESTORE;
     }
 
     return TOperationId::UNUSED;

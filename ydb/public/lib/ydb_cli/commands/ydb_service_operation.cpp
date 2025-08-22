@@ -105,7 +105,7 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     case TOperationId::INCREMENTAL_BACKUP:
         return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
-    case TOperationId::BACKUP_COLLECTION_RESTORE:
+    case TOperationId::RESTORE:
         return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";

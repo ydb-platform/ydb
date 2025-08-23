@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TCancelTx) {
                     ")"
                     );
 
-        auto& icb = *clientServer.GetRuntime()->GetAppData().Icb;
+        auto& icb = *cleverServer.GetRuntime()->GetAppData().Icb;
         TControlBoard::SetValue(allowCancelROwithReadsets ? 1 : 0, icb.DataShardControls.CanCancelROWithReadSets);
 
         return cleverServer;

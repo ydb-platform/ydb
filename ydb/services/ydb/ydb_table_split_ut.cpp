@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         // Set low CPU usage threshold for robustness
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
-        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThreshlodPercent);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
         TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();

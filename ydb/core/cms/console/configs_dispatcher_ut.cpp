@@ -884,6 +884,138 @@ selector_config:
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
     }
+
+    Y_UNIT_TEST(TestYamlEndToEndNameServiceConfig) {
+        NKikimrConfig::TAppConfig config;
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvPrivate::EvGotNotification:
+                    ++notifications;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        {
+            NKikimrConsole::TConfigItem cfgItem;
+            cfgItem.MutableConfig()->MutableNameserviceConfig()->MutableAcceptUUID()->Add("test");
+            cfgItem.MutableConfig()->MutableNameserviceConfig()->SetClusterUUID("cluster1");
+            CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(cfgItem));
+        }
+        
+        {
+            NKikimrConsole::TConfigItem cfgItem;
+            cfgItem.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
+            CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(cfgItem));
+        }
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem, (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem});
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        NKikimrConfig::TAppConfig expectedConfig;
+        auto *nsCfg = expectedConfig.MutableNameserviceConfig();
+        nsCfg->MutableAcceptUUID()->Add("test");
+        nsCfg->SetClusterUUID("cluster1");
+        expectedConfig.MutableLogConfig()->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  nameservice_config:
+    accept_uuid: [test]
+    cluster_uuid: cluster1
+  log_config:
+    default_level: 5
+allowed_labels: {}
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        UNIT_ASSERT(notifications == 0);
+
+        TString yamlConfig2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  nameservice_config:
+    accept_uuid: [test]
+    cluster_uuid: test
+  log_config:
+    default_level: 5
+  yaml_config_enabled: true
+allowed_labels: {}
+selector_config: []
+)";
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        expectedConfig = {};
+        nsCfg = expectedConfig.MutableNameserviceConfig();
+        nsCfg->MutableAcceptUUID()->Add("test");
+        nsCfg->SetClusterUUID("test");
+        expectedConfig.MutableLogConfig()->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        NKikimrConsole::TConfigItem cfgItem2;
+        cfgItem2.MutableConfig()->MutableNameserviceConfig()->MutableAcceptUUID()->Add("test");
+        cfgItem2.MutableConfig()->MutableNameserviceConfig()->SetClusterUUID("test2");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(cfgItem2));
+        UNIT_ASSERT(notifications == 0);
+
+        TString yamlConfig3 = R"(
+---
+metadata:
+  cluster: ""
+  version: 2
+
+config:
+  log_config:
+    cluster_name: cluster3
+    default_level: 6
+  nameservice_config:
+    accept_uuid: [test3]
+    cluster_uuid: test
+  yaml_config_enabled: true
+allowed_labels: {}
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig3);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(notifications > 0);
+        expectedConfig = {};
+        auto logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(6);
+        auto expectedNsCfg = expectedConfig.MutableNameserviceConfig();
+        expectedNsCfg->MutableAcceptUUID()->Add("test3");
+        expectedNsCfg->SetClusterUUID("test");
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+    }
 }
 
 } // namespace NKikimr

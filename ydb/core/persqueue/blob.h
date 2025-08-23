@@ -100,8 +100,6 @@ struct TBatch {
     void Pack();
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result) const;
-    void UnpackToType0(TVector<TClientBlob> *result) const;
-    void UnpackToType1(TVector<TClientBlob> *result) const;
 
     void SerializeTo(TString& res) const;
 

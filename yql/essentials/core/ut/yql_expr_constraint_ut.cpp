@@ -3578,7 +3578,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Just", "VarIndex(0:0,0:1,1:1)");
     }
 
-    Y_UNIT_TEST(VisitWithoutRowUsage) {
+    Y_UNIT_TEST(VisitWithoutRowUsageInOneBranch) {
         const TStringBuf s = R"(
 (
 #comment
@@ -3617,6 +3617,47 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TEmptyConstraintNode>(exprRoot, "FlatMap", "");
         CheckConstraint<TEmptyConstraintNode>(exprRoot, "Take", "Empty");
         CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(0:1,0:4294967295)");
+    }
+
+    Y_UNIT_TEST(VisitWithoutRowUsageInAllBranches) {
+        const TStringBuf s = R"(
+(
+#comment
+(let res_sink (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let data (Mux '(list1 list2)))
+
+(let data (LMap data (lambda '(stream)
+    (FlatMap stream (lambda '(v) (block '(
+        (let l (lambda '(item) (AsStruct '('key (Nothing (OptionalType (DataType 'String)))))))
+        (return (Just (Visit v '0 l '1 l)))
+    ))))
+)))
+
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)
+        )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TEmptyConstraintNode>(exprRoot, "FlatMap", "");
+        CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "");
     }
 }
 

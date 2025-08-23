@@ -145,6 +145,9 @@ inline bool HasMessageTags(
     if (!loggingContext.TraceLoggingTag.empty()) {
         return true;
     }
+    if (!GetThreadMessageTag().empty()) {
+        return true;
+    }
     return false;
 }
 
@@ -163,6 +166,14 @@ inline void AppendMessageTags(
             builder->AppendString(TStringBuf(", "));
         }
         builder->AppendString(traceLoggingTag);
+        printComma = true;
+    }
+    if (const auto& threadMessageTag = GetThreadMessageTag(); !threadMessageTag.empty()) {
+        if (printComma) {
+            builder->AppendString(TStringBuf(", "));
+        }
+        builder->AppendString(threadMessageTag);
+        printComma = true;
     }
 }
 

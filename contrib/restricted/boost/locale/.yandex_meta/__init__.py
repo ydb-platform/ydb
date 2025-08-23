@@ -61,7 +61,7 @@ def post_install(self):
 boost_locale = NixSourceProject(
     nixattr="boost_locale",
     arcdir="contrib/restricted/boost/locale",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

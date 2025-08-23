@@ -2029,20 +2029,16 @@ private:
                             }
                         }
                         else {
-                            for (ui32 i = 1; i < inAltCount; ++i) {
-                                if (!usedAlts.Test(i)) {
-                                    auto range = varIndex->GetIndexMapping().equal_range(i);
-                                    for (auto i = range.first; i != range.second; ++i) {
-                                        varIndexItems.push_back(std::make_pair(0, i->second));
-                                    }
-                                }
-                            }
+                            // 'default' branch
+                            varIndexItems.push_back(std::make_pair(0, Max<ui32>()));
                         }
                     }
 
                     if (!varIndexItems.empty()) {
                         ::SortUnique(varIndexItems);
-                        input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(varIndexItems)));
+                        if (varIndexItems.size() != 1 || varIndexItems.back().second != Max<ui32>()) {
+                            input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(varIndexItems)));
+                        }
                     }
                 }
             }

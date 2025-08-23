@@ -175,7 +175,6 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptPhysicalGraphResponse,
         EvGetScriptPhysicalGraphResponse,
         EvResetScriptExecutionRetriesResponse,
-        EvScriptExecutionProgress,
     };
 };
 

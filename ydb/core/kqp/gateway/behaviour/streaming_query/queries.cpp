@@ -168,8 +168,7 @@ struct TEvPrivate {
 enum class EOperationCase {
     Create,
     Alter,
-    AlterWithRestart,
-    Max = AlterWithRestart
+    Max = Alter
 };
 
 //// Common
@@ -393,6 +392,7 @@ protected:
 
     void Finish(Ydb::StatusIds::StatusCode status) {
         if (BeforeFinish(status)) {
+            LOG_D("Do action before finish with status " << status);
             return;
         }
 
@@ -1571,6 +1571,9 @@ private:
 
 class TStartStreamingQueryTableActor : public TActionActorBase<TStartStreamingQueryTableActor> {
     using TBase = TActionActorBase<TStartStreamingQueryTableActor>;
+    using TRetryPolicy = IRetryPolicy<>;
+
+    inline static constexpr TDuration START_REQUEST_TIMEOUT = TDuration::Seconds(30);
 
 public:
     using TBase::LogPrefix;
@@ -1630,19 +1633,16 @@ public:
     STRICT_STFUNC(StartQueryStateFunc,
         hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleStartQuery);
         hFunc(TEvKqp::TEvScriptResponse, HandleStartQuery);
-        hFunc(TEvScriptExecutionProgress, HandleStartQuery);
+        hFunc(TEvents::TEvWakeup, HandleStartQuery);
+        hFunc(TEvGetScriptExecutionOperationResponse, HandleStartQuery);
     )
 
     void HandleStartQuery(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
-        if (HandleResult(ev, TStringBuilder() << "Update streaming query state (start query)" << (FinalStatus ? (TStringBuilder() << " query start status: " << *FinalStatus) : TStringBuilder()))) {
+        if (HandleResult(ev, "Update streaming query state (start query)")) {
             return;
         }
 
-        if (FinalStatus) {
-            Finish(*FinalStatus);
-        } else {
-            StartQuery();
-        }
+        StartQuery();
     }
 
     void HandleStartQuery(TEvKqp::TEvScriptResponse::TPtr& ev) {
@@ -1650,47 +1650,78 @@ public:
             return;
         }
 
-        ExecutionCreated = true;
+        RequestStarted = true;
         LOG_D("Script execution created: " << ev->Get()->ExecutionId << ", wait for saving query state");
+
+        GetScriptExecutionOperation();
     }
 
-    void HandleStartQuery(TEvScriptExecutionProgress::TPtr& ev) {
+    void HandleStartQuery(TEvents::TEvWakeup::TPtr&) {
+        const auto& executionId = State.GetCurrentExecutionId();
+        LOG_D("Get streaming query execution " << executionId);
+        SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)));
+    }
+
+    void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
+        const auto& info = ev->Get()->Info;
+        LOG_D("Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
+
+        if (info.Ready && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            ExecutionFailed = true;
+        }
+
         if (HandleResult(ev, "Query compilation / planing")) {
             return;
         }
 
-        if (ev->Get()->StateSaved) {
+        if (info.StateSaved) {
             Finish(Ydb::StatusIds::SUCCESS);
-        } else {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue("Query state is not saved", ev->Get()->Issues));
+            return;
         }
+
+        if (!info.Ready) {
+            GetScriptExecutionOperation();
+            return;
+        }
+
+        FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Query execution unexpectedly finished before saving state");
+    }
+
+    STRICT_STFUNC(FinalizeStateFunc,
+        hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleFinalize);
+    )
+
+    void HandleFinalize(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
+        if (HandleResult(ev, TStringBuilder() << "Update streaming query state (finish query starting), creation status: " << FinalStatus)) {
+            return;
+        }
+
+        Finish(FinalStatus);
     }
 
 protected:
     bool BeforeFinish(Ydb::StatusIds::StatusCode status) override {
-        if (!StartRequestSent) {
+        if (!RequestStarted) {
             return false;
         }
 
-        Become(&TStartStreamingQueryTableActor::StartQueryStateFunc);
+        Become(&TStartStreamingQueryTableActor::FinalizeStateFunc);
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            if (State.GetStatus() != NKikimrKqp::TStreamingQueryState::STATUS_RUNNING || State.GetAlterVersion() != Settings.FinalAlterVersion) {
+            if (State.GetStatus() != NKikimrKqp::TStreamingQueryState::STATUS_RUNNING) {
                 State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_RUNNING);
-                State.SetAlterVersion(Settings.FinalAlterVersion);
                 UpdateQueryState("move query to running");
 
                 FinalStatus = status;
                 return true;
             }
-        } else if (ExecutionCreated) {
-            ExecutionCreated = false;
+        } else if (ExecutionFailed) {
+            ExecutionFailed = false;
 
             const auto& executionId = State.GetCurrentExecutionId();
             State.AddPreviousExecutionIds(executionId);
             State.ClearCurrentExecutionId();
             State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_STOPPED);
-            State.SetAlterVersion(Settings.FinalAlterVersion);
             UpdateQueryState("move query to stopped");
 
             FinalStatus = status;
@@ -1741,10 +1772,6 @@ private:
     }
 
     void StartQuery() {
-        if (StartRequestSent) {
-            return;
-        }
-
         auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
         ev->SaveQueryPhysicalGraph = true;
         ev->RetryMapping = CreateRetryMapping();
@@ -1769,9 +1796,35 @@ private:
         request.SetQuery(State.GetQueryText());
         request.SetTimeoutMs(TDuration::Max().MilliSeconds());
 
-        StartRequestSent = true;
         LOG_D("Send start streaming query request, execution id: " << State.GetCurrentExecutionId());
         SendToKqpProxy(std::move(ev));
+    }
+
+    void GetScriptExecutionOperation() {
+        if (!GetOperationRetryState) {
+            GetOperationRetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                []() {
+                    return ERetryErrorClass::ShortRetry;
+                },
+                TDuration::MilliSeconds(100),
+                TDuration::MilliSeconds(100),
+                TDuration::Seconds(1),
+                std::numeric_limits<size_t>::max(),
+                START_REQUEST_TIMEOUT
+            )->CreateRetryState();
+        }
+
+        if (const auto delay = GetOperationRetryState->GetNextRetryDelay()) {
+            LOG_D("Schedule get script execution operation in " << *delay);
+            Schedule(*delay, new TEvents::TEvWakeup());
+        } else {
+            LOG_W("Script execution operation not started after " << START_REQUEST_TIMEOUT << " send response");
+            Issues.AddIssue(
+                NYql::TIssue(TStringBuilder() << "Streaming query not started after " << START_REQUEST_TIMEOUT << ", try to check query status later")
+                    .SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_INFO)
+            );
+            Finish(Ydb::StatusIds::SUCCESS);
+        }
     }
 
     std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> CreateRetryMapping() const {
@@ -1846,9 +1899,10 @@ private:
     ui64 OperationsToForget = 0;
 
     // Query starting state
-    bool StartRequestSent = false;
-    bool ExecutionCreated = false;
-    std::optional<Ydb::StatusIds::StatusCode> FinalStatus;
+    bool RequestStarted = false;
+    bool ExecutionFailed = false;
+    TRetryPolicy::IRetryState::TPtr GetOperationRetryState;
+    Ydb::StatusIds::StatusCode FinalStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 // Interrupt previous not completed query action and update query state according to properties from SS
@@ -1981,7 +2035,32 @@ public:
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
+    STRICT_STFUNC(FinalizeStateFunc,
+        hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleFinalize);
+    )
+
+    void HandleFinalize(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
+        if (HandleResult(ev, TStringBuilder() << "Update streaming query state (finish query synchronization), operation status: " << FinalStatus)) {
+            return;
+        }
+
+        Finish(FinalStatus);
+    }
+
 protected:
+    bool BeforeFinish(Ydb::StatusIds::StatusCode status) override {
+        if (State.GetAlterVersion() != AlterVersion) {
+            Become(&TSynchronizeStreamingQueryTableActor::FinalizeStateFunc);
+            State.SetAlterVersion(AlterVersion);
+            UpdateQueryState("sync alter version");
+
+            FinalStatus = status;
+            return true;
+        }
+
+        return false;
+    }
+
     void OnFinish(Ydb::StatusIds::StatusCode status) override {
         Send(Owner, new TEvPrivate::TEvSynchronizeStreamingQueryResult(status, State, ExistsInSS, std::move(Issues)));
     }
@@ -2055,17 +2134,13 @@ private:
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
-    void EnrichStateFromSS(bool syncAlterVersion) {
+    void EnrichStateFromSS() {
         State.SetQueryText(QuerySettings.QueryText);
         State.SetRun(QuerySettings.Run);
         State.SetResourcePool(QuerySettings.ResourcePool);
 
         if (State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED) {
             State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_CREATED);
-        }
-
-        if (syncAlterVersion) {
-            State.SetAlterVersion(AlterVersion);
         }
 
         StateEnrichedFromSS = true;
@@ -2095,7 +2170,7 @@ private:
             case NKikimrKqp::TStreamingQueryState::STATUS_CREATED:
             case NKikimrKqp::TStreamingQueryState::STATUS_STOPPED: {
                 if (!StateEnrichedFromSS) {
-                    EnrichStateFromSS(/* syncAlterVersion */ !QuerySettings.Run);
+                    EnrichStateFromSS();
                 } else if (QuerySettings.Run) {
                     StartQuery();
                 } else {
@@ -2105,24 +2180,12 @@ private:
             }
             case NKikimrKqp::TStreamingQueryState::STATUS_RUNNING: {
                 switch (QuerySettings.LastOperationCase) {
-                    case EOperationCase::Create: {
-                        CleanupQuery("interrupt running", NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED);
+                    case EOperationCase::Create:
+                        CleanupQuery("interrupt running for create", NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED);
                         break;
-                    }
-                    case EOperationCase::Alter: {
-                        if (!QuerySettings.Run) {
-                            StopQuery("interrupt running for alter");
-                        } else if (!StateEnrichedFromSS) {
-                            EnrichStateFromSS(/* syncAlterVersion */ true);
-                        } else {
-                            Finish(Ydb::StatusIds::SUCCESS);
-                        }
+                    case EOperationCase::Alter:
+                        StopQuery("interrupt running for alter");
                         break;
-                    }
-                    case EOperationCase::AlterWithRestart: {
-                        StopQuery("interrupt running for alter with restart");
-                        break;
-                    }
                 }
                 break;
             }
@@ -2153,6 +2216,7 @@ private:
     TPathId QueryPathId;
     TStreamingQuerySettings QuerySettings;
     bool StateEnrichedFromSS = false;
+    Ydb::StatusIds::StatusCode FinalStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 //// Request handlers
@@ -2649,7 +2713,7 @@ private:
             return status;
         }
 
-        if (auto status = validator.AddProperty(EName::LastOperationCase, ToString(static_cast<ui64>(queryTextValue ? EOperationCase::AlterWithRestart : EOperationCase::Alter))); status.IsFail()) {
+        if (auto status = validator.AddProperty(EName::LastOperationCase, ToString(static_cast<ui64>(EOperationCase::Alter))); status.IsFail()) {
             return status;
         }
 

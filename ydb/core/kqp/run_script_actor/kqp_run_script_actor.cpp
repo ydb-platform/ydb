@@ -136,7 +136,6 @@ public:
         , QueryServiceConfig(std::move(queryServiceConfig))
         , SaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph)
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
-        , RequestActorId(settings.RequestActorId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , Counters(settings.Counters)
     {}
@@ -348,14 +347,10 @@ private:
                 Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration
             );
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
-        } else {
-            LOG_N("Script final status is already saved, WaitFinalizationRequest: " << WaitFinalizationRequest);
+            return;
         }
 
-        if (!RequestActorNotified) {
-            RequestActorNotified = true;
-            Send(RequestActorId, new TEvScriptExecutionProgress(Status, /* stateSaved */ false, Issues));
-        }
+        LOG_N("Script final status is already saved, WaitFinalizationRequest: " << WaitFinalizationRequest);
 
         if (!WaitFinalizationRequest && RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
             RunState = ERunState::Finished;
@@ -622,11 +617,6 @@ private:
         const auto status = ev->Get()->Status;
         const auto& issues = ev->Get()->Issues;
         LOG_D("Script physical graph saved " << ev->Sender << ", Status: " << status << ", Issues: " << issues.ToOneLineString());
-
-        if (!RequestActorNotified) {
-            RequestActorNotified = true;
-            Send(RequestActorId, new TEvScriptExecutionProgress(status, /* stateSaved */ true, issues));
-        }
 
         Y_ABORT_UNLESS(PhysicalGraphSender);
         Forward(ev, *PhysicalGraphSender);
@@ -926,8 +916,6 @@ private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const bool SaveQueryPhysicalGraph = false;
     const bool DisableDefaultTimeout = false;
-    const TActorId RequestActorId;
-    bool RequestActorNotified = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;

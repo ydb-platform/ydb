@@ -1518,29 +1518,29 @@ private:
             }
 
             case EDelayedRequestType::ScriptRequest:
-                HanleDelayedScriptRequestError<TEvKqp::TEvScriptResponse>(std::move(requestEvent), status, std::move(issues));
+                HandleDelayedScriptRequestError<TEvKqp::TEvScriptResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
 
             case EDelayedRequestType::ForgetScriptExecutionOperation:
-                HanleDelayedScriptRequestError<TEvForgetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                HandleDelayedScriptRequestError<TEvForgetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
 
             case EDelayedRequestType::GetScriptExecutionOperation:
-                HanleDelayedScriptRequestError<TEvGetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                HandleDelayedScriptRequestError<TEvGetScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
 
             case EDelayedRequestType::ListScriptExecutionOperations:
-                HanleDelayedScriptRequestError<TEvListScriptExecutionOperationsResponse>(std::move(requestEvent), status, std::move(issues));
+                HandleDelayedScriptRequestError<TEvListScriptExecutionOperationsResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
 
             case EDelayedRequestType::CancelScriptExecutionOperation:
-                HanleDelayedScriptRequestError<TEvCancelScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
+                HandleDelayedScriptRequestError<TEvCancelScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
         }
     }
 
     template<typename TResponse>
-    void HanleDelayedScriptRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
+    void HandleDelayedScriptRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
         Send(requestEvent->Sender, new TResponse(status, std::move(issues)), 0, requestEvent->Cookie);
     }
 

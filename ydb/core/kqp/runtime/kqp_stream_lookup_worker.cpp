@@ -546,9 +546,7 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
             leftRowIt->second.PendingReads.erase(prevReadId);
 
-            const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                && leftRowIt->second.RightRowExist;
-            if (leftRowProcessed) {
+            if (leftRowIt->second.Completed()) {
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                 ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
                 PendingLeftRowsByKey.erase(leftRowIt);
@@ -766,7 +764,8 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
             TReadResultStats rowStats;
-            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, false, result.ShardId);
+            bool lastRow = (result.UnprocessedResultRow + 1 == result.ReadResult->Get()->GetRowsCount()) && record.GetFinished();
+            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, lastRow, result.ShardId);
             YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
             ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
         }
@@ -779,9 +778,7 @@ public:
 
                 // row is considered processed when all reads are finished
                 // and at least one right row is found
-                const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                    && leftRowIt->second.RightRowExist;
-                if (leftRowProcessed) {
+                if (leftRowIt->second.Completed()) {
                     YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                     ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
                     PendingLeftRowsByKey.erase(leftRowIt);
@@ -844,10 +841,9 @@ public:
         TReadResultStats resultStats;
         batch.clear();
 
-        // we should process left rows that haven't matches on the right
+        // we should process left rows that haven't received last row flags.
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
             if (leftRowIt->second.PendingReads.empty()) {
-                YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
                 auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats, true);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
@@ -925,11 +921,12 @@ private:
         NUdf::TUnboxedValue Row;
         std::unordered_set<ui64> PendingReads;
         bool RightRowExist = false;
+        bool LastRowReceived = false;
         const ui64 SeqNo;
         ui64 MatchedRows = 0;
 
         bool Completed() {
-            return PendingReads.empty() && RightRowExist;
+            return PendingReads.empty() && RightRowExist && LastRowReceived;
         }
     };
 
@@ -1041,6 +1038,11 @@ private:
 
         leftRowSize = NYql::NDq::TDqDataSerializer::EstimateSize(leftRowInfo.Row, leftRowType);
 
+        if (lastRow) {
+            leftRowInfo.LastRowReceived = lastRow;
+        }
+
+        bool isRightRowAdded = !rightRow.empty();
         if (!rightRow.empty()) {
             leftRowInfo.RightRowExist = true;
 
@@ -1076,13 +1078,11 @@ private:
 
         resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
 
-        if (!lastRow) {
-            rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
-            // TODO: use datashard statistics KIKIMR-16924
-            rowStats.ReadBytesCount += storageReadBytes;
-            rowStats.ResultRowsCount += 1;
-            rowStats.ResultBytesCount += leftRowSize + rightRowSize;
-        }
+        rowStats.ReadRowsCount += (isRightRowAdded ? 1 : 0);
+        // TODO: use datashard statistics KIKIMR-16924
+        rowStats.ReadBytesCount += storageReadBytes;
+        rowStats.ResultRowsCount += 1;
+        rowStats.ResultBytesCount += leftRowSize + rightRowSize;
 
         return resultRow;
     }

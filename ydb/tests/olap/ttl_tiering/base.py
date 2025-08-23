@@ -123,42 +123,33 @@ class TllTieringTestBase(object):
 
     @classmethod
     def _setup_ydb(cls):
-        if cls.endpoint is None:
-            ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-            logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
-            config = KikimrConfigGenerator(
-                extra_feature_flags={
-                    "enable_external_data_sources": True,
-                    "enable_write_portions_on_insert": True,
-                    "enable_tiering_in_column_shard": True,
-                    "disable_column_shard_bulk_upsert_require_all_columns": True,
-                },
-                column_shard_config={
-                    "lag_for_compaction_before_tierings_ms": 0,
-                    "compaction_actualization_lag_ms": 0,
-                    "optimizer_freshness_check_duration_ms": 0,
-                    "small_portion_detect_size_limit": 0,
-                    "max_read_staleness_ms": 20000,
-                    "alter_object_enabled": True,
-                    "periodic_wakeup_activation_period_ms": 5000,
-                    "gcinterval_ms": 5000,
-                },
-                additional_log_configs={
-                    "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
-                    "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
-                    "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
-                },
-                query_service_config=dict(
-                    available_external_data_sources=["ObjectStorage"]
-                )
-            )
-            cls.cluster = KiKiMR(config)
-            cls.cluster.start()
-            node = cls.cluster.nodes[1]
-            cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
-        else:
-            cls.ydb_client = YdbClient(database=cls.database, endpoint=cls.endpoint)
-
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True,
+                "disable_column_shard_bulk_upsert_require_all_columns": True,
+            },
+            column_shard_config={
+                "disabled_on_scheme_shard": False,
+                "lag_for_compaction_before_tierings_ms": 0,
+                "compaction_actualization_lag_ms": 0,
+                "optimizer_freshness_check_duration_ms": 0,
+                "small_portion_detect_size_limit": 0,
+                "max_read_staleness_ms": 5000,
+                "alter_object_enabled": True,
+            },
+            additional_log_configs={
+                "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
+                "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
+                "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
+            },
+        )
+        cls.cluster = KiKiMR(config)
+        cls.cluster.start()
+        node = cls.cluster.nodes[1]
+        cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
     @classmethod

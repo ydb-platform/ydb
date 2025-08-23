@@ -128,7 +128,8 @@ class TllTieringTestBase(object):
         config = KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_tiering_in_column_shard": True
+                "enable_tiering_in_column_shard": True,
+                "disable_column_shard_bulk_upsert_require_all_columns": True,
             },
             column_shard_config={
                 "disabled_on_scheme_shard": False,

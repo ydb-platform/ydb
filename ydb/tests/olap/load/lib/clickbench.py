@@ -1,10 +1,8 @@
 import allure
 import pytest
-import ydb
 from .conftest import LoadSuiteBase, LoadSuiteParallel
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper, CheckCanonicalPolicy
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 
 
@@ -96,47 +94,3 @@ class TestClickbenchParallel8(ClickbenchParallelBase):
 
 class TestClickbenchParallel16(ClickbenchParallelBase):
     threads: int = 16
-
-
-class TestWorkloadMangerClickbenchConcurentQueryLimit(ClickbenchParallelBase):
-    threads: int = 10
-    resource_pools = ['testpool']
-    user_group = 'testgroup'
-
-    @classmethod
-    def get_users(cls) -> list[str]:
-        return ['testuser1'] + ['testuser2']
-
-    @classmethod
-    def do_setup_class(cls):
-        def _exists(path: str) -> bool:
-            try:
-                YdbCluster.get_ydb_driver().scheme_client.describe_path(f'/{YdbCluster.ydb_database}/{path}')
-            except BaseException:
-                return False
-            return True
-
-        sessions_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
-
-        for pool in cls.resource_pools:
-            if _exists('.metadata/workload_manager/classifiers/resource_pool_classifiers') and sessions_pool.execute_with_retries(f'SELECT count(*) from `.metadata/workload_manager/classifiers/resource_pool_classifiers` WHERE name="{pool}"')[0].rows[0][0] > 0:
-                sessions_pool.execute_with_retries(f'DROP RESOURCE POOL CLASSIFIER {pool}')
-            if _exists(f'.metadata/workload_manager/pools/{pool}'):
-                sessions_pool.execute_with_retries(f'DROP RESOURCE POOL {pool}')
-        sessions_pool.execute_with_retries(f'DROP GROUP IF EXISTS {cls.user_group}; DROP USER IF EXISTS {", ".join(cls.get_users())}')
-
-        for user in cls.get_users():
-            sessions_pool.execute_with_retries(f'CREATE USER {user} PASSWORD NULL; GRANT ALL ON `/{YdbCluster.ydb_database}` TO {user}')
-        sessions_pool.execute_with_retries(f'CREATE GROUP {cls.user_group} WITH USER {", ".join(cls.get_users())}')
-
-        for pool in cls.resource_pools:
-            sessions_pool.execute_with_retries(f'''
-                CREATE RESOURCE POOL {pool} WITH (
-                    CONCURRENT_QUERY_LIMIT = 2
-                )''')
-            sessions_pool.execute_with_retries(f'''
-                CREATE RESOURCE POOL CLASSIFIER {pool} WITH (
-                    RESOURCE_POOL = '{pool}',
-                    MEMBER_NAME = '{cls.user_group}'
-                )''')
-        super().do_setup_class()

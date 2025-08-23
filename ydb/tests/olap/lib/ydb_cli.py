@@ -91,8 +91,10 @@ class YdbCliHelper:
             self.start_time = time()
 
         def merge(self, *others: list[YdbCliHelper.WorkloadRunResult]) -> YdbCliHelper.WorkloadRunResult:
+            def not_empty(x):
+                return bool(x)
+
             results = [r for r in filter(lambda x: x is not None, others)]
-            not_empty = lambda x: bool(x)
             self.start_time = min([r.start_time for r in results])
             self.query_out = '\n'.join(filter(not_empty, [r.query_out for r in results]))
             self.stdout = '\n'.join(filter(not_empty, [r.stdout for r in results]))

@@ -118,13 +118,13 @@ ttl_types = {
 index_zero_sync = {
     "Int64": lambda i: i,
     "Int32": lambda i: i,
-    # "Int16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    "Int16": lambda i: i,
 }
 
 index_first_sync = {
     "Uint64": lambda i: i,
     "Uint32": lambda i: i,
-    # "Uint16": lambda i: i,  https://github.com/ydb-platform/ydb/issues/15842
+    "Uint16": lambda i: i,
 }
 
 index_second_sync = {
@@ -167,8 +167,8 @@ index_first_not_Bool = {
     "Uint64": lambda i: i,
     "Int32": lambda i: i,
     "Uint32": lambda i: i,
-    # "Int16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
-    # "Uint16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    "Int16": lambda i: i,
+    "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Decimal(15,0)": lambda i: "{}".format(i),
@@ -181,8 +181,8 @@ index_first = {
     "Uint64": lambda i: i,
     "Int32": lambda i: i,
     "Uint32": lambda i: i,
-    # "Int16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
-    # "Uint16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    "Int16": lambda i: i,
+    "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Bool": lambda i: bool(i),

@@ -55,7 +55,7 @@ class TestInsert(BaseTestSet):
                 logger.info(f'Inserting data to {cnt}, iteration {iteration}, attempt {attempt}...')
                 result = sth.execute_query(
                     yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({iteration}, $cnt)',
-                    retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error,
+                    retries=0, fail_on_error=True, return_error=True, ignore_error=ignore_error,
                 )
                 if result == []:  # query succeeded
                     logger.info(f'Inserting data to {cnt}, iteration {iteration}, attempt {attempt}... succeeded')

@@ -248,7 +248,7 @@ private:
         if (pile.IsPrimary) {
             return Ydb::Bridge::PileState::PRIMARY;
         } else if (pile.IsBeingPromoted) {
-            return Ydb::Bridge::PileState::PROMOTE;
+            return Ydb::Bridge::PileState::PROMOTED;
         } else {
             switch (pile.State) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:

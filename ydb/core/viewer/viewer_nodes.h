@@ -1352,7 +1352,8 @@ public:
                     (!FieldsRequired.test(+ENodeFields::HostName) || FieldsAvailable.test(+ENodeFields::HostName)) &&
                     (!FieldsRequired.test(+ENodeFields::NodeName) || FieldsAvailable.test(+ENodeFields::NodeName));
                 if (allFieldsPresent) {
-                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TVector<TString> filterWords;
+                    StringSplitter(Filter).SplitBySet(", ").SkipEmpty().Collect(&filterWords);
                     TNodeView nodeView;
                     for (TNode* node : NodeView) {
                         for (const TString& word : filterWords) {

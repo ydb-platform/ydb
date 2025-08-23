@@ -1553,7 +1553,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx);
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, true);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
 
@@ -1847,11 +1847,11 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         }
 
         NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
-        
+
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
-        
+
         if (unitSpan) {
             unitSpan.Attribute("Type", TypeName(unit))
                     .Attribute("Status", static_cast<int>(status))

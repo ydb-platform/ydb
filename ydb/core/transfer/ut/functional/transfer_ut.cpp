@@ -1689,7 +1689,99 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.Write({"Message-1"});
 
         testCase.CheckTransferStateError("unwrap error");
-
     }
+
+    void ReadFromCDC(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        std::string cdcTableName = Sprintf("%s_in", testCase.TableName.data());
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", cdcTableName.data()));
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER TABLE `%s`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON'
+                );
+            )", cdcTableName.data()));
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = Sprintf("%s/feed", cdcTableName.data());
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:Unwrap(CAST($x._offset AS Uint64)),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.ExecuteQuery(Sprintf("INSERT INTO `%s` (Key, Message) VALUES ( 7, '13' )", cdcTableName.data()));
+
+        testCase.CheckResult({{
+            _C("Message", TString("{\"update\":{\"Message\":\"13\"},\"key\":[7]}"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Remote) {
+        ReadFromCDC(false);
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Local) {
+        ReadFromCDC(true);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Remote) {
+        MessageField_CreateTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Local) {
+        MessageField_CreateTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Remote) {
+        MessageField_WriteTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Local) {
+        MessageField_WriteTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Remote) {
+        MessageField_Attributes("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Local) {
+        MessageField_Attributes("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Remote) {
+        MessageField_Partition("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Local) {
+        MessageField_Partition("ROW", true);
+    }
+
 }
 

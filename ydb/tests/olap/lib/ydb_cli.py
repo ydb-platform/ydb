@@ -176,7 +176,6 @@ class YdbCliHelper:
                      query_prefix: Optional[str],
                      external_path: str,
                      threads: int,
-                     float_mode: str,
                      user: str
                      ):
             self.result = YdbCliHelper.WorkloadRunResult()
@@ -200,7 +199,6 @@ class YdbCliHelper:
             self.__plan_path = f'{self.__prefix}.plan'
             self.__query_output_path = f'{self.__prefix}.result'
             self.json_path = f'{self.__prefix}.stats.json'
-            self.float_mode = float_mode
             self.user = user
 
         def get_plan_path(self, query_name: str, plan_name: Any) -> str:
@@ -237,8 +235,6 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
-            if self.float_mode:
-                cmd += ['--float-mode', self.float_mode]
             return cmd
 
         def run(self) -> bool:
@@ -378,7 +374,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0, float_mode: str = '',
+                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0,
                      users=['']) -> dict[str, YdbCliHelper.WorkloadRunResult]:
         runners = [YdbCliHelper.WorkloadRunner(
             workload_type,
@@ -392,7 +388,6 @@ class YdbCliHelper:
             query_prefix=query_prefix,
             external_path=external_path,
             threads=threads,
-            float_mode=float_mode,
             user=u,
         ) for u in users]
         extended_query_names = query_names + ["Sum", "Avg", "GAvg"]

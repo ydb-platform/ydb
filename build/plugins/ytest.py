@@ -1026,6 +1026,7 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
+        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1041,6 +1042,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     keywords = {
         "NAME": 1,
         "LINTER": 1,
+        "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,

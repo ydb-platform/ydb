@@ -1675,14 +1675,12 @@ private:
     bool RlAllowed;
 };
 
-class TEvRequestAuthAndCheck;
-
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, THolder<IAuditCtx> responseCtx = nullptr)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts = {})
         : Status(status)
         , Issues(issues)
-        , Context(std::move(responseCtx))
+        , AuditLogParts(auditLogParts)
     {}
 
     TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
@@ -1697,11 +1695,11 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, THolder<IAuditCtx> responseCtx = nullptr)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts = {})
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
-        , Context(std::move(responseCtx))
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1709,7 +1707,7 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    THolder<IAuditCtx> Context;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
@@ -1740,8 +1738,8 @@ public:
         return AuthState;
     }
 
-    void SetAuditMode(TAuditMode::ELogClass logClass) {
-        AuditMode = TAuditMode(logClass);
+    void SetAuditMode(TAuditMode auditMode) {
+        AuditMode = auditMode;
     }
 
     TAuditMode GetAuditMode() const override {
@@ -1763,7 +1761,7 @@ public:
                     Database,
                     YdbToken,
                     UserToken,
-                    this->Copy()
+                    AuditLogParts
                 )
             );
         } else {
@@ -1771,7 +1769,7 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     status,
                     IssueManager.GetIssues(),
-                    this->Copy()
+                    AuditLogParts
                 )
             );
         }
@@ -1905,12 +1903,6 @@ public:
 
     TMaybe<TString> GetGrpcUserAgent() const {
         return {};
-    }
-
-    THolder<IAuditCtx> Copy() const {
-        auto holder = MakeHolder<TEvRequestAuthAndCheck>(Database, YdbToken, Sender);
-        holder->AuditLogParts = AuditLogParts;
-        return holder;
     }
 
     TString Database;

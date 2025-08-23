@@ -107,7 +107,7 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner
         );
-    ev->SetAuditMode(NMonitoring::NAudit::TAuditCtx::MONITORING_LOG_CLASS);
+    ev->SetAuditMode(NKikimr::NGRpcService::TAuditMode::Modifying(NMonitoring::NAudit::TAuditCtx::MONITORING_LOG_CLASS));
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,

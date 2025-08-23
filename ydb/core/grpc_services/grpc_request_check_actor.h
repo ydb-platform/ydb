@@ -483,6 +483,9 @@ private:
         const TString sanitizedToken = TBase::GetSanitizedToken();
         if (auditEnabledReceived || auditEnabledCompleted) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
+
+            // RequestAuthAndCheck is a monitoring service request; audit is not logged for it
+            // logClass is provided by the monitoring service
             if constexpr (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
                 if (auditEnabledReceived) {
                     AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());

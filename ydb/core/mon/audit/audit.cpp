@@ -124,7 +124,7 @@ void TAuditCtx::AddAuditLogParts(const NKikimr::NGRpcService::TEvRequestAuthAndC
 
     static const THashSet<TString> DATABASE_CLOUD_PARTS = {"cloud_id", "folder_id", "resource_id", "sanitized_token", "subject"};
 
-    for (const auto& [key, value] : result->Context->GetAuditLogParts()) {
+    for (const auto& [key, value] : result->AuditLogParts) {
         if (DATABASE_CLOUD_PARTS.contains(key)) {
             AddAuditLogPart(key, value);
         }

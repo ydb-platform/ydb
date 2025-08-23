@@ -11,6 +11,7 @@ TEST_SRCS(
     test_upload.py
     test_import_csv.py
     test_default_path.py
+    test_workload_manager.py
 )
 
 SIZE(MEDIUM)

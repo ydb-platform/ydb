@@ -1,6 +1,6 @@
 import pytest
+import time
 
-from datetime import datetime, timedelta
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import (
     RestartToAnotherVersionFixture,
@@ -18,7 +18,7 @@ class WorkloadManagerWorkload:
         self.batch_size = 1000
 
     def create_resource_pool(self):
-        query = f"""
+        query = """
             CREATE RESOURCE POOL TestResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUEUE_SIZE=1000
@@ -33,7 +33,7 @@ class WorkloadManagerWorkload:
                 session_pool.execute_with_retries(query)
 
     def alter_resource_pool(self):
-        query = f"""
+        query = """
             ALTER RESOURCE POOL TestResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
                 RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
@@ -47,7 +47,7 @@ class WorkloadManagerWorkload:
                 session_pool.execute_with_retries(query)
 
     def create_resource_pool_classifier(self):
-        query = f"""
+        query = """
             CREATE RESOURCE POOL CLASSIFIER TestResourcePoolClassifier WITH (
                 RANK=20,
                 RESOURCE_POOL="TestResourcePool"
@@ -62,7 +62,7 @@ class WorkloadManagerWorkload:
                 session_pool.execute_with_retries(query)
 
     def alter_resource_pool_classifier(self):
-        query = f"""
+        query = """
             ALTER RESOURCE POOL CLASSIFIER TestResourcePoolClassifier
                 SET (RANK = 1, RESOURCE_POOL = "TestResourcePool"),
                 RESET (MEMBER_NAME);
@@ -97,46 +97,44 @@ class WorkloadManagerWorkload:
                 result = session_pool.execute_with_retries(query_body)
                 return result[0].rows
 
-    def get_resource_pool(self):
-        query = f"SELECT * FROM `.sys/resource_pools` WHERE Name = 'TestResourcePool'"
+    def get_resource_pool(self, throw_exception):
+        query = "SELECT * FROM `.sys/resource_pools` WHERE Name = 'TestResourcePool'"
         try:
             return (self.execute_query(query)[0], True)
         except Exception as e:
+            if throw_exception:
+                raise e
             return (str(e), False)
 
-    def get_resource_pool_classifier(self):
-        query = f"SELECT * FROM `.sys/resource_pool_classifiers` WHERE Name = 'TestResourcePoolClassifier'"
+    def get_resource_pool_classifier(self, throw_exception):
+        query = "SELECT * FROM `.sys/resource_pool_classifiers` WHERE Name = 'TestResourcePoolClassifier'"
         try:
             return (self.execute_query(query)[0], True)
         except Exception as e:
+            if throw_exception:
+                raise e
             return (str(e), False)
 
-    def validate_resource_pool(self):
-        value, result = self.get_resource_pool()
+    def validate_resource_pool(self, throw_exception = False):
+        value, result = self.get_resource_pool(throw_exception)
         assert result, f"Failed to get resource pool: {value}"
         assert value["ConcurrentQueryLimit"] == 20
         assert value["QueueSize"] == 1000
 
-    def validate_resource_pool(self):
-        value, result = self.get_resource_pool()
-        assert result, f"Failed to get resource pool: {value}"
-        assert value["ConcurrentQueryLimit"] == 20
-        assert value["QueueSize"] == 1000
-
-    def validate_altered_resource_pool(self):
-        value, result = self.get_resource_pool()
+    def validate_altered_resource_pool(self, throw_exception = False):
+        value, result = self.get_resource_pool(throw_exception)
         assert result, f"Failed to get resource pool: {value}"
         assert value["ConcurrentQueryLimit"] == 30
         assert value["QueueSize"] == 100
 
-    def validate_resource_pool_classifier(self):
-        value, result = self.get_resource_pool_classifier()
+    def validate_resource_pool_classifier(self, throw_exception = False):
+        value, result = self.get_resource_pool_classifier(throw_exception)
         assert result, f"Failed to get resource pool classifier: {value}"
         assert value["ResourcePool"] == "TestResourcePool"
         assert value["Rank"] == 20
 
-    def validate_altered_resource_pool_classifier(self):
-        value, result = self.get_resource_pool_classifier()
+    def validate_altered_resource_pool_classifier(self, throw_exception = False):
+        value, result = self.get_resource_pool_classifier(throw_exception)
         assert result, f"Failed to get resource pool classifier: {value}"
         assert value["ResourcePool"] == "TestResourcePool"
         assert value["Rank"] == 1
@@ -179,6 +177,7 @@ class TestWorkloadManagerRestartToAnotherVersion(RestartToAnotherVersionFixture)
         workload.create_resource_pool_classifier()
         workload.validate_resource_pool_classifier()
         self.change_cluster_version()
+        time.sleep(60)
         workload.validate_resource_pool()
         workload.validate_resource_pool_classifier()
         workload.alter_resource_pool()
@@ -208,8 +207,8 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
                 break
 
             try:
-                workload.validate_resource_pool()
-                workload.validate_resource_pool_classifier()
+                workload.validate_resource_pool(True)
+                workload.validate_resource_pool_classifier(True)
             except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError):
                 assert workload.wait_for_connection(), "Failed to restore connection after rolling upgrade"
             step_count += 1

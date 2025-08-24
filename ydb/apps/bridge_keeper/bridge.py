@@ -80,6 +80,11 @@ class AsyncHealthcheckRunner:
         self._piles_list = {}
         self._last_piles_refresh_ts = 0.0
 
+        # Track mapping from endpoint -> pile and last response time per endpoint
+        # TODO: probably get ridd of _endpoint_to_pile if we have initial mapping?
+        self._endpoint_to_pile = {}
+        self._endpoint_last_ts = {}
+
     def start(self):
         if not self.endpoints:
             return
@@ -193,6 +198,9 @@ class AsyncHealthcheckRunner:
         with self._lock:
             self._reporter_to_failed[reporter_pile] = set(failed_piles)
             self._reporter_last_ts[reporter_pile] = time.time()
+            # Track per-endpoint recency and pile mapping
+            self._endpoint_to_pile[endpoint] = reporter_pile
+            self._endpoint_last_ts[endpoint] = time.time()
 
     def get_health_state(self):
         """Thread-safe snapshot: reporter pile -> {failed_piles: set, last_ts: float}."""
@@ -209,6 +217,14 @@ class AsyncHealthcheckRunner:
         """Thread-safe snapshot of piles mapping: pile_name -> state string."""
         with self._lock:
             return dict(self._piles_list)
+
+    def get_ordered_endpoints(self, pile):
+        """Thread-safe snapshot of pile endpoints ordered by response recency (most recent first)."""
+        with self._lock:
+            candidates = [ep for ep, p in self._endpoint_to_pile.items() if p == pile]
+
+        ranked = sorted(candidates, key=lambda ep: self._endpoint_last_ts.get(ep, 0.0), reverse=True)
+        return list(ranked)
 
 
 class PileState:
@@ -413,7 +429,7 @@ class Bridgekeeper:
         self._state_lock = threading.RLock()
         self._run_thread = None
 
-    def do_healthcheck(self):
+    def _do_healthcheck(self):
         cluster_admin_piles = self.async_checker.get_piles()
 
         new_state = TotalState()
@@ -459,7 +475,7 @@ class Bridgekeeper:
             self.current_state = new_state
             self.state_history.add_state(self.current_state)
 
-    def decide(self) -> List[str]:
+    def _decide(self) -> List[str]:
         # decide is called within the same thread as do_healthcheck,
         # so we can access everything without locking
         if self.current_state is None:
@@ -514,14 +530,22 @@ class Bridgekeeper:
                 commands[-1].append('--ignore-uuid-validation')
             '''
 
-        return commands
+        return ((new_primary_name or primary_name), commands,)
 
-    def apply_decision(self, commands: List[List[str]]):
-        # TODO: here we want to start from working endpoints
+    def _apply_decision(self, primary: str, commands: List[List[str]]):
+        # primary is either working primary or candidate,
+        # thus we prefer its endpoints, because at least some are healthy
+        endpoints = self.async_checker.get_ordered_endpoints(primary)
+        strict_order = True
+        if len(endpoints) == 0:
+            logger.warning(f"No endpoints for primary / primary candidate '{primary}', fall back to all endpoints")
+            endpoints = self.endpoints
+            strict_order = False
+
         if commands and len(commands) > 0:
             some_failed = False
             for command in commands:
-                result = execute_cli_command(self.path_to_cli, command, self.endpoints)
+                result = execute_cli_command(self.path_to_cli, command, self.endpoints, strict_order=strict_order)
                 if result is None:
                     some_failed = True
                     logger.error(f"Failed to apply command {command}")
@@ -531,15 +555,22 @@ class Bridgekeeper:
                 logger.info("Failover complete")
 
     def _maintain_once(self):
-        self.do_healthcheck()
-        commands = self.decide()
-        self.apply_decision(commands)
+        self._do_healthcheck()
+        decision = self._decide()
+        if decision:
+            primary, commands = decision
+            self._apply_decision(primary, commands)
 
     def run(self):
         # TODO: gracefully stop
-        while True:
-            time.sleep(1)
-            self._maintain_once()
+        try:
+            while True:
+                time.sleep(1)
+                self._maintain_once()
+        except Exception as e:
+            # TODO: restore logs
+            logger.error(f"Keeper's run loop got exception: {e}")
+            # TODO: exit
 
     def run_async(self):
         if self._run_thread and self._run_thread.is_alive():
@@ -555,9 +586,14 @@ class Bridgekeeper:
         return (state_copy, transitions_copy)
 
 
-def execute_cli_command(path_to_cli: str, cmd: List[str], endpoints: List[str]) -> Optional[subprocess.CompletedProcess]:
+def execute_cli_command(
+        path_to_cli: str, cmd: List[str], endpoints: List[str], strict_order: bool = False)-> Optional[subprocess.CompletedProcess]:
+
     random_order_endpoints = list(endpoints)
-    random.shuffle(random_order_endpoints)
+
+    if not strict_order:
+        random.shuffle(random_order_endpoints)
+
     for endpoint in random_order_endpoints:
         try:
             full_cmd = [path_to_cli, '-e', f'grpc://{endpoint}:2135'] + cmd

@@ -199,9 +199,9 @@ def main():
             piles = bridge.resolve(args.endpoint, path_to_cli)
             if piles:
                 endpoints = [h for hosts in piles.values() for h in hosts]
-        except:
+        except Exception as e:
             # ignore, result is checked below
-            pass
+            logger.debug(f'Resolve throw exception: {e}')
 
         if not endpoints or len(endpoints) == 0:
             logger.error(f'No endpoints resolved from {args.endpoint}, use --endpoints')

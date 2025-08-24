@@ -4,8 +4,8 @@ import yatest
 
 
 def kikimr_driver_path():
-    if os.getenv("YDB_DRIVER_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_DRIVER_BINARY"))
+    if os.getenv("YDB_DRIVER_BINARY_OLD"):
+        return yatest.common.binary_path(os.getenv("YDB_DRIVER_BINARY_OLD"))
 
     return yatest.common.binary_path("kikimr/driver/kikimr")
 

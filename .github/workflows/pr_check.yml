@@ -138,7 +138,8 @@ jobs:
             const header = `<!-- merge pr=${pr.number} -->\n`;
             
             const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
-                + 'Please rebase or merge it with the base branch.'
+                + 'Please rebase or merge it with the base branch.\n\n'
+                + ':repeat: **To rerun checks after rebasing**, comment `/rebase-and-check` on this PR.'
             
             let i = 0;
             

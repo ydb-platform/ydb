@@ -756,3 +756,10 @@ def resolve(endpoint: str, path_to_cli: str) -> Dict[str, List[str]]:
     logger.info("Piles host counts (capped to %d per pile): %s", MAX_ENDPOINTS_PER_PILE, summary)
 
     return piles_to_hosts
+
+
+def get_max_status_length():
+    max_length = 0
+    for status in STATUS_COLOR.keys():
+        max_length = max(max_length, len(status))
+    return max_length

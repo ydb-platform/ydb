@@ -24,23 +24,6 @@ import bridge
 logger = logging.getLogger(__name__)
 
 
-def format_pile_box(name: str, status: str, color: str) -> str:
-    # Compact, consistent-width ASCII barrel
-    inner_w = 13
-    name_trim = name[:inner_w]
-    status_trim = status[:inner_w]
-    lines = [
-        f"[{color}]  " + ("_" * inner_w) + f"  [/{color}]",
-        f"[{color}] /" + (" " * inner_w) + f"\\ [/{color}]",
-        f"[{color}]| " + f"{name_trim:<{inner_w-1}}" + f"  |[/{color}]",
-        f"[{color}]| " + f"{status_trim:<{inner_w-1}}" + f"  |[/{color}]",
-        f"[{color}]| " + (" " * (inner_w-1)) + f"  |[/{color}]",
-        f"[{color}] \\" + (" " * inner_w) + f"/ [/{color}]",
-        f"[{color}]  " + ("-" * inner_w) + f"  [/{color}]",
-    ]
-    return "\n".join(lines)
-
-
 class HeaderBar(Static):
     cluster_name: reactive[str] = reactive("")
     refresh_seconds: reactive[float] = reactive(1.0)
@@ -63,7 +46,16 @@ class PileWidget(Static):
     color: reactive[str] = reactive("red")
 
     def render(self) -> str:
-        return format_pile_box(self.pile_name, self.status, self.color)
+        inner_w = bridge.get_max_status_length() + 2
+
+        lines = [
+            (f"[{self.color}]" +
+            f"╭{'─' * inner_w}╮"),
+            f"│{self.pile_name.center(inner_w)}│",
+            f"│{self.status.center(inner_w)}│",
+            f"╰{'─' * inner_w}╯ [/]",
+        ]
+        return "\n".join(lines)
 
 
 class KeeperApp(App):
@@ -74,7 +66,7 @@ class KeeperApp(App):
     #piles_group { height: 10; align: center middle; content-align: center middle; }
     #history_view { height: 10; }
     #logs_view { height: 1fr; }
-    .pile { width: 19; margin: 0 1; align: center middle; }
+    .pile { width: 25; margin: 0 1; align: center middle; }
     """
 
     def __init__(

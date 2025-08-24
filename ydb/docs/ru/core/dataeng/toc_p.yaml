@@ -4,3 +4,5 @@ items:
     include:
       mode: link
       path: transfer/toc_p.yaml
+  - name: Реализация SCD2 в YDB
+    href: scd2.md

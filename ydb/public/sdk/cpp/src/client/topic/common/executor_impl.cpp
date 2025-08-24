@@ -1,5 +1,7 @@
 #include "executor_impl.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/thread_pool/pool.h>
+
 namespace NYdb::inline Dev::NTopic {
 
 void IAsyncExecutor::Post(TFunction&& f) {

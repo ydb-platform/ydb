@@ -24,13 +24,13 @@ namespace NBlobStorageNodeWardenTest{
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
     NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes) {
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
         NKikimrBlobStorage::TStorageConfig config;
         for (ui32 i : xrange(nodes)) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, config, true);
         keeper.GenerateStateStorageConfig(&ss, config);
         return ss;
     }
@@ -38,6 +38,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         for (ui32 dc : xrange(dcCnt)) {
             for (ui32 rack : xrange(racksCnt)) {
                 for (auto _ : xrange(nodesInRack)) {
@@ -49,7 +50,6 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             }
         }
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
-        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, config, true);
         keeper.GenerateStateStorageConfig(&ss, config);
         return ss;
     }

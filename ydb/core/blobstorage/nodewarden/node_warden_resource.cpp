@@ -84,15 +84,16 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 }
 
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-    ev->Get()->Config->Swap(&StorageConfig);
-    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
+    auto *msg = ev->Get();
+    StorageConfig = std::move(msg->Config);
+    SelfManagementEnabled = msg->SelfManagementEnabled;
 
-    if (StorageConfig.HasBlobStorageConfig()) {
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+    if (StorageConfig->HasBlobStorageConfig()) {
+        if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
             if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
-                Y_VERIFY_S(StorageConfig.GetGeneration() < proposedConfig->GetGeneration(),
-                    "StorageConfig.Generation# " << StorageConfig.GetGeneration()
+                Y_VERIFY_S(StorageConfig->GetGeneration() < proposedConfig->GetGeneration(),
+                    "StorageConfig.Generation# " << StorageConfig->GetGeneration()
                     << " ProposedConfig.Generation# " << proposedConfig->GetGeneration());
                 Y_ABORT_UNLESS(proposedConfig->HasBlobStorageConfig()); // must have the BlobStorageConfig and the ServiceSet
                 const auto& proposedBsConfig = proposedConfig->GetBlobStorageConfig();
@@ -103,29 +104,29 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (StorageConfig.HasStateStorageConfig() && StorageConfig.HasStateStorageBoardConfig() && StorageConfig.HasSchemeBoardConfig()) {
+    if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {
         ApplyStateStorageConfig(ev->Get()->ProposedConfig.get());
     } else {
-        Y_ABORT_UNLESS(!StorageConfig.HasStateStorageConfig() && !StorageConfig.HasStateStorageBoardConfig() &&
-            !StorageConfig.HasSchemeBoardConfig());
+        Y_ABORT_UNLESS(!StorageConfig->HasStateStorageConfig() && !StorageConfig->HasStateStorageBoardConfig() &&
+            !StorageConfig->HasSchemeBoardConfig());
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
         Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     }
 
-    if (StorageConfig.HasConfigComposite()) {
+    if (StorageConfig->HasConfigComposite()) {
         TString mainConfigYaml;
         ui64 mainConfigYamlVersion;
-        auto error = DecomposeConfig(StorageConfig.GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
+        auto error = DecomposeConfig(StorageConfig->GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
         if (error) {
             STLOG_DEBUG_FAIL(BS_NODE, NW49, "failed to decompose yaml configuration", (Error, error));
         } else if (mainConfigYaml) {
             std::optional<TString> storageConfigYaml;
             std::optional<ui64> storageConfigYamlVersion;
-            if (StorageConfig.HasCompressedStorageYaml()) {
+            if (StorageConfig->HasCompressedStorageYaml()) {
                 try {
-                    TStringInput s(StorageConfig.GetCompressedStorageYaml());
+                    TStringInput s(StorageConfig->GetCompressedStorageYaml());
                     storageConfigYaml.emplace(TZstdDecompress(&s).ReadAll());
                     storageConfigYamlVersion.emplace(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0));
                 } catch (const std::exception& ex) {
@@ -138,7 +139,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 storageConfigYamlVersion);
         }
     } else {
-        Y_DEBUG_ABORT_UNLESS(!StorageConfig.HasCompressedStorageYaml());
+        Y_DEBUG_ABORT_UNLESS(!StorageConfig->HasCompressedStorageYaml());
     }
 
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
@@ -166,22 +167,22 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
     // apply updates for the state storage proxy
 #define FETCH_CONFIG(PART, PREFIX, PROTO) \
-    Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
+    Y_ABORT_UNLESS(StorageConfig->Has##PROTO##Config()); \
     char PART##Prefix[TActorId::MaxServiceIDLength] = PREFIX; \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config());
+    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig->Get##PROTO##Config());
 
     FETCH_CONFIG(stateStorage, "ssr", StateStorage)
     FETCH_CONFIG(board, "ssb", StateStorageBoard)
     FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
 
     STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
-        (StateStorageConfig, StorageConfig.GetStateStorageConfig()),
+        (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
         (CurrentStateStorageInfo, StateStorageInfo.Get()),
-        (StateStorageBoardConfig, StorageConfig.GetStateStorageBoardConfig()),
+        (StateStorageBoardConfig, StorageConfig->GetStateStorageBoardConfig()),
         (NewStateStorageBoardInfo, *boardInfo),
         (CurrentStateStorageBoardInfo, BoardInfo.Get()),
-        (SchemeBoardConfig, StorageConfig.GetSchemeBoardConfig()),
+        (SchemeBoardConfig, StorageConfig->GetSchemeBoardConfig()),
         (NewSchemeBoardInfo, *schemeBoardInfo),
         (CurrentSchemeBoardInfo, SchemeBoardInfo.Get()));
 

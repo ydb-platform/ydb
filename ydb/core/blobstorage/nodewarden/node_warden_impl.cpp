@@ -1,6 +1,7 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 #include "node_warden_impl.h"
+#include "distconf.h"
 
 #include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
@@ -159,6 +160,9 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigPush, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
@@ -168,6 +172,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+
+        hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -449,8 +455,11 @@ void TNodeWarden::Bootstrap() {
         appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
     }
     TString errorReason;
-    const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
+    auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+    const bool success = DeriveStorageConfig(appConfig, config.get(), &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
+    TDistributedConfigKeeper::UpdateFingerprint(config.get());
+    StorageConfig = std::move(config);
 
     YamlConfig = std::move(Cfg->YamlConfig);
 
@@ -899,7 +908,7 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
         }
         InvokeCallbacks.emplace(cookie, [=](TEvNodeConfigInvokeOnRootResult& msg) {
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-                for (const auto& vdisk : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+                for (const auto& vdisk : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
                     const auto& loc = vdisk.GetVDiskLocation();
                     if (currentVDiskId.SameExceptGeneration(vdiskId) &&
@@ -948,7 +957,7 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
         }
         InvokeCallbacks.emplace(cookie, [=](TEvNodeConfigInvokeOnRootResult& msg) {
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-                for (const auto& vdisk : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+                for (const auto& vdisk : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
                     const auto& loc = vdisk.GetVDiskLocation();
                     if (currentVDiskId == vDiskId && loc.GetNodeID() == vslotId.NodeId &&
@@ -1154,7 +1163,7 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
             const auto& info = r->GroupInfo;
 
             if (const ui32 groupId = info->GroupID.GetRawId(); TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
-                for (const auto& item : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+                for (const auto& item : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID vdiskId = VDiskIDFromVDiskID(item.GetVDiskID());
                     if (vdiskId.GroupID.GetRawId() == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
                             item.HasDonorMode() && item.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {

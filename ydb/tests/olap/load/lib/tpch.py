@@ -12,6 +12,7 @@ class TpchSuiteBase(LoadSuiteBase):
     tables_size: dict[str, int] = {}
     skip_tests: list = []
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
+    float_mode = 'decimal_ydb'
 
     @staticmethod
     def _get_tables_size(test_class) -> dict[str, int]:
@@ -100,6 +101,7 @@ class TestTpch10000(TpchSuiteBase):
 class TpchParallelBase(LoadSuiteParallel):
     workload_type: WorkloadType = TpchSuiteBase.workload_type
     iterations: int = 10
+    float_mode = TpchSuiteBase.float_mode
 
     @classmethod
     def get_query_list(cls) -> list[str]:

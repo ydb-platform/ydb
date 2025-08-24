@@ -39,6 +39,7 @@ public:
         auto desc = TTableBuilder()
             .AddNullableColumn("id", EPrimitiveType::String)
             .AddNullableColumn("generation", EPrimitiveType::Uint64)
+            .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
             .SetPrimaryKeyColumn("id")
             .Build();
 
@@ -118,6 +119,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -142,6 +144,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -160,6 +163,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -184,6 +188,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -202,6 +207,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     12UL);
 
@@ -225,6 +231,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -243,6 +250,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     10UL);
 
@@ -267,6 +275,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -285,6 +294,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     10UL);
 
@@ -317,6 +327,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -349,6 +360,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -367,6 +379,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -396,6 +409,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -414,6 +428,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     10UL);
 
@@ -438,6 +453,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     11UL);
 
@@ -456,6 +472,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
                     "test",
                     "id",
                     "generation",
+                    "expire_at",
                     "masterId",
                     10UL);
 

@@ -23,7 +23,7 @@ class KqpRun(object):
     def __res_file_path(self, name):
         return os.path.join(self.res_dir, name)
 
-    def yql_exec(self, program=None, program_file=None, verbose=False, check_error=True, var_templates=None, tables=None):
+    def yql_exec(self, program=None, program_file=None, verbose=False, check_error=True, var_templates=None, tables=None, user=None):
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file
@@ -48,6 +48,8 @@ class KqpRun(object):
             '--result-format full-proto '
             '--result-rows-limit 0 ' % locals()
         )
+        if user is not None:
+            cmd += f'-U {user} '
 
         if var_templates is not None:
             for var_template in var_templates:

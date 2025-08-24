@@ -89,6 +89,9 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
+        if (KqpSessionSpan && AppData()) {
+            KqpSessionSpan.Attribure("database", AppData()->TenantName);
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {

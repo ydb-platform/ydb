@@ -13,7 +13,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.reactive import reactive
-from textual.widgets import Static, Log
+from textual.widgets import Static, Log, RichLog
 
 from rich.markup import escape
 from rich.text import Text
@@ -22,6 +22,35 @@ import bridge
 
 
 logger = logging.getLogger(__name__)
+
+# TODO: fast and dirty way
+def _colorize_log_line(line: str) -> str:
+    # Expected format: "%(asctime)s %(levelname)s %(name)s: %(message)s"
+    # We detect the level token inside the line and colorize for CRITICAL/ERROR/WARNING
+    try:
+        # Find level token position by scanning for known tokens with surrounding spaces
+        candidates = [
+            (" CRITICAL ", "red"),
+            (" ERROR ", "#ff0000"), # for some reason "red" in markup is magenta like
+            (" WARNING ", "#ffff00"), # "yellow" is red :/
+        ]
+        hit = None
+        hit_idx = None
+        for token, color in candidates:
+            idx = line.find(token)
+            if idx != -1 and (hit_idx is None or idx < hit_idx):
+                hit = (token.strip(), color)
+                hit_idx = idx
+        if hit is None:
+            return escape(line)
+
+        level_text, color = hit
+        token_len = len(level_text) + 2  # include surrounding spaces
+        prefix = line[:hit_idx]
+        after = line[hit_idx + token_len :]
+        return f"{escape(prefix)} [{color}]{level_text}[/] {escape(after)}"
+    except Exception:
+        return escape(line)
 
 
 class HeaderBar(Static):
@@ -109,8 +138,9 @@ class KeeperApp(App):
 
         # Logs section
         yield Static("Logs", classes="section_title")
-        self.log_view = Log(id="logs_view")
+        self.log_view = RichLog(id="logs_view")
         self.log_view.auto_scroll = True
+        self.log_view.markup = True
         yield self.log_view
 
     async def on_mount(self) -> None:
@@ -168,4 +198,6 @@ class KeeperApp(App):
 
         new_lines = self.log_consumer()
         if len(new_lines) > 0:
-            self.log_view.write_lines(new_lines)
+            new_lines = [_colorize_log_line(l) for l in new_lines]
+            joined_lines = '\n'.join(new_lines)
+            self.log_view.write(joined_lines)

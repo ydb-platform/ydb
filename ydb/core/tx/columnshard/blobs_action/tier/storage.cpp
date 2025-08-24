@@ -74,8 +74,7 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
         DoInitNewExternalOperator(extStorageConfig->ConstructStorageOperator(false), settings);
     } else {
         DoInitNewExternalOperator(std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
-                                      NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
-                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())),
+                                      "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId()),
             std::nullopt);
     }
 }

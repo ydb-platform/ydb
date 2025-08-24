@@ -11,6 +11,7 @@ public:
         const TString& traceId,
         const NActors::TActorId& executerId,
         const NActors::TActorId& resultId,
+        const NActors::TActorId& checkpointCoordinatorId,
         const TDqConfiguration::TPtr& settings,
         const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
@@ -20,6 +21,7 @@ public:
             traceId,
             executerId,
             resultId,
+            checkpointCoordinatorId,
             settings,
             serviceCounters,
             pingPeriod,
@@ -35,12 +37,13 @@ THolder<NActors::IActor> MakeTaskController(
     const TString& traceId,
     const NActors::TActorId& executerId,
     const NActors::TActorId& resultId,
+    const NActors::TActorId& checkpointCoordinatorId,
     const TDqConfiguration::TPtr& settings,
     const NYql::NCommon::TServiceCounters& serviceCounters,
     const TDuration& pingPeriod,
     const TDuration& aggrPeriod
 ) {
-    return MakeHolder<NDq::TLogWrapReceive>(new TTaskController(traceId, executerId, resultId, settings, serviceCounters, pingPeriod, aggrPeriod), traceId);
+    return MakeHolder<NDq::TLogWrapReceive>(new TTaskController(traceId, executerId, resultId, checkpointCoordinatorId, settings, serviceCounters, pingPeriod, aggrPeriod), traceId);
 }
 
 } /* namespace NYql */

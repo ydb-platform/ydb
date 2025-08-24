@@ -14,6 +14,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
@@ -435,7 +436,7 @@ private:
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-        hFunc(TEvents::TEvRaiseTransientIssues, Handle);
+        hFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, Handle);
         hFunc(TEvDqStats, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
@@ -457,7 +458,7 @@ private:
         IgnoreFunc(TEvents::TEvGraphParams);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
-        IgnoreFunc(TEvents::TEvRaiseTransientIssues);
+        IgnoreFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues);
         IgnoreFunc(TEvDqStats);
     )
 
@@ -480,6 +481,10 @@ private:
             // Clear finished actors ids
             ExecuterId = {};
             ControlId = {};
+        }
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoison());
+            CheckpointCoordinatorId = {};
         }
     }
 
@@ -862,7 +867,7 @@ private:
                 QueryStateUpdateRequest.resources().topic_consumers().size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
-            Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
+            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph());
         } else if (ev->Cookie == UpdateStatisticsCookie) {
             PendingUpdateStatisticsPing = false;
         }
@@ -942,7 +947,7 @@ private:
         SetLoadFromCheckpointMode();
     }
 
-    void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
+    void Handle(TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr& ev) {
         SendTransientIssues(ev->Get()->TransientIssues);
     }
 
@@ -1537,7 +1542,7 @@ private:
             info.ResultId = info.ExecuterId;
         }
 
-        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
+        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, CheckpointCoordinatorId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -1605,7 +1610,7 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            ControlId = Register(MakeCheckpointCoordinator(
+            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
@@ -1613,27 +1618,19 @@ private:
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
-                Params.StreamingDisposition,
-                // vvv TaskController temporary params vvv
+                Params.StreamingDisposition).Release());
+        }
+
+        ControlId = Register(NYql::MakeTaskController(
                 SessionId,
                 ExecuterId,
                 resultId,
-                dqConfiguration,
-                QueryCounters,
-                pingPeriod,
-                aggrPeriod
-                ).Release());
-        } else {
-            ControlId = Register(NYql::MakeTaskController(
-                SessionId,
-                ExecuterId,
-                resultId,
+                CheckpointCoordinatorId,
                 dqConfiguration,
                 QueryCounters,
                 pingPeriod,
                 aggrPeriod
             ).Release());
-        }
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -2343,6 +2340,7 @@ private:
     ui32 DqEvalIndex = 0;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
+    NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;

@@ -369,7 +369,6 @@ public:
         }
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             AFL_VERIFY(!IsFail());
-            SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeStartedOnComplete);
             AFL_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }

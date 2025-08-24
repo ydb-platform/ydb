@@ -1461,6 +1461,9 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1495,6 +1498,9 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1524,6 +1530,9 @@ private:
         if (settings.ConcurrentResults) {
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
+        }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }
 
         TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;

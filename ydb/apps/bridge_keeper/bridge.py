@@ -30,6 +30,10 @@ MINIMAL_EXPECTED_ENDPOINTS_PER_PILE = 3
 # Consider healthcheck reply valid only within this amount of time
 HEALTH_REPLY_TTL_SECONDS = 5.0
 
+# Currently when pile goes from 'NOT SYNCHRONIZED -> SYNCHRONIZED' there might be
+# healthchecks reporting it bad, we should ignore them for some time.
+TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVINESS_THRESHOLD_SECONDS * 2
+
 STATUS_COLOR = {
     # ydb reported statuses
 
@@ -272,9 +276,22 @@ class PileState:
         # any healthcheck reported this pile in group issues
         self.reported_bad = None
 
+        self.synced_since = None
+
     def is_healthy(self):
         if self.admin_reported_state in ['PRIMARY', 'SYNCHRONIZED']:
             # TODO: remove responsive from the check!!!
+            # shouldn't be checked as the only condition
+            if not self.responsive:
+                return False
+
+            if self.reported_bad and self.admin_reported_state == 'SYNCHRONIZED':
+                if not self.synced_since:
+                    # sanity check, shouldn't happen
+                    return False
+                if time.monotonic() - self.synced_since < TO_SYNC_TRANSITION_GRACE_PERIOD:
+                    return True
+
             return not self.reported_bad and self.responsive
         return True
 
@@ -306,13 +323,22 @@ class PileState:
         return "red"
 
     def __str__(self):
-        return (
+        s = (
             f"PileState(good={self.is_healthy()}, responsive={self.responsive}, "
             f"reported_alive={self.reported_alive}, "
             f"self_reported_alive={self.self_reported_alive}, "
             f"admin_reported_state={self.admin_reported_state}, "
             f"reported_bad={self.reported_bad}"
         )
+
+        if self.synced_since:
+            synced_elapsed = time.monotonic() - self.synced_since
+            s += f", synced for {synced_elapsed}s"
+
+        s += ")"
+
+        return s
+
 
     def __eq__(self, other):
         if not isinstance(other, PileState):
@@ -328,7 +354,8 @@ class PileState:
 
 class TotalState:
     def __init__(self):
-        self.Timestamp = time.time()
+        self.WallTimestamp = time.time()
+        self.MonotonicTs = time.monotonic()
         self.Piles = {} # pile name -> dict
         self.PrimaryName = None
         self.Generation = None
@@ -360,7 +387,7 @@ class TotalState:
         return True
 
     def __str__(self):
-        ts = int(self.Timestamp)
+        ts = int(self.WallTimestamp)
         piles_parts = []
         details_parts = []
         for name in sorted(self.Piles.keys()):
@@ -389,7 +416,7 @@ class TransitionHistory:
         return list(self.transitions)
 
     def add_state(self, state):
-        ts = state.Timestamp
+        ts = state.WallTimestamp
         ts_str = time.strftime("%H:%M:%S", time.gmtime(ts))
         if len(self.state_history) == 0:
             logger.debug(f"Added first state: {state}")
@@ -405,7 +432,7 @@ class TransitionHistory:
         # Build single-line transition summary
         changes = []
         # Elapsed time between previous and current states
-        delta_s = ts - prev_state.Timestamp if hasattr(prev_state, 'Timestamp') else 0
+        delta_s = state.MonotonicTs - prev_state.MonotonicTs if hasattr(prev_state, 'MonotonicTs') else 0
         delta_str = f"+{delta_s:.1f}s"
         if prev_state.PrimaryName != state.PrimaryName:
             changes.append(f"PRIMARY {prev_state.PrimaryName} → {state.PrimaryName}")
@@ -457,6 +484,20 @@ class Bridgekeeper:
         self._state_lock = threading.RLock()
         self._run_thread = None
 
+    def _set_sync_time_if_any(self, new_state):
+        # it is OK to read self.current_state without lock, since we are the only writer
+        if not self.current_state:
+            return
+
+        current_piles = self.current_state.Piles
+        if len(current_piles) == 0:
+            return
+
+        for pile_name, pile in new_state.Piles.items():
+            if pile.admin_reported_state == 'SYNCHRONIZED' and pile_name in current_piles:
+                if current_piles[pile_name].admin_reported_state != 'SYNCHRONIZED':
+                    pile.synced_since = new_state.MonotonicTs
+
     def _do_healthcheck(self):
         cluster_admin_piles = self.async_checker.get_piles()
 
@@ -496,6 +537,8 @@ class Bridgekeeper:
                 # we assume that if pile is not seen bad, it is seen good
                 if not other_pile_name in observed_failed_piles:
                     other_pile.reported_alive = True
+
+        self._set_sync_time_if_any(new_state)
 
         logger.debug(f"Current state: {new_state}")
 

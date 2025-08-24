@@ -9,7 +9,7 @@ import time
 import traceback
 import yaml
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -117,17 +117,20 @@ class AsyncHealthcheckRunner:
             future = self._inflight.get(endpoint)
             if future is None:
                 # Schedule new request
-                self._inflight[endpoint] = self._executor.submit(self._do_request, endpoint)
+                if not self._stop_event.is_set():
+                    self._inflight[endpoint] = self._executor.submit(self._do_request, endpoint)
             elif future.done():
                 # Process completed request and start a new one
                 self._process_future(endpoint, future)
-                self._inflight[endpoint] = None
+                if not self._stop_event.is_set():
+                    self._inflight[endpoint] = self._executor.submit(self._do_request, endpoint)
             else:
                 # Opportunistically process any other completed futures
                 for ep, fut in list(self._inflight.items()):
                     if fut is not None and fut.done():
                         self._process_future(ep, fut)
-                        self._inflight[ep] = None
+                        if not self._stop_event.is_set():
+                            self._inflight[ep] = self._executor.submit(self._do_request, ep)
 
             time.sleep(HEALTH_CHECK_INTERVAL)
 
@@ -565,6 +568,36 @@ def execute_cli_command(path_to_cli: str, cmd: List[str], endpoints: List[str]) 
         except Exception as e:
             logger.debug(f"CLI command failed for endpoint {endpoint}: {e}")
             continue
+
+    return None
+
+
+def execute_cli_command_parallel(path_to_cli: str, cmd: List[str], endpoints: List[str]) -> Optional[subprocess.CompletedProcess]:
+    """Run the CLI command against majority of provided endpoints concurrently and return the first completed result.
+
+    Other in-flight calls are ignored once the first completes.
+    """
+    if not endpoints:
+        return None
+
+    shuffled = list(endpoints)
+    random.shuffle(shuffled)
+    # Use only a strict majority of endpoints
+    majority_size = (len(shuffled) // 2) + 1 if shuffled else 0
+    targets = shuffled[:majority_size]
+
+    if len(targets) <= 1:
+        return execute_cli_command(path_to_cli, cmd, targets)
+
+    with ThreadPoolExecutor(max_workers=min(len(targets), 8)) as executor:
+        future_map = {executor.submit(execute_cli_command, path_to_cli, cmd, [ep]): ep for ep in targets}
+        for future in as_completed(future_map.keys()):
+            try:
+                res = future.result()
+            except Exception:
+                res = None
+            # Return immediately regardless of success; caller may check returncode
+            return res
 
     return None
 

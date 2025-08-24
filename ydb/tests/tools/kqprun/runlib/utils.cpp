@@ -18,6 +18,8 @@ namespace NKikimrRun {
 
 namespace {
 
+std::terminate_handler DefaultTerminateHandler;
+
 void TerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
@@ -29,7 +31,11 @@ void TerminateHandler() {
     }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
 
-    abort();
+    if (DefaultTerminateHandler) {
+        DefaultTerminateHandler();
+    } else {
+        abort();
+    }
 }
 
 TString SignalToString(int signal) {
@@ -271,7 +277,9 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 }
 
 void SetupSignalActions() {
+    DefaultTerminateHandler = std::get_terminate();
     std::set_terminate(&TerminateHandler);
+
     for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
         signal(sig, &BackTraceSignalHandler);
     }

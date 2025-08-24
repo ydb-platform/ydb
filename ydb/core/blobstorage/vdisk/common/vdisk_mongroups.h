@@ -998,6 +998,20 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TPhantomFlagStorageGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TPhantomFlagStorageGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TPhantomFlagStorageGroup)
+            {
+                COUNTER_INIT(BuilderReadsFromDisk, true);
+                COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+            }
+            COUNTER_DEF(BuilderReadsFromDisk);
+            COUNTER_DEF(BuilderReadsFromDiskBytes);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TFullSyncGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TFullSyncGroup : public TBase {
@@ -1011,6 +1025,5 @@ public:                                                                         
             COUNTER_DEF(UnorderedDataProtocolActorsCreated);
             COUNTER_DEF(UnorderedDataProtocolActorsTerminated);
         };
-
     } // NMonGroup
 } // NKikimr

@@ -147,13 +147,14 @@ namespace NKikimr {
     class TLoggedRecLocalSyncData : public ILoggedRec {
     public:
         TLoggedRecLocalSyncData(TLsnSeg seg, bool confirmSyncLogAlso, std::unique_ptr<TEvLocalSyncDataResult> result,
-                TEvLocalSyncData::TPtr origEv);
+                TEvLocalSyncData::TPtr origEv, TActorId syncLogActorId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
         std::unique_ptr<TEvLocalSyncDataResult> Result;
         TEvLocalSyncData::TPtr OrigEv;
         NWilson::TSpan Span;
+        const TActorId SyncLogActorId;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

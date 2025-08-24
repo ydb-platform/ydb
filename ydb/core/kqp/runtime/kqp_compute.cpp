@@ -310,7 +310,7 @@ public:
             return !firstNonNull;
         }
 
-        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 header) {
+        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 rowMeta) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
 
@@ -326,7 +326,7 @@ public:
                     break;
                 }
                 case EJoinKind::Left: {
-                    if (OmitRowLeftJoin(state, header, !rightRow.HasValue())) {
+                    if (OmitRowLeftJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -335,7 +335,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftOnly: {
-                    if (OmitLeftOnlyJoin(state, header, !rightRow.HasValue())) {
+                    if (OmitLeftOnlyJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -344,7 +344,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftSemi: {
-                    if (OmitRowSemiJoin(state, header, !rightRow.HasValue())) {
+                    if (OmitRowSemiJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -374,8 +374,8 @@ public:
                     return status;
                 }
 
-                ui64 header = item.GetElement(2).Get<ui64>();
-                bool buildRow = TryBuildResultRow(state, item, result, header);
+                ui64 rowMeta = item.GetElement(2).Get<ui64>();
+                bool buildRow = TryBuildResultRow(state, item, result, rowMeta);
                 if (buildRow) {
                     return NUdf::EFetchStatus::Ok;
                 }

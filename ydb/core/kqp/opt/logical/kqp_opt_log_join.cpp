@@ -419,8 +419,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
                         .Build()
                     .Done()
             );
-
-            Cerr << KqpExprToPrettyString(onConditions.back(), ctx) << Endl;
         }
 
         newSecondElement = Build<TCoOptionalIf>(ctx, join.Pos())
@@ -436,8 +434,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
                 .Optional(newSecondElement)
                 .Build()
             .Done();
-
-        Cerr << KqpExprToPrettyString(newSecondElement, ctx) << Endl;
     }
 
     newSecondElement = rightReadMatch.BuildProcessNodes(newSecondElement, ctx);

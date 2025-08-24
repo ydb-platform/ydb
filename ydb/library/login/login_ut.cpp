@@ -109,8 +109,7 @@ Y_UNIT_TEST_SUITE(Login) {
             .MinLowerCaseCount = 2,
             .MinUpperCaseCount = 2,
             .MinNumbersCount = 2,
-            .MinSpecialCharsCount = 2,
-            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS
+            .MinSpecialCharsCount = 2
         });
 
         provider.UpdatePasswordCheckParameters(passwordComplexity);

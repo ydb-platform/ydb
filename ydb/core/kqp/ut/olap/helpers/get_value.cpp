@@ -61,9 +61,24 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
             out << value.GetBool();
             break;
         }
+        case NYdb::EPrimitiveType::String:
+        {
+            out << value.GetString();
+            break;
+        }
+        case NYdb::EPrimitiveType::Json:
+        {
+            out << value.GetJson();
+            break;
+        }
+        case NYdb::EPrimitiveType::JsonDocument:
+        {
+            out << value.GetJsonDocument();
+            break;
+        }
         default:
         {
-            UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
+            UNIT_ASSERT_C(false, TStringBuilder() << "PrintValue not iplemented for this type: " << (ui64)value.GetPrimitiveType());
         }
     }
 }

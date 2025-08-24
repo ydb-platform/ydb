@@ -15,13 +15,17 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Request healthcheck from the next in RR endpoint every amount of time
-HEALTH_CHECK_INTERVAL = 0.1
+HEALTH_CHECK_INTERVAL = 0.05
 
 # Refresh piles list via CLI every amount of time
 PILES_REFRESH_INTERVAL = 0.5
 
 # Consider a pile responsive if last health check is within this threshold (seconds)
-RESPONSIVINESS_THRESHOLD_SECONDS = 5.0
+# Initial healthecks to endpoints of the same pile are evenly distributed across
+# this interval of time
+RESPONSIVINESS_THRESHOLD_SECONDS = 2.0
+
+MINIMAL_EXPECTED_ENDPOINTS_PER_PILE = 3
 
 # Consider healthcheck reply valid only within this amount of time
 HEALTH_REPLY_TTL_SECONDS = 5.0
@@ -57,9 +61,11 @@ class AsyncHealthcheckRunner:
     - get_health_state() and get_piles() is thread-safe and returns a snapshot for Bridgekeeper
     """
 
-    def __init__(self, endpoints, path_to_cli):
+    def __init__(self, endpoints, path_to_cli, initial_piles):
         self.endpoints = list(endpoints)
-        self._path_to_cli = path_to_cli
+        self.path_to_cli = path_to_cli
+        self.initial_piles = initial_piles
+
         random.shuffle(self.endpoints)
 
         self._executor = ThreadPoolExecutor(max_workers=max(1, min(4, len(self.endpoints) or 1)))
@@ -105,6 +111,28 @@ class AsyncHealthcheckRunner:
         for endpoint in self.endpoints:
             self._inflight.setdefault(endpoint, None)
 
+        # start healthecks for the same pile evenly distributed within RESPONSIVINESS_THRESHOLD_SECONDS
+        # TODO: proper impl for the case when piles have different number of endpoints
+        if self.initial_piles and len(self.initial_piles) > 0:
+            endpoints_multiqueue = []
+            for pile_endpoints in self.initial_piles.values():
+                endpoints_multiqueue.append(pile_endpoints)
+            endpoints_per_pile = max(len(endpoints_multiqueue[0]), MINIMAL_EXPECTED_ENDPOINTS_PER_PILE)
+            delay = RESPONSIVINESS_THRESHOLD_SECONDS / endpoints_per_pile
+            logger.debug(f"Starting initial {endpoints_per_pile} healthecks per pile with delay between {delay}")
+
+            for i in range(endpoints_per_pile):
+                for pile_endpoints in endpoints_multiqueue:
+                    if i < len(pile_endpoints):
+                        endpoint = pile_endpoints[i]
+                        future = self._inflight.get(endpoint)
+                        if future is None:
+                            if not self._stop_event.is_set():
+                                self._inflight[endpoint] = self._executor.submit(self._do_request, endpoint)
+                time.sleep(delay)
+
+            logger.debug("Initial healthecks started")
+
         while not self._stop_event.is_set():
             # Periodically refresh piles list via CLI
             now = time.time()
@@ -141,7 +169,7 @@ class AsyncHealthcheckRunner:
 
     def _fetch_piles_list(self):
         cmd = ['admin', 'cluster', 'bridge', 'list', '--format=json']
-        result = execute_cli_command(self._path_to_cli, cmd, self.endpoints)
+        result = execute_cli_command(self.path_to_cli, cmd, self.endpoints)
         if result is None:
             return
         try:
@@ -418,7 +446,7 @@ class Bridgekeeper:
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
 
-        self.async_checker = AsyncHealthcheckRunner(endpoints, path_to_cli)
+        self.async_checker = AsyncHealthcheckRunner(endpoints, path_to_cli, initial_piles)
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data

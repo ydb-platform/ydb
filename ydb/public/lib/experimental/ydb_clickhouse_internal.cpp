@@ -138,10 +138,7 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
     NKikimr::TSerializedCellVec end(endKey);
     Y_ABORT_UNLESS(end.GetCells().size() <= keyColumnTypes.size());
 
-    int cmp = NKikimr::CompareTypedCellVectors(
-                last.GetCells().data(), end.GetCells().data(),
-                keyColumnTypes.data(),
-                last.GetCells().size(), end.GetCells().size());
+    int cmp = NKikimr::CompareKeys(last.GetCells(), end.GetCells(), keyColumnTypes);
 
     return cmp >= 0;
 }

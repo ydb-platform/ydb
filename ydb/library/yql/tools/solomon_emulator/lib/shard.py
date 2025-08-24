@@ -162,7 +162,7 @@ class Shard(object):
 
         matching_metrics = self.get_matching_metrics(selectors)
         if len(matching_metrics) != 1:
-            return (result, "Invalid amount of metrics matching selectors, should be 1, have: {}".format(len(matching_metrics)))
+            return (result, "Invalid amount of metrics matching selectors, should be 1, have: {}, selectors = {}".format(len(matching_metrics), selectors))
 
         metric = matching_metrics[0]
 
@@ -171,14 +171,17 @@ class Shard(object):
         labels["cluster"] = self._cluster
         labels["service"] = self._service
 
-        timestamps = []
-        values = []
-
+        timestamps, values = [], []
+        count = 0
         for ts, value in metric.data:
             if isinstance(ts, str) or (ts >= nanoseconds_from and ts <= nanoseconds_to):
                 if downsampling_disabled or ts % downsampling_grid_interval == 0:
                     timestamps.append(ts)
                     values.append(value)
+                    count += 1
+
+        if (count > 10000):
+            return (result, "Invalid number of point in one request, should be under 10000, have: {}".format(count))
 
         result["labels"] = labels
         result["type"] = metric.kind

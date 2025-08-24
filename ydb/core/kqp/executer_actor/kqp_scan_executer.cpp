@@ -173,13 +173,7 @@ private:
             const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = GetTasksGraph().GetStageInfo(TStageId(txIdx, stageIdx));
-
                 Y_DEBUG_ABORT_UNLESS(!stage.GetIsEffectsStage());
-
-                if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
-                }
             }
         }
 

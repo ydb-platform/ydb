@@ -1004,6 +1004,14 @@ protected:
                     }
                 }
 
+                if (stage.GetIsSinglePartition()) {
+                    YQL_ENSURE(isScan
+                        ? stageInfo.Tasks.size() == 1
+                        : stageInfo.Tasks.size() <= 1
+                        , "Unexpected multiple tasks in single-partition stage"
+                    );
+                }
+
                 // Not task-related
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
                 if (!TasksGraph.GetMeta().IsRestored) {

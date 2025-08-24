@@ -1923,10 +1923,6 @@ private:
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                     return;
                 }
-
-                if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
-                }
             }
         }
 

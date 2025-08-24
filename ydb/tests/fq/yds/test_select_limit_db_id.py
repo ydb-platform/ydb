@@ -14,8 +14,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 class TestSelectLimitWithDbId(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    @pytest.mark.skip("Skip until streaming disposition is implemented YQ-589")
     def test_select_same_with_id(self, kikimr, client):
-        pytest.skip("Skip until streaming disposition is implemented YQ-589")
 
         self.init_topics("select_same_with_id", create_output=False)
 

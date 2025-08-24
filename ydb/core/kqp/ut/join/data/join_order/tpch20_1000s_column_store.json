@@ -29,16 +29,6 @@
                     "args":
                       [
                         {
-                          "op_name":"TableFullScan",
-                          "table":"lineitem"
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
                           "op_name":"InnerJoin (Grace)",
                           "args":
                             [
@@ -57,6 +47,16 @@
                                 "table":"part"
                               }
                             ]
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"lineitem"
                         }
                       ]
                   }

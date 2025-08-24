@@ -8,6 +8,7 @@
 
 - [ClickHouse](clickhouse.md)
 - [Greenplum](greenplum.md)
+- [Microsoft SQL Server](ms_sql_server.md#query)
 - [MySQL](mysql.md)
 - [PostgreSQL](postgresql.md)
 - [S3](s3/external_table.md)

@@ -101,7 +101,7 @@ public:
         }
         if (Batches.size() == 1) {
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
-                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters(), std::nullopt);
             if (portionConclusion.IsFail()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
                 return portionConclusion;
@@ -165,7 +165,7 @@ public:
             NArrow::NMerger::TRecordBatchBuilder rbBuilder(dataSchema->fields(), recordsCountSum);
             stream.DrainAll(rbBuilder);
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
-                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters(), std::nullopt);
             if (portionConclusion.IsFail()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
                 return portionConclusion;
@@ -246,7 +246,7 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
         auto result =
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
         TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
-    
+
     }
 }
 }   // namespace NKikimr::NOlap::NWritingPortions

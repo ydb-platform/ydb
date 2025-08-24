@@ -24,9 +24,9 @@ public:
         return "Write::ConstructBatches";
     }
 
-    TBuildBatchesTask(NEvWrite::TWriteData&& writeData, const TWritingContext& context)
+    TBuildBatchesTask(NEvWrite::TWriteData&& writeData, const TWritingContext& context, TSnapshot snapshot)
         : WriteData(std::move(writeData))
-        , ActualSnapshot(context.GetApplyToSnapshot())
+        , ActualSnapshot(snapshot)
         , Context(context) {
         WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildBatch);
     }

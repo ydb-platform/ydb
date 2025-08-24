@@ -203,6 +203,7 @@ public:
     private:
         YDB_READONLY_DEF(NActors::TActorId, ActorId);
         YDB_READONLY(ui64, FreeSpace, 0);
+        YDB_READONLY(TMonotonic, LastAckInstant, TMonotonic::Now());
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {
@@ -228,6 +229,7 @@ public:
         }
 
         void OnAckReceived(const ui64 freeSpace) {
+            LastAckInstant = TMonotonic::Now();
             AFL_ENSURE(!FreeSpace);
             AFL_ENSURE(freeSpace);
             FreeSpace = freeSpace;
@@ -247,14 +249,25 @@ public:
 
 private:
     std::deque<std::unique_ptr<TComputeTaskData>> UndefinedShardTaskData;
-    std::deque<TComputeActorInfo> ComputeActors;
+    YDB_READONLY_DEF(std::deque<TComputeActorInfo>, ComputeActors);
+    YDB_READONLY(TMonotonic, StartInstant, TMonotonic::Now());
     THashMap<TActorId, TComputeActorInfo*> ComputeActorsById;
 
 public:
+
     ui32 GetPacksToSendCount() const {
         ui32 result = UndefinedShardTaskData.size();
         for (auto&& i : ComputeActors) {
             result += i.GetPacksToSendCount();
+        }
+        return result;
+    }
+
+    THashMap<NActors::TActorId, ui32> GetPacksToSend() const {
+        THashMap<NActors::TActorId, ui32> result;
+        result.emplace(NActors::TActorId(), UndefinedShardTaskData.size());
+        for (auto&& i : ComputeActors) {
+            AFL_ENSURE(result.emplace(i.GetActorId(), i.GetPacksToSendCount()).second);
         }
         return result;
     }

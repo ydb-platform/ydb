@@ -193,6 +193,7 @@ message Location {
     LocationDatabase database = 3;
     LocationNode node = 4;
     LocationNode peer = 5;
+    LocationBridgePile pile = 6;
 }
 
 message IssueLog {

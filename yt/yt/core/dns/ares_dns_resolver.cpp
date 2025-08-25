@@ -459,13 +459,12 @@ private:
 
     void OnRequestTimeout(TPromise<TNetworkAddress> promise, TGuid requestId)
     {
-        auto timeoutError
-            = TError(NNet::EErrorCode::ResolveTimedOut, "Ares DNS resolve timed out");
+        TString message = TStringBuilder() << "TAresDnsResolver could not resolve network address in "
+            << Config_->MaxResolveTimeout.GetSeconds() << " seconds (RequestId: " << requestId << ")";
+        auto timeoutError = TError(NNet::EErrorCode::ResolveTimedOut, message);
         if (promise.TrySet(std::move(timeoutError))) {
             TimeoutCounter_.Increment();
-            YT_LOG_WARNING(
-                "Ares DNS resolve timed out (RequestId: %v)",
-                requestId);
+            YT_LOG_WARNING(message);
         }
     }
 

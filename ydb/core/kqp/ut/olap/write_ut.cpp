@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES (3u, 3u, 3u)
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3, Col4) VALUES (4u, 4u, 4u, 4u)
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col3 Uint32
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32 NOT NULL DEFAULT 0
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col4 Uint32
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTable` ADD COLUMN Col5 Uint32

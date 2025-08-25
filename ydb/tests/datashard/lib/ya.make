@@ -1,6 +1,7 @@
 PY3_LIBRARY()
 
 PY_SRCS(
+    add_column_base.py
     dml_operations.py
     create_table.py
     types_of_variables.py

@@ -331,6 +331,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/persqueue/config
     ydb/core/persqueue/events
+    ydb/core/persqueue/partition_index_generator
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

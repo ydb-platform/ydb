@@ -488,6 +488,7 @@ private:
 
     NKikimrPQ::EScaleStatus CheckScaleStatus(const TActorContext& ctx);
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
+    void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
 
@@ -644,6 +645,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
+            HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
@@ -947,6 +949,7 @@ private:
 
     std::unique_ptr<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> SplitMergeAvgWriteBytes;
     TInstant LastScaleRequestTime = TInstant::Zero();
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
     NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;

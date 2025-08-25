@@ -455,7 +455,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
-            PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx);
+            PartitionsScaleManager->HandleScaleStatusChange(
+                partitionId,
+                partRes.GetScaleStatus(),
+                partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                ctx
+            );
         }
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -970,7 +975,12 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
     }
 
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
+        PartitionsScaleManager->HandleScaleStatusChange(
+            record.GetPartitionId(),
+            record.GetScaleStatus(),
+            record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            ctx
+        );
     } else {
         PQ_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized.");
     }

@@ -5410,10 +5410,16 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
 {
+    const NKikimrPQ::TEvPartitionScaleStatusChanged& record = ev->Get()->Record;
+    if (MirroringEnabled(Config) && record.HasParticipatingPartitions()) {
+        PQ_LOG_I("Got mirrorer split merge request" << ev->ToString());
+    }
+
     if (ReadBalancerActorId) {
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }
 }
+
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);

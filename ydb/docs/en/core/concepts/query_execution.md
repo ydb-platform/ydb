@@ -8,21 +8,21 @@ This article provides an overview of query execution in {{ ydb-short-name }}. It
 
 ## General Workflow
 
-This section provides a step-by-step overview of how SQL queries are handled in {{ ydb-short-name }}. Understanding this process will help you familiarize yourself with {{ ydb-short-name }} components and have some insight on what’s happening under the hood.
+This section provides a step-by-step overview of how SQL queries are handled in {{ ydb-short-name }}. Understanding this process helps you become familiar with {{ ydb-short-name }} components and gain insight into what happens under the hood.
 
 ![Query Execution Workflow](./_assets/query_workflow.png "Query Execution Workflow")
 
 1. **Connecting to the Database**
-Your application uses one of the official YDB SDKs to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the YDB  cluster. When you need to run a query, the SDK provides a session from this pool so you don’t need to manage connections manually.
+Your application uses one of the [official {{ ydb-short-name }} SDKs](../reference/ydb-sdk/index.md) to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the {{ ydb-short-name }} cluster. When you need to run a query, the SDK provides a session from this pool, so you don’t need to manage connections manually.
 
 2. **Starting a Transaction and Sending a Query**
-With your session in hand, your application can begin a new transaction. You then generate your query in YQL query language based on your application logic, and send this query to the YDB server using the session.
+With your session in hand, your application can begin a new transaction. You then generate your query in the [YQL query language](../yql/reference/index.md) based on your application logic and send it to the {{ ydb-short-name }} cluster using the session.
 
 3. **Parsing and Plan Cache Lookup**
-On the server side, the YDB node that receives your query first parses and analyzes it for correctness. Before planning execution, YDB checks if it has already saved a physical execution plan for this query in its query cache. If it finds a cached plan, that plan can be reused to save time and resources.
+On the server side, the {{ ydb-short-name }} node that receives your query first parses and analyzes it for correctness. Before planning execution, {{ ydb-short-name }} checks whether a physical execution plan for this query already exists in the query cache. If a cached plan is found, it can be reused to save time and resources.
 
 4. **Query Optimization and Plan Preparation**
-If there isn’t an existing plan in the cache, YDB’s query optimizer creates a new physical query plan. This plan determines the most efficient way to execute your query across the distributed cluster. For more detailed information about query optimization and query plans, see [Query Optimizer](optimizer.md) article.
+If no existing plan is found in the cache, {{ ydb-short-name }}'s query optimizer creates a new physical query plan. This plan determines the most efficient way to execute your query across the distributed cluster. For more detailed information about query optimization and query plans, see the [{#T}](optimizer.md) article.
 
 5. **Distributed Query Execution**
 Using the prepared physical plan, YDB starts distributed execution of the query. Work is distributed across multiple nodes in the database, each node undertakes a part of the computation or data access based on the plan. This parallel processing enables fast and scalable query execution, even on large datasets.

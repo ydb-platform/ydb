@@ -1,0 +1,10 @@
+Failed to execute query, invalid final status FAILED, issues:
+<main>: Error: Query failed with code ABORTED at ISOTIME
+    <main>: Error: Run query failed: Error
+        <main>: Error: Type annotation, code: 1030
+            <main>:4:1: Error: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: PersistableRepr, At function: SqlProject
+                <main>:12:5: Error: At lambda
+                    <main>:12:19: Error: At function: Unwrap
+                        <main>:12:36: Error: At function: -
+                            <main>:12:26: Error: Member not found: timestamp
+

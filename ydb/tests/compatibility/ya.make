@@ -51,4 +51,5 @@ END()
 RECURSE(
     s3_backups
     configs
+    olap
 )

@@ -208,6 +208,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
             /* ordered */ false,
             /* arbiter */ false,
+            /* disable expectations */ false,
             *params.Txc);
         // Note: transaction is already committed, no additional waiting needed
     }

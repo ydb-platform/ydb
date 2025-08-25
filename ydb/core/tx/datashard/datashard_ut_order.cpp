@@ -2969,7 +2969,8 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
         .SetAppConfig(app)
         // Note: currently volatile transactions don't survive tablet reboots,
         // and reply with UNDETERMINED similar to immediate transactions.
-        .SetEnableDataShardVolatileTransactions(false);
+        .SetEnableDataShardVolatileTransactions(false)
+        .SetEnableDataShardWriteAlwaysVolatile(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();

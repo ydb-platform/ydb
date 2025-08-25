@@ -43,6 +43,7 @@ SRCS(
     create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
+    block_fail_point_unit.cpp
     datashard.cpp
     datashard.h
     datashard__cancel_tx_proposal.cpp
@@ -167,6 +168,7 @@ SRCS(
     key_conflicts.h
     key_validator.cpp
     load_and_wait_in_rs_unit.cpp
+    load_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
     make_scan_snapshot_unit.cpp

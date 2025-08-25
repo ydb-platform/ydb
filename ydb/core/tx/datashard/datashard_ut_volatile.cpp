@@ -3062,7 +3062,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // arbiter will send 3 expectations
         // two shards will send 1 commit decision + 1 expectation
-        size_t expectedReadSets = 3 + 2 * 2;
+        // one shard will send 1 abort decision
+        size_t expectedReadSets = 3 + 2 * 2 + 1;
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), expectedReadSets);
 
@@ -3078,9 +3079,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TCountReadSets countReadSets(runtime);
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // arbiter will send 3 additional commit decisions
-        // the last shard sends a nodata readset to answer expectation
-        UNIT_ASSERT_VALUES_EQUAL(countReadSets.Count, expectedReadSets + 4);
+        // arbiter will send 3 additional commit (abort) decisions
+        UNIT_ASSERT_VALUES_EQUAL(countReadSets.Count, expectedReadSets + 3);
 
         Cerr << "========= Checking table =========" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(

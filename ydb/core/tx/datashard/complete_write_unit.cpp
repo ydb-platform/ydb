@@ -103,7 +103,7 @@ void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
     Pipeline.RemoveCommittingOp(op);
     Pipeline.RemoveTx(op->GetStepOrder());
     DataShard.IncCounter(COUNTER_WRITE_SUCCESS);
-    
+
     CompleteWrite(op, ctx);
 
     DataShard.SendDelayedAcks(ctx, op->DelayedAcks());

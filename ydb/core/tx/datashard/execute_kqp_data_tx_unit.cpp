@@ -127,9 +127,33 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         return EExecutionStatus::Executed;
     }
 
+    bool preparedOutReadSets = false;
+    bool keepOutReadSets = tx->IsOutRSStored();
+
+    const auto* kqpLocks = tx->GetDataTx()->HasKqpLocks() ? &tx->GetDataTx()->GetKqpLocks() : nullptr;
+
+    auto ensureAbortOutReadSets = [&]() -> std::optional<EExecutionStatus> {
+        if (!op->IsImmediate() && !keepOutReadSets) {
+            op->OutReadSets().clear();
+            op->AwaitingDecisions().clear();
+            KqpFillOutReadSets(op->OutReadSets(), kqpLocks, NKikimrTx::TReadSetData::DECISION_ABORT, tabletId);
+            if (!op->OutReadSets().empty()) {
+                DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+                preparedOutReadSets = true;
+            }
+            keepOutReadSets = true;
+
+            if (preparedOutReadSets && !op->PreparedOutReadSets().empty()) {
+                op->SetWaitCompletionFlag(true);
+                return EExecutionStatus::DelayCompleteNoMoreRestarts;
+            }
+        }
+
+        return std::nullopt;
+    };
+
     try {
         const ui64 txId = tx->GetTxId();
-        const auto* kqpLocks = tx->GetDataTx()->HasKqpLocks() ? &tx->GetDataTx()->GetKqpLocks() : nullptr;
         const auto& inReadSets = op->InReadSets();
         auto& awaitingDecisions = tx->AwaitingDecisions();
         auto& outReadSets = tx->OutReadSets();
@@ -186,8 +210,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
         }
 
-        bool keepOutReadSets = !op->HasVolatilePrepareFlag();
-
         Y_DEFER {
             // We need to clear OutReadSets and AwaitingDecisions for
             // volatile transactions, except when we commit them.
@@ -218,6 +240,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
+
+            if (auto status = ensureAbortOutReadSets()) {
+                return *status;
+            }
+
             if (locksDb.HasChanges()) {
                 op->SetWaitCompletionFlag(true);
                 return EExecutionStatus::ExecutedNoMoreRestarts;
@@ -360,6 +387,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 dataTx->GetVolatileChangeGroup(),
                 dataTx->GetVolatileCommitOrdered(),
                 isArbiter,
+                /* disable expectations */ !participants.empty() && !op->HasVolatilePrepareFlag(),
                 txc);
         } else {
             awaitingDecisions.clear();
@@ -378,6 +406,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
             if (!op->OutReadSets().empty()) {
                 DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+                preparedOutReadSets = true;
             }
             keepOutReadSets = true;
         }
@@ -468,7 +497,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         return EExecutionStatus::Executed;
     }
 
-    if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+    if (preparedOutReadSets && !op->PreparedOutReadSets().empty()) {
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
@@ -510,7 +539,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
 }
 
 void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
-    if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+    if (!op->PreparedOutReadSets().empty()) {
         DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
     }
 }

@@ -599,6 +599,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         Y_ENSURE(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
@@ -613,6 +614,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);  // note: reloads from memory
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         // Note: execute will also prepare and send readsets
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         // Note: it is important that plan here is the same as regular
         // distributed tx, since normal tx may decide to commit in a
@@ -633,10 +635,18 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
 
-        plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        if (AppData()->FeatureFlags.GetEnableDataShardWriteAlwaysVolatile()) {
+            // Note: previous generation may have persisted InReadSets
+            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
+            plan.push_back(EExecutionUnitKind::LoadInRS);
+        } else {
+            plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
+            plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
+            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
+            plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        }
+
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
 
         plan.push_back(EExecutionUnitKind::CompleteWrite);

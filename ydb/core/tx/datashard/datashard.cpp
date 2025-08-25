@@ -4548,6 +4548,18 @@ void TDataShard::Handle(TEvPrivate::TEvRestartOperation::TPtr &ev, const TActorC
     PlanQueue.Progress(ctx);
 }
 
+void TDataShard::Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx) {
+    const auto txId = ev->Get()->TxId;
+
+    if (auto op = Pipeline.FindOp(txId)) {
+        if (op->HasFlag(TTxFlags::BlockFailPointWaiting)) {
+            op->SetFlag(TTxFlags::BlockFailPointUnblocked);
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
+        }
+    }
+}
+
 bool TDataShard::ReassignChannelsEnabled() const {
     return true;
 }

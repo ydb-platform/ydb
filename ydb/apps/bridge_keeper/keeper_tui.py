@@ -133,13 +133,13 @@ class KeeperApp(App):
 
         yield Static("Transition History", classes="section_title")
         self.history_view = Log(id="history_view")
-        self.history_view.auto_scroll = True
+        self.history_view.auto_scroll = False
         yield self.history_view
 
         # Logs section
         yield Static("Logs", classes="section_title")
         self.log_view = RichLog(id="logs_view")
-        self.log_view.auto_scroll = True
+        self.log_view.auto_scroll = False
         self.log_view.markup = True
         yield self.log_view
 

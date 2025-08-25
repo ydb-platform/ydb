@@ -269,6 +269,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             bool hasPasswordOption = false;
             if (authData["password"]) {
                 hasPasswordOption = true;
+                DoNotAskForPassword = true;
                 password = authData["password"].as<TString>();
             }
             if (authData["password-file"]) {
@@ -278,6 +279,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                     }
                     return false;
                 }
+                DoNotAskForPassword = true;
                 PasswordFile = authData["password-file"].as<TString>();
                 TString fileContent;
                 if (!ReadFromFileIfExists(PasswordFile, "password", fileContent, true)) {
@@ -293,9 +295,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             }
             // Assign values
             if (!parseOnly) {
-                if (!password.empty()) {
-                    DoNotAskForPassword = true;
-                }
                 Password = std::move(password);
             }
             return true;
@@ -309,6 +308,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .SetSupportsProfile()
             .FileName("password").RequiredArgument("PATH")
             .StoreFilePath(&PasswordFileOption)
+            .Handler([this](const TString& value) {
+                Y_UNUSED(value);
+                // Do not ask for password if a password (even empty) was provided from any option source
+                DoNotAskForPassword = true;
+            })
             .StoreResult(&PasswordOption);
 
         auto& noPasswordOpt = opts.AddLongOption("no-password",
@@ -520,12 +524,11 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
 
     // Assign values
     config.StaticCredentials.User = UserName;
-    if (!NoPasswordOption) {
-        config.StaticCredentials.Password = Password;
-    }
 
-    if (!config.StaticCredentials.Password.empty() || NoPasswordOption) {
+    if (NoPasswordOption) {
         DoNotAskForPassword = true;
+    } else {
+        config.StaticCredentials.Password = Password;
     }
 
     // Interactively ask for password

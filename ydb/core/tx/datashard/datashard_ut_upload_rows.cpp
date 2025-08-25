@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
+        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST(TestUploadRowsLocks) {

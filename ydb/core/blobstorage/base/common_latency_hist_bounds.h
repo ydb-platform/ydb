@@ -30,10 +30,9 @@ static inline NMonitoring::TBucketBounds GetCommonLatencyHistBounds(NPDisk::EDev
             break;
         case NPDisk::DEVICE_TYPE_NVME:
             bounds = {
-                0.25, 0.5,                          // us
-                1, 2, 4, 8, 32, 128,                // ms
-                1'024,                              // s
-                65'536                              // minutes
+                0.125, 0.25, 0.5,                   // us
+                1, 2, 8, 32, 128,                   // ms
+                1'000, 10'000                       // s
             };
             break;
     }

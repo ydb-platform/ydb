@@ -53,17 +53,17 @@ Supported transaction modes:
 
 * `SerializableReadWrite` — fully isolated read-write transactions (default).
 * `SnapshotReadOnly` — read-only queries executed on a consistent snapshot of the data.
-* `StaleReadOnly` — read-only queries that may read from replicas and therefore return slightly stale data.
+* `StaleReadOnly` — read-only transactions that may read from replicas and therefore return slightly stale data.
 
-For more information about transactions in {{ ydb-short-name }}, see [Transactions](transactions.md) article.
+For more information about transactions in {{ ydb-short-name }}, see the [Transactions](transactions.md) article.
 
 ## Retries
 
-YDB employs an optimistic concurrency control approach for transaction management. This means that a transaction may be aborted during execution if YDB detects a conflict and cannot guarantee the requested isolation level — for instance, when two transactions attempt to modify the same data concurrently. Also, because YDB operates as a distributed system across potentially large clusters, there is also a possibility of temporary unavailability of some nodes due to network partitions, hardware failures, or maintenance. These events may also cause transaction failures that require retries.
+{{ ydb-short-name }} employs optimistic concurrency control for transaction management. This means that a transaction may be aborted during execution if {{ ydb-short-name }} detects a conflict and cannot guarantee the requested isolation level — for example, when two transactions attempt to modify the same data concurrently. Additionally, because {{ ydb-short-name }} operates as a distributed system across potentially large clusters, some nodes may become temporarily unavailable due to network partitions, hardware failures, or maintenance. Such events can also cause transaction failures that require retries.
 
-Retries should always be handled at the transaction level, not at the level of individual queries. This is because, particularly in interactive transactions, where the sequence of queries and their intermediate results may affect subsequent operations, it is often not possible or safe to retry only a single query after a failure. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.
+Retries should always be handled at the transaction level, not at the level of individual queries. In [interactive transactions](glossary.md#interactive-transaction), the sequence of queries and their intermediate results may influence subsequent operations, making it unsafe or impossible to retry only a single failed query. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.
 
-All official YDB SDKs offer built-in retry logic and helpers for transaction management abstractions to simplify application code. By using the standard transaction methods provided by your SDK, you automatically get correct and robust retry behavior without needing to implement it yourself. For specifics about retries in SDK, please see SDK reference for your programming language.
+All official {{ ydb-short-name }} SDKs provide built-in retry logic and transaction management helpers to simplify application development. By using the standard transaction methods provided by your SDK, you automatically get correct and robust retry behavior without having to implement it manually. For details about retry mechanisms in specific SDKs, see the [{#T}](../reference/ydb-sdk/error_handling.md).
 
 ## Query language
 

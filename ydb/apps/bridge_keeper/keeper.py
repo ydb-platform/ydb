@@ -187,18 +187,19 @@ def _parse_args():
     parser.add_argument("--tui", action="store_true", help="Enable TUI")
     parser.add_argument("--tui-refresh", type=float, default=1.0, help="Refresh interval in seconds")
     parser.add_argument("--tui-disable-auto-failover", action="store_true", help="Disable automatical failover")
+    parser.add_argument("--https", action="store_true", help="Use HTTPS for viewer healthcheck requests")
 
     return parser.parse_args()
 
 
-def _run_no_tui(endpoints, path_to_cli, piles):
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles)
+def _run_no_tui(endpoints, path_to_cli, piles, use_https):
+    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=use_https)
     keeper.run()
 
 
 def _run_tui(args, endpoints, path_to_cli, piles):
     auto_failover = not args.tui_disable_auto_failover
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles)
+    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=args.https)
     app = keeper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
@@ -278,7 +279,7 @@ def main():
     if args.tui:
         _run_tui(args, endpoints, path_to_cli, piles)
     else:
-        _run_no_tui(endpoints, path_to_cli, piles)
+        _run_no_tui(endpoints, path_to_cli, piles, args.https)
 
 
 if __name__ == '__main__':

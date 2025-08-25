@@ -70,10 +70,11 @@ class AsyncHealthcheckRunner:
     - get_health_state() and get_piles() is thread-safe and returns a snapshot for Bridgekeeper
     """
 
-    def __init__(self, endpoints, path_to_cli, initial_piles):
+    def __init__(self, endpoints, path_to_cli, initial_piles, use_https=False):
         self.endpoints = list(endpoints)
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
+        self.use_https = use_https
 
         random.shuffle(self.endpoints)
 
@@ -206,9 +207,11 @@ class AsyncHealthcheckRunner:
 
     def _do_request(self, endpoint):
         try:
+            scheme = 'https' if self.use_https else 'http'
             r = requests.get(
-                f'http://{endpoint}:8765/viewer/healthcheck',
+                f'{scheme}://{endpoint}:8765/viewer/healthcheck',
                 params={'merge_records': 'true', 'timeout': '1000'},
+                verify = False,
                 )
             r.raise_for_status()
             data = r.json()
@@ -483,12 +486,13 @@ class TransitionHistory:
 
 
 class Bridgekeeper:
-    def __init__(self, endpoints: List[str], path_to_cli: str, initial_piles: Dict[str, List[str]]):
+    def __init__(self, endpoints: List[str], path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False):
         self.endpoints = endpoints
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
+        self.use_https = use_https
 
-        self.async_checker = AsyncHealthcheckRunner(endpoints, path_to_cli, initial_piles)
+        self.async_checker = AsyncHealthcheckRunner(endpoints, path_to_cli, initial_piles, use_https=use_https)
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data

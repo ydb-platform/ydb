@@ -175,6 +175,7 @@
 
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/logs/log.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
@@ -2185,10 +2186,12 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects)
+        IGlobalObjectStorage& globalObjects,
+        NFq::IYqSharedResources::TPtr yqSharedResources)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , GlobalObjects(globalObjects)
+    , YqSharedResources(yqSharedResources)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2242,6 +2245,38 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        const auto& sharedReading = Config.GetQueryServiceConfig().GetSharedReading();
+        if (sharedReading.GetEnabled()) {
+            NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(YqSharedResources);
+
+            NYql::TPqGatewayServices pqServices(
+                yqSharedResources->UserSpaceYdbDriver,
+                nullptr,
+                nullptr,
+                std::make_shared<NYql::TPqGatewayConfig>(),
+                nullptr,
+                nullptr
+               // commonTopicClientSettings
+            );
+           // FederatedQuerySetup = federatedQuerySetupFactory->Make(ctx.ActorSystem());
+
+            auto service = NFq::NewRowDispatcherService(
+                Config.GetQueryServiceConfig().GetSharedReading(),
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                yqSharedResources,
+                nullptr, //credentialsFactory, todo
+                "tenant",
+                appData->Counters->GetSubgroup("subsystem", "row_dispatcher"),
+                CreatePqNativeGateway(pqServices),
+                NActors::TActorId{},
+                appData->Mon,
+                appData->Counters);
+
+            setup->LocalServices.push_back(std::make_pair(
+                NFq::RowDispatcherServiceActorId(),
+                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 

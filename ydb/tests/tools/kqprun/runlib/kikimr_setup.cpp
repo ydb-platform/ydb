@@ -91,6 +91,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbose);
     serverSettings.SetNeedStatsCollectors(true);
+    serverSettings.SetEnableSharedReading(true);
 
     SetLoggerSettings(settings, serverSettings);
     SetFunctionRegistry(settings, serverSettings);

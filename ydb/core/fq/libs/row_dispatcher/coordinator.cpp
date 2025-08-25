@@ -172,7 +172,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         TTopicMetrics Metrics;
     };
 
-    NConfig::TRowDispatcherCoordinatorConfig Config;
+    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
     NActors::TActorId NodesManagerId;
@@ -189,7 +189,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
-        const NConfig::TRowDispatcherCoordinatorConfig& config,
+        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -236,7 +236,7 @@ private:
 
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -256,7 +256,9 @@ void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
 
-    Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest());
+    if (NodesManagerId) {
+        Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest());
+    }
 
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
@@ -525,10 +527,13 @@ void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& 
 }
 
 bool TActorCoordinator::IsReady() const {
+    if (!NodesManagerId) {
+        return true;
+    }
     if (!NodesCount) {
         return false;
     }
-    return RowDispatchers.size() >= NodesCount - 1; 
+    return RowDispatchers.size() >= NodesCount - 1;
 }
 
 void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
@@ -544,7 +549,7 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,

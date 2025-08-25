@@ -79,16 +79,13 @@ void TPqIoTestFixture::InitSource(
 {
     CaSetup->Execute([&](TFakeActor& actor) {
         NPq::NProto::TDqReadTaskParams params;
+        ui32 partitionsCount = 1;
         auto* partitioninigParams = params.MutablePartitioningParams();
-        partitioninigParams->SetTopicPartitionsCount(1);
+        partitioninigParams->SetTopicPartitionsCount(partitionsCount);
         partitioninigParams->SetEachTopicPartitionGroupId(0);
         partitioninigParams->SetDqPartitionsCount(1);
 
-        TString serializedParams;
-        Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
-
         const THashMap<TString, TString> secureParams;
-        const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
         TPqGatewayServices pqServices(
             Driver,
@@ -105,15 +102,14 @@ void TPqIoTestFixture::InitSource(
             "query_1",
             0,
             secureParams,
-            taskParams,
-            {},
+            TVector<NPq::NProto::TDqReadTaskParams>{params},
             Driver,
             nullptr,
             actor.SelfId(),
             actor.GetHolderFactory(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),
+            partitionsCount,
             freeSpace);
 
         actor.InitAsyncInput(dqSource, dqSourceAsActor);

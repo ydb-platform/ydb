@@ -183,6 +183,7 @@ namespace Tests {
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;
+        bool EnableSharedReading = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
@@ -294,6 +295,11 @@ namespace Tests {
 
         TServerSettings& SetEnableStorage(bool enable) {
             EnableStorage = enable;
+            return *this;
+        }
+
+        TServerSettings& SetEnableSharedReading(bool enable) {
+            EnableSharedReading = enable;
             return *this;
         }
 

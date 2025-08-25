@@ -2,9 +2,9 @@
 
 #include "parser_abstract.h"
 
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
-
 #include <util/generic/size_literals.h>
+
+#include <ydb/core/protos/config.pb.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -15,6 +15,6 @@ struct TJsonParserConfig {
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);
-TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig);
+TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConfig::TJsonParserConfig& parserConfig);
 
 }  // namespace NFq::NRowDispatcher

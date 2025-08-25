@@ -81,10 +81,11 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        if (!counters) {
-            return;
+        if (Counters) {
+            SubGroup = Counters->GetSubgroup("source", "RdPqRead");
+        } else {
+            SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        SubGroup = Counters->GetSubgroup("source", "RdPqRead");
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
@@ -729,6 +730,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
     Counters.GetAsyncInputData++;
+    Cerr << "GetAsyncInputData freeSpace = " << freeSpace << Endl;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
     Metrics.InFlyAsyncInputData->Set(0);
@@ -1456,7 +1458,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
@@ -1466,13 +1468,13 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     i64 bufferSize,
     const IPqGateway::TPtr& pqGateway)
 {
-    auto taskParamsIt = taskParams.find("pq");
-    YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
+    // auto taskParamsIt = taskParams.find("pq");
+    // YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
 
-    TVector<NPq::NProto::TDqReadTaskParams> params;
-    NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
-    YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
-    params.emplace_back(std::move(readTaskParamsMsg));
+    // TVector<NPq::NProto::TDqReadTaskParams> params;
+    // NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
+    // YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+    // params.emplace_back(std::move(readTaskParamsMsg));
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1486,7 +1488,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         holderFactory,
         typeEnv,
         std::move(settings),
-        std::move(params),
+        std::move(readTaskParamsMsg),
         driver,
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,

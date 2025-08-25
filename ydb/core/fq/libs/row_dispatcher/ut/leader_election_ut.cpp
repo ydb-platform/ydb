@@ -32,7 +32,7 @@ public:
     }
 
     void Init(bool localMode = false) {
-        NConfig::TRowDispatcherCoordinatorConfig config;
+        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("row_dispatcher");
         config.SetLocalMode(localMode);
         auto& database = *config.MutableDatabase();

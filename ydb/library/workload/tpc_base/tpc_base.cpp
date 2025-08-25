@@ -42,8 +42,7 @@ TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() 
         }
         switch (type.GetKind()) {
         case NYdb::TTypeParser::ETypeKind::Decimal: {
-            const auto decimal = type.GetDecimal();
-            return (decimal.Precision == NKikimr::NScheme::DECIMAL_PRECISION && decimal.Scale == NKikimr::NScheme::DECIMAL_SCALE) ? TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB : TTpcBaseWorkloadParams::EFloatMode::DECIMAL;
+            return TTpcBaseWorkloadParams::EFloatMode::DECIMAL;
         }
         case NYdb::TTypeParser::ETypeKind::Primitive:
             if (type.GetPrimitive() == NYdb::EPrimitiveType::Double || type.GetPrimitive() == NYdb::EPrimitiveType::Float) {
@@ -126,12 +125,9 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
     switch(FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         scaleFactor << Params.GetScale();
-	break;
+        break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         scaleFactor << "cast('" << Params.GetScale() << "' as decimal(35,2))";
-	break;
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        scaleFactor << "cast('" << Params.GetScale() << "' as decimal(35,9))";
         break;
     }
     scaleFactor << ";";
@@ -164,28 +160,8 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
         break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
         FilterHeader(header.Out, NResource::Find("consts_decimal.yql"), query);
         break;
-    }
-
-    if (FloatMode != TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB) {
-        return header;
-    }
-    header.to_lower();
-    const TStringBuf dec("decimal(");
-    auto p = header.find(dec);
-    while (p != TString::npos) {
-        p += dec.length();
-        const auto q = header.find(')', p);
-        TVector<ui32> decParams;
-        StringSplitter(header.cbegin() + p, q - p).SplitBySet(", ").SkipEmpty().Limit(2).ParseInto(&decParams);
-        TStringBuilder newDecParams;
-        newDecParams
-            << Max(decParams[0], NKikimr::NScheme::DECIMAL_PRECISION)
-            << "," << Max(decParams[1], NKikimr::NScheme::DECIMAL_SCALE);
-        header.replace(p, q - p, newDecParams);
-        p = header.find(dec, q);
     }
     return header;
 }
@@ -198,9 +174,7 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         << "  " << colors.BoldColor() << EFloatMode::FLOAT << colors.OldColor() << Endl
         << "    Use native Float type for floating-point values." << Endl
         << "  " << colors.BoldColor() << EFloatMode::DECIMAL << colors.OldColor() << Endl
-        << "    Use Decimal type with canonical precision and scale." << Endl
-        << "  " << colors.BoldColor() << EFloatMode::DECIMAL_YDB << colors.OldColor() << Endl
-        << "    Use Decimal(22,9)." << Endl;
+        << "    Use Decimal type with canonical precision and scale." << Endl;
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")

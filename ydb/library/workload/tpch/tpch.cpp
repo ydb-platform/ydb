@@ -1,8 +1,6 @@
 #include "tpch.h"
 #include "data_generator.h"
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
 
@@ -27,9 +25,6 @@ TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialData
         return {{"float_type", "Double"}};
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         return {{"float_type", "Decimal(12,2)"}};
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        return {{"float_type", "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
-                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")"}};
     }
 }
 

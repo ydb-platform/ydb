@@ -10,7 +10,6 @@ public:
     enum class EFloatMode {
         FLOAT /* "float" */,
         DECIMAL /* "decimal" */,
-        DECIMAL_YDB /* "decimal_ydb" */
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);

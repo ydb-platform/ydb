@@ -369,10 +369,14 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
+        if (portion->IsRemovedFor(GetContext()->GetReadMetadata()->GetRequestSnapshot())) {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot();
+        } else if (portion->HasCommitSnapshot()) {
             ss = portion->GetCommitSnapshotVerified();
         } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
+        } else {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot();
         }
     }
 
@@ -399,9 +403,14 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
-          portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
-          portion->GetMeta().GetDeletionsCount())
+    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context,
+          portion->IsRemovedFor(context->GetReadMetadata()->GetRequestSnapshot())
+              ? context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()
+              : portion->RecordSnapshotMin(context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()),
+          portion->IsRemovedFor(context->GetReadMetadata()->GetRequestSnapshot())
+              ? context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()
+                                       : portion->RecordSnapshotMax(context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()),
+          portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))

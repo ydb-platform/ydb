@@ -11,18 +11,21 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TPredicateFilter::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
             true));
     source->MutableStageData().AddFilter(filter);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AFTER_PREDICATE")("portion_id", source->GetSourceId())("count", filter.GetFilteredCount());
     return true;
 }
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build()("lock_id", source->GetContext()->GetReadMetadata()->GetLockId()));
     auto filter =
         MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
                                std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
@@ -30,8 +33,13 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
             source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ADD_CONFLICT")("portion_id", source->GetSourceId());
             return true;
+        } else {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "CANNOT_ADD_CONFLICT")("portion_id", source->GetSourceId());
         }
+    } else {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "NO_CONFLICT")("portion_id", source->GetSourceId());
     }
     source->MutableStageData().AddFilter(filter);
     return true;
@@ -219,8 +227,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto* sSource = source->MutableAs<IDataSource>();
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                                                  source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
+                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")(
+                "source_id", source->GetSourceId());
             continue;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_id", source->GetSourceId());

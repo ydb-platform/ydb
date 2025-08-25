@@ -85,7 +85,7 @@ public:
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         Version = version;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
         if (IsTxBroken()) {
             owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), txc);
         } else {
@@ -95,7 +95,9 @@ public:
     }
 
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
+        NActors::TLogContextGuard lGuard(
+            NActors::TLogContextBuilder::Build()("lock_id", LockId)("broken", IsTxBroken())("progress_tx_id", GetTxId()));
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "start-ProgressOnComplete");
         AFL_VERIFY(Version);
         if (IsTxBroken()) {
             owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId());

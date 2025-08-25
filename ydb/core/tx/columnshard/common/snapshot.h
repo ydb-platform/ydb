@@ -31,6 +31,22 @@ public:
         , TxId(txId) {
     }
 
+    TSnapshot GetPreviousSnapshot() const {
+        if (TxId) {
+            return TSnapshot(PlanStep, TxId - 1);
+        } else {
+            return TSnapshot(PlanStep - 1, ::Max<ui64>());
+        }
+    }
+
+    TSnapshot GetNextSnapshot() const {
+        if (TxId == ::Max<ui64>()) {
+            return TSnapshot(PlanStep + 1, 0);
+        } else {
+            return TSnapshot(PlanStep, TxId + 1);
+        }
+    }
+
     NJson::TJsonValue SerializeToJson() const;
 
     constexpr TInstant GetPlanInstant() const noexcept {

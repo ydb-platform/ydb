@@ -23,7 +23,9 @@ void TBuildBatchesTask::ReplyError(const TString& message, const NColumnShard::T
 }
 
 void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("scope", "TBuildBatchesTask::DoExecute");
+    const NActors::TLogContextGuard lGuard =
+        NActors::TLogContextBuilder::Build()("scope", "TBuildBatchesTask::DoExecute")("w_data_id", WriteData.GetWriteMeta().GetId())(
+            "w_data_wid", WriteData.GetWriteMeta().GetWriteId())("w_lock_id", WriteData.GetWriteMeta().GetLockIdOptional());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_external");
         ReplyError("writing aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
@@ -47,6 +49,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
     auto batch = preparedConclusion.DetachResult();
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("batch", batch->ToString());
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {

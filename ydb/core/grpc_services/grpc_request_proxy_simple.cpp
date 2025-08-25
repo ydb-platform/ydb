@@ -106,9 +106,7 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-
         LogRequest(event);
-
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
             return;

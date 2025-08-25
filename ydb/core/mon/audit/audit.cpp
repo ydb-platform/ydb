@@ -16,7 +16,7 @@ namespace {
     const TString EMPTY_VALUE = "{none}";
     const TString X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
     const TStringBuf TRUNCATED_SUFFIX = "**TRUNCATED_BY_YDB**";
-    const TString REASON_EXECUTE = "Execute";
+    const TString REASON_RECEIVED = "Received";
 
     // audit event has limit of 4 MB, but we limit body size to 2 MB
     const size_t MAX_AUDIT_BODY_SIZE = 2_MB - TRUNCATED_SUFFIX.size();
@@ -117,28 +117,33 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
 }
 
-void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    if (!Auditable) {
+void TAuditCtx::AddAuditLogParts(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result) {
+    if (!Auditable || !result) {
         return;
     }
-    SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    if (userToken) {
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
+
+    static const THashSet<TString> DATABASE_CLOUD_PARTS = {"cloud_id", "folder_id", "resource_id", "sanitized_token", "subject"};
+
+    for (const auto& [key, value] : result->AuditLogParts) {
+        if (DATABASE_CLOUD_PARTS.contains(key)) {
+            AddAuditLogPart(key, value);
+        }
+    }
+
+    if (result->UserToken) {
+        const auto& userToken = result->UserToken;
+        SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     }
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
-    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
+    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(MONITORING_LOG_CLASS, logPhase, SubjectType);
 
     if (!Auditable || !auditEnabled) {
         return;
     }
 
     AUDIT_LOG(
-        AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
-        AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
-
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }
@@ -149,7 +154,7 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
 }
 
 void TAuditCtx::LogOnReceived() {
-    LogAudit(ERequestStatus::Process, REASON_EXECUTE, NKikimrConfig::TAuditConfig::TLogClassConfig::Received);
+    LogAudit(ERequestStatus::Process, REASON_RECEIVED, NKikimrConfig::TAuditConfig::TLogClassConfig::Received);
 }
 
 void TAuditCtx::LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response) {

@@ -102,13 +102,16 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
 }
 
 IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket) {
+    auto *ev = new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+            database,
+            ticket ? TMaybe<TString>(ticket) : Nothing(),
+            owner
+        );
+    ev->SetAuditMode(NKikimr::NGRpcService::TAuditMode::Modifying(NMonitoring::NAudit::TAuditCtx::MONITORING_LOG_CLASS));
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
-            database,
-            ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner),
+        ev,
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -390,6 +393,7 @@ public:
                 return;
             }
         }
+        AuditCtx.LogOnReceived();
         SendRequest();
     }
 
@@ -524,10 +528,8 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -553,6 +555,8 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(&result);
+        AuditCtx.LogOnReceived();
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1060,6 +1064,7 @@ public:
                 return;
             }
         }
+        AuditCtx.LogOnReceived();
         SendRequest();
         Become(&THttpMonAuthorizedActorRequest::StateWork);
     }
@@ -1171,10 +1176,8 @@ public:
                 << " " << request->URL);
         }
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1197,6 +1200,8 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(&result);
+        AuditCtx.LogOnReceived();
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }

@@ -483,15 +483,20 @@ private:
         const TString sanitizedToken = TBase::GetSanitizedToken();
         if (auditEnabledReceived || auditEnabledCompleted) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            if (auditEnabledReceived) {
-                AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
-            }
 
-            if (auditEnabledCompleted) {
-                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
-                    AuditContextEnd(requestBaseCtx);
-                    AuditLog(status, parts);
-                });
+            // RequestAuthAndCheck is a monitoring service request; audit is not logged for it
+            // logClass is provided by the monitoring service
+            if constexpr (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+                if (auditEnabledReceived) {
+                    AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
+                }
+
+                if (auditEnabledCompleted) {
+                    requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                        AuditContextEnd(requestBaseCtx);
+                        AuditLog(status, parts);
+                    });
+                }
             }
         }
     }
@@ -559,6 +564,8 @@ private:
     }
 
     void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
+
         GrpcRequestBaseCtx_->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();

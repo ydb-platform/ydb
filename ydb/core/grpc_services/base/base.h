@@ -277,6 +277,7 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    virtual ~IAuditCtx() = default;
 };
 
 class IRequestCtxBase
@@ -1676,9 +1677,10 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts = {})
         : Status(status)
         , Issues(issues)
+        , AuditLogParts(auditLogParts)
     {}
 
     TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
@@ -1693,10 +1695,11 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts = {})
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1704,6 +1707,7 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
@@ -1734,6 +1738,14 @@ public:
         return AuthState;
     }
 
+    void SetAuditMode(TAuditMode auditMode) {
+        AuditMode = auditMode;
+    }
+
+    TAuditMode GetAuditMode() const override {
+        return AuditMode;
+    }
+
     void ReplyUnauthenticated(const TString& msg = "") override {
         if (msg) {
             IssueManager.RaiseIssue(NYql::TIssue{msg});
@@ -1748,14 +1760,16 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     Database,
                     YdbToken,
-                    UserToken
+                    UserToken,
+                    AuditLogParts
                 )
             );
         } else {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
                     status,
-                    IssueManager.GetIssues()
+                    IssueManager.GetIssues(),
+                    AuditLogParts
                 )
             );
         }
@@ -1895,6 +1909,7 @@ public:
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;
+    TAuditMode AuditMode;
     NWilson::TSpan Span;
     IGRpcProxyCounters::TPtr Counters;
     TMaybe<NRpcService::TRlPath> RlPath;

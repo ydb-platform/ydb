@@ -114,13 +114,43 @@ message GlobalVectorKMeansTreeIndex {
 }
 
 message FulltextIndexSettings {
+    // Specifies the layout strategy for storing and updating the full-text index
     enum Layout {
         LAYOUT_UNSPECIFIED = 0;
+
+        // Uses a single flat inverted index table (indexImplTable)
+        // Example:
+        //   Documents:
+        //     Document ID 1: "The quick brown fox"
+        //     Document ID 2: "The quick blue hare"
+        //   After tokenization using WHITESPACE tokenizer:
+        //     Document ID 1 → ["The", "quick", "brown", "fox"]
+        //     Document ID 2 → ["The", "quick", "blue", "hare"]
+        //   Flat inverted index table (indexImplTable):
+        //     ┌──────────────┬───────────────┐
+        //     │ __ydb_token  │ document_id   │
+        //     ├──────────────┼───────────────┤
+        //     │ "blue"       │ 2             │
+        //     │ "brown"      │ 1             │
+        //     │ "fox"        │ 1             │
+        //     │ "hare"       │ 2             │
+        //     │ "quick"      │ 1             │
+        //     │ "quick"      │ 2             │
+        //     │ "The"        │ 1             │
+        //     │ "The"        │ 2             │
+        //     └──────────────┴───────────────┘
         FLAT = 1;
     }
 
+    // Specifies how text is tokenized during indexing
     enum Tokenizer {
         TOKENIZER_UNSPECIFIED = 0;
+
+        // Splits tokens only by whitespace
+        // Does not split on punctuation
+        // Example:
+        //   Document: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo-bar", "baz_lorem", "ipsum"]
         WHITESPACE = 1;
     }
 

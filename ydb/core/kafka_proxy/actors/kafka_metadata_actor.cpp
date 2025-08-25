@@ -213,6 +213,38 @@ void TKafkaMetadataActor::AddTopicResponse(
         responsePartition.ReplicaNodes.push_back(nodeId);
         responsePartition.IsrNodes.push_back(nodeId);
 
+        ui32 nodeId2 = -1;
+        TNodeInfo nodeInfo2;
+        ui32 nodeId3 = -1;
+        TNodeInfo nodeInfo3;
+
+        auto iterNode = Nodes.find(part.NodeId);
+        iterNode++;
+        if (iterNode != Nodes.end()) {
+            nodeId2 = iterNode->first;
+            nodeInfo2 = iterNode->second;
+        } else {
+            iterNode = Nodes.begin();
+            nodeId2 = iterNode->first;
+            nodeInfo2 = iterNode->second;
+        }
+
+        iterNode++;
+        if (iterNode != Nodes.end()) {
+            nodeId3 = iterNode->first;
+            nodeInfo3 = iterNode->second;
+        } else {
+            iterNode = Nodes.begin();
+            nodeId3 = iterNode->first;
+            nodeInfo3 = iterNode->second;
+        }
+        if (Nodes.size() >= 3) {
+            responsePartition.ReplicaNodes.push_back(nodeId2);
+            responsePartition.ReplicaNodes.push_back(nodeId3);
+            responsePartition.IsrNodes.push_back(nodeId2);
+            responsePartition.IsrNodes.push_back(nodeId3);
+        }
+
         topic.Partitions.emplace_back(std::move(responsePartition));
 
         if (!WithProxy && !NeedAllNodes) {
@@ -223,6 +255,10 @@ void TKafkaMetadataActor::AddTopicResponse(
                     hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
                 }
                 AddBroker(part.NodeId, hostname, (*nodeIter)->Port);
+                if (Nodes.size() >= 3) {
+                    AddBroker(nodeId2, nodeInfo2.Host, nodeInfo2.Port);
+                    AddBroker(nodeId3, nodeInfo3.Host, nodeInfo3.Port);
+                }
             }
         }
         ++nodeIter;

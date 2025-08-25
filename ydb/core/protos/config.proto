@@ -1374,7 +1374,7 @@ message TImmediateControlsConfig {
 
         optional uint64 CpuUsageReportThresholdPercent = 22 [(ControlOptions) = {
           Description: "Cpu usage threshold about high datashard load",
-          MinValue: 0,
+          MinValue: -1,
           MaxValue: 146,
           DefaultValue: 60 }];
         optional uint64 CpuUsageReportIntervalSeconds = 23 [(ControlOptions) = {
@@ -1384,7 +1384,7 @@ message TImmediateControlsConfig {
           DefaultValue: 60 }];
         optional uint64 HighDataSizeReportThresholdBytes = 24 [(ControlOptions) = {
           Description: "Data size threshold about high data shard load",
-          MinValue: 0,
+          MinValue: -1,
           MaxValue: 9223372036854775807, // 2 ** 63 - 1
           DefaultValue: 10737418240 }]; // 10 << 30
         optional uint64 HighDataSizeReportIntervalSeconds = 25 [(ControlOptions) = {
@@ -1493,7 +1493,7 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
         optional uint64 SplitMergePartCountLimit = 8 [(ControlOptions) = {
             Description: "Max count of SplitMerge actions for part",
-            MinValue: 0,
+            MinValue: -1,
             MaxValue: 1000000,
             DefaultValue: 2000 }];
         optional uint64 FastSplitSizeThreshold = 9 [(ControlOptions) = {

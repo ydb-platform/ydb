@@ -45,7 +45,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
         new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner),
+            owner,
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -71,7 +72,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             owner,
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided")
+                "No security credentials were provided",
+                {})
         );
     } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
         TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
@@ -81,7 +83,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 {},
                 {},
-                token
+                token,
+                {}
             )
         );
     } else {

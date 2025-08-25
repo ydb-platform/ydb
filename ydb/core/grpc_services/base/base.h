@@ -1671,27 +1671,31 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
         : Status(status)
         , Issues(issues)
+        , AuditLogParts(auditLogParts)
     {}
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(issue);
     }
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1699,17 +1703,19 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender)
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
+        , AuditMode(auditMode)
     {}
 
     // IRequestProxyCtx
@@ -1743,14 +1749,16 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     Database,
                     YdbToken,
-                    UserToken
+                    UserToken,
+                    GetAuditLogParts()
                 )
             );
         } else {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
                     status,
-                    IssueManager.GetIssues()
+                    IssueManager.GetIssues(),
+                    GetAuditLogParts()
                 )
             );
         }
@@ -1886,6 +1894,10 @@ public:
         return {};
     }
 
+    TAuditMode GetAuditMode() const override {
+        return AuditMode;
+    }
+
     TString Database;
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
@@ -1897,6 +1909,7 @@ public:
     NYql::TIssueManager IssueManager;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+    TAuditMode AuditMode;
 
     inline static const TString EmptySerializedTokenMessage;
 };

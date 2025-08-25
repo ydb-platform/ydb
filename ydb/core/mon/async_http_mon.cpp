@@ -347,9 +347,12 @@ public:
                 << " " << request->URL);
         }
         TString serializedToken;
-        if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
-            serializedToken = result->UserToken->GetSerializedToken();
+        if (result) {
+            AuditCtx.AddAuditLogParts(result->AuditLogParts);
+            if (result->UserToken) {
+                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
+                serializedToken = result->UserToken->GetSerializedToken();
+            }
         }
         AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(

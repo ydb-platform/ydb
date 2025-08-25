@@ -191,6 +191,24 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             continue;
         }
 
+        if (syncer.HasBytesDone() || syncer.HasBytesTotal() || syncer.HasBytesError() ||
+                syncer.HasBlobsDone() || syncer.HasBlobsTotal() || syncer.HasBlobsError()) {
+            auto& state = SyncerProgress[std::tie(targetGroupId, nodeId)];
+#define FETCH_METRIC(NAME) \
+            if (syncer.Has##NAME()) { \
+                state.NAME = syncer.Get##NAME(); \
+            }
+
+            FETCH_METRIC(BytesDone)
+            FETCH_METRIC(BytesTotal)
+            FETCH_METRIC(BytesError)
+            FETCH_METRIC(BlobsDone)
+            FETCH_METRIC(BlobsTotal)
+            FETCH_METRIC(BlobsError)
+
+#undef FETCH_METRIC
+        }
+
         if (syncer.GetFinished()) {
             if (syncer.HasErrorReason() || TargetGroupsInCommit.contains(targetGroupId)) {
                 continue;
@@ -242,6 +260,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
     for (const auto& [targetGroupId, sourceGroupId] : targetSourceToDelete) {
         SyncersNodeTargetSource.erase(std::make_tuple(nodeId, targetGroupId, sourceGroupId));
         SyncersTargetNodeSource.erase(std::make_tuple(targetGroupId, nodeId, sourceGroupId));
+        SyncerProgress.erase(std::make_tuple(targetGroupId, nodeId));
     }
 }
 
@@ -259,6 +278,7 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
                 const auto& [nodeId, targetGroupId, sourceGroupId] = *it++;
                 const size_t n = SyncersTargetNodeSource.erase(std::make_tuple(targetGroupId, nodeId, sourceGroupId));
                 Y_ABORT_UNLESS(n == 1);
+                SyncerProgress.erase(std::make_tuple(targetGroupId, nodeId));
             }
             SyncersNodeTargetSource.erase(first, it);
         } else {
@@ -507,6 +527,9 @@ void TBlobStorageController::RenderBridge(IOutputStream& out) {
                     TABLEH() { out << "Source group id"; }
                     TABLEH() { out << "State"; }
                     TABLEH() { out << "Node id"; }
+                    TABLEH() { out << "Progress"; }
+                    TABLEH() { out << "Bytes"; }
+                    TABLEH() { out << "Blobs"; }
                 }
             }
             TABLEBODY() {
@@ -545,6 +568,32 @@ void TBlobStorageController::RenderBridge(IOutputStream& out) {
                         TABLED() { out << state; }
                         TABLED() {
                             out << "<a href='/node/" << nodeId << "/actors/nodewarden#syncer-" << targetGroupId << "'>" << nodeId << "</a>";
+                        }
+
+                        auto& progress = SyncerProgress[std::tie(targetGroupId, nodeId)];
+                        TABLED() {
+                            if (progress.BytesTotal) {
+                                const int percent = 10'000 * progress.BytesDone / progress.BytesTotal;
+                                out << Sprintf("%d.%02d%%", percent / 100, percent % 100);
+                            }
+                        }
+                        TABLED() {
+                            static const char *bytesSuffixes[] = {"B", "KiB", "MiB", "GiB", nullptr};
+                            FormatHumanReadable(out, progress.BytesDone, 1024, 1, bytesSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, progress.BytesTotal, 1024, 1, bytesSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, progress.BytesError, 1024, 1, bytesSuffixes);
+                            out << ')';
+                        }
+                        TABLED() {
+                            static const char *blobsSuffixes[] = {"", "K", "M", nullptr};
+                            FormatHumanReadable(out, progress.BlobsDone, 1000, 1, blobsSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, progress.BlobsTotal, 1000, 1, blobsSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, progress.BlobsError, 1000, 1, blobsSuffixes);
+                            out << ')';
                         }
                     }
                 }

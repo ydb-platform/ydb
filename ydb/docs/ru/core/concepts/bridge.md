@@ -1,4 +1,4 @@
-# Режим bridge
+# Режим работы кластера Bridge
 
 {% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
 
@@ -24,7 +24,7 @@ Pile не являются самостоятельными кластерами
 - в каждом pile работает отдельная [статическая группа](glossary.md#static-group) и набор независимых групп хранения с обычными [VDisk](glossary.md#vdisk). Доступ к группам хранения осуществляется через DS-proxy-proxy, который предоставляет таблеткам интерфейс [DS-proxy](glossary.md#ds-proxy) и выполняет операции с использованием двух DS-proxy — по одной для групп в каждом pile;
 - в каждом pile работает свой набор реплик [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board) и [Board](glossary.md#board). Доступ к StateStorage, SchemeBoard и Board осуществляется через аналогичные proxy-proxy.
 
-## Состояния pile {#pile-states}
+## Состояния Pile {#pile-states}
 
 Режим работы кластера определяется состояниями всех его pile. Например, для кластера из pile А и pile Б состояния pile указываются как (А, Б), где порядок имеет значение.
 

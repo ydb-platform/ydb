@@ -234,9 +234,9 @@ namespace NKikimr::NBridge {
                 }
                 auto kv = std::make_unique<TVector<TLogoBlobID>>();
                 std::ranges::set_difference(tempKeep, *dkv, std::back_inserter(*kv)); // do not keep flag overrides keep
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(),
-                    0u, false, 0u, 0u, kv->empty() ? nullptr : kv.release(), dkv->empty() ? nullptr : dkv.release(),
-                    TInstant::Max()));
+                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
+                    false, 0u, 0u, kv->empty() ? nullptr : kv.release(), dkv->empty() ? nullptr : dkv.release(),
+                    TInstant::Max(), true, false, true));
             }
         };
 

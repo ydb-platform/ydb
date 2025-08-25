@@ -58,6 +58,8 @@ message TAuthConfig {
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
     optional TPasswordComplexity PasswordComplexity = 83;
     optional TAccountLockout AccountLockout = 84;
+    optional string AccessServiceTokenName = 85;
+    optional TTokenManager TokenManager = 86;
 }
 
 message TUserRegistryConfig {
@@ -138,4 +140,43 @@ message TPasswordComplexity {
 message TAccountLockout {
     optional uint32 AttemptThreshold = 1 [default = 4];
     optional string AttemptResetDuration = 2 [default = "1h"];
+}
+
+message TTokenManager {
+    message TTokenProviderSettings {
+        optional string SuccessRefreshPeriod = 1 [default = "1h"];
+        optional string MinErrorRefreshPeriod = 2 [default = "1s"];
+        optional string MaxErrorRefreshPeriod = 3 [default = "1m"];
+        optional string RequestTimeout = 4 [default = "1m"];
+    }
+
+    message TVmMetadataProvider {
+        message TVmMetadataInfo {
+            optional string Id = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TVmMetadataInfo ProvidersInfo = 1;
+        optional TTokenProviderSettings Settings = 2;
+    }
+
+    message TTokenAgentProvider {
+        message TTokenAgentInfo {
+            optional string Id = 1;
+            optional string Tag = 2;
+        }
+
+        message TSettings {
+            optional TTokenProviderSettings CommonSettings = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TTokenAgentInfo ProvidersInfo = 1;
+        optional TSettings Settings = 2;
+    }
+
+    optional bool Enable = 1 [default = false];
+    optional string RefreshCheckPeriod = 2 [default = "1s"];
+    optional TVmMetadataProvider VmMetadataProvider = 3;
+    optional TTokenAgentProvider TokenAgentProvider = 4;
 }

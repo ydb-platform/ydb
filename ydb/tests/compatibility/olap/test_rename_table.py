@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 import pytest
 import logging
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
 
-class TestRenameTable(RestartToAnotherVersionFixture):
+class TestRenameTableRestart(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
 
@@ -105,3 +105,82 @@ class TestRenameTable(RestartToAnotherVersionFixture):
         self._rename_table("table2", "renamed2")
         self._write_to_table("renamed2", table2_start_value + rows_per_write, rows_per_write)
         assert self._expected_sum(table2_start_value, rows_per_write * 2) == self._get_sum("renamed2")
+
+
+class TestRenameTableRollingUpdate(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        self.rows_per_iteration = 100
+
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1")
+
+        yield from self.setup_cluster(table_service_config={
+            "enable_olap_sink": True,
+        }, extra_feature_flags={
+            "enable_move_column_table": True,
+        }, column_shard_config={
+            "disabled_on_scheme_shard": False,
+            "generate_internal_path_id": True
+        })
+
+    def get_table_name(self, i):
+        return f"table_{i}"
+
+    def run_iteration(self, iteration):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            rows = []
+            for j in range(self.rows_per_iteration):
+                rows.append({"k": iteration * self.rows_per_iteration + j, "v": f"Iteration {iteration}, row {j}".encode("utf-8")})
+            data_struct_type = ydb.StructType()
+            data_struct_type.add_member("k", ydb.PrimitiveType.Uint64)
+            data_struct_type.add_member("v", ydb.PrimitiveType.String)
+
+            session_pool.execute_with_retries(
+                f"""
+                    DECLARE $data AS List<Struct<k: Uint64, v: String>>;
+                    UPSERT INTO `{self.get_table_name(iteration)}`
+                    SELECT k AS k, v
+                    FROM AS_TABLE($data);
+                """,
+                {"$data": (rows, ydb.ListType(data_struct_type))}
+            )
+            logger.info(f"Iteration {iteration} about to rename")
+            session_pool.execute_with_retries(
+                f"""
+                    ALTER TABLE `{self.get_table_name(iteration)}` RENAME TO `{self.get_table_name(iteration + 1)}`;
+                """
+            )
+            result = session_pool.execute_with_retries(
+                f"""
+                    select count(*) as cnt from `{self.get_table_name(iteration + 1)}`;
+                """
+            )
+            cnt = result[0].rows[0]["cnt"]
+            assert cnt == (iteration + 1) * self.rows_per_iteration
+
+    def test_rename_table(self):
+        iteration = 0
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"""
+                CREATE TABLE `{self.get_table_name(iteration)}` (
+                    k Uint64 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                ) WITH (
+                    STORE=COLUMN
+                );
+            """
+            )
+
+        for _ in self.roll():
+            self.run_iteration(iteration)
+            iteration += 1
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"""
+                DROP TABLE `{self.get_table_name(iteration)}`
+            """
+            )

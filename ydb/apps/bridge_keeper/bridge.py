@@ -244,12 +244,13 @@ class AsyncHealthcheckRunner:
             return
 
         reporter_pile, failed_piles = result
+        monotonicNow = time.monotonic()
         with self._lock:
             self._reporter_to_failed[reporter_pile] = set(failed_piles)
-            self._reporter_last_ts[reporter_pile] = time.monotonic()
+            self._reporter_last_ts[reporter_pile] = monotonicNow
             # Track per-endpoint recency and pile mapping
             self._endpoint_to_pile[endpoint] = reporter_pile
-            self._endpoint_last_ts[endpoint] = time.monotonic()
+            self._endpoint_last_ts[endpoint] = monotonicNow
 
     def get_health_state_and_piles(self):
         """Thread-safe snapshot: (reporter pile -> {failed_piles: set, last_ts: float}), pile_name -> state string)"""
@@ -500,7 +501,7 @@ class Bridgekeeper:
 
         self.current_state = None
         self.state_history = TransitionHistory()
-        self._state_lock = threading.RLock()
+        self._state_lock = threading.Lock()
         self._run_thread = None
         self._last_all_good_info_ts = 0.0
         self._stop_event = threading.Event()

@@ -22,7 +22,7 @@ std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectF
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
     switch (Params.GetFloatMode()) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
         break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:

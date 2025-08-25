@@ -8,11 +8,11 @@ namespace NYdbWorkload {
 class TTpcBaseWorkloadParams: public TWorkloadBaseParams {
 public:
     enum class EFloatMode {
-        FLOAT /* "float" */,
+        DOUBLE /* "double" */,
         DECIMAL /* "decimal" */,
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);
+    YDB_READONLY(EFloatMode, FloatMode, EFloatMode::DOUBLE);
     YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
     YDB_READONLY(double, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);

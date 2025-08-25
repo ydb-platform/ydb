@@ -21,7 +21,7 @@ std::pair<TString, TString> TTpchWorkloadGenerator::GetTableAndColumnForDetectFl
 
 TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
     switch (Params.GetFloatMode()) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         return {{"float_type", "Double"}};
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         return {{"float_type", "Decimal(12,2)"}};

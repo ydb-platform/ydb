@@ -20,7 +20,7 @@ TTpcBaseWorkloadGenerator::TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParam
 
 TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() const {
     if (!Params.TableClient) { //dry run case
-        return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
+        return TTpcBaseWorkloadParams::EFloatMode::DOUBLE;
     }
     const auto [table, column] = GetTableAndColumnForDetectFloatMode();
     auto session = Params.TableClient->GetSession(NYdb::NTable::TCreateSessionSettings()).ExtractValueSync();
@@ -46,7 +46,7 @@ TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() 
         }
         case NYdb::TTypeParser::ETypeKind::Primitive:
             if (type.GetPrimitive() == NYdb::EPrimitiveType::Double || type.GetPrimitive() == NYdb::EPrimitiveType::Float) {
-                return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
+                return TTpcBaseWorkloadParams::EFloatMode::DOUBLE;
             }
         default:
             ythrow yexception() << "Invalid column " << column << " type: " << col.Type.ToString();
@@ -123,7 +123,7 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
     TStringBuilder scaleFactor;
     scaleFactor << "$scale_factor = ";
     switch(FloatMode) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         scaleFactor << Params.GetScale();
         break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
@@ -156,7 +156,7 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
         header << "--!syntax_pg" << Endl;
     }
     switch (FloatMode) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
         break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
@@ -171,7 +171,7 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
     TStringBuilder floatDescr;
     auto colors = NColorizer::AutoColors(Cout);
     floatDescr << "Float mode. Defines the type to be used for floating-point values. Available options:" << Endl
-        << "  " << colors.BoldColor() << EFloatMode::FLOAT << colors.OldColor() << Endl
+        << "  " << colors.BoldColor() << EFloatMode::DOUBLE << colors.OldColor() << Endl
         << "    Use native Float type for floating-point values." << Endl
         << "  " << colors.BoldColor() << EFloatMode::DECIMAL << colors.OldColor() << Endl
         << "    Use Decimal type with canonical precision and scale." << Endl;

@@ -2320,7 +2320,9 @@ void TPartition::RunPersist() {
             }
 
             // Bytes Written
-            BytesWrittenPerPartition->Add(writeInfo->BytesWrittenTotal);
+            if (BytesWrittenPerPartition) {
+                BytesWrittenPerPartition->Add(writeInfo->BytesWrittenTotal);
+            }
             BytesWrittenTotal.Inc(writeInfo->BytesWrittenTotal);
             BytesWrittenGrpc.Inc(writeInfo->BytesWrittenGrpc);
             BytesWrittenUncompressed.Inc(writeInfo->BytesWrittenUncompressed);
@@ -4135,8 +4137,12 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 }
 
 ::NMonitoring::TDynamicCounterPtr TPartition::GetPerPartitionCounterSubgroup() const {
+    auto counters = AppData(ActorContext())->Counters;
+    if (!counters) {
+        return nullptr;
+    }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return AppData(ActorContext())->Counters
+        return counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "")
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
@@ -4146,7 +4152,7 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
             ->GetSubgroup("topic", EscapeBadChars(TopicName()))
             ->GetSubgroup("partition_id", ToString(Partition.InternalPartitionId));
     } else {
-        return AppData(ActorContext())->Counters
+        return counters
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster")
             ->GetSubgroup("Account", TopicConverter->GetAccount())
@@ -4163,6 +4169,10 @@ void TPartition::SetupPerPartitionCounters() {
     }
 
     auto subgroup = GetPerPartitionCounterSubgroup();
+    if (!subgroup) {
+        return;
+    }
+
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
         return subgroup->GetExpiringNamedCounter(
@@ -4172,10 +4182,14 @@ void TPartition::SetupPerPartitionCounters() {
     };
 
     WriteTimeLagMsByLastWritePerPartition = getCounter("topic.partition.write.lag_milliseconds", "WriteTimeLagMsByLastWrite", false);
+
     SourceIdCountPerPartition = getCounter("topic.partition.producers_count", "SourceIdCount", false);
     TimeSinceLastWriteMsPerPartition = getCounter("topic.partition.write.idle_milliseconds", "TimeSinceLastWriteMs", false);
     PartitionWriteQuotaUsagePerPartition = getCounter("topic.partition.write.throttled_microseconds", "PartitionWriteQuotaUsage", false);
+
     BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWrittenPerPartition", true);
+    BytesWrittenPerPartition->Set(BytesWrittenTotal.Value());  // Doesn't work, Value returns 0 for non-supportive partitions.
+
     MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
 }
 

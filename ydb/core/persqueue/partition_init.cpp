@@ -977,10 +977,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
-        if (Config.GetEnablePerPartitionCounters()) {
-            SetupPerPartitionCounters();
-        }
-
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
@@ -1024,6 +1020,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupStreamCounters(ctx);
         } else {
             SetupTopicCounters(ctx);
+        }
+        if (Config.GetEnablePerPartitionCounters()) {
+            SetupPerPartitionCounters();
         }
     }
 }

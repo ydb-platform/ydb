@@ -5,4 +5,4 @@ items:
 - { name: FAMILY,          href: family.md          }
 - { name: TEMPORARY,       href: temporary.md       }
 - { name: WITH,            href: with.md            }
-- { name: CREATE TABLE AS, href: create_table_as.md }
+- { name: AS SELECT, href: create_table_as.md }

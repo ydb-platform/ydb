@@ -39,6 +39,7 @@
     )
 {% if feature_map_tables %}
     WITH ( key = value, ... )
+    [AS SELECT ...]
 {% endif %}
 
 {% if oss == true and backend_name == "YDB" %}
@@ -259,10 +260,12 @@ CREATE TABLE <table_name> (
 * [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [SELECT запрос для заполнения таблицы данными](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [SELECT запрос для заполнения таблицы данными](as_select.md).
 
 {% endif %}

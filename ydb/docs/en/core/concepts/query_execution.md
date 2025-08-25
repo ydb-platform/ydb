@@ -85,19 +85,19 @@ YQL supports most common SQL constructs, including:
 
 When you execute a query in {{ ydb-short-name }}, the result can consist of one or more result sets. Each result set is similar to a table: it contains rows and columns, where every column has a defined, explicit data type. This strong typing guarantees that the structure of the returned data is always predictable and consistent.
 
-Result sets in YDB can be arbitrarily large. To efficiently handle large amounts of data, YDB streams result sets back to the client in parts (chunks). This streaming approach lets clients begin processing the results right away without waiting for the entire result set to be transferred. As a result, applications can handle large datasets quickly and with minimal memory usage.
+Result sets in {{ ydb-short-name }} can be arbitrarily large. To efficiently handle large amounts of data, {{ ydb-short-name }} streams result sets back to the client in parts (chunks). This streaming approach lets clients begin processing the results right away without waiting for the entire result set to be transferred. As a result, applications can handle large datasets quickly and with minimal memory usage.
 
 ## Limitations
 
 When working with queries in {{ ydb-short-name }}, there are several important limitations to keep in mind:
 
 * **No schema transactions**
-{{ ydb-short-name }} does not support schema transactions. This means that Data Definition Language (DDL) statements (such as creating or altering tables) cannot be combined with Data Manipulation Language (DML) statements (such as inserts, updates, or deletes) within the same transaction or query.
+{{ ydb-short-name }} does not support schema transactions. This means that DDL statements (such as creating or altering tables) cannot be combined with DML statements (such as inserts, updates, or deletes) within the same transaction or query.
 
 * **Large updates and optimistic locking**
-{{ ydb-short-name }} uses optimistic concurrency control. When performing very large updates or deletes within a transaction, the probability of lock conflicts increases, making such operations impractical. For bulk modifications, it is recommended to use [BATCH UPDATE](../yql/reference/syntax/batch-update.md) / [BATCH DELETE](../yql/reference/syntax/batch-delete.md) statements.
+{{ ydb-short-name }} uses optimistic concurrency control. When performing very large updates or deletes within a transaction, the probability of lock conflicts increases, making such operations impractical. For bulk modifications, it is recommended to use [`BATCH UPDATE`](../yql/reference/syntax/batch-update.md) / [`BATCH DELETE`](../yql/reference/syntax/batch-delete.md) statements.
 
 * **Transaction size limits**
-The amount of data that can be written in a single transaction is limited. For detailed thresholds, see the [Limits on Query Execution](./limits-ydb.md#query) section.
+The amount of data that can be written in a single transaction is limited. For detailed thresholds, see the [{#T}](./limits-ydb.md#query) section.
 
-For a full overview of {{ ydb-short-name }} limitations, [Limits on Query Execution](./limits-ydb.md#query).
+For a full overview of {{ ydb-short-name }} limitations, see [{#T}](./limits-ydb.md).

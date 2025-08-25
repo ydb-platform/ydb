@@ -39,9 +39,9 @@ Further details and explanations of the concepts introduced in this section are 
 
 A session in {{ ydb-short-name }} is a logical "connection" to the database that maintains the context needed to execute queries and manage transactions. Sessions store transaction state and other important context, making it possible to execute a series of related queries as part of a transaction. Most of operations related to query execution are executed within the context of an active session.
 
-Sessions are designed to be long-living objects. One of their key roles is to enable efficient load balancing: by distributing sessions and their associated queries across different nodes in the cluster, YDB can make better use of resources and achieve high availability and scalability.
+Sessions are designed to be long-living objects. One of their key roles is to enable efficient load balancing: by distributing sessions and their associated queries across different nodes in the cluster, {{ ydb-short-name }} can make better use of resources and achieve high availability and scalability.
 
-In practice, you don’t need to worry about creating, reusing, or closing sessions yourself. All official YDB SDKs provide session pooling out of the box. A session pool automatically manages the lifecycle of sessions—creating them when needed, reusing existing ones, and returning them to the pool—so that you can focus on writing your application’s logic rather than handling session management details.
+In practice, you don’t need to worry about creating, reusing, or closing sessions yourself. All official {{ ydb-short-name }} SDKs provide session pooling out of the box. A session pool automatically manages the lifecycle of sessions—creating them when needed, reusing existing ones, and returning them to the pool—so that you can focus on writing your application’s logic rather than handling session management details.
 
 ## Transactions
 

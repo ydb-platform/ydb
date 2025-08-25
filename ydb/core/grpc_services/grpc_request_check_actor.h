@@ -553,6 +553,12 @@ private:
     }
 
     void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        // Request audit happen after successful authentication
+        // and authorization check against the database
+        // TODO: refactor: http monitoring authentication/authorization scheme must pass the same
+        // way as for grpc API
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
+
         GrpcRequestBaseCtx_->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();

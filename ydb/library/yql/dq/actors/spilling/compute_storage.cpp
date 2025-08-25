@@ -45,7 +45,6 @@ NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Extract(TK
 }
 
 NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::GetInternal(TKey key, bool removeBlobAfterRead) {
-
     auto promise = NThreading::NewPromise<std::optional<TChunkedBuffer>>();
     auto future = promise.GetFuture();
 

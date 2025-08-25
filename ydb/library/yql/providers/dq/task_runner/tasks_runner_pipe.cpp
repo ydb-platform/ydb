@@ -1689,7 +1689,7 @@ public:
         return Task.GetId();
     }
 
-    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    void SetSpillerFactory(std::shared_ptr<TDqSpillerFactory>) override {
     }
 
     TString GetOutputDebugString() override {

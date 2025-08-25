@@ -146,12 +146,26 @@ message FulltextIndexSettings {
     enum Tokenizer {
         TOKENIZER_UNSPECIFIED = 0;
 
-        // Splits tokens only by whitespace
+        // Splits text only by whitespace
         // Does not split on punctuation
         // Example:
-        //   Document: "foo-bar baz_lorem ipsum"
+        //   Text: "foo-bar baz_lorem ipsum"
         //   Tokens: ["foo-bar", "baz_lorem", "ipsum"]
         WHITESPACE = 1;
+
+        // Applies general language-aware tokenization
+        // Splits text on whitespace and punctuation
+        // Example:
+        //   Text: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo", "bar", "baz", "lorem", "ipsum"]
+        STANDARD = 2;
+
+        // Treats the entire input as a single token
+        // No splitting is performed.
+        // Example:
+        //   Text: "Hello World!"
+        //   Tokens: ["Hello World!"]
+        KEYWORD = 3;
     }
 
     Layout layout = 1;

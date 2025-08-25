@@ -94,12 +94,16 @@ class AsyncHealthcheckRunner:
 
         # piles list snapshot (dict: pile_name -> state string)
         self._piles_list = {}
+        self._piles_generation = None
         self._last_piles_refresh_ts = 0.0
 
         # Track mapping from endpoint -> pile and last response time per endpoint
         # TODO: probably get ridd of _endpoint_to_pile if we have initial mapping?
         self._endpoint_to_pile = {}
         self._endpoint_last_ts = {}
+
+        # Set by keeper
+        self._primary_hint = None
 
     def start(self):
         if not self.endpoints:
@@ -187,14 +191,35 @@ class AsyncHealthcheckRunner:
             time.sleep(HEALTH_CHECK_INTERVAL)
 
     def _fetch_piles_list(self):
+        # we want to prefer pile, which is good: either any is good until
+        # failover or use hinted primary
+        with self._lock:
+            primary_hint = self._primary_hint
+
+        endpoints = None
+        strict_order = False
+        if primary_hint:
+            endpoints = self.get_ordered_endpoints(primary_hint)
+            if len(endpoints) != 0:
+                strict_order = True
+
+        if not endpoints or len(endpoints) == 0:
+            endpoints = self.endpoints
+
         cmd = ['admin', 'cluster', 'bridge', 'list', '--format=json']
-        result = execute_cli_command(self.path_to_cli, cmd, self.endpoints)
+        result = execute_cli_command(self.path_to_cli, cmd, endpoints, strict_order=strict_order)
         if result is None:
             return
         try:
             parsed = json.loads(result.stdout.decode())
+            generation = parsed['generation']
+
+            # it is OK to read without lock, since we are the only writer
+            if self._piles_generation is not None and generation <= self._piles_generation:
+                return
+
             piles_map = {}
-            for item in parsed:
+            for item in parsed["piles"]:
                 name = item.get('pile_name')
                 state = item.get('state')
                 if name is None:
@@ -202,6 +227,7 @@ class AsyncHealthcheckRunner:
                 piles_map[name] = state
             with self._lock:
                 self._piles_list = dict(piles_map)
+                self._piles_generation = generation
         except Exception:
             logger.debug("Failed to parse piles list JSON", exc_info=True)
 
@@ -265,15 +291,19 @@ class AsyncHealthcheckRunner:
 
             piles = dict(self._piles_list)
 
-            return (health_state, piles,)
+            return (health_state, piles, self._piles_generation)
 
-    def get_ordered_endpoints(self, pile):
+    def get_ordered_endpoints(self, pile: str):
         """Thread-safe snapshot of pile endpoints ordered by response recency (most recent first)."""
         with self._lock:
             candidates = [ep for ep, p in self._endpoint_to_pile.items() if p == pile]
 
         ranked = sorted(candidates, key=lambda ep: self._endpoint_last_ts.get(ep, 0.0), reverse=True)
         return list(ranked)
+
+    def set_primary_hint(self, new_primary: str):
+        with self._lock:
+            self._primary_hint = new_primary
 
 
 class PileState:
@@ -371,12 +401,12 @@ class PileState:
 
 
 class TotalState:
-    def __init__(self):
+    def __init__(self, generation):
         self.WallTimestamp = time.time()
         self.MonotonicTs = time.monotonic()
         self.Piles = {} # pile name -> dict
         self.PrimaryName = None
-        self.Generation = None
+        self.Generation = generation
 
     def is_disaster(self) -> bool:
         if self.PrimaryName is None:
@@ -524,9 +554,9 @@ class Bridgekeeper:
         # TODO: it seems that sometimes this calls takes too long for unknown yet reason,
         # thus it's important to call before TotalState() constructor, which inits
         # timestamps.
-        health_state, cluster_admin_piles = self.async_checker.get_health_state_and_piles()
+        health_state, cluster_admin_piles, generation = self.async_checker.get_health_state_and_piles()
 
-        new_state = TotalState()
+        new_state = TotalState(generation)
         for pile_name, state in (cluster_admin_piles or {}).items():
             new_state.Piles[pile_name] = PileState()
             new_state.Piles[pile_name].admin_reported_state = state
@@ -621,7 +651,10 @@ class Bridgekeeper:
                 # TODO: try to choose best one?
                 new_primary_name = random.choice(candidates)
                 new_primary = self.current_state.Piles[new_primary_name]
+                self.async_checker.set_primary_hint(new_primary_name)
                 logger.info(f"Pile '{new_primary_name}' is chosen as new primary: {new_primary}")
+        else:
+            self.async_checker.set_primary_hint(primary_name)
 
         commands = []
         for pile_name in bad_piles:

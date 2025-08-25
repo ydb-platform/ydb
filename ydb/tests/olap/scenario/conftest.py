@@ -174,7 +174,7 @@ class BaseTestSet:
             },
             column_shard_config={
                 "generate_internal_path_id": True,
-                "disable_column_shard_bulk_upsert_require_all_columns": True,
+                "disable_bulk_upsert_require_all_columns": True,
             },
             query_service_config=dict(
                 available_external_data_sources=["ObjectStorage"]

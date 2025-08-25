@@ -815,11 +815,20 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
 }
 
-NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
+NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind) {
     NKikimrSchemeOp::TPartitionConfig cfg;
 
     TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> compactionPolicy = appData->DomainsInfo->GetDefaultUserTablePolicy();
     compactionPolicy->Serialize(*cfg.MutableCompactionPolicy());
+
+    if (defaultPoolKind) {
+        auto& dafaultColumnFamily = *cfg.AddColumnFamilies();
+        dafaultColumnFamily.SetId(0);
+        auto& storageConfig = *dafaultColumnFamily.MutableStorageConfig();
+        storageConfig.MutableSysLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableData()->SetPreferredPoolKind(*defaultPoolKind);
+    }
 
     return cfg;
 }

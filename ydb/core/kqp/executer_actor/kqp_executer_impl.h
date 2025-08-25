@@ -589,11 +589,23 @@ protected:
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
+
+            // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
+            //       Replace with more precise database events in the future.
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+            addDatabaseEvent->Id = databaseId;
+            this->Send(schedulerServiceId, addDatabaseEvent.Release());
+
+            // TODO: replace with more precise pool events.
+            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
+            this->Send(schedulerServiceId, addPoolEvent.Release());
+
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = TxId;
-            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
+            this->Send(schedulerServiceId, addQueryEvent.Release(), 0, TxId);
             Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
         }
 
@@ -2439,7 +2451,7 @@ protected:
     bool EnableParallelPointReadConsolidation = false;
 
     bool AccountDefaultPoolInScheduler = false;
-    
+
     THashSet<ui32> SentResultIndexes;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

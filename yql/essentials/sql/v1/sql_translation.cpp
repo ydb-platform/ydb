@@ -1691,6 +1691,11 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "cache_mode") {
+        if (!StoreString(value, family.CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -2387,6 +2392,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         }
         if (!StoreId(*value, settings.StoreExternalBlobs, *this)) {
             Ctx_.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "external_data_channels_count") {
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreInt(*value, settings.ExternalDataChannelsCount, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
     } else {

@@ -14,7 +14,7 @@ protected:
     virtual void DoComplete(const TActorContext& /*ctx*/) override;
 public:
     TTxFinishAckFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session)
-        : TBase(self)
+        : TBase(self, "finish_ack_from_initiator")
         , Session(session)
     {
     }

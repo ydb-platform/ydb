@@ -341,12 +341,14 @@ namespace NKikimr::NStorage {
                 // we've got already running syncer, but group generation gets changed, we need to restart it
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
                 syncer.ActorId = {};
+                ++syncer.NumStop;
             }
             if (!syncer.ActorId) {
                 syncer.BridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
                 syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId));
                 syncer.Finished = false;
                 syncer.ErrorReason.reset();
+                ++syncer.NumStart;
             }
 
             toStop.erase(syncer);
@@ -375,7 +377,9 @@ namespace NKikimr::NStorage {
 
         syncer.Finished = true;
         syncer.ErrorReason = std::move(msg.ErrorReason);
+        syncer.LastErrorReason = syncer.ErrorReason;
         syncer.ActorId = {};
+        ++(syncer.ErrorReason ? syncer.NumFinishError : syncer.NumFinishOK);
 
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
         FillInWorkingSyncers(&notify->Record);

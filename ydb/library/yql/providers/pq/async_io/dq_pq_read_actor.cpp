@@ -394,10 +394,11 @@ private:
     void StartClusterDiscovery() {
         Y_ENSURE (Clusters.empty());
         if (StaticDiscovery) {
+            ui32 index = 0;
             if (SourceParams.FederatedClustersSize()) {
                 for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
                     auto& cluster = Clusters.emplace_back(
-                        0, // Index
+                        index++,
                         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
                             .Name = federatedCluster.GetName(),
                             .Endpoint = federatedCluster.GetEndpoint(),
@@ -412,7 +413,7 @@ private:
                 }
             } else {
                 Clusters.emplace_back(
-                    0, // Index
+                    index++,
                     NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
                             .Endpoint = SourceParams.GetEndpoint(),
                             .Path =SourceParams.GetDatabase()

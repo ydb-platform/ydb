@@ -35,6 +35,7 @@ ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/kafka_proxy/ut KafkaProtocol.MetadataTopicAutocreationEnabledScenario
+ydb/core/kafka_proxy/ut KafkaProtocol.TopicsWithCleaunpPolicyScenario
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge

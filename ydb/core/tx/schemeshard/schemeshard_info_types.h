@@ -3062,6 +3062,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Rejected = 550
     };
 
+    enum class ESubState: ui32 {
+        // Common
+        None = 0,
+
+        // Filling
+        UniqIndexValidation = 100,
+    };
+
     struct TColumnBuildInfo {
         TString ColumnName;
         Ydb::TypedValue DefaultFromLiteral;
@@ -3097,6 +3105,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildSecondaryIndex = 10,
         BuildVectorIndex = 11,
         BuildPrefixedVectorIndex = 12,
+        BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
     };
 
@@ -3188,6 +3197,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
+    ESubState SubState = ESubState::None;
 private:
     TString Issue;
 public:
@@ -3435,6 +3445,8 @@ public:
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
 
@@ -3578,6 +3590,9 @@ public:
                     break;
             }
         }
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
     }
 
     template<class TRow>
@@ -3628,11 +3643,15 @@ public:
     }
 
     bool IsFillBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildColumns();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildColumns();
     }
 
     bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
+    }
+
+    bool IsBuildSecondaryUniqueIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -3644,7 +3663,7 @@ public:
     }
 
     bool IsBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildVectorIndex();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex();
     }
 
     bool IsBuildColumns() const {
@@ -3661,6 +3680,10 @@ public:
 
     bool IsFinished() const {
         return IsDone() || IsCancelled();
+    }
+
+    bool IsValidatingUniqueIndex() const {
+        return SubState == ESubState::UniqIndexValidation;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {
@@ -3788,8 +3811,19 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 };
 
 struct TIncrementalRestoreState {
-    TPathId BackupCollectionPathId;
-    ui64 OriginalOperationId;
+    enum class EState : ui32 {
+        Running = 1,
+        Finalizing = 2,
+        Completed = 3,
+    };
+
+    EState State = EState::Running;
+
+    // The backup collection path this restore belongs to
+    TPathId BackupCollectionPathId; // used for DB scoping and finalization
+
+    // Global id of the original incremental restore operation
+    ui64 OriginalOperationId = 0;
 
     // Sequential incremental backup processing
     struct TIncrementalBackup {
@@ -3834,6 +3868,8 @@ struct TIncrementalRestoreState {
     // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
+    THashSet<TShardIdx> InvolvedShards;
+
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
     }
@@ -3869,6 +3905,7 @@ struct TIncrementalRestoreState {
             InProgressOperations.clear();
             CompletedOperations.clear();
             TableOperations.clear();
+            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
         }
     }
 
@@ -4013,6 +4050,7 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     }
 
     o << ", State: " << info.State;
+    o << ", SubState: " << info.SubState;
     o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 

@@ -21,6 +21,7 @@ struct TCloudPermissions<EType::DEFAULT> {
             "ydb.databases.create",
             "ydb.databases.connect",
             "ydb.tables.select",
+            "ydb.tables.write",
             "ydb.schemas.getMetadata"
         };
         return permissions;
@@ -35,6 +36,7 @@ struct TCloudPermissions<EType::STREAM> {
             "ydb.databases.create",
             "ydb.databases.connect",
             "ydb.tables.select",
+            "ydb.tables.write",
             "ydb.schemas.getMetadata",
             "ydb.streams.write"
         };

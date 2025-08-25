@@ -51,7 +51,7 @@ class LogInterceptor(logging.Handler):
         all_records_length = len(self._all_records)
         if all_records_length > MAX_KEEP_LOG_LINES:
             self._truncated_count += all_records_length - MAX_KEEP_LOG_LINES
-            self._all_records = self._all_records[-MAX_KEEP_LOG_LINES]
+            self._all_records = self._all_records[-MAX_KEEP_LOG_LINES:]
 
         self._not_consumed_records.clear()
         return records

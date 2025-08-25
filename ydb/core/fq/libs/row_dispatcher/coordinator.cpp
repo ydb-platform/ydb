@@ -54,9 +54,9 @@ struct TEvPrivate {
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
-    const ui64 PrintStatePeriodSec = 300;
-    const ui64 PrintStateToLogSplitSize = 64000;
-    const TDuration NodesManagerRetryPeriod = TDuration::Seconds(1);
+    static constexpr ui64 PrintStatePeriodSec = 300;
+    static constexpr ui64 PrintStateToLogSplitSize = 64000;
+    static constexpr TDuration NodesManagerRetryPeriod = TDuration::Seconds(1);
 
     struct TTopicKey {
         TString Endpoint;

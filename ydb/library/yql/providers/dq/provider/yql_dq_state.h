@@ -89,9 +89,10 @@ struct TDqState: public TThrRefBase {
                 OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
             }
         }
-        return OperationSemaphore->AcquireAsync().Apply([this_=TIntrusivePtr<TDqState>(this), sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
+        return OperationSemaphore->AcquireAsync().Apply([gateway = DqGateway, sessionId, plan=std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout](const auto& f) mutable {
             auto lock = f.GetValue()->MakeAutoRelease();
-            return this_->DqGateway->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {
+            const auto gw = std::move(gateway);
+            return gw->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout).Apply([unlock = lock.DeferRelease()](const auto& f) {
                 unlock(NThreading::MakeFuture());
                 return f;
             });

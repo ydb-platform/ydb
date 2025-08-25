@@ -102,10 +102,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& secretAlter = Transaction.GetAlterSecret();
+        const auto& alterSecretProto = Transaction.GetAlterSecret();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& secretName = secretAlter.GetName();
+        const TString& secretName = alterSecretProto.GetName();
 
         LOG_N("TAlterSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
@@ -178,7 +178,7 @@ public:
         }
 
         auto alterData = secretInfo->CreateNextVersion();
-        alterData->Description.SetValue(secretAlter.GetValue());
+        alterData->Description.SetValue(alterSecretProto.GetValue());
         alterData->Description.SetVersion(secretInfo->AlterVersion);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

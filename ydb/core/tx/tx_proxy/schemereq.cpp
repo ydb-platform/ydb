@@ -168,6 +168,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -395,9 +396,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterSecret:
             return *modifyScheme.MutableAlterSecret()->MutableName();
-
-        case NKikimrSchemeOp::ESchemeOpDropSecret:
-            return *modifyScheme.MutableDropSecret()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();

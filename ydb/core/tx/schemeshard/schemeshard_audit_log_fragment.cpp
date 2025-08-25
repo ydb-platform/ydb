@@ -683,7 +683,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterSecret().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropSecret().GetName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     }
 

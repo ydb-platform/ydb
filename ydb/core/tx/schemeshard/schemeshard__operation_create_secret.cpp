@@ -122,16 +122,16 @@ public:
 
         const auto acceptExisting = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        auto secretDescription = Transaction.GetCreateSecret();
+        const auto& createSecretProto = Transaction.GetCreateSecret();
 
-        const TString& secretName = secretDescription.GetName();
+        const TString& secretName = createSecretProto.GetName();
 
         LOG_N("TCreateSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
             << ", opId: " << OperationId
         );
 
-        auto secretDescrWithoutSecretParts = secretDescription;
+        auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
         LOG_D("TCreateSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
@@ -226,6 +226,10 @@ public:
         if (!acl.empty()) {
             secretPath->ApplyACL(acl);
         }
+
+        NKikimrSchemeOp::TSecretDescription secretDescription;
+        secretDescription.SetName(createSecretProto.GetName());
+        secretDescription.SetValue(createSecretProto.GetValue());
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
         context.SS->Secrets[secretPathId] = secretInfo;

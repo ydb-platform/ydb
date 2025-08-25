@@ -1853,9 +1853,8 @@ message TModifyScheme {
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Secret
-    optional TSecretDescription CreateSecret = 87;
-    optional TSecretDescription AlterSecret = 88;
-    optional TSecretDescription DropSecret = 89;
+    optional TSecretSchemaOp CreateSecret = 87;
+    optional TSecretSchemaOp AlterSecret = 88;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2319,4 +2318,10 @@ message TSecretDescription {
     optional string Name = 1;
     optional string Value = 2; // original, unencrypted value
     optional uint64 Version = 3;
+}
+
+message TSecretSchemaOp {
+    optional string Name = 1;
+    optional string Value = 2; // original, unencrypted value
+    optional bool InheritPermissions = 3;
 }

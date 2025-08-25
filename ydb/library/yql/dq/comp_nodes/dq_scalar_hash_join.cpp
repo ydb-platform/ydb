@@ -1,0 +1,193 @@
+#include "dq_scalar_hash_join.h"
+
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+
+namespace NKikimr::NMiniKQL {
+
+namespace {
+
+class TScalarHashJoinWrapper : public TStatelessWideFlowCodegeneratorNode<TScalarHashJoinWrapper> {
+private:
+    using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TScalarHashJoinWrapper>;
+
+public:
+    TScalarHashJoinWrapper(
+        TComputationMutables&       mutables,
+        IComputationWideFlowNode*   leftFlow,
+        IComputationWideFlowNode*   rightFlow,
+        const TVector<TType*>&&     resultItemTypes,
+        const TVector<TType*>&&     leftItemTypes,
+        const TVector<ui32>&&       leftKeyColumns,
+        const TVector<TType*>&&     rightItemTypes,
+        const TVector<ui32>&&       rightKeyColumns
+    )
+        : TBaseComputation(GetCommonSource(leftFlow, rightFlow))
+        , LeftFlow_(leftFlow)
+        , RightFlow_(rightFlow)
+        , ResultItemTypes_(std::move(resultItemTypes))
+        , LeftItemTypes_(std::move(leftItemTypes))
+        , LeftKeyColumns_(std::move(leftKeyColumns))
+        , RightItemTypes_(std::move(rightItemTypes))
+        , RightKeyColumns_(std::move(rightKeyColumns))
+        , LeftWideFieldsIndex_(mutables.IncrementWideFieldsIndex(leftItemTypes.size()))
+        , RightWideFieldsIndex_(mutables.IncrementWideFieldsIndex(rightItemTypes.size()))
+    {}
+
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        // Простая логика: сначала читаем все данные из левого потока, потом из правого
+        if (!LeftFinished_) {
+            auto** leftFields = ctx.WideFields.data() + LeftWideFieldsIndex_;
+            
+            // Настраиваем поля для левого потока
+            for (ui32 i = 0; i < LeftItemTypes_.size(); ++i) {
+                if (i < ResultItemTypes_.size() && output[i]) {
+                    leftFields[i] = output[i];
+                } else {
+                    leftFields[i] = &ctx.MutableValues[LeftWideFieldsIndex_ + i];
+                }
+            }
+            
+            auto result = LeftFlow_->FetchValues(ctx, leftFields);
+            if (result == EFetchResult::One) {
+                return EFetchResult::One;
+            } else if (result == EFetchResult::Finish) {
+                LeftFinished_ = true;
+            } else if (result == EFetchResult::Yield) {
+                return EFetchResult::Yield;
+            }
+        }
+
+        if (!RightFinished_) {
+            auto** rightFields = ctx.WideFields.data() + RightWideFieldsIndex_;
+            
+            // Настраиваем поля для правого потока
+            for (ui32 i = 0; i < RightItemTypes_.size(); ++i) {
+                ui32 outputIdx = LeftItemTypes_.size() + i;
+                if (outputIdx < ResultItemTypes_.size() && output[outputIdx]) {
+                    rightFields[i] = output[outputIdx];
+                } else {
+                    rightFields[i] = &ctx.MutableValues[RightWideFieldsIndex_ + i];
+                }
+            }
+            
+            auto result = RightFlow_->FetchValues(ctx, rightFields);
+            if (result == EFetchResult::One) {
+                return EFetchResult::One;
+            } else if (result == EFetchResult::Finish) {
+                RightFinished_ = true;
+            } else if (result == EFetchResult::Yield) {
+                return EFetchResult::Yield;
+            }
+        }
+
+        if (LeftFinished_ && RightFinished_) {
+            return EFetchResult::Finish;
+        }
+
+        return EFetchResult::Yield;
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(LeftFlow_);
+        this->DependsOn(RightFlow_);
+    }
+
+private:
+    IComputationWideFlowNode* const LeftFlow_;
+    IComputationWideFlowNode* const RightFlow_;
+
+    const TVector<TType*>   ResultItemTypes_;
+    const TVector<TType*>   LeftItemTypes_;
+    const TVector<ui32>     LeftKeyColumns_;
+    const TVector<TType*>   RightItemTypes_;
+    const TVector<ui32>     RightKeyColumns_;
+
+    const ui32 LeftWideFieldsIndex_;
+    const ui32 RightWideFieldsIndex_;
+    
+    mutable bool LeftFinished_ = false;
+    mutable bool RightFinished_ = false;
+};
+
+} // namespace
+
+IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+
+    const auto joinType = callable.GetType()->GetReturnType();
+    MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
+    const auto joinStreamType = AS_TYPE(TStreamType, joinType);
+    MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(),
+                "Expected Multi as a resulting item type");
+    const auto joinComponents = GetWideComponents(joinStreamType);
+    MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
+
+    const auto leftType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
+    const auto leftStreamType = AS_TYPE(TStreamType, leftType);
+    MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(),
+                "Expected Multi as a left stream item type");
+    const auto leftStreamComponents = GetWideComponents(leftStreamType);
+    MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
+
+    const auto rightType = callable.GetInput(1).GetStaticType();
+    MKQL_ENSURE(rightType->IsStream(), "Expected WideStream as a right stream");
+    const auto rightStreamType = AS_TYPE(TStreamType, rightType);
+    MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(),
+                "Expected Multi as a right stream item type");
+    const auto rightStreamComponents = GetWideComponents(rightStreamType);
+    MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> rightStreamItems(rightStreamComponents.cbegin(), rightStreamComponents.cend());
+
+    const auto joinKindNode = callable.GetInput(2);
+    const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
+    const auto joinKind = GetJoinKind(rawKind);
+    MKQL_ENSURE(joinKind == EJoinKind::Inner,
+                "Only inner join is supported in scalar hash join prototype");
+
+    const auto leftKeyColumnsLiteral = callable.GetInput(3);
+    const auto leftKeyColumnsTuple = AS_VALUE(TTupleLiteral, leftKeyColumnsLiteral);
+    TVector<ui32> leftKeyColumns;
+    leftKeyColumns.reserve(leftKeyColumnsTuple->GetValuesCount());
+    for (ui32 i = 0; i < leftKeyColumnsTuple->GetValuesCount(); i++) {
+        const auto item = AS_VALUE(TDataLiteral, leftKeyColumnsTuple->GetValue(i));
+        leftKeyColumns.emplace_back(item->AsValue().Get<ui32>());
+    }
+
+    const auto rightKeyColumnsLiteral = callable.GetInput(4);
+    const auto rightKeyColumnsTuple = AS_VALUE(TTupleLiteral, rightKeyColumnsLiteral);
+    TVector<ui32> rightKeyColumns;
+    rightKeyColumns.reserve(rightKeyColumnsTuple->GetValuesCount());
+    for (ui32 i = 0; i < rightKeyColumnsTuple->GetValuesCount(); i++) {
+        const auto item = AS_VALUE(TDataLiteral, rightKeyColumnsTuple->GetValue(i));
+        rightKeyColumns.emplace_back(item->AsValue().Get<ui32>());
+    }
+
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key columns mismatch");
+
+    const auto leftFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));
+    
+    MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
+    MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
+
+    return new TScalarHashJoinWrapper(
+        ctx.Mutables,
+        leftFlow,
+        rightFlow,
+        std::move(joinItems),
+        std::move(leftStreamItems),
+        std::move(leftKeyColumns),
+        std::move(rightStreamItems),
+        std::move(rightKeyColumns)
+    );
+}
+
+} // namespace NKikimr::NMiniKQL

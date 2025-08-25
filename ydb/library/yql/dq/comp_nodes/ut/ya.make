@@ -21,6 +21,7 @@ SRCS(
 
     dq_hash_combine_ut.cpp
     dq_block_hash_join_ut.cpp
+    dq_scalar_hash_join_ut.cpp
 )
 
 END()

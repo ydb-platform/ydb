@@ -575,7 +575,7 @@ namespace NKikimr::NBsController {
 
         Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
             if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
-               Serialize(pb->AddGroup(), groupInfo, finder);
+               Serialize(pb->AddGroup(), groupInfo, finder, BridgeInfo.get());
             }
         });
 
@@ -641,7 +641,7 @@ namespace NKikimr::NBsController {
                         const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
                         vslotId.Serialize(x->AddVSlotId());
                     }
-                    const auto& status = group.GetStatus(finder);
+                    const auto& status = group.GetStatus(finder, BridgeInfo.get());
                     x->SetOperatingStatus(status.OperatingStatus);
                     x->SetExpectedStatus(status.ExpectedStatus);
                 }

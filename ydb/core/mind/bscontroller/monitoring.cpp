@@ -1493,7 +1493,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
             TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.GetStatus(finder);
+            const auto& status = group.GetStatus(finder, BridgeInfo.get());
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
             TABLED() {

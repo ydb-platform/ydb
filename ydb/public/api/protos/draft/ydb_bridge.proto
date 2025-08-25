@@ -23,6 +23,8 @@ message GetClusterStateResponse {
 message GetClusterStateResult {
     // Current cluster state
     repeated PileState pile_states = 1;
+    // Generation of the cluster state
+    uint64 generation = 2;
 }
 
 message UpdateClusterStateRequest {

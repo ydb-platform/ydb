@@ -27,21 +27,28 @@ enum class EPileState {
 struct TPileStateUpdate {
     std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
+    uint64_t Generation = 0;
 };
 
 class TGetClusterStateResult : public TStatus {
 public:
-    TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state)
+    TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation)
         : TStatus(std::move(status))
         , State_(std::move(state))
+        , Generation_(generation)
     {}
 
     const std::vector<TPileStateUpdate>& GetState() const {
         return State_;
     }
 
+    uint64_t GetGeneration() const {
+        return Generation_;
+    }
+
 private:
     std::vector<TPileStateUpdate> State_;
+    uint64_t Generation_ = 0;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;

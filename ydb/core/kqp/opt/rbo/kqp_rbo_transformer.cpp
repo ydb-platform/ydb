@@ -50,12 +50,22 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit>& joinKeys, const TJoinTab
         if (joinAliases.LeftSideAliases.count(rightSideKey.Alias)) {
             std::swap(leftSideKey, rightSideKey);
         }
+        // clang-format off
         keys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
-                           .LeftLabel().Value(leftSideKey.Alias).Build()
-                           .LeftColumn().Value(leftSideKey.ColumnName).Build()
-                           .RightLabel().Value(rightSideKey.Alias).Build()
-                           .RightColumn().Value(rightSideKey.ColumnName).Build()
-                           .Done());
+                           .LeftLabel()
+                               .Value(leftSideKey.Alias)
+                           .Build()
+                           .LeftColumn()
+                               .Value(leftSideKey.ColumnName)
+                           .Build()
+                           .RightLabel()
+                               .Value(rightSideKey.Alias)
+                           .Build()
+                           .RightColumn()
+                               .Value(rightSideKey.ColumnName)
+                           .Build()
+                      .Done());
+        // clang-format on
         processedInputs.insert(leftSideKey.Alias);
         processedInputs.insert(rightSideKey.Alias);
     }
@@ -77,12 +87,15 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext& ctx) {
         if (input->IsLambda()) {
             auto lambda = TCoLambda(input);
 
+            // clang-format off
             return Build<TCoLambda>(ctx, input->Pos())
                 .Args(lambda.Args())
                 .Body(ReplacePgOps(lambda.Body().Ptr(), ctx))
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
         }
         else if (input->IsCallable("PgAnd")) {
+            // clang-format off
             return ctx.Builder(input->Pos())
                 .Callable("ToPg")
                     .Callable(0, "And")
@@ -94,9 +107,12 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext& ctx) {
                         .Seal()
                     .Seal()
                 .Seal()
-                .Build();
+            .Build();
+            // clang-format on
+            
         }
         else if (input->IsCallable("PgOr")) {
+            // clang-format off
             return ctx.Builder(input->Pos())
                 .Callable("ToPg")
                     .Callable(0, "Or")
@@ -108,21 +124,34 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext& ctx) {
                         .Seal()
                     .Seal()
                 .Seal()
-                .Build();
+            .Build();
+            // clnag-format on
         }
         else if (input->IsCallable()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplacePgOps(c, ctx));
             }
-            return ctx.Builder(input->Pos()).Callable(input->Content()).Add(std::move(newChildren)).Seal().Build();
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable(input->Content())
+                    .Add(std::move(newChildren))
+                .Seal()
+            .Build();
+            // clang-format on
         }
         else if(input->IsList()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplacePgOps(c, ctx));
             }
-            return ctx.Builder(input->Pos()).List().Add(std::move(newChildren)).Seal().Build();
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .List()
+                    .Add(std::move(newChildren))
+                .Seal()
+            .Build();
+            // clang-format on
         }
         else {
             return input;
@@ -150,11 +179,13 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
             auto alias = fromItem->Child(1);
 
+            // clang-format off
             auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
                 .Table(readExpr.Table())
                 .Alias(alias)
                 .Columns(readExpr.Columns())
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
             aliasToInputMap.insert({TString(alias->Content()), opRead});
             inputsInOrder.push_back(opRead);
             lastAlias = alias;
@@ -214,12 +245,16 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 auto joinKind = TString(joinType);
                 ToCamelCase(joinKind);
 
+                // clang-format off
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                               .LeftInput(leftInput)
-                               .RightInput(rightInput)
-                               .JoinKind().Value(joinKind).Build()
-                               .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
-                               .Done().Ptr();
+                    .LeftInput(leftInput)
+                    .RightInput(rightInput)
+                    .JoinKind()
+                        .Value(joinKind)
+                    .Build()
+                    .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
+                .Done().Ptr();
+                // clang-format on
                 tableInputsCount = 0;
             }
         }
@@ -232,12 +267,16 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                     auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
                     auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];
                     auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
+                    // clang-format off
                     joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                                   .LeftInput(leftTableInput)
-                                   .RightInput(rightTableInput)
-                                   .JoinKind().Value("Cross").Build()
-                                   .JoinKeys(joinKeys)
-                                   .Done().Ptr();
+                        .LeftInput(leftTableInput)
+                        .RightInput(rightTableInput)
+                        .JoinKind()
+                            .Value("Cross")
+                        .Build()
+                        .JoinKeys(joinKeys)
+                    .Done().Ptr();
+                    // clang-format on
                     inputIndex += (inputIndex == 0 ? 2 : 1);
                 }
             } else {
@@ -253,10 +292,12 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     if (where) {
         TExprNode::TPtr lambda = where->Child(1)->Child(1);
         lambda = ReplacePgOps(lambda, ctx);
+        // clang-format off
         filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
             .Input(filterExpr)
             .Lambda(lambda)
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
 
     if (!filterExpr) {
@@ -296,10 +337,12 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             lambdaBody = ReplacePgOps(lambdaBody, ctx);
             auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambdaBody});
 
+            // clang-format off
             lambda = Build<TCoLambda>(ctx, node->Pos())
                 .Args(lambda.Args())
                 .Body(toPg)
-                .Done();
+            .Done();
+            // clang-format on
         }
         else if (needPgCast) {
             auto pgType = ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
@@ -307,39 +350,47 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             lambdaBody = ReplacePgOps(lambdaBody, ctx);
             auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambdaBody, pgType});
 
+            // clang-format off
             lambda = Build<TCoLambda>(ctx, node->Pos())
                 .Args(lambda.Args())
                 .Body(pgCast)
-                .Done();
+            .Done();
+            // clang-format on
         }
 
+        // clang-format off
         resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
             .Input(resultExpr)
             .Variable(variable)
             .Lambda(lambda)
-            .Done().Ptr());
+        .Done().Ptr());
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TKqpOpRoot>(ctx, node->Pos())
-            .Input<TKqpOpMap>()
-                .Input(resultExpr)
+        .Input<TKqpOpMap>()
+            .Input(resultExpr)
                 .MapElements()
-                    .Add(resultElements)
-                .Build()
+                .Add(resultElements)
             .Build()
-            .Done().Ptr();
+        .Build()
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
     if (auto root = take.Input().Maybe<TKqpOpRoot>()){
+        // clang-format off
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpLimit>()
                 .Input(root.Cast().Input())
                 .Count(take.Count())
             .Build()
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
     else {
         return node;

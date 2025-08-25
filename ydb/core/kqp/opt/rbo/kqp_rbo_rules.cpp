@@ -13,24 +13,38 @@ using namespace NKikimr::NKqp;
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
+        // clang-format off
         return Build<TCoMember>(ctx, input->Pos())
             .Struct(arg)
             .Name(member.Name())
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
     else if (input->IsCallable()){
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
         }
-        return ctx.Builder(input->Pos()).Callable(input->Content()).Add(std::move(newChildren)).Seal().Build();
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .Callable(input->Content())
+            .Add(std::move(newChildren))
+            .Seal()
+        .Build();
+        // clang-format on
     }
     else if(input->IsList()){
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
         }
-        return ctx.Builder(input->Pos()).List().Add(std::move(newChildren)).Seal().Build();
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .List()
+            .Add(std::move(newChildren))
+            .Seal()
+        .Build();
+        // clang-format on
     }
     else {
         return input;
@@ -44,10 +58,12 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     if (conjuncts.size()==1) {
         auto body = TExprBase(ReplaceArg(conjuncts[0].FilterBody, arg.Ptr(), ctx));
 
+        // clang-format off
         return Build<TCoLambda>(ctx, pos)
             .Args(arg)
             .Body(body)
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
     else {
         TVector<TExprNode::TPtr> newConjuncts;
@@ -56,12 +72,14 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
             newConjuncts.push_back( ReplaceArg(c.FilterBody, arg.Ptr(), ctx));
         }
 
+        // clang-format off
         return Build<TCoLambda>(ctx, pos)
             .Args(arg)
             .Body<TCoAnd>()
                 .Add(newConjuncts)
             .Build()
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
 }
 

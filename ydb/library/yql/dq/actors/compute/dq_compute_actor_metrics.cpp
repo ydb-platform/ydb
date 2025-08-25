@@ -136,10 +136,10 @@ void TDqComputeActorMetrics::ReportInjectedToOutputsWatermark(TInstant watermark
     }
 
     InjectedToOutputsWatermark->Set(watermark.MilliSeconds());
-    auto iter = WatermarkStartedAt.find(watermark);
-    if (iter != WatermarkStartedAt.end()) {
-        WatermarkCollectLatency->Collect((TInstant::Now() - iter->second).MilliSeconds());
-        WatermarkStartedAt.erase(iter);
+    auto iter = WatermarkStartedAt.upper_bound(watermark);
+    if (iter != WatermarkStartedAt.begin()) {
+        WatermarkCollectLatency->Collect((TInstant::Now() - WatermarkStartedAt.begin()->second).MilliSeconds());
+        WatermarkStartedAt.erase(WatermarkStartedAt.begin(), iter);
     }
 }
 
@@ -162,9 +162,13 @@ NMonitoring::TDynamicCounterPtr TDqComputeActorMetrics::GetInputChannelCounters(
 }
 
 void TDqComputeActorMetrics::ReportInputWatermarkMetrics(NMonitoring::TDynamicCounterPtr& counters, TInstant watermark) {
+    if (!Enable) {
+        return;
+    }
     counters->GetCounter("watermark_ms")->Set(watermark.MilliSeconds());
-    if (!WatermarkStartedAt.contains(watermark)) {
-        WatermarkStartedAt[watermark] = TInstant::Now();
+    auto [it, inserted] = WatermarkStartedAt.emplace(watermark, TInstant::Zero());
+    if (inserted) {
+        it->second = TInstant::Now();
     }
 }
 

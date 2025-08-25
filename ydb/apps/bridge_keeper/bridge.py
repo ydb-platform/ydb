@@ -23,7 +23,7 @@ PILES_REFRESH_INTERVAL = 0.5
 # Consider a pile responsive if last health check is within this threshold (seconds)
 # Initial healthecks to endpoints of the same pile are evenly distributed across
 # this interval of time
-RESPONSIVINESS_THRESHOLD_SECONDS = 2.0
+RESPONSIVENESS_THRESHOLD_SECONDS = 2.0
 
 MINIMAL_EXPECTED_ENDPOINTS_PER_PILE = 3
 
@@ -32,7 +32,7 @@ HEALTH_REPLY_TTL_SECONDS = 5.0
 
 # Currently when pile goes from 'NOT SYNCHRONIZED -> SYNCHRONIZED' there might be
 # healthchecks reporting it bad, we should ignore them for some time.
-TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVINESS_THRESHOLD_SECONDS * 2
+TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVENESS_THRESHOLD_SECONDS * 2
 
 STATUS_COLOR = {
     # ydb reported statuses
@@ -115,14 +115,14 @@ class AsyncHealthcheckRunner:
         for endpoint in self.endpoints:
             self._inflight.setdefault(endpoint, None)
 
-        # start healthecks for the same pile evenly distributed within RESPONSIVINESS_THRESHOLD_SECONDS
+        # start healthecks for the same pile evenly distributed within RESPONSIVENESS_THRESHOLD_SECONDS
         # TODO: proper impl for the case when piles have different number of endpoints
         if self.initial_piles and len(self.initial_piles) > 0:
             endpoints_multiqueue = []
             for pile_endpoints in self.initial_piles.values():
                 endpoints_multiqueue.append(pile_endpoints)
             endpoints_per_pile = max(len(endpoints_multiqueue[0]), MINIMAL_EXPECTED_ENDPOINTS_PER_PILE)
-            delay = RESPONSIVINESS_THRESHOLD_SECONDS / endpoints_per_pile
+            delay = RESPONSIVENESS_THRESHOLD_SECONDS / endpoints_per_pile
             logger.debug(f"Starting initial {endpoints_per_pile} healthecks per pile with delay between {delay}")
 
             for i in range(endpoints_per_pile):
@@ -477,7 +477,7 @@ class Bridgekeeper:
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data
-        time.sleep(RESPONSIVINESS_THRESHOLD_SECONDS)
+        time.sleep(RESPONSIVENESS_THRESHOLD_SECONDS)
 
         self.current_state = None
         self.state_history = TransitionHistory()
@@ -513,7 +513,7 @@ class Bridgekeeper:
         for pile_name, info in health_state.items():
             last_ts = info.get('last_ts', 0.0)
             pile = new_state.Piles.setdefault(pile_name, PileState())
-            if now - last_ts <= RESPONSIVINESS_THRESHOLD_SECONDS:
+            if now - last_ts <= RESPONSIVENESS_THRESHOLD_SECONDS:
                 pile.responsive = True
 
             observed_failed_piles = info.get('failed_piles', set())

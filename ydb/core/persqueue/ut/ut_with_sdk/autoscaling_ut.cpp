@@ -1404,6 +1404,80 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ReadFromTimestamp(SdkVersion::PQv1, false);
     }
 
+    void OrderOfChildrenPartitions(SdkVersion sdk) {
+        const size_t partitionsCount = 32;
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, partitionsCount, partitionsCount * 2);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto readSession = CreateTestReadSession({.Name = "Session-0", .Setup = setup, .Sdk = sdk, .ExpectedMessagesCount = partitionsCount * 2, .AutoCommit = true, .Partitions = {}, .AutoPartitioningSupport = true});
+        readSession->Run();
+
+        for (ui32 p = 0; p < partitionsCount; ++p) {
+            for (ui32 sub = 1; sub <= 2; ++sub) {
+                TString name = TStringBuilder() << "producer-" << p << "-" << sub;
+                const ui64 seqNo = p * 2 + sub;
+                auto writeSession = CreateWriteSession(client, name, p, TString{TEST_TOPIC}, false);
+                writeSession->Write(Msg(name, seqNo));
+                writeSession->Close();
+            }
+        }
+        {
+            ui64 txId = 1006;
+            ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+            scheme.SetName(TString{TEST_TOPIC});
+            for (ui32 partition = 0; partition < partitionsCount; ++partition) {
+                TString boundary(1, char(partition * (256 / partitionsCount) + (128 / partitionsCount)));
+                auto* split = scheme.AddSplit();
+                split->SetPartition(partition);
+                split->SetSplitBoundary(boundary);
+            }
+            DoRequest(setup.GetRuntime(), txId, scheme);
+        }
+
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), partitionsCount * 3);
+        THashMap<ui32, const NYdb::NTopic::TPartitionInfo*> partitions;
+        for (const auto& p : describe.GetTopicDescription().GetPartitions()) {
+            partitions[p.GetPartitionId()] = &p;
+        }
+
+        readSession->WaitAllMessages();
+        std::vector<EvEndMsg> events = readSession->GetEndedPartitionEvents();
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), partitionsCount);
+
+        for (const EvEndMsg& ev : events) {
+            UNIT_ASSERT_VALUES_EQUAL(ev.ChildPartitionIds.size(), 2);
+            ui32 u = ev.ChildPartitionIds.at(0);
+            ui32 v = ev.ChildPartitionIds.at(1);
+
+            const TPartitionInfo& pu = *partitions.at(u);
+            const TPartitionInfo& pv = *partitions.at(v);
+
+            auto toHex = [](const TStringBuf value) -> TString {
+                return TStringBuilder() << HexText(value);
+            };
+            auto boundToString = [&toHex](const std::optional<std::string>& b) -> TString {
+                if (b.has_value()) {
+                    return toHex(*b).Quote();
+                }
+                return "none";
+            };
+            auto partitionInfoToString = [&boundToString](const TPartitionInfo& p) -> TString {
+                return TStringBuilder() << "Partition: " << p.GetPartitionId() << "; Bounds: " << boundToString(p.GetFromBound()) << "-" << boundToString(p.GetToBound());
+            };
+
+            TString dataRepr = TStringBuilder() << "First child: #" << partitionInfoToString(pu)
+                << "; Second child: " << partitionInfoToString(pv);
+            UNIT_ASSERT_EQUAL_C(pu.GetToBound(), pv.GetFromBound(), dataRepr);
+        }
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(OrderOfChildrenPartitions_Topic) {
+        OrderOfChildrenPartitions(SdkVersion::Topic);
+    }
 }
 
 } // namespace NKikimr

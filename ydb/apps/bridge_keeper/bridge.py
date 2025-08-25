@@ -332,6 +332,9 @@ class PileState:
             if not self.responsive:
                 return False
 
+            if not self.self_reported_alive:
+                return False
+
             if self.reported_bad and self.admin_reported_state == 'SYNCHRONIZED':
                 if not self.synced_since:
                     # sanity check, shouldn't happen
@@ -341,6 +344,20 @@ class PileState:
 
             return not self.reported_bad and self.responsive
         return True
+
+    def can_vote_for_bad_piles(self):
+        if not self.self_reported_alive:
+            return False
+
+        if self.admin_reported_state == 'PRIMARY':
+            return True
+
+        if self.admin_reported_state == 'SYNCHRONIZED':
+            if self.synced_since:
+                return time.monotonic() - self.synced_since > TO_SYNC_TRANSITION_GRACE_PERIOD
+            return True
+
+        return False
 
     def is_fit_for_promote(self):
         return not self.reported_bad and self.admin_reported_state == 'SYNCHRONIZED' and (self.self_reported_alive or self.reported_alive)
@@ -571,21 +588,26 @@ class Bridgekeeper:
             if monotonicNow - last_ts <= RESPONSIVENESS_THRESHOLD_SECONDS:
                 pile.responsive = True
 
+            # merge how this pile sees itself
             observed_failed_piles = info.get('failed_piles', set())
             if len(observed_failed_piles) > 0:
                 if pile_name not in observed_failed_piles:
                     pile.self_reported_alive = True
                 else:
+                    # note: it is self reported bad
                     pile.reported_bad = True
             else:
                 pile.self_reported_alive = True
 
-            for bad_pile_name in observed_failed_piles:
-                if bad_pile_name == pile_name:
-                    continue
-                bad_pile = new_state.Piles.setdefault(bad_pile_name, PileState())
-                bad_pile.reported_bad = True
+            # merge how this piles sees other piles
+            if pile.can_vote_for_bad_piles():
+                for bad_pile_name in observed_failed_piles:
+                    if bad_pile_name == pile_name:
+                        continue
+                    bad_pile = new_state.Piles.setdefault(bad_pile_name, PileState())
+                    bad_pile.reported_bad = True
 
+            # how other piles see this pile
             for other_pile_name, other_pile in new_state.Piles.items():
                 if other_pile_name == pile_name or other_pile.reported_bad:
                     continue

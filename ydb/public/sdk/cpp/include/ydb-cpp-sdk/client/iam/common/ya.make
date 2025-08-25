@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/grpc
     ydb/public/sdk/cpp/src/library/jwt
     ydb/public/sdk/cpp/src/client/types/credentials
 )

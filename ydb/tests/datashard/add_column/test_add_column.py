@@ -32,7 +32,7 @@ class TestYdbAddColumnWorkload(AddColumnBase):
 
     def test_add_column(self):
         """
-        Test adding columns without default values and verify all columns are present
+        Test adding columns without default values and verify all columns are present as NULLs
         """
 
         table_name = f"{self.table_path}_add_column"
@@ -60,13 +60,13 @@ class TestYdbAddColumnWorkload(AddColumnBase):
 
     def test_add_column_default(self):
         """
-        Test adding columns with default values and verify all columns are present
+        Test adding columns with default values and verify all columns are present as default values
         """
 
         table_name = f"{self.table_path}_add_column_default"
         self.prepare_table(table_name)
 
-        # Add new columns with default values and NULLs
+        # Add new columns with default values
         for i, (type_name, type_func) in enumerate(self.ALL_TYPES.items()):
             self.query(f"""
                 ALTER TABLE `{table_name}`
@@ -79,14 +79,14 @@ class TestYdbAddColumnWorkload(AddColumnBase):
 
         select_columns = ["C0"] + [self.try_cast_column(i + 1, type_name) for i, type_name in enumerate(self.ALL_TYPES.keys())]
 
-        # Verify all columns are built with default values and NULLs
+        # Verify all columns are built with default values
         return self.query(f"""
             SELECT {", ".join(select_columns)} FROM `{table_name}` ORDER BY C0;
         """)
 
     def test_add_column_default_not_null(self):
         """
-        Test adding not null columns with default values and verify all columns are present
+        Test adding not null columns with default values and verify all columns are present as default values
         """
 
         table_name = f"{self.table_path}_add_column_default_not_null"
@@ -105,7 +105,7 @@ class TestYdbAddColumnWorkload(AddColumnBase):
 
         select_columns = ["C0"] + [self.try_cast_column(i + 1, type_name) for i, type_name in enumerate(self.ALL_TYPES.keys())]
 
-        # Verify all columns are built with values
+        # Verify all columns are built with default values
         return self.query(f"""
             SELECT {", ".join(select_columns)} FROM `{table_name}` ORDER BY C0;
         """)

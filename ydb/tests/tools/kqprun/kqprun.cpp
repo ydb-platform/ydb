@@ -381,7 +381,6 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
             } else {
-                Cerr << "EXX\n";
                 throw exception;
             }
         }

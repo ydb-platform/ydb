@@ -2105,8 +2105,8 @@ message TColumnShardConfig {
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
-    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
-    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 2147483648];
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];

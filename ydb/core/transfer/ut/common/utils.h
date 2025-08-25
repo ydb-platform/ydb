@@ -624,7 +624,7 @@ struct MainTestCase {
         ExecuteDDL(Sprintf(R"(
             ALTER TRANSFER `%s`
             SET (
-                STATE = "Running"
+                STATE = "Active"
             );
         )", TransferName.data()));
     }

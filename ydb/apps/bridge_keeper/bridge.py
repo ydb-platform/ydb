@@ -353,6 +353,7 @@ class PileState:
             return True
 
         if self.admin_reported_state == 'SYNCHRONIZED':
+            # TODO: this is a quick hack
             if self.synced_since:
                 return time.monotonic() - self.synced_since > TO_SYNC_TRANSITION_GRACE_PERIOD
             return True

@@ -680,6 +680,24 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     ++msgSeqNo;
 }
 
+void CmdWrite(const TCmdWriteOptions& o) {
+    CmdWrite(
+        o.Partition,
+        o.SourceId,
+        o.Data,
+        o.TestContext,
+        o.Error,
+        o.AlreadyWrittenSeqNo,
+        o.IsFirst,
+        o.OwnerCookie,
+        o.MessageNo,
+        o.Offset,
+        o.TreatWrongCookieAsError,
+        o.TreatBadOffsetAsError,
+        o.DisableDeduplication
+    );
+}
+
 void ReserveBytes(const ui32 partition, TTestContext& tc,
                const TString& cookie, i32 msgSeqNo, i64 size, const TActorId& pipeClient, bool lastRequest) {
     THolder<TEvPersQueue::TEvRequest> request;

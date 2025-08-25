@@ -110,6 +110,9 @@ struct TUserInfo: public TUserInfoBase {
     NKikimr::NPQ::TMultiCounter MsgsReadGrpc;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesReadFromDC;
 
+    // Per partition counters
+    NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
+
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
     ui32 Subscriptions;

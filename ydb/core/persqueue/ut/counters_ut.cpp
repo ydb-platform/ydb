@@ -88,7 +88,7 @@ Y_UNIT_TEST(Partition) {
     tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
+    PQTabletPrepare({}, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -154,6 +154,15 @@ Y_UNIT_TEST(PerPartition) {
         // Turn on per partition counters, check counters.
 
         PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
+
+        // partition, sourceId, data, text
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
 
         std::string counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition.html"));

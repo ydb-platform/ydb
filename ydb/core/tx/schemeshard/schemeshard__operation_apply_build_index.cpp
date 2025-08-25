@@ -127,9 +127,11 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     TPath table = TPath::Resolve(tablePath, context.SS);
 
     TVector<ISubOperation::TPtr> result;
+
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
+
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnapshotTxId());
@@ -150,10 +152,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         operation->SetName(index.Base()->Name);
 
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
-    }
 
-    if (!indexName.empty()) {
-        TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
@@ -167,6 +166,27 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     }
 
     return result;
+}
+
+ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild);
+
+    auto config = tx.GetDropColumnBuild();
+    TString tablePath = config.GetSettings().GetTable();
+
+    TPath table = TPath::Resolve(tablePath, context.SS);
+
+    auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
+    auto op = mainTableAlter.MutableAlterTable();
+    op->SetName(table.LeafName());
+
+    for (const auto& col : config.GetSettings().Getcolumn()) {
+        auto colInfo = op->AddDropColumns();
+        colInfo->SetName(col.GetColumnName());
+    }
+
+    return CreateAlterTable(id, mainTableAlter);
 }
 
 }

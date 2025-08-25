@@ -449,7 +449,7 @@ public:
 
         TMemoryPool valueDataPool(256);
         TString err;
-        Y_ABORT_UNLESS(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
+        Y_ENSURE(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
         ValueSerialized = TSerializedCellVec::Serialize(Value);
     }
 

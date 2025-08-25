@@ -6,6 +6,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <util/generic/is_in.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 namespace NMonitoring::NAudit {
@@ -117,15 +119,31 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
 }
 
-void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
+void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
     if (!Auditable) {
         return;
     }
-    SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    if (userToken) {
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
+    // TODO: refactor so that all the parts are logged
+    static const THashSet<TString> ALLOWED_PARTS = {
+        "subject",
+        "sanitized_token",
+        // "start_time",
+        // "end_time",
+        // "database",
+        // "remote_address",
+        "cloud_id",
+        "folder_id",
+        "resource_id",
+    };
+    for (const auto& [k, v] : parts) {
+        if (IsIn(ALLOWED_PARTS, k)) {
+            Parts.emplace_back(k, v);
+        }
     }
+}
+
+void TAuditCtx::SetSubjectType(NACLibProto::ESubjectType subjectType) {
+    SubjectType = subjectType;
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
@@ -136,9 +154,6 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
     }
 
     AUDIT_LOG(
-        AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
-        AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
-
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }

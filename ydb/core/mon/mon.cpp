@@ -108,7 +108,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
         new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner),
+            owner,
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -136,7 +137,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             owner,
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided")
+                "No security credentials were provided",
+                {})
         );
     } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
         TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
@@ -146,7 +148,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 {},
                 {},
-                token
+                token,
+                {}
             )
         );
     } else {
@@ -523,9 +526,12 @@ public:
                 << " " << request->URL);
         }
         TString serializedToken;
-        if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
-            serializedToken = result->UserToken->GetSerializedToken();
+        if (result) {
+            AuditCtx.AddAuditLogParts(result->AuditLogParts);
+            if (result->UserToken) {
+                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
+                serializedToken = result->UserToken->GetSerializedToken();
+            }
         }
         AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1170,9 +1176,12 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
-            Event->Get()->UserToken = result->UserToken->GetSerializedToken();
+        if (result) {
+            AuditCtx.AddAuditLogParts(result->AuditLogParts);
+            if (result->UserToken) {
+                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
+                Event->Get()->UserToken = result->UserToken->GetSerializedToken();
+            }
         }
         AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));

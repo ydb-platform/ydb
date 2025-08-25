@@ -21,10 +21,11 @@ enum ERequestStatus {
 class TAuditCtx {
 public:
     void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
-    void AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+    void AddAuditLogParts(const TAuditParts& parts); // TODO: pass request context instead of audit log parts
     void LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase);
     void LogOnReceived();
     void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
+    void SetSubjectType(NACLibProto::ESubjectType subjectType);
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
@@ -33,8 +34,6 @@ private:
     TAuditParts Parts;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    TString Subject;
-    TString SanitizedToken;
 };
 
 }

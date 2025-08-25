@@ -28,14 +28,14 @@ If no existing plan is found in the cache, {{ ydb-short-name }}'s query optimize
 Using the prepared physical plan, {{ ydb-short-name }} starts distributed execution of the query. Work is distributed across multiple nodes in the database, with each node undertaking a part of the computation or data access as defined by the plan. This parallel processing enables fast and scalable query execution, even on large datasets.
 
 6. **Streaming Results Back to the Client**
-Query results are returned to your application as one or more result sets, which resemble strongly typed tables. Instead of sending all results at once, {{ ydb-short-name }} streams the data back in portions. This allows your application to begin processing results immediately and to handle large result sets efficiently, without loading all data into memory at once.
+For queries that produce results (such as `SELECT` statements), they are returned to your application as one or more result sets, which look like strongly typed tables. Instead of sending all results at once, YDB streams the data back in portions (parts). This allows your application to start processing results immediately and handle large result sets efficiently without needing to load everything into memory at once.
 
 7. **Continuing or Completing the Transaction**
 After receiving and processing the results, your application can choose to continue the transaction by sending additional queries within the same transaction context, or complete the transaction by committing it to save changes.
 
 Further details and explanations of the concepts introduced in this section are provided in the following sections.
 
-## Sessions
+## Sessions {#sessions}
 
 A session in {{ ydb-short-name }} is a logical "connection" to the database that maintains the context required to execute queries and manage transactions. Sessions store transaction state and other essential context, enabling a series of related queries to be executed as part of a single transaction. Most query execution operations occur within the context of an active session.
 

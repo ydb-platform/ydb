@@ -427,6 +427,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         writeGuard.Finalize();
         {
             auto selectQuery = TString(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT
                     field, count(*) as count,
                 FROM `/Root/olapStore/olapTable`

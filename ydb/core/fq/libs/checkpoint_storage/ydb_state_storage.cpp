@@ -284,12 +284,12 @@ TStatus ProcessRowState(
 
 class TStateStorage : public IStateStorage {
     TYdbConnectionPtr YdbConnection;
-    const NConfig::TYdbStorageConfig StorageConfig;
-    const NConfig::TCheckpointCoordinatorConfig Config;
+    const NKikimrConfig::TCheckpointsConfig::TExternalStorage StorageConfig;
+    const NKikimrConfig::TCheckpointsConfig Config;
 
 public:
     explicit TStateStorage(
-        const NConfig::TCheckpointCoordinatorConfig& config,
+        const NKikimrConfig::TCheckpointsConfig& config,
         const TYdbConnectionPtr& ydbConnection);
     ~TStateStorage() = default;
 
@@ -355,10 +355,10 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStorage::TStateStorage(
-    const NConfig::TCheckpointCoordinatorConfig& config,
+    const NKikimrConfig::TCheckpointsConfig& config,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
-    , StorageConfig(config.GetStorage())
+    , StorageConfig(config.GetExternalStorage())
     , Config(config)
 {
 }
@@ -1000,7 +1000,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStoragePtr NewYdbStateStorage(
-    const NConfig::TCheckpointCoordinatorConfig& config,
+    const NKikimrConfig::TCheckpointsConfig& config,
     const TYdbConnectionPtr& ydbConnection) {
     return new TStateStorage(config, ydbConnection);
 }

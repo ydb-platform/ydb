@@ -321,7 +321,6 @@ void TSchemeShard::PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndex
     info.Shards.clear();
 }
 
-
 void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ASSERT(info.IsBuildVectorIndex());
     for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {

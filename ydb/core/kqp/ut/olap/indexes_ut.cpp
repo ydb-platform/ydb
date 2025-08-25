@@ -42,6 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 uid Utf8 NOT NULL,
                 level Int32,
                 message Utf8,
+                new_column1 Uint64,
                 PRIMARY KEY (timestamp, uid)
             )
             PARTITION BY HASH(timestamp, uid)
@@ -278,7 +279,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto& response = event->Record;
                 // Cerr << response << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
-                UNIT_ASSERT(response.ColumnsSize() == 5);
+                UNIT_ASSERT(response.ColumnsSize() == 6);
                 TString someData = response.GetColumns(0).GetStatistics(0).GetData();
                 *sketch += *std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(someData.data(), someData.size()));
                 Cerr << ">>> sketch.GetElementCount() = " << sketch->GetElementCount() << Endl;

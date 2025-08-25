@@ -9,7 +9,7 @@ def post_install(self):
 boost_icl = NixSourceProject(
     nixattr="boost_icl",
     arcdir=boost.make_arcdir("icl"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

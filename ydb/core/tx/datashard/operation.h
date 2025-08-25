@@ -452,12 +452,6 @@ private:
 struct TRSData {
     TString Body;
     ui64 Origin = 0;
-
-    explicit TRSData(const TString &body = TString(),
-                     ui64 origin = 0)
-        : Body(body)
-        , Origin(origin)
-    {}
 };
 
 struct TInputOpData {

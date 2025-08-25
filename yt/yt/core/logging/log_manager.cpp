@@ -1579,6 +1579,28 @@ TFiberMinLogLevelGuard::~TFiberMinLogLevelGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
+    : OldMessageTag_(std::move(GetThreadMessageTag()))
+{
+    SetThreadMessageTag(std::move(messageTag));
+}
+
+TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other)
+    : OldMessageTag_(std::move(other.OldMessageTag_))
+    , Active_(other.Active_)
+{
+    other.Active_ = false;
+}
+
+TFiberMessageTagGuard::~TFiberMessageTagGuard()
+{
+    if (Active_) {
+        SetThreadMessageTag(std::move(OldMessageTag_));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 #ifndef _win_
 
 ILogManager* GetDefaultLogManager()

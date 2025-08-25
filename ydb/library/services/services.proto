@@ -433,6 +433,8 @@ enum EServiceKikimr {
     BRIDGE = 3400;
 
     TRANSFER = 3500;
+
+    TOKEN_MANAGER = 3600;
 };
 
 message TActivity {
@@ -1105,5 +1107,6 @@ message TActivity {
         RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
         BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL = 664;
         SCHEMESHARD_SYSVIEWS_ROSTER_UPDATE = 665;
+        TOKEN_MANAGER_ACTOR = 666;
     };
 };

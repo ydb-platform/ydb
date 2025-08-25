@@ -165,15 +165,9 @@ class TestSecondaryIndex(TestBase):
         rows = dml.query(f"select count(*) as count from {table_name}")
         count_col = rows[0].count
         statements = []
-        # delete if after https://github.com/ydb-platform/ydb/issues/16930
+
         for data_type in all_types.keys():
-            if (
-                data_type != "Date32"
-                and data_type != "Datetime64"
-                and data_type != "Timestamp64"
-                and data_type != 'Interval64'
-            ):
-                statements.append(f"col_{cleanup_type_name(data_type)}")
+            statements.append(f"col_{cleanup_type_name(data_type)}")
 
         for type_name in index.keys():
             if type_name != "Bool":
@@ -188,14 +182,8 @@ class TestSecondaryIndex(TestBase):
                         rows = self.query(select_sql, tx=session.transaction(tx_mode=ydb.QueryStaleReadOnly()))
                         count = 0
                         for data_type in all_types.keys():
-                            if (
-                                data_type != "Date32"
-                                and data_type != "Datetime64"
-                                and data_type != "Timestamp64"
-                                and data_type != 'Interval64'
-                            ):
-                                dml.assert_type(all_types, data_type, i, rows[0][count])
-                                count += 1
+                            dml.assert_type(all_types, data_type, i, rows[0][count])
+                            count += 1
 
                     dml.transactional(process)
             else:
@@ -209,15 +197,9 @@ class TestSecondaryIndex(TestBase):
                     rows = self.query(select_sql, tx=session.transaction(tx_mode=ydb.QueryStaleReadOnly()))
                     count = 0
                     for data_type in all_types.keys():
-                        if (
-                            data_type != "Date32"
-                            and data_type != "Datetime64"
-                            and data_type != "Timestamp64"
-                            and data_type != 'Interval64'
-                        ):
-                            for i in range(len(rows)):
-                                dml.assert_type(all_types, data_type, i + 1, rows[i][count])
-                            count += 1
+                        for i in range(len(rows)):
+                            dml.assert_type(all_types, data_type, i + 1, rows[i][count])
+                        count += 1
 
                 dml.transactional(process)
 

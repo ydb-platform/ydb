@@ -25,7 +25,7 @@ def post_install(self):
 boost_regex = NixSourceProject(
     nixattr="boost_regex",
     arcdir=boost.make_arcdir("regex"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         # Copy evertthing except for boost/regex/v4
         "include/boost/*.hpp",

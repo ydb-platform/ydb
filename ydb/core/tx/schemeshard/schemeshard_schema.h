@@ -2154,9 +2154,10 @@ struct Schema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
+        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx, SerializedData>;
     };
 
     // Incremental restore shard progress tracking

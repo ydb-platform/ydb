@@ -535,6 +535,7 @@ class Bridgekeeper:
 
         monotonicNow = time.monotonic()
         for pile_name, info in health_state.items():
+            #logger.debug(f"Observed {pile_name} state: {info}")
             last_ts = info.get('last_ts', 0.0)
             pile = new_state.Piles.setdefault(pile_name, PileState())
             if monotonicNow - last_ts <= RESPONSIVENESS_THRESHOLD_SECONDS:
@@ -549,11 +550,11 @@ class Bridgekeeper:
             else:
                 pile.self_reported_alive = True
 
-                for bad_pile_name in observed_failed_piles:
-                    if bad_pile_name == pile_name:
-                        continue
-                    bad_pile = new_state.Piles.setdefault(bad_pile_name, PileState())
-                    bad_pile.reported_bad = True
+            for bad_pile_name in observed_failed_piles:
+                if bad_pile_name == pile_name:
+                    continue
+                bad_pile = new_state.Piles.setdefault(bad_pile_name, PileState())
+                bad_pile.reported_bad = True
 
             for other_pile_name, other_pile in new_state.Piles.items():
                 if other_pile_name == pile_name or other_pile.reported_bad:

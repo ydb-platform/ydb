@@ -1605,7 +1605,7 @@ void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryP
                             newOutput.HashKind = EHashShuffleFuncType::ColumnShardHashV1;
                             break;
                         case NDqProto::TTaskOutputHashPartition::HASHKIND_NOT_SET:
-                            YQL_ENSURE(false, "Unknown hash kind");
+                            YQL_ENSURE(false, "Hash kind not set");
                             break;
                     }
 

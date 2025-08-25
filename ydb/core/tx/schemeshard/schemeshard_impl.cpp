@@ -3128,8 +3128,8 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
 
     Y_ABORT_UNLESS(partitionInfo.ParentPartitionIds.size() <= 2);
     auto it = partitionInfo.ParentPartitionIds.begin();
-    const auto parent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
-    const auto adjacentParent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    const auto parent = it != partitionInfo.ParentPartitionIds.end() ? *(it++) : Max<ui32>();
+    const auto adjacentParent = it != partitionInfo.ParentPartitionIds.end() ? *(it++) : Max<ui32>();
 
     db.Table<Schema::PersQueues>()
         .Key(pathId.LocalPathId, partitionInfo.PqId)

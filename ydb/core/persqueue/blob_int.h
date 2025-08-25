@@ -4,10 +4,16 @@
 
 namespace NKikimr::NPQ {
 
+struct TClientBlob;
+
 union TMessageFlags {
     using TValue = ui8;
 
-    TValue V = 0;
+    explicit TMessageFlags(TValue v = 0)
+        : V(v) {
+    }
+
+    TValue V;
     struct {
         TValue HasPartData : 1;
         TValue HasWriteTimestamp : 1;

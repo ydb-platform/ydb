@@ -462,6 +462,11 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
     KVWriteInProgress = false;
 
+    for (auto& span : TxForPersistSpans) {
+        span.End();
+    }
+    TxForPersistSpans.clear();
+
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         // before deleting an supportive partition, it is necessary to summarize its work
         HandleWakeup(ctx);
@@ -1419,7 +1424,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
             Y_ABORT_UNLESS(!BlobEncoder.NewHead.GetLastBatch().Packed);
             BlobEncoder.NewHead.AddBlob(x);
-            BlobEncoder.NewHead.PackedSize += x.GetBlobSize();
+            BlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
                 BlobEncoder.PackLastBatch();
             }

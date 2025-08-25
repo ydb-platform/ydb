@@ -125,7 +125,9 @@
 
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/ticket_parser_settings.h>
+#include <ydb/core/security/token_manager/token_manager_settings.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -1628,8 +1630,26 @@ TSecurityServicesInitializer::TSecurityServicesInitializer(const TKikimrRunConfi
 {
 }
 
-void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                                      const NKikimr::TAppData* appData) {
+void TSecurityServicesInitializer::InitializeTokenManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    const auto& authConfig = appData->AuthConfig;
+    if (!IsServiceInitialized(setup, MakeTokenManagerID()) && authConfig.GetTokenManager().GetEnable()) {
+        IActor* tokenManager = nullptr;
+        TTokenManagerSettings settings {
+            .Config = Config.GetAuthConfig().GetTokenManager(),
+            .HttpProxyId = {}
+        };
+        if (Factories && Factories->CreateTokenManager) {
+            tokenManager = Factories->CreateTokenManager(settings);
+        } else {
+            tokenManager = CreateTokenManager(settings);
+        }
+        if (tokenManager) {
+            setup->LocalServices.push_back(std::make_pair<TActorId, TActorSetupCmd>(MakeTokenManagerID(), TActorSetupCmd(tokenManager, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+    }
+}
+
+void TSecurityServicesInitializer::InitializeLdapAuthProvider(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     const auto& authConfig = appData->AuthConfig;
     if (!IsServiceInitialized(setup, MakeLdapAuthProviderID()) && authConfig.HasLdapAuthentication()) {
         IActor* ldapAuthProvider = CreateLdapAuthProvider(authConfig.GetLdapAuthentication());
@@ -1637,6 +1657,9 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
             setup->LocalServices.push_back(std::make_pair<TActorId, TActorSetupCmd>(MakeLdapAuthProviderID(), TActorSetupCmd(ldapAuthProvider, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
+}
+
+void TSecurityServicesInitializer::InitializeTicketParser(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
         auto grpcConfig = Config.GetGRpcConfig();
@@ -1658,6 +1681,13 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
                 TActorSetupCmd(ticketParser, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
+}
+
+void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
+                                                      const NKikimr::TAppData* appData) {
+    InitializeTokenManager(setup, appData);
+    InitializeLdapAuthProvider(setup, appData);
+    InitializeTicketParser(setup, appData);
 }
 
 // TGRpcServicesInitializer

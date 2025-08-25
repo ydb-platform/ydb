@@ -676,6 +676,7 @@ private:
 
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected overload ready from unknown tabletId " << shardId);
+        YQL_ENSURE(EvWriteTxs.contains(shardId), "Unexpected overload ready from unknown tabletId " << shardId);
 
         if (seqNo == shardState->OverloadSeqNo) {
             ExecuteEvWriteTransaction(shardId, *EvWriteTxs.at(shardId));
@@ -1750,7 +1751,7 @@ private:
 
     void ExecuteEvWriteTransaction(ui64 shardId, const NKikimrDataEvents::TEvWrite& evWrite) {
         YQL_ENSURE(!TxManager);
-        YQL_ENSURE(!ImmediateTx);
+        YQL_ENSURE(Request.LocksOp != ELocksOp::Commit || !ImmediateTx);
         TShardState& shardState = ShardStates[shardId];
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();

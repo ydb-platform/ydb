@@ -16,7 +16,6 @@ PEERDIR(
     ydb/core/kqp/federated_query
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/core/tx/schemeshard
-    ydb/core/fq/libs/checkpointing
 )
 
 YQL_LAST_ABI_VERSION()

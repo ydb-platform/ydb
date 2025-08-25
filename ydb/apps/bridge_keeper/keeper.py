@@ -180,13 +180,13 @@ def _parse_args():
         help='Manual endpoints to check piles. Should include at least three from each pile')
 
     parser.add_argument('--ydb', required=False, help='Path to ydb cli')
+    parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")
 
     parser.add_argument('--log-level', default='INFO', choices=log_choices, help='Logging level')
 
     parser.add_argument("--cluster", default="cluster", help="Cluster name to display")
     parser.add_argument("--tui", action="store_true", help="Enable TUI")
     parser.add_argument("--tui-refresh", type=float, default=1.0, help="Refresh interval in seconds")
-    parser.add_argument("--tui-disable-auto-failover", action="store_true", help="Disable automatical failover")
     parser.add_argument("--https", action="store_true", help="Use HTTPS for viewer healthcheck requests")
 
     return parser.parse_args()
@@ -198,8 +198,8 @@ def _run_no_tui(endpoints, path_to_cli, piles, use_https):
 
 
 def _run_tui(args, endpoints, path_to_cli, piles):
-    auto_failover = not args.tui_disable_auto_failover
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=args.https)
+    auto_failover = not args.disable_auto_failover
+    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
     app = keeper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,

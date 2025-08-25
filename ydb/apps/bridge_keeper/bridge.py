@@ -485,11 +485,12 @@ class TransitionHistory:
 
 
 class Bridgekeeper:
-    def __init__(self, endpoints: List[str], path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False):
+    def __init__(self, endpoints: List[str], path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True):
         self.endpoints = endpoints
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
         self.use_https = use_https
+        self.auto_failover = auto_failover
 
         self.async_checker = AsyncHealthcheckRunner(endpoints, path_to_cli, initial_piles, use_https=use_https)
         self.async_checker.start()
@@ -648,15 +649,19 @@ class Bridgekeeper:
             some_failed = False
             for command in commands:
                 command_str = self.path_to_cli + " " + " ".join(command)
-                logger.info(f"Executing command: {command_str}")
-                result = execute_cli_command(self.path_to_cli, command, self.endpoints, strict_order=strict_order)
-                if result is None:
-                    some_failed = True
-                    logger.error(f"Failed to apply command {command}")
+                if self.auto_failover:
+                    logger.info(f"Executing command: {command_str}")
+                    result = execute_cli_command(self.path_to_cli, command, self.endpoints, strict_order=strict_order)
+                    if result is None:
+                        some_failed = True
+                        logger.error(f"Failed to apply command {command}")
+                else:
+                    logger.warning(f"Autofailover disable, please execute the command: {command_str}")
             if some_failed:
                 logger.critical("Failover failed: cluster might be down!")
             else:
-                logger.info("Failover commands executed successfully")
+                if self.auto_failover:
+                    logger.info("Failover commands executed successfully")
 
     def _maintain_once(self):
         self._do_healthcheck()

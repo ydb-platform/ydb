@@ -1016,9 +1016,21 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, 
         return;
     }
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->HandleMirrorTopicDescriptionResult(ev, ctx);
+        auto result = PartitionsScaleManager->HandleMirrorTopicDescriptionResult(ev, ctx);
+        if (!result.has_value()) {
+            BroadcastPartitionError(std::move(result).error(), NKikimrServices::EServiceKikimr::PQ_MIRROR_DESCRIBER, ctx);
+        }
     }
 }
+
+void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
+    const TInstant now = TInstant::Now();
+    for (const auto& [_, pipeLocation] : TabletPipes) {
+        THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
+        NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
+    }
+}
+
 
 } // NPQ
 } // NKikimr

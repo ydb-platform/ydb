@@ -207,6 +207,7 @@ struct TEvPQ {
         EvReleaseExclusiveLock,
         EvRunCompaction,
         EvMirrorTopicDescription,
+        EvBroadcastPartitionError,
         EvEnd
     };
 
@@ -1208,6 +1209,19 @@ struct TEvPQ {
         TEvPartitionScaleStatusChanged(ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus) {
             Record.SetPartitionId(partitionId);
             Record.SetScaleStatus(scaleStatus);
+        }
+    };
+
+    struct TBroadcastPartitionError : public TEventPB<TBroadcastPartitionError,
+            NKikimrPQ::TBroadcastPartitionError, EvBroadcastPartitionError> {
+        TBroadcastPartitionError() = default;
+
+        explicit TBroadcastPartitionError(TString message, NKikimrServices::EServiceKikimr service, TInstant timestamp) {
+            auto* defaultGroup = Record.AddMessageGroups();
+            auto* error = defaultGroup->AddErrors();
+            error->SetMessage(std::move(message));
+            error->SetService(service);
+            error->SetTimestamp(timestamp.Seconds());
         }
     };
 

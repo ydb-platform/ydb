@@ -605,7 +605,7 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:
-    return unit.get("TIDY") != "yes"
+    return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
 
 def _setup_eslint(unit: NotsUnitType) -> None:

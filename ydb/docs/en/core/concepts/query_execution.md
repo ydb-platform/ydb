@@ -67,19 +67,19 @@ All official {{ ydb-short-name }} SDKs provide built-in retry logic and transact
 
 ## Query language
 
-Queries for {{ ydb-short-name }} are written in YQL — an SQL dialect, designed with distributed, scalable databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The full language reference is available in the [YQL documentation](../yql/reference/index.md).
+Queries for {{ ydb-short-name }} are written in YQL — an SQL dialect designed with scalable distributed databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The complete language reference is available in the [YQL documentation](../yql/reference/index.md).
 
-Most interactions with {{ ydb-short-name }} are performed using YQL, making it the primary tool for querying and managing data in YDB. Because of this, understanding YQL’s features and capabilities is essential for effectively working with {{ ydb-short-name }}. Learning YQL enables you to take full advantage of the database’s advanced query functionality, express complex business logic, and utilize YDB’s distributed architecture efficiently.
+Most interactions with {{ ydb-short-name }} are performed using YQL, making it the primary tool for querying and managing data in {{ ydb-short-name }}. Because of this, understanding YQL’s features and capabilities is essential for effectively working with {{ ydb-short-name }}. Learning YQL enables you to take full advantage of the database’s advanced query functionality, express complex business logic, and utilize {{ ydb-short-name }}’s distributed architecture efficiently.
 
 YQL supports most common SQL constructs, including:
 
-* DML — `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
-* DDL — `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
-* JOINs — all standard join types plus special joins such as `LEFT/RIGHT SEMI` and `ANY` joins.
-* Aggregations — `GROUP BY` and window functions.
-* Named expressions for better query text organization.
-* Collection of built-in functions for processing various data types, empowering users to handle complex logic directly in queries.
-* Pragmas and hints to fine-tune execution plans.
+- [Data Manipulation Language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language) — `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
+- [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) — `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
+- Joins — all standard `JOIN` types, plus special joins such as `LEFT SEMI`, `RIGHT SEMI`, and `ANY` joins.
+- Aggregations — `GROUP BY` and window functions.
+- Named expressions for better query text organization.
+- A collection of built-in functions for processing various data types, empowering users to handle complex logic directly in queries.
+- Pragmas and hints to fine-tune execution plans.
 
 ## Result Sets
 

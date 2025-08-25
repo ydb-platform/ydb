@@ -168,55 +168,62 @@ message FulltextIndexSettings {
         KEYWORD = 3;
     }
 
+    // see Layout
     Layout layout = 1;
+
+    // see Tokenizer
     Tokenizer tokenizer = 2;
 
     // Language used for language-sensitive operations, for example stopword filtering
     // Example:
-    //   Value: english
+    //   Value: "english"
     // If not specified, no language-specific logic is applied
     string language = 3;
 
     // Whether to Convert tokens to lowercase
     // Example:
-    //   Input: "Quick"
+    //   Token: "Quick"
     //   Output: "quick"
-    bool use_lowercase = 100 [default = false];
+    bool use_filter_lowercase = 100 [default = false];
 
     // Whether to remove common stopwords (e.g. "the", "a", "is") if true
-    // Example (English):
-    //   Input: ["the", "quick", "brown"]
+    // Example (language = "english"):
+    //   Tokens: ["the", "quick", "brown"]
     //   Output: ["quick", "brown"]
-    bool use_stopwords = 101 [default = false];
+    bool use_filter_stopwords = 101 [default = false];
 
     // Whether to apply character n-gram indexing to each token (after tokenization process)
     // Example (ngram_length_min = 3, ngram_length_man = 4):
     //   Token: "search"
     //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
-    bool use_ngram = 102 [default = false];
+    bool use_filter_ngram = 102 [default = false];
 
     // Whether to apply character edge n-gram indexing (prefix-based) on tokens
-    // Example (ngram_length_min = 3, ngram_length_man = 4):
+    // Example (filter_ngram_min_length = 3, filter_ngram_max_length = 4):
     //   Token: "search"
     //   Output: ["sea", "sear"]
     // Common use case: autocomplete / typeahead.
-    bool use_edge_ngram = 103 [default = false];
+    bool use_filter_edge_ngram = 103 [default = false];
 
     // Minimum token length to keep (inclusive)
-    // Example:
-    //   filter_length_min = 3 -> token "is" is too short -> removed
+    // Example (filter_length_min = 4):
+    //   Tokens: ["foo", "foobar", "foobarbaz"]
+    //   Output: ["foobar", "foobarbaz"]
     uint32 filter_length_min = 200 [default = 0];
 
     // Maximum token length to keep (inclusive)
-    // Example:
-    //   filter_length_max = 10 -> token "supercalifragilistic" is too long -> removed
+    // Example (filter_length_max = 6):
+    //   Tokens: ["foo", "foobar"]
+    //   Output: ["foobar", "foobarbaz"]
     uint32 filter_length_max = 201 [default = 4294967295];
 
     // Minimum length of character n-grams to generate (inclusive)
-    uint32 ngram_length_min = 202 [default = 3];
+    // in addition to use_filter_ngram = true / use_filter_edge_ngram = true
+    uint32 filter_ngram_min_length = 202 [default = 3];
 
-    // Maximum length of character n-grams to generate (inclusive).
-    uint32 ngram_length_man = 203 [default = 4];
+    // Maximum length of character n-grams to generate (inclusive)
+    // in addition to use_filter_ngram = true / use_filter_edge_ngram = true
+    uint32 filter_ngram_max_length = 203 [default = 4];
 }
 
 message GlobalFulltextIndex {

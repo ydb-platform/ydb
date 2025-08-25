@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Request healthcheck from the next in RR endpoint every amount of time
-HEALTH_CHECK_INTERVAL = 0.05
+HEALTH_CHECK_INTERVAL = 0.1
 
 # Refresh piles list via CLI every amount of time
 PILES_REFRESH_INTERVAL = 0.5
@@ -33,7 +33,7 @@ HEALTH_REPLY_TTL_SECONDS = 5.0
 
 # Currently when pile goes from 'NOT SYNCHRONIZED -> SYNCHRONIZED' there might be
 # healthchecks reporting it bad, we should ignore them for some time.
-TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVENESS_THRESHOLD_SECONDS * 2
+TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVENESS_THRESHOLD_SECONDS * 3
 
 # Emit an info-level "All is good" at most once per this period (seconds)
 ALL_GOOD_INFO_PERIOD_SECONDS = 60.0
@@ -67,7 +67,7 @@ class AsyncHealthcheckRunner:
     - Constructor accepts endpoints and shuffles them
     - start() begins asynchronous round-robin dispatch in a background thread
     - Maintains a dictionary: reporter pile name -> set of failed pile names
-    - get_health_state() and get_piles() is thread-safe and returns a snapshot for Bridgekeeper
+    - get_health_state_and_piles() is thread-safe and returns a snapshot for Bridgekeeper
     """
 
     def __init__(self, endpoints, path_to_cli, initial_piles, use_https=False):
@@ -251,10 +251,10 @@ class AsyncHealthcheckRunner:
             self._endpoint_to_pile[endpoint] = reporter_pile
             self._endpoint_last_ts[endpoint] = time.monotonic()
 
-    def get_health_state(self):
-        """Thread-safe snapshot: reporter pile -> {failed_piles: set, last_ts: float}."""
+    def get_health_state_and_piles(self):
+        """Thread-safe snapshot: (reporter pile -> {failed_piles: set, last_ts: float}), pile_name -> state string)"""
         with self._lock:
-            return {
+            health_state = {
                 pile: {
                     'failed_piles': set(failed),
                     'last_ts': self._reporter_last_ts.get(pile, 0.0),
@@ -262,10 +262,9 @@ class AsyncHealthcheckRunner:
                 for pile, failed in self._reporter_to_failed.items()
             }
 
-    def get_piles(self):
-        """Thread-safe snapshot of piles mapping: pile_name -> state string."""
-        with self._lock:
-            return dict(self._piles_list)
+            piles = dict(self._piles_list)
+
+            return (health_state, piles,)
 
     def get_ordered_endpoints(self, pile):
         """Thread-safe snapshot of pile endpoints ordered by response recency (most recent first)."""
@@ -520,7 +519,10 @@ class Bridgekeeper:
                     pile.synced_since = new_state.MonotonicTs
 
     def _do_healthcheck(self):
-        cluster_admin_piles = self.async_checker.get_piles()
+        # TODO: it seems that sometimes this calls takes too long for unknown yet reason,
+        # thus it's important to call before TotalState() constructor, which inits
+        # timestamps.
+        health_state, cluster_admin_piles = self.async_checker.get_health_state_and_piles()
 
         new_state = TotalState()
         for pile_name, state in (cluster_admin_piles or {}).items():
@@ -529,7 +531,6 @@ class Bridgekeeper:
             if state == 'PRIMARY':
                 new_state.PrimaryName = pile_name
 
-        health_state = self.async_checker.get_health_state()
         monotonicNow = time.monotonic()
         for pile_name, info in health_state.items():
             last_ts = info.get('last_ts', 0.0)

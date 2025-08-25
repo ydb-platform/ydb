@@ -783,6 +783,7 @@ private:
         }
         if (DeferredRunEvent) {
             HandleExecuteBase(DeferredRunEvent);
+            DeferredRunEvent.Reset();
         }
 
         ContinueExecute(EResumeSource::CATaskRunnerCreated);

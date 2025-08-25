@@ -104,7 +104,7 @@ class KeeperApp(App):
     #header { height: 5; }
     .section_title { content-align: center middle; height: 1; }
     #piles_group { height: 10; align: center middle; content-align: center middle; }
-    #history_view { height: 10; }
+    #history_view { height: 20; }
     #logs_view { height: 1fr; }
     .pile { width: 25; margin: 0 1; align: center middle; }
     """

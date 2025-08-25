@@ -1,4 +1,6 @@
 items:
+- { name: Схема кластера,                         href: cluster_schema.md }
+- { name: Имена схемных объектов,                 href: object-naming-rules.md }
 - { name: Директории,                             href: dir.md }
 - { name: Таблицы,                                href: table.md }
 - { name: Представления (VIEW),                   href: view.md, when: feature_view }

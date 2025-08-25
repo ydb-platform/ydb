@@ -22,6 +22,8 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/folder_service/folder_service.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
 
@@ -233,18 +235,48 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
-        // auto rowDispatcher = NFq::NewRowDispatcherService(
-        //     protoConfig.GetRowDispatcher(),
-        //     NKikimr::CreateYdbCredentialsProviderFactory,
-        //     yqSharedResources,
-        //     credentialsFactory,
-        //     tenant,
-        //     yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-        //     pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
-        //     MakeNodesManagerId(),
-        //     appData->Mon,
-        //     appData->Counters);
-        // actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
+        auto fqConfig = protoConfig.GetRowDispatcher();
+        NKikimrConfig::TSharedReadingConfig config;
+        config.SetEnabled(fqConfig.GetEnabled());
+        config.SetTimeoutBeforeStartSessionSec(fqConfig.GetTimeoutBeforeStartSessionSec());
+        config.SetSendStatusPeriodSec(fqConfig.GetSendStatusPeriodSec());
+        config.SetMaxSessionUsedMemory(fqConfig.GetMaxSessionUsedMemory());
+        config.SetWithoutConsumer(fqConfig.GetWithoutConsumer());
+        config.MutableJsonParser()->SetBatchSizeBytes(fqConfig.GetJsonParser().GetBatchSizeBytes());
+        config.MutableJsonParser()->SetBatchCreationTimeoutMs(fqConfig.GetJsonParser().GetBatchCreationTimeoutMs());
+        config.MutableJsonParser()->SetBufferCellCount(fqConfig.GetJsonParser().GetBufferCellCount());
+        config.MutableCompileService()->SetParallelCompilationLimit(fqConfig.GetCompileService().GetParallelCompilationLimit());
+        auto* database = config.MutableCoordinator()->MutableDatabase();
+        auto fqDatabase = fqConfig.GetCoordinator().GetDatabase();
+        database->SetEndpoint(fqDatabase.GetEndpoint());
+        database->SetDatabase(fqDatabase.GetDatabase());
+        database->SetOAuthFile(fqDatabase.GetOAuthFile());
+        database->SetToken(fqDatabase.GetToken());
+        database->SetTablePrefix(fqDatabase.GetTablePrefix());
+        database->SetCertificateFile(fqDatabase.GetCertificateFile());
+        database->SetIamEndpoint(fqDatabase.GetIamEndpoint());
+        database->SetSaKeyFile(fqDatabase.GetSaKeyFile());
+        database->SetUseLocalMetadataService(fqDatabase.GetUseLocalMetadataService());
+        database->SetClientTimeoutSec(fqDatabase.GetClientTimeoutSec());
+        database->SetOperationTimeoutSec(fqDatabase.GetOperationTimeoutSec());
+        database->SetCancelAfterSec(fqDatabase.GetCancelAfterSec());
+        database->SetUseSsl(fqDatabase.GetUseSsl());
+        database->SetTableClientMaxActiveSessions(fqDatabase.GetTableClientMaxActiveSessions());
+        config.MutableCoordinator()->SetCoordinationNodePath(fqConfig.GetCoordinator().GetCoordinationNodePath());
+        config.MutableCoordinator()->SetLocalMode(fqConfig.GetCoordinator().GetLocalMode());
+
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            config,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            credentialsFactory,
+            tenant,
+            yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
+            pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+            MakeNodesManagerId(),
+            appData->Mon,
+            appData->Counters);
+        actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

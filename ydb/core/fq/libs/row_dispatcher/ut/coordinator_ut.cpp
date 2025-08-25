@@ -38,7 +38,6 @@ public:
 
         NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
-        config.SetTopicPartitionsLimitPerNode(1);
         auto& database = *config.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");

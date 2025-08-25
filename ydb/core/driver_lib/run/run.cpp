@@ -1726,6 +1726,13 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    if (runConfig.AppConfig.GetQueryServiceConfig().GetSharedReading().GetEnabled()) {
+        YqSharedResources = NFq::CreateYqSharedResources(
+            runConfig.AppConfig.GetFederatedQueryConfig(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            Counters->GetSubgroup("counters", "yq"));
+    }
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this, YqSharedResources));
     }
@@ -1815,7 +1822,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }
 
-    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled()) {
+    if ((serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled())
+        || runConfig.AppConfig.GetQueryServiceConfig().GetSharedReading().GetEnabled()) {
         YqSharedResources = NFq::CreateYqSharedResources(
             runConfig.AppConfig.GetFederatedQueryConfig(),
             NKikimr::CreateYdbCredentialsProviderFactory,

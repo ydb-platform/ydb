@@ -43,11 +43,7 @@ struct TFixture : public TPqIoTestFixture {
             partitioninigParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioninigParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
-
             const THashMap<TString, TString> secureParams;
-            const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
             NYql::NPq::NProto::TDqPqTopicSource copySettings = settings;
             TPqIoTestFixture setup;
@@ -59,7 +55,7 @@ struct TFixture : public TPqIoTestFixture {
                 "query_1",
                 0,
                 secureParams,
-                taskParams,
+                TVector<NPq::NProto::TDqReadTaskParams>{params},
                 setup.Driver,
                 {},
                 actor.SelfId(),         // computeActorId

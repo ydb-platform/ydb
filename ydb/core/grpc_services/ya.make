@@ -151,6 +151,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
     ydb/library/yaml_config
+    ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types
     yql/essentials/public/issue

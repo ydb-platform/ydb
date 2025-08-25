@@ -1144,8 +1144,7 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
- message TSharedReadingConfig {
-
+message TSharedReadingConfig {
     message TExternalStorage {
         optional string Endpoint = 1;
         optional string Database = 2;
@@ -1211,7 +1210,6 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
-
     optional TSharedReadingConfig SharedReading = 25;
 }
 

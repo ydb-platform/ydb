@@ -154,13 +154,13 @@ class AsyncHealthcheckRunner:
 
         while not self._stop_event.is_set():
             # Periodically refresh piles list via CLI
-            now = time.time()
-            if now - self._last_piles_refresh_ts >= PILES_REFRESH_INTERVAL:
+            monotonicNow = time.monotonic()
+            if monotonicNow - self._last_piles_refresh_ts >= PILES_REFRESH_INTERVAL:
                 try:
                     self._fetch_piles_list()
                 except Exception:
                     logger.debug("Piles refresh failed", exc_info=True)
-                self._last_piles_refresh_ts = now
+                self._last_piles_refresh_ts = monotonicNow
 
             # Round-robin choose next endpoint
             endpoint = self.endpoints[self._rr_index]
@@ -246,10 +246,10 @@ class AsyncHealthcheckRunner:
         reporter_pile, failed_piles = result
         with self._lock:
             self._reporter_to_failed[reporter_pile] = set(failed_piles)
-            self._reporter_last_ts[reporter_pile] = time.time()
+            self._reporter_last_ts[reporter_pile] = time.monotonic()
             # Track per-endpoint recency and pile mapping
             self._endpoint_to_pile[endpoint] = reporter_pile
-            self._endpoint_last_ts[endpoint] = time.time()
+            self._endpoint_last_ts[endpoint] = time.monotonic()
 
     def get_health_state(self):
         """Thread-safe snapshot: reporter pile -> {failed_piles: set, last_ts: float}."""
@@ -530,11 +530,11 @@ class Bridgekeeper:
                 new_state.PrimaryName = pile_name
 
         health_state = self.async_checker.get_health_state()
-        now = time.time()
+        monotonicNow = time.monotonic()
         for pile_name, info in health_state.items():
             last_ts = info.get('last_ts', 0.0)
             pile = new_state.Piles.setdefault(pile_name, PileState())
-            if now - last_ts <= RESPONSIVENESS_THRESHOLD_SECONDS:
+            if monotonicNow - last_ts <= RESPONSIVENESS_THRESHOLD_SECONDS:
                 pile.responsive = True
 
             observed_failed_piles = info.get('failed_piles', set())

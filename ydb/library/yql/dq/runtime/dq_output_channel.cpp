@@ -74,7 +74,7 @@ public:
 
     EDqFillLevel CalcFillLevel() const {
         if (Storage) {
-            return Storage->IsEmpty() ? NoLimit : (Storage->IsFull() ? HardLimit : SoftLimit);
+            return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
             return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
         }
@@ -196,7 +196,7 @@ public:
             data.Proto.SetChunks(head.ChunkCount);
             data.Proto.SetRows(head.RowCount);
             data.SetPayload(std::move(head.Buffer));
-            Storage->Push(SaveForSpilling(std::move(data)));
+            Storage->Put(NextStoredId++, SaveForSpilling(std::move(data)));
 
             PackedDataSize -= bufSize;
             PackedChunkCount -= head.ChunkCount;
@@ -248,12 +248,15 @@ public:
 
         data.Clear();
         data.Proto.SetTransportVersion(TransportVersion);
-        if (!Storage->IsEmpty()) {
+        if (FirstStoredId < NextStoredId) {
             YQL_ENSURE(Storage);
+            LOG("Loading spilled blob. BlobId: " << FirstStoredId);
             TBuffer blob;
-            if (!Storage->Pop(blob)) {
+            if (!Storage->Get(FirstStoredId, blob)) {
+                LOG("BlobId " << FirstStoredId << " not ready yet");
                 return false;
             }
+            ++FirstStoredId;
             data = LoadSpilled(std::move(blob));
             SpilledChunkCount -= data.ChunkCount();
         } else if (!Data.empty()) {
@@ -420,6 +423,7 @@ public:
         SpilledChunkCount = 0;
         PackerCurrentChunkCount = 0;
         PackerCurrentRowCount = 0;
+        FirstStoredId = NextStoredId;
         UpdateFillLevel();
         return chunks;
     }
@@ -461,6 +465,8 @@ private:
     std::deque<TSerializedBatch> Data;
 
     size_t SpilledChunkCount = 0;
+    ui64 FirstStoredId = 0;
+    ui64 NextStoredId = 0;
 
     size_t PackedDataSize = 0;
     size_t PackedChunkCount = 0;

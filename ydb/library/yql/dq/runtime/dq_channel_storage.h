@@ -21,13 +21,16 @@ public:
     virtual bool IsEmpty() = 0;
     virtual bool IsFull() = 0;
 
-    // methods Push/Pop can throw `TDqChannelStorageException`
+    // methods Put/Get can throw `TDqChannelStorageException`
 
-    // Data should be owned by `blob` argument since the Push() call is actually asynchronous
-    virtual void Push(TChunkedBuffer&& blob) = 0;
+    // Data should be owned by `blob` argument since the Put() call is actually asynchronous
+    virtual void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) = 0;
 
-    // Pop() will return false if data is not ready yet. Client should repeat Pop() in this case
-    virtual bool Pop(TBuffer& data)  = 0;
+    // TODO: there is no way for client to delete blob.
+    // It is better to replace Get() with Pull() which will delete blob after read
+    // (current clients read each blob exactly once)
+    // Get() will return false if data is not ready yet. Client should repeat Get() in this case
+    virtual bool Get(ui64 blobId, TBuffer& data, ui64 cookie = 0)  = 0;
 };
 
 } // namespace NYql::NDq

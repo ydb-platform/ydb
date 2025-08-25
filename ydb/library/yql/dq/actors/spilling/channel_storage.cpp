@@ -1,6 +1,5 @@
 #include "channel_storage.h"
 
-#include <util/stream/mem.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -11,10 +10,12 @@
 #include <util/generic/buffer.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
-#include <util/generic/queue.h>
 
 
 namespace NYql::NDq {
+
+namespace {
+
 
 constexpr ui32 MAX_INFLIGHT_BLOBS_COUNT = 10;
 constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
@@ -22,16 +23,20 @@ constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
 class TDqChannelStorage : public IDqChannelStorage {
     struct TWritingBlobInfo {
         ui64 BlobSize_;
-        NThreading::TFuture<IDqSpiller::TKey> KeyFuture_;
+        NThreading::TFuture<IDqSpiller::TKey> BlobKey_;
     };
 public:
-    TDqChannelStorage(IDqSpiller::TPtr spiller)
-    : Spiller_(spiller) { }
+    TDqChannelStorage(TTxId txId, ui64 channelId, IDqSpiller::TPtr spiller)
+    : Spiller_(spiller)
+    {
+        Y_UNUSED(txId);
+        Y_UNUSED(channelId);
+    }
 
     bool IsEmpty() override {
         UpdateWriteStatus();
 
-        return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && !LoadingBlob_.has_value();
+        return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && LoadingBlobs_.empty();
     }
 
     bool IsFull() override {
@@ -40,74 +45,53 @@ public:
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Push(TChunkedBuffer&& blob) override {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
+        Y_UNUSED(cookie);
         UpdateWriteStatus();
 
         ui64 blobSize = blob.Size();
-        auto keyFuture = Spiller_->Put(std::move(blob));
 
-        ui64 blobId = BlobId_++;
-        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(keyFuture)});
+        auto future = Spiller_->Put(std::move(blob));
+
+        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(future)});
         WritingBlobsTotalSize_ += blobSize;
-        
-        BlobIdQueue_.push(blobId);
     }
 
-    bool Pop(TBuffer& blob) override {
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
+        Y_UNUSED(cookie);
         UpdateWriteStatus();
 
-        if (LoadingBlob_.has_value()) {
-            if (!LoadingBlob_->HasValue()) {
-                return false;
-            }
+        auto keyIt = StoredBlobsKeysMapping_.find(blobId);
+        Y_ENSURE(keyIt != StoredBlobsKeysMapping_.end());
 
-            auto optionalChunkedBuffer = LoadingBlob_->ExtractValue();
-            if (optionalChunkedBuffer.has_value()) {
-                // Конвертируем TChunkedBuffer в TBuffer
-                const auto& chunkedBuffer = *optionalChunkedBuffer;
-                blob.Resize(chunkedBuffer.Size());
-                TMemoryOutput output(blob.Data(), blob.Size());
-                chunkedBuffer.CopyTo(output);
-                --StoredBlobsCount_;
-                LoadingBlob_ = std::nullopt;
-                return true;
-            } else {
-                LoadingBlob_ = std::nullopt;
-                return false;
-            }
-        }
+        const auto it = LoadingBlobs_.find(blobId);
+        // If we didn't request loading blob from spilling -> request it
+        if (it == LoadingBlobs_.end()) {
 
-        // Проверяем есть ли готовые блобы в FIFO порядке
-        if (StoredBlobsCount_ == 0 || StoredBlobs_.empty()) {
+            auto future = Spiller_->Extract(keyIt->second);
+
+            LoadingBlobs_.emplace(blobId, std::move(future));
             return false;
         }
+        // If we requested loading blob, but it's not loaded -> wait
+        if (!it->second.HasValue()) return false;
 
-        // Берем первый блоб из очереди (FIFO)
-        if (BlobIdQueue_.empty()) {
-            return false;
-        }
+        blob = std::move(it->second.ExtractValue());
+        LoadingBlobs_.erase(it);
+        StoredBlobsKeysMapping_.erase(keyIt);
+        --StoredBlobsCount_;
 
-        ui64 nextBlobId = BlobIdQueue_.front();
-        auto it = StoredBlobs_.find(nextBlobId);
-        if (it == StoredBlobs_.end()) {
-            return false;
-        }
-
-        BlobIdQueue_.pop();
-        LoadingBlob_ = Spiller_->Extract(it->second);
-        StoredBlobs_.erase(it);
-
-        return false; // Данные еще не готовы, нужно будет вызвать Get снова
+        return true;
     }
 
 private:
     void UpdateWriteStatus() {
         for (auto it = WritingBlobs_.begin(); it != WritingBlobs_.end();) {
-            if (it->second.KeyFuture_.HasValue()) {
-                StoredBlobs_[it->first] = it->second.KeyFuture_.GetValue();
+            if (it->second.BlobKey_.HasValue()) {
                 WritingBlobsTotalSize_ -= it->second.BlobSize_;
                 ++StoredBlobsCount_;
                 it = WritingBlobs_.erase(it);
+                StoredBlobsKeysMapping_[it->first] = it->second.BlobKey_.ExtractValue();
             } else {
                 ++it;
             }
@@ -117,21 +101,22 @@ private:
 private:
     IDqSpiller::TPtr Spiller_;
 
-    std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>> LoadingBlob_ = std::nullopt;
+    // BlobId -> future with requested blob
+    std::unordered_map<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
     // BlobId -> future with some additional info
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
+    std::unordered_map<ui64, ui64> StoredBlobsKeysMapping_;
     ui64 WritingBlobsTotalSize_ = 0;
 
     ui64 StoredBlobsCount_ = 0;
-
-    std::unordered_map<ui64, IDqSpiller::TKey> StoredBlobs_;
-    TQueue<ui64> BlobIdQueue_; // Очередь для FIFO порядка
-    ui64 BlobId_ = 0;
-
 };
 
-// Фабричная функция для создания адаптера
-IDqChannelStorage::TPtr CreateDqChannelSpillerAdapter(IDqSpiller::TPtr spiller);
+} // anonymous namespace
 
+
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqSpiller::TPtr spiller)
+{
+    return new TDqChannelStorage(txId, channelId, spiller);
+}
 
 } // namespace NYql::NDq

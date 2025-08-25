@@ -180,13 +180,13 @@ message FulltextIndexSettings {
     // Whether to remove common stopwords (e.g. "the", "a", "is") if true
     // Example (English):
     //   Input: ["the", "quick", "brown"]
-    //   Output (use_stopwords = true): ["quick", "brown"]
+    //   Output: ["quick", "brown"]
     bool use_stopwords = 101 [default = false];
 
     // Whether to apply character n-gram indexing to each token (after tokenization process)
     // Example (ngram_length_min = 3, ngram_length_man = 4):
     //   Token: "search"
-    //   N-grams: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
+    //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
     bool use_ngram = 102 [default = false];
 
     // Whether to apply character edge n-gram indexing (prefix-based) on tokens

@@ -1990,9 +1990,19 @@ private:
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
 
+    struct TSyncerProgress {
+        ui64 BytesDone = 0;
+        ui64 BytesTotal = 0;
+        ui64 BytesError = 0;
+        ui64 BlobsDone = 0;
+        ui64 BlobsTotal = 0;
+        ui64 BlobsError = 0;
+    };
+
     std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
     std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
     THashSet<TGroupId> TargetGroupsInCommit;
+    THashMap<std::tuple<TGroupId, TNodeId>, TSyncerProgress> SyncerProgress;
 
     void CheckUnsyncedBridgePiles();
 

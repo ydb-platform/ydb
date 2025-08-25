@@ -134,10 +134,21 @@ It is recommended to check the optimality of the written query using [query stat
 
 ## Updating Vector Indexes {#update}
 
-The tree of clusters (groups of similar records) is not recalculated when a table with a vector index is updated. The new records are only reclassified according to the existing tree. So indexed vector search performance or quality may decrease after changing a very large amount of data in the table - such amount that may significantly affect the distribution of clusters in the dataset.
+When a table with a vector index is updated, its internal structure — a tree of clusters (groups of similar vectors) — is not recalculated. New or modified records are simply assigned to existing clusters.
 
-This degradation is highly affected by the exact data being updated. For example, if you just randomly split the data set into two equal parts, build an index on the first 50 % of data and then add the remaining 50 % - the index highly likely won't degrade at all. However, the degradation may become noticeable if you initially exclude some clusters in a whole.
+Over time, this can lead to index degradation, resulting in:
 
-The corner case is a vector index created on an empty table - in this case it will only contain 1 cluster, all new records will be added into that single cluster, and search requests will work as full scans.
+1. Reduced completeness — the index may return fewer relevant results because clusters no longer reflect the actual data distribution.
+2. Reduced performance — unbalanced clusters (for example, one cluster containing too many records) can slow down search queries and, in the worst case, lead to full table scans.
 
-At the moment, in such cases it's recommended to [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md?version=main#rename) the old index with the new one after updating a large amount of data.
+The extent of degradation depends on the nature of the updates:
+
+- If the index was built on a representative sample (e.g., a random 50% of the data) and the remaining records are added later, the index structure remains mostly relevant, and degradation is minimal.
+- If entire groups of similar vectors were absent from the initial dataset, the clustering may fail to partition the space effectively, leading to a significant drop in result relevance.
+
+A particularly problematic corner case arises when a vector index is created on an empty table. In this scenario, the index consists of a single cluster, and all new records are placed within it. As a result, searches using such an index are equivalent to full table scans.
+
+To prevent degradation:
+
+- Avoid creating a vector index on an empty table.
+- If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.

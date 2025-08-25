@@ -17,6 +17,7 @@ SRCS(
     dq_hash_operator_serdes.cpp
     dq_program_builder.cpp
     dq_block_hash_join.cpp
+    dq_scalar_hash_join.cpp
 )
 
 

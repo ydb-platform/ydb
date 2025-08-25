@@ -256,7 +256,7 @@ FROM dimension_scd2_final
 WHERE is_current = 1ut;
 ```
 
-### Получение данных на определенный момент времени
+### Получение данных на определённый момент времени
 
 ```sql
 DECLARE $as_of AS Timestamp;

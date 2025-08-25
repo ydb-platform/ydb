@@ -192,8 +192,8 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _run_no_tui(endpoints, path_to_cli, piles, use_https):
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=use_https)
+def _run_no_tui(endpoints, path_to_cli, piles, use_https, auto_failover):
+    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
     keeper.run()
 
 
@@ -279,7 +279,8 @@ def main():
     if args.tui:
         _run_tui(args, endpoints, path_to_cli, piles)
     else:
-        _run_no_tui(endpoints, path_to_cli, piles, args.https)
+        auto_failover = not args.disable_auto_failover
+        _run_no_tui(endpoints, path_to_cli, piles, args.https, auto_failover)
 
 
 if __name__ == '__main__':

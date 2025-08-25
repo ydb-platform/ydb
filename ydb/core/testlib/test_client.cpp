@@ -47,6 +47,8 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/metadata/functions_metadata.h>
@@ -1663,6 +1665,43 @@ namespace Tests {
                 );
             NFq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }
+
+        if (Settings->EnableSharedReading) {
+            auto config = Settings->AppConfig->GetQueryServiceConfig().GetSharedReading();
+            NFq::NConfig::TConfig protoConfig;
+            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters));
+
+            const auto& database = config.GetCoordinator().GetDatabase();
+            config.MutableCoordinator()->MutableDatabase()->SetEndpoint(database.HasEndpoint() ? database.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
+            config.MutableCoordinator()->MutableDatabase()->SetDatabase(database.HasDatabase() ? database.GetDatabase() : GetEnv("YDB_DATABASE"));
+
+            NYql::TPqGatewayServices pqServices(
+                yqSharedResources->UserSpaceYdbDriver,
+                nullptr,
+                nullptr,
+                std::make_shared<NYql::TPqGatewayConfig>(),
+                nullptr,
+                nullptr
+               // commonTopicClientSettings
+            );
+            auto actor = NFq::NewRowDispatcherService(
+                config,
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                yqSharedResources,
+                nullptr, //credentialsFactory, todo
+                "tenant",
+                counters->GetSubgroup("subsystem", "row_dispatcher"),
+                CreatePqNativeGateway(pqServices),
+                NActors::TActorId{},
+                nullptr,
+                counters);
+
+            TActorId actorId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NFq::RowDispatcherServiceActorId(), actorId, nodeIdx);
+        }
+
         {
             using namespace NViewer;
             if (Settings->KikimrRunConfig) {

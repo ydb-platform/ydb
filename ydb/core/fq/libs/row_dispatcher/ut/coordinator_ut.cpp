@@ -73,7 +73,7 @@ public:
         settings.MutableToken()->SetName("token");
         settings.SetDatabase("Database");
         settings.SetReadGroup(readGroup);
-        for (auto id: nodeIds) {
+        for (auto id : nodeIds) {
             settings.AddNodeIds(id);
         }
         return settings;

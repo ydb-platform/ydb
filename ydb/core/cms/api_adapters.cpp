@@ -59,7 +59,7 @@ namespace {
     }
 
     template <typename TApiAction>
-    void ConvertAction(const NKikimrCms::TAction& cmsAction, TApiAction& action) {
+    static void ConvertAction(const NKikimrCms::TAction& cmsAction, TApiAction& action) {
         if constexpr (std::is_same_v<TApiAction, Ydb::Maintenance::LockAction>) {
             *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
         }
@@ -116,10 +116,10 @@ namespace {
         actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
 
         switch (cmsAction.GetType()) {
-        default:
-            return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
+        default:
+            return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         }
     }
 
@@ -140,10 +140,10 @@ namespace {
         *actionState.mutable_deadline() = TimeUtil::MicrosecondsToTimestamp(permission.GetDeadline());
 
         switch (permission.GetAction().GetType()) {
-        default:
-            return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
+        default:
+            return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
         }
     }
 
@@ -215,7 +215,8 @@ class THiveInteractor {
 public:
     explicit THiveInteractor(IActorOps* actorOps)
         : ActorOps(actorOps)
-    {}
+    {
+    }
 
 protected:
     TActorId HivePipe(const TActorId& self) {
@@ -333,7 +334,7 @@ protected:
     }
 
     template <typename TResult>
-    TActionIdx GetLastIdx(const TResult& result) const {
+    static TActionIdx GetLastIdx(const TResult& result) {
         Y_ABORT_UNLESS(!result.action_group_states().empty());
         const int groupIdx = result.action_group_states_size() - 1;
         const int actionIdx = result.action_group_states(groupIdx).action_states_size() - 1;
@@ -484,7 +485,7 @@ class TCreateMaintenanceTask
         case EActionCase::kLockAction:
             return ValidateScope<EActionCase::kLockAction>(action.lock_action().scope());
         case EActionCase::kDrainAction:
-            return ValidateScope<EActionCase::kDrainAction>(action.lock_action().scope());
+            return ValidateScope<EActionCase::kDrainAction>(action.drain_action().scope());
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown action");
             return false;

@@ -239,15 +239,37 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     }
 
     if (config.UseStaticCredentials) {
-        auto parser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
+        auto userParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
-            TString user, password;
-            bool hasPasswordOption = false;
+            Y_UNUSED(errors);
+            TString user;
             if (authData["user"]) {
                 user = authData["user"].as<TString>();
             }
+            if (value) {
+                *value = user;
+            }
+            // Assign values
+            if (!parseOnly) {
+                UserName = std::move(user);
+            }
+            return true;
+        };
+        ydbUserAuth = &opts.AddAuthMethodOption("user", "User name to authenticate with");
+        (*ydbUserAuth)
+            .AuthMethod("static-credentials")
+            .AuthProfileParser(std::move(userParser))
+            .LogToConnectionParams("user")
+            .Env("YDB_USER", false)
+            .RequiredArgument("NAME").StoreResult(&UserName);
+
+        auto passwordParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
+            Y_UNUSED(isFileName);
+            TString password;
+            bool hasPasswordOption = false;
             if (authData["password"]) {
                 hasPasswordOption = true;
+                DoNotAskForPassword = true;
                 password = authData["password"].as<TString>();
             }
             if (authData["password-file"]) {
@@ -257,6 +279,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                     }
                     return false;
                 }
+                DoNotAskForPassword = true;
                 PasswordFile = authData["password-file"].as<TString>();
                 TString fileContent;
                 if (!ReadFromFileIfExists(PasswordFile, "password", fileContent, true)) {
@@ -268,35 +291,34 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 password = std::move(fileContent);
             }
             if (value) {
-                *value = user;
+                *value = password;
             }
             // Assign values
             if (!parseOnly) {
-                if (!password.empty()) {
-                    DoNotAskForPassword = true;
-                }
-                UserName = std::move(user);
                 Password = std::move(password);
             }
             return true;
         };
-        ydbUserAuth = &opts.AddAuthMethodOption("user", "User name to authenticate with");
-        (*ydbUserAuth)
+        auto& passwordOpt = opts.AddAuthMethodOption("password-file", "File with password to authenticate with",
+                false /*Not main auth option*/)
             .AuthMethod("static-credentials")
-            .AuthProfileParser(std::move(parser))
-            .LogToConnectionParams("user")
-            .Env("YDB_USER", false)
-            .RequiredArgument("NAME").StoreResult(&UserName);
-
-        auto& passwordOpt = opts.AddLongOption("password-file", "File with password to authenticate with")
+            .AuthProfileParser(std::move(passwordParser))
+            .LogToConnectionParams("password")
             .Env("YDB_PASSWORD", false)
             .SetSupportsProfile()
             .FileName("password").RequiredArgument("PATH")
             .StoreFilePath(&PasswordFileOption)
+            .Handler([this](const TString& value) {
+                Y_UNUSED(value);
+                // Do not ask for password if a password (even empty) was provided from any option source
+                DoNotAskForPassword = true;
+            })
             .StoreResult(&PasswordOption);
 
-        auto& noPasswordOpt = opts.AddLongOption("no-password", "Do not ask for user password (if empty)")
-            .Optional().StoreTrue(&DoNotAskForPassword);
+        auto& noPasswordOpt = opts.AddLongOption("no-password",
+                "Do not use a password for the specified user. All password sources will be ignored. "
+                "If this option is not specified and no password is found, the CLI will prompt for one interactively.")
+            .Optional().StoreTrue(&NoPasswordOption);
 
         opts.MutuallyExclusiveOpt(passwordOpt, noPasswordOpt);
     }
@@ -491,22 +513,22 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
     // Check that we have username/password from one source
     const TOptionParseResult* userResult = ParseResult->FindResult("user");
     const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
-    if (passwordResult && passwordResult->GetValueSource() == userResult->GetValueSource()) { // Both from command line or both from env
+
+    if (passwordResult) {
+        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
+            MisuseErrors.push_back("User password was provided without user name");
+        }
         Password = PasswordOption;
         PasswordFile = PasswordFileOption;
     }
 
-    if (passwordResult && static_cast<int>(passwordResult->GetValueSource()) < static_cast<int>(userResult->GetValueSource())) { // Password is set from command line/env, but user is taken from source with less priority
-        MisuseErrors.push_back("User password was provided without user name");
-        return;
-    }
-
     // Assign values
     config.StaticCredentials.User = UserName;
-    config.StaticCredentials.Password = Password;
 
-    if (!config.StaticCredentials.Password.empty()) {
+    if (NoPasswordOption) {
         DoNotAskForPassword = true;
+    } else {
+        config.StaticCredentials.Password = Password;
     }
 
     // Interactively ask for password

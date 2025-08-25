@@ -81,7 +81,9 @@ private:
     // Password from separate option
     TString PasswordFileOption;
     TString PasswordOption;
+    // Whether to ask for a password input if it was not provided
     bool DoNotAskForPassword = false;
+    bool NoPasswordOption = false;
 
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;

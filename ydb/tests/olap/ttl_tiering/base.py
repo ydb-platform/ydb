@@ -42,7 +42,6 @@ class TllTieringTestBase(object):
                     "enable_external_data_sources": True,
                     "enable_write_portions_on_insert": True,
                     "enable_tiering_in_column_shard": True,
-                    "disable_column_shard_bulk_upsert_require_all_columns": True,
                 },
                 column_shard_config={
                     "lag_for_compaction_before_tierings_ms": 0,
@@ -53,6 +52,7 @@ class TllTieringTestBase(object):
                     "alter_object_enabled": True,
                     "periodic_wakeup_activation_period_ms": 5000,
                     "gcinterval_ms": 5000,
+                    "disable_column_shard_bulk_upsert_require_all_columns": True,
                 },
                 additional_log_configs={
                     "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,

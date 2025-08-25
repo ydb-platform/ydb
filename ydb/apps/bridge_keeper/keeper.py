@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import argparse
+import atexit
 import logging
 import os
 import requests
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 LOG_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
+MAX_KEEP_LOG_LINES = 200
+
+_GLOBAL_LOG_INTERCEPTOR = None
+
 
 # Global, thread-safe log interceptor for TUI
 class LogInterceptor(logging.Handler):
@@ -24,24 +29,62 @@ class LogInterceptor(logging.Handler):
         super().__init__()
         self._formatter = formatter
         self._lock = threading.Lock()
-        self._lines = []
+        self._not_consumed_records = []
+        self._all_records = []
+        self._truncated_count = 0
+        self._disabled = False
 
     def emit(self, record: logging.LogRecord):
+        with self._lock:
+            if not self._disabled:
+                self._not_consumed_records.append(record)
+                return
+
+        # Pass through to normal logging if disabled
+        logging.getLogger().handle(record)
+
+    def _process_new_records(self):
+        # must be called with lock
+        records = list(self._not_consumed_records)
+
+        self._all_records.extend(records)
+        all_records_length = len(self._all_records)
+        if all_records_length > MAX_KEEP_LOG_LINES:
+            self._truncated_count += all_records_length - MAX_KEEP_LOG_LINES
+            self._all_records = self._all_records[-MAX_KEEP_LOG_LINES]
+
+        self._not_consumed_records.clear()
+        return records
+
+    def consume_records(self):
+        with self._lock:
+            return self._process_new_records()
+
+    def disable_and_flush(self):
+        # Disable interception and replay kept records via normal logging
+        with self._lock:
+            self._disabled = True
+            self._process_new_records()
+
+            records = list(self._all_records)
+            truncated = self._truncated_count
+            self._all_records.clear()
+            self._truncated_count = 0
+
+        root_logger = logging.getLogger()
+        # Detach this interceptor, ensure a normal handler is present
         try:
-            message = self._formatter.format(record)
+            root_logger.removeHandler(self)
+            _ensure_color_logging_no_tui(root_logger)
         except Exception:
-            message = record.getMessage()
-        with self._lock:
-            self._lines.append(message)
+            pass
 
-    def consume_lines(self):
-        with self._lock:
-            lines = list(self._lines)
-            self._lines.clear()
-            return lines
+        if truncated > 0:
+            root_logger.info(f"Log records truncated: {truncated}")
 
+        for rec in records:
+            root_logger.handle(rec)
 
-_GLOBAL_LOG_INTERCEPTOR = None
 
 def _get_log_interceptor():
     return _GLOBAL_LOG_INTERCEPTOR
@@ -101,6 +144,17 @@ def _setup_logging(args):
         interceptor = LogInterceptor(logging.Formatter(fmt))
         root_logger.addHandler(interceptor)
         _GLOBAL_LOG_INTERCEPTOR = interceptor
+
+        # Ensure logs are flushed and printed on any normal process exit
+        def _flush_logs_on_exit():
+            try:
+                li = _get_log_interceptor()
+                if li:
+                    li.disable_and_flush()
+            except Exception:
+                pass
+
+        atexit.register(_flush_logs_on_exit)
     else:
         _ensure_color_logging_no_tui(logging.getLogger())
 
@@ -150,10 +204,21 @@ def _run_tui(args, endpoints, path_to_cli, piles):
         cluster_name=args.cluster,
         refresh_seconds=args.tui_refresh,
         auto_failover=auto_failover,
-        log_consumer=lambda: _get_log_interceptor().consume_lines()
+        log_consumer=lambda: _get_log_interceptor().consume_records()
     )
 
     app.run()
+
+    try:
+        keeper.stop_async()
+    except Exception as e:
+        logger.exception(f"Exception while stopping keeper: {e}")
+
+    log_interceptor = _get_log_interceptor()
+    if log_interceptor:
+        log_interceptor.disable_and_flush()
+
+    sys.exit(app.return_code)
 
 
 def main():

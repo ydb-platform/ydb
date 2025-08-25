@@ -23,34 +23,45 @@ import bridge
 
 logger = logging.getLogger(__name__)
 
-# TODO: fast and dirty way
-def _colorize_log_line(line: str) -> str:
-    # Expected format: "%(asctime)s %(levelname)s %(name)s: %(message)s"
-    # We detect the level token inside the line and colorize for CRITICAL/ERROR/WARNING
-    try:
-        # Find level token position by scanning for known tokens with surrounding spaces
-        candidates = [
-            (" CRITICAL ", "red"),
-            (" ERROR ", "#ff0000"), # for some reason "red" in markup is magenta like
-            (" WARNING ", "#ffff00"), # "yellow" is red :/
-        ]
-        hit = None
-        hit_idx = None
-        for token, color in candidates:
-            idx = line.find(token)
-            if idx != -1 and (hit_idx is None or idx < hit_idx):
-                hit = (token.strip(), color)
-                hit_idx = idx
-        if hit is None:
-            return escape(line)
+class MarkupFormatter:
+    def __init__(self, fmt: str):
+        self._fmt = fmt
 
-        level_text, color = hit
-        token_len = len(level_text) + 2  # include surrounding spaces
-        prefix = line[:hit_idx]
-        after = line[hit_idx + token_len :]
-        return f"{escape(prefix)} [{color}]{level_text}[/] {escape(after)}"
-    except Exception:
-        return escape(line)
+    def format(self, record: logging.LogRecord) -> str:
+        try:
+            message = self._fmt % {
+                'asctime': self._format_time(record),
+                'levelname': record.levelname,
+                'name': record.name,
+                'message': record.getMessage(),
+            }
+        except Exception:
+            message = record.getMessage()
+
+        # Colorize based on level
+        try:
+            # Escape message except the level token we will colorize separately
+            level_color = {
+                'CRITICAL': 'red',
+                'ERROR': '#ff0000',
+                'WARNING': '#ffff00',
+            }.get(record.levelname)
+            if level_color is None:
+                return escape(message)
+            # Replace first occurrence of level token with colored version
+            token = f" {record.levelname} "
+            idx = message.find(token)
+            if idx == -1:
+                return escape(message)
+            prefix = message[:idx]
+            after = message[idx + len(token):]
+            return f"{escape(prefix)} [{level_color}]{record.levelname}[/] {escape(after)}"
+        except Exception:
+            return escape(message)
+
+    def _format_time(self, record: logging.LogRecord) -> str:
+        import datetime as _dt
+        return _dt.datetime.utcfromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
 
 
 class HeaderBar(Static):
@@ -104,7 +115,7 @@ class KeeperApp(App):
         cluster_name: str,
         refresh_seconds: float,
         auto_failover: bool,
-        log_consumer: Callable[[], List[str]],
+        log_consumer: Callable[[], List[logging.LogRecord]],
     ):
         super().__init__()
 
@@ -118,7 +129,9 @@ class KeeperApp(App):
 
         self.pile_widgets: Dict[str, PileWidget] = {}
 
-        self.keeper.run_async()
+        self._keeper_thread = self.keeper.run_async()
+        if not self._keeper_thread:
+            raise("Failed to start async keeper")
 
     def compose(self) -> ComposeResult:
         self.header = HeaderBar(id="header")
@@ -152,6 +165,9 @@ class KeeperApp(App):
         pass
 
     async def refresh_once(self) -> None:
+        if not self._keeper_thread.is_alive():
+            self.exit(1)
+
         state, transitions = self.keeper.get_state_and_history()
 
         now = dt.datetime.utcnow()
@@ -195,9 +211,9 @@ class KeeperApp(App):
             self.history_view.write_lines(list(transitions[-50:]))
 
         # Update logs
-
-        new_lines = self.log_consumer()
-        if len(new_lines) > 0:
-            new_lines = [_colorize_log_line(l) for l in new_lines]
-            joined_lines = '\n'.join(new_lines)
+        new_records = self.log_consumer()
+        if len(new_records) > 0:
+            formatter = MarkupFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+            lines = [formatter.format(r) for r in new_records]
+            joined_lines = '\n'.join(lines)
             self.log_view.write(joined_lines)

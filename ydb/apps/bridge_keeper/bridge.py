@@ -4,6 +4,7 @@ import logging
 import random
 import requests
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -57,6 +58,7 @@ STATUS_COLOR = {
 # Keep at most this many endpoints per pile when resolving
 # TODO: consider larger number of larger installations
 MAX_ENDPOINTS_PER_PILE = 3
+
 
 class AsyncHealthcheckRunner:
     """
@@ -113,7 +115,16 @@ class AsyncHealthcheckRunner:
             self._thread.join(timeout=10)
         self._executor.shutdown(wait=True)
 
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def _run_loop(self):
+        try:
+            self._run_loop_impl()
+        except Exception as e:
+            logger.exception(f"AsyncHealthcheckRunner's run loop got exception: {e}")
+
+    def _run_loop_impl(self):
         # Pre-fill inflight slots with None
         for endpoint in self.endpoints:
             self._inflight.setdefault(endpoint, None)
@@ -488,6 +499,7 @@ class Bridgekeeper:
         self._state_lock = threading.RLock()
         self._run_thread = None
         self._last_all_good_info_ts = 0.0
+        self._stop_event = threading.Event()
 
     def _set_sync_time_if_any(self, new_state):
         # it is OK to read self.current_state without lock, since we are the only writer
@@ -650,21 +662,41 @@ class Bridgekeeper:
 
     def run(self):
         # TODO: gracefully stop
+        self._stop_event.clear()
         try:
-            while True:
+            while not self._stop_event.is_set():
+                if not self.async_checker.is_alive():
+                    raise RuntimeError("AsyncHealthcheckRunner thread is not running")
                 time.sleep(1)
                 self._maintain_once()
         except Exception as e:
-            # TODO: restore logs
             logger.exception(f"Keeper's run loop got exception: {e}")
-            # TODO: exit
+        finally:
+            try:
+                self.async_checker.stop(wait=True)
+            except Exception:
+                pass
 
     def run_async(self):
-        if self._run_thread and self._run_thread.is_alive():
-            return self._run_thread
+        if self._run_thread:
+            return None
+
+        self._stop_event.clear()
         self._run_thread = threading.Thread(target=self.run, name="Bridgekeeper.run", daemon=True)
         self._run_thread.start()
+
         return self._run_thread
+
+    def stop_async(self):
+        if not self._run_thread:
+            return
+
+        try:
+            self._stop_event.set()
+            if self._run_thread.is_alive():
+                self._run_thread.join(timeout=10)
+        except Exception:
+            pass
 
     def get_state_and_history(self) -> Tuple[Optional[TotalState], List[str]]:
         with self._state_lock:

@@ -657,7 +657,7 @@ class Bridgekeeper:
                         some_failed = True
                         logger.error(f"Failed to apply command {command}")
                 else:
-                    logger.warning(f"Autofailover disable, please execute the command: {command_str}")
+                    logger.warning(f"Autofailover disabled, please execute the command: {command_str}")
             if some_failed:
                 logger.critical("Failover failed: cluster might be down!")
             else:

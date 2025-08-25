@@ -760,6 +760,30 @@
             "Truncated": true
         }
     },
+    "test.test_topic_data_cdc": {
+        "alter": null,
+        "insert":  {"version": 8},
+        "update": {"version": 8},
+        "data": {
+            "Messages": [
+                {
+                    "Offset": 0,
+                    "SeqNo": 1,
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
+                    "OriginalSize": 40,
+                    "StorageSize": 40,
+                    "ProducerId": "not-zero-number-text",
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 1,
+            "Truncated": false
+        }
+    },
     "test.test_transfer_describe": {
         "connection_params": {
             "connection_string": "text",

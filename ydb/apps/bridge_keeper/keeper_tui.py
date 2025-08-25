@@ -154,6 +154,7 @@ class KeeperApp(App):
         self.log_view = RichLog(id="logs_view")
         self.log_view.auto_scroll = False
         self.log_view.markup = True
+        self.log_view.wrap = True
         yield self.log_view
 
     async def on_mount(self) -> None:

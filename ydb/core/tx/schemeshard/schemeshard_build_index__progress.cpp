@@ -710,6 +710,7 @@ private:
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
         ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);
+        ev->Record.SetMakeOneEmptyCluster(!buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1);
 
         if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {
             ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
@@ -869,9 +870,16 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
+        auto rows = buildInfo.Sample.Rows;
+        auto isLeaf = !buildInfo.KMeans.NeedsAnotherLevel();
+        if (!rows.size() && buildInfo.KMeans.Parent == 0) {
+            auto emptyRow = buildInfo.Clusters->GetEmptyRow();
+            rows.push_back(TIndexBuildInfo::TSample::TRow(0, TSerializedCellVec::Serialize({TCell(emptyRow.data(), emptyRow.size())})));
+            isLeaf = true;
+        }
+        auto actor = new TUploadSampleK(path.PathString(), isLeaf,
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
-            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
+            rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -1080,16 +1088,7 @@ private:
 
     void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         NIceDb::TNiceDb db{txc.DB};
-        db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round)
-        );
+        Self->PersistBuildIndexKMeansState(db, buildInfo);
     }
 
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -1217,7 +1216,15 @@ private:
             }
             ClearDoneShards(txc, buildInfo);
             if (buildInfo.Sample.Rows.empty()) {
-                // No samples => no data for this cluster
+                // No samples
+                if (buildInfo.KMeans.Parent == 0) {
+                    // Index is empty - add 1 leaf cluster for future index updates
+                    SendUploadSampleKRequest(buildInfo);
+                    buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                    return false;
+                }
+                // No data for a specific cluster - should not happen
+                // Supported to not crash if we have duplicate clusters for some reason
                 return FillVectorIndexNextParent(txc, buildInfo);
             }
             if (buildInfo.KMeans.Rounds > 1) {
@@ -1241,6 +1248,10 @@ private:
             // Just wait until samples are uploaded (saved)
             return false;
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+            if (buildInfo.Sample.Rows.empty() && buildInfo.KMeans.Parent == 0) {
+                // Done
+                return true;
+            }
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -2105,6 +2116,13 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     explicit TTxReplyLocalKMeans(TSelf* self, TEvDataShard::TEvLocalKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        if (Response->Get()->Record.GetIsLastLevel()) {
+            buildInfo.KMeans.Level = buildInfo.KMeans.Levels;
+            Self->PersistBuildIndexKMeansState(db, buildInfo);
+        }
     }
 };
 

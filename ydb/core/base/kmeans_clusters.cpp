@@ -302,6 +302,13 @@ public:
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
+    TString GetEmptyRow() const override {
+        TString str;
+        str.resize(1 + sizeof(TCoord) * Dimensions);
+        str[sizeof(TCoord) * Dimensions] = TypeByte;
+        return str;
+    }
+
 private:
     auto GetCoords(const char* coords) {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};

@@ -79,8 +79,10 @@ protected:
     const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
+    bool IsLastLevel = false;
 
     const TIndexBuildScanSettings ScanSettings;
+    const bool MakeOneEmptyCluster;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
@@ -126,6 +128,7 @@ public:
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
+        , MakeOneEmptyCluster(request.GetMakeOneEmptyCluster())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetParentFrom() == 0 && request.GetParentTo() == 0 ? 0u : 1u}
@@ -173,6 +176,7 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+        record.SetIsLastLevel(IsLastLevel);
 
         Uploader.Finish(record, status);
 
@@ -369,12 +373,23 @@ protected:
             State = EState::KMEANS;
             auto rows = Sampler.Finish().second;
             if (rows.size() == 0) {
+                if (MakeOneEmptyCluster) {
+                    // Make 1 empty placeholder cluster
+                    IsLastLevel = true;
+                    rows.push_back(Clusters->GetEmptyRow());
+                    bool ok = Clusters->SetClusters(std::move(rows));
+                    Y_ENSURE(ok);
+                    Y_ENSURE(UploadState == EState::UPLOAD_MAIN_TO_POSTING || UploadState == EState::UPLOAD_MAIN_TO_BUILD);
+                    State = EState::UPLOAD_MAIN_TO_POSTING;
+                    FormLevelRows();
+                    return true;
+                }
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
             if (rows.size() < K) {
-                // if this datashard have less than K valid embeddings for this parent
+                // if this datashard has less than K valid embeddings for this parent
                 // lets make single centroid for it
                 rows.resize(1);
             }
@@ -386,8 +401,8 @@ protected:
 
         if (State == EState::KMEANS) {
             if (Clusters->NextRound()) {
-                FormLevelRows();
                 State = UploadState;
+                FormLevelRows();
                 return false; // do UPLOAD_*
             } else {
                 return false; // recompute KMEANS
@@ -477,8 +492,8 @@ protected:
 
     void FormLevelRows()
     {
-        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
-            || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+        const bool isPostingLevel = State == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+            || State == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
 
         for (NTable::TPos pos = 0; const auto& row : Clusters->GetClusters()) {
             AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);

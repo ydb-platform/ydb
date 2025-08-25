@@ -393,5 +393,7 @@ message TTableServiceConfig {
     optional bool EnableOlapScalarApply = 86 [default = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true];
 
+    optional bool EnableOlapPushdownProjections = 91  [ default = false ];
+
     optional bool EnableTempTablesForUser = 95 [default = false];
 };

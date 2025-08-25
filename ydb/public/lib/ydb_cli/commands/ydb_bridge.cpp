@@ -186,7 +186,7 @@ int TCommandBridgeList::Run(TConfig& config) {
     switch (OutputFormat) {
         case EDataFormat::Json: {
             NJson::TJsonValue json(NJson::JSON_MAP);
-            json.InsertValue("generation", ToString(result.GetGeneration()));
+            json.InsertValue("generation", result.GetGeneration());
             NJson::TJsonValue piles(NJson::JSON_ARRAY);
             for (const auto& s : state) {
                 NJson::TJsonValue item(NJson::JSON_MAP);

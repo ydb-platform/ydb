@@ -277,8 +277,7 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 }
 
 void SetupSignalActions() {
-    DefaultTerminateHandler = std::get_terminate();
-    std::set_terminate(&TerminateHandler);
+    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
 
     for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
         signal(sig, &BackTraceSignalHandler);

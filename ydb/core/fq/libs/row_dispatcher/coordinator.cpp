@@ -60,17 +60,19 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     struct TTopicKey {
         TString Endpoint;
         TString Database;
+        TString ReadGroup;
         TString TopicName;
 
         size_t Hash() const noexcept {
             ui64 hash = std::hash<TString>()(Endpoint);
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(ReadGroup));
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicName));
             return hash;
         }
         bool operator==(const TTopicKey& other) const {
             return Endpoint == other.Endpoint && Database == other.Database
-                && TopicName == other.TopicName;
+                && ReadGroup == other.ReadGroup && TopicName == other.TopicName;
         }
     };
 
@@ -458,7 +460,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
     bool hasPendingPartitions = false;
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
     for (auto& partitionId : request.Record.GetPartitionIds()) {
-        TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath()};
+        TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetReadGroup(), source.GetTopicPath()};
         TPartitionKey key {topicKey, partitionId};
         auto locationIt = PartitionLocations.find(key);
         NActors::TActorId rowDispatcherId;

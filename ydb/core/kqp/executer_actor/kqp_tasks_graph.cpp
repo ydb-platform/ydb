@@ -1484,6 +1484,8 @@ void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryP
     }
 }
 
+// Restored graph only requires to update authentication secrets
+// and to reassign existing tasks between actual nodes.
 void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
         if (!protoInfo.HasTransform()) {
@@ -1631,6 +1633,8 @@ void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryP
         newChannel = channel;
         YQL_ENSURE(id == newChannel.Id);
     }
+
+    tasksGraph.GetMeta().IsRestored = true;
 }
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

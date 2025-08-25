@@ -1064,6 +1064,21 @@ class DockerImage:
 class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
 
+    DEFAULT_VALUE = "tsconfig.json"
+
+    @classmethod
+    def from_unit(cls, unit, flat_args, spec_args):
+        ts_config_paths = get_values_list(unit, cls.KEY)
+
+        # Special case: resolve path, relative to test dir
+        if unit.get("TS_TEST_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
+            tsconfig_path_test = os.path.join(unit.get("MODDIR"), ts_config_paths[0])
+            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_TEST_FOR_PATH"))
+
+            return {cls.KEY: tsconfig_path_for}
+
+        return {cls.KEY: ts_config_paths[0]}
+
 
 class TsStylelintConfig:
     KEY = 'TS_STYLELINT_CONFIG'

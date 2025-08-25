@@ -171,6 +171,7 @@ TS_TEST_FIELDS_BASE = (
     df.TestName.value,
     df.TestRecipes.value,
     df.TestTimeout.from_unit,
+    df.TsConfigPath.from_unit,
 )
 
 TS_TEST_SPECIFIC_FIELDS = {
@@ -348,13 +349,16 @@ def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
     return _build_directives([hide_part, "output"], paths)
 
 
+def _arc_path(unit: NotsUnitType, path: str) -> str:
+    return unit.resolve(unit.resolve_arc_path(path))
+
+
 def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
-    erm_packages_path = unit.get("ERM_PACKAGES_PATH")
-    path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
+    erm_packages_path = _arc_path(unit, unit.get("ERM_PACKAGES_PATH"))
 
-    return ErmJsonLite.load(path)
+    return ErmJsonLite.load(erm_packages_path)
 
 
 def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
@@ -492,16 +496,17 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
     mod_dir = unit.get("MODDIR")
     cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(unit.resolve(unit.resolve_arc_path(cur_dir)))
+    pj_path = build_pj_path(_arc_path(unit, cur_dir))
     dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
 
     # reversed for using the first tsconfig as the config for include processor (legacy)
     for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
         if not abs_tsconfig_path:
             raise Exception("tsconfig not found: {}".format(tsconfig_path))
 
-        tsconfig = TsConfig.load(abs_tsconfig_path)
+        source_dir = _arc_path(unit, _get_source_path(unit))
+        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
         config_files = tsconfig.inline_extend(dep_paths)
         config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
@@ -682,7 +687,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
         tsconfig_path = tsconfig_paths[0]
 
-    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    abs_tsconfig_path = _arc_path(unit, tsconfig_path)
     if not abs_tsconfig_path:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 

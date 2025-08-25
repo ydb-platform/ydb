@@ -2350,7 +2350,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key)
             )
             WITH (
-                STORE_EXTERNAL_BLOBS = ENABLED
+                STORE_EXTERNAL_BLOBS = ENABLED,
+                EXTERNAL_DATA_CHANNELS_COUNT = 7
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2358,6 +2359,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().value_or(false));
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7);
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {

@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
-        tieringHelper.GetTestHelper().GetKikimr().GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetDisableColumnShardBulkUpsertRequireAllColumns(true);
+        tieringHelper.GetTestHelper().GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetDisableBulkUpsertRequireAllColumns(true);
         olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);

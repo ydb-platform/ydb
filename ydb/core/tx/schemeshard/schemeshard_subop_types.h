@@ -125,6 +125,9 @@ enum ESimpleCounters : int;
     item(TxRotateCdcStreamAtTable, 108) \
     item(TxIncrementalRestoreFinalize, 109) \
     item(TxCreateLongIncrementalBackupOp, 110) \
+    item(TxCreateStreamingQuery, 111) \
+    item(TxDropStreamingQuery, 112) \
+    item(TxAlterStreamingQuery, 113) \
 
 // TX_STATE_TYPE_ENUM
 

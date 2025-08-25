@@ -281,12 +281,12 @@ private:
 };
 
 
-void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner, TDuration& duration) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
         case TExecutionOptions::EExecutionCase::GenericScript: {
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime), duration)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -303,14 +303,14 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
         }
 
         case TExecutionOptions::EExecutionCase::GenericQuery: {
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime), duration)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::YqlScript: {
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime), duration)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
@@ -340,6 +340,9 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     }
 
     const size_t numberLoops = executionOptions.LoopCount;
+    std::vector<double> durations;
+    const size_t maxQueueSize = numberLoops ? (numberLoops * 7 + 9) / 10 : 10;
+    double durationSec = 0.0;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
         if (queryId > 0) {
@@ -360,15 +363,37 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         }
 
         try {
-            RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner);
+            TDuration duration;
+            RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner, duration);
+            durationSec += duration.SecondsFloat();
+            if (id + 1 == numberQueries) {
+                if (durationSec > 0.001) {
+                    durations.push_back(durationSec);
+                    std::push_heap(durations.begin(), durations.end());
+                    if (durations.size() > maxQueueSize) {
+                        std::pop_heap(durations.begin(), durations.end());
+                        durations.pop_back();
+                    }
+                }
+                durationSec = 0.0;
+            }
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
             } else {
+                Cerr << "EXX\n";
                 throw exception;
             }
         }
     }
+
+    if (durations.size() > 1) {
+        auto gmean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
+        Cout << colors.Cyan()
+             << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gmean * 1000000.0))
+             << colors.Default() << Endl;
+    }
+
     runner.FinalizeRunner();
 
     if (executionOptions.HasResults()) {

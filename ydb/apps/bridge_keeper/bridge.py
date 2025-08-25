@@ -34,6 +34,9 @@ HEALTH_REPLY_TTL_SECONDS = 5.0
 # healthchecks reporting it bad, we should ignore them for some time.
 TO_SYNC_TRANSITION_GRACE_PERIOD = RESPONSIVENESS_THRESHOLD_SECONDS * 2
 
+# Emit an info-level "All is good" at most once per this period (seconds)
+ALL_GOOD_INFO_PERIOD_SECONDS = 60.0
+
 STATUS_COLOR = {
     # ydb reported statuses
 
@@ -348,7 +351,8 @@ class PileState:
             self.reported_alive == other.reported_alive and
             self.self_reported_alive == other.self_reported_alive and
             self.admin_reported_state == other.admin_reported_state and
-            self.reported_bad == other.reported_bad
+            self.reported_bad == other.reported_bad and
+            self.synced_since == other.synced_since # however, it means that admin_reported_state is different
         )
 
 
@@ -483,6 +487,7 @@ class Bridgekeeper:
         self.state_history = TransitionHistory()
         self._state_lock = threading.RLock()
         self._run_thread = None
+        self._last_all_good_info_ts = 0.0
 
     def _set_sync_time_if_any(self, new_state):
         # it is OK to read self.current_state without lock, since we are the only writer
@@ -540,7 +545,10 @@ class Bridgekeeper:
 
         self._set_sync_time_if_any(new_state)
 
-        logger.debug(f"Current state: {new_state}")
+        if new_state != self.current_state:
+            logger.info(f"State changed, new state: {new_state}")
+        else:
+            logger.debug(f"Current state: {new_state}")
 
         with self._state_lock:
             self.current_state = new_state
@@ -553,11 +561,15 @@ class Bridgekeeper:
             return None
 
         if len(self.current_state.Piles) == 0:
-            logger.error('No piles!')
+            logger.error("No piles!")
 
         bad_piles = [pile for pile, state in self.current_state.Piles.items() if not state.is_healthy()]
         if len(bad_piles) == 0:
-            logger.debug('All is good')
+            monotonicNow = time.monotonic()
+            if monotonicNow - self._last_all_good_info_ts >= ALL_GOOD_INFO_PERIOD_SECONDS:
+                logger.info(f"All is good: {self.current_state}")
+                self._last_all_good_info_ts = monotonicNow
+            logger.debug("All is good")
             return None
 
         new_primary_name = None
@@ -576,11 +588,13 @@ class Bridgekeeper:
                     if state.is_fit_for_promote():
                         candidates.append(pile_name)
                 if len(candidates) == 0:
-                    logger.critical('No candidates for new primary')
+                    logger.critical("No candidates for new primary")
                     return None
 
                 # TODO: try to choose best one?
                 new_primary_name = random.choice(candidates)
+                new_primary = self.current_state.Piles[new_primary_name]
+                logger.info(f"Pile '{new_primary_name}' is chosen as new primary: {new_primary}")
 
         commands = []
         for pile_name in bad_piles:
@@ -616,6 +630,8 @@ class Bridgekeeper:
         if commands and len(commands) > 0:
             some_failed = False
             for command in commands:
+                command_str = self.path_to_cli + " " + " ".join(command)
+                logger.info(f"Executing command: {command_str}")
                 result = execute_cli_command(self.path_to_cli, command, self.endpoints, strict_order=strict_order)
                 if result is None:
                     some_failed = True
@@ -623,7 +639,7 @@ class Bridgekeeper:
             if some_failed:
                 logger.critical("Failover failed: cluster might be down!")
             else:
-                logger.info("Failover complete")
+                logger.info("Failover commands executed successfully")
 
     def _maintain_once(self):
         self._do_healthcheck()
@@ -640,7 +656,7 @@ class Bridgekeeper:
                 self._maintain_once()
         except Exception as e:
             # TODO: restore logs
-            logger.error(f"Keeper's run loop got exception: {e}")
+            logger.exception(f"Keeper's run loop got exception: {e}")
             # TODO: exit
 
     def run_async(self):

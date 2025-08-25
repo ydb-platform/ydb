@@ -82,7 +82,6 @@ PartitionConfig {
 })", R"(
 storage_settings {
   store_external_blobs: DISABLED
-  external_data_channels_count: 1
 }
 )");
 
@@ -111,7 +110,6 @@ storage_settings {
     media: "ssd"
   }
   store_external_blobs: DISABLED
-  external_data_channels_count: 1
 }
 )");
 
@@ -126,6 +124,7 @@ PartitionConfig {
         AllowOtherKinds: false
       }
       ExternalThreshold: 1
+      ExternalChannelsCount: 7
     }
   }
 })", R"(
@@ -134,7 +133,7 @@ storage_settings {
     media: "hdd"
   }
   store_external_blobs: ENABLED
-  external_data_channels_count: 1
+  external_data_channels_count: 7
 }
 )");
     }

@@ -1,4 +1,4 @@
-# CREATE TABLE AS
+# CREATE TABLE ... AS SELECT ...
 
 ## Синтаксис CREATE TABLE AS
 

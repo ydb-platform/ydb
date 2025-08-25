@@ -53,7 +53,7 @@ public:
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -217,11 +217,11 @@ public:
         return TRow().AddUint64(100 * index).AddString(TStringBuilder() << "value" << index);
     }
 
-    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
-    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
+    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) { 
-        auto now = TInstant::Now(); 
+    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) {
+        auto now = TInstant::Now();
         TMessageInformation msgInfo(
             offset,
             "ProducerId",

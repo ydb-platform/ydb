@@ -2,9 +2,11 @@
 
 #include "parser_abstract.h"
 
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
-
 #include <util/generic/size_literals.h>
+
+namespace NFq::NConfig {
+    class TJsonParserConfig;
+} // namespace NFq::NConfig
 
 namespace NFq::NRowDispatcher {
 

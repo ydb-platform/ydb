@@ -69,6 +69,7 @@ message TEvMessage {
     reserved 2;
     uint32 PayloadId = 3;
     repeated uint64 Offsets = 4;
+    repeated uint64 WatermarksUs = 5;
 }
 
 message TEvMessageBatch {

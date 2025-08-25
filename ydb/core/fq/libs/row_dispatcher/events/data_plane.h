@@ -30,6 +30,10 @@ public:
 public:
     // Perform program creation and saving
     virtual void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) = 0;
+
+    virtual TStringBuf GetQuery() const {
+        return "";
+    }
 };
 
 struct TEvRowDispatcher {
@@ -73,7 +77,7 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvGetAddressRequest, EEv::EvCoordinatorRequest> {
         TEvCoordinatorRequest() = default;
         TEvCoordinatorRequest(
-            const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, 
+            const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             const std::vector<ui64>& partitionIds) {
             *Record.MutableSource() = sourceParams;
             for (const auto& id : partitionIds) {
@@ -91,7 +95,7 @@ struct TEvRowDispatcher {
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
-            
+
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,

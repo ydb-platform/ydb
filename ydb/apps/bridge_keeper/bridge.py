@@ -583,13 +583,20 @@ class Bridgekeeper:
             logger.error("No piles!")
 
         bad_piles = [pile for pile, state in self.current_state.Piles.items() if not state.is_healthy()]
+
+        monotonicNow = time.monotonic()
         if len(bad_piles) == 0:
-            monotonicNow = time.monotonic()
-            if monotonicNow - self._last_all_good_info_ts >= ALL_GOOD_INFO_PERIOD_SECONDS:
-                logger.info(f"All is good: {self.current_state}")
-                self._last_all_good_info_ts = monotonicNow
-            logger.debug("All is good")
-            return None
+            short_message = "All is good"
+            long_message = f"All is good: {self.current_state}"
+        else:
+            short_message = "There are bad piles"
+            long_message = f"There are bad piles: {self.current_state}"
+
+        if monotonicNow - self._last_all_good_info_ts >= ALL_GOOD_INFO_PERIOD_SECONDS:
+            logger.info(long_message)
+            self._last_all_good_info_ts = monotonicNow
+        else:
+            logger.debug(short_message)
 
         new_primary_name = None
         primary_name = self.current_state.PrimaryName

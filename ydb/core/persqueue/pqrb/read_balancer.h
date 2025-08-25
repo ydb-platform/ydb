@@ -118,6 +118,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
     void AnswerWaitingRequests(const TActorContext& ctx);
 
+    void BroadcastPartitionError(const TString& message, NKikimrServices::EServiceKikimr service, const TActorContext& ctx);
+
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);

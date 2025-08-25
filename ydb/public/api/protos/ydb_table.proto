@@ -171,6 +171,12 @@ message FulltextIndexSettings {
     Layout layout = 1;
     Tokenizer tokenizer = 2;
 
+    // Language used for language-sensitive operations, for example stopword filtering
+    // Example:
+    //   Value: english
+    // If not specified, no language-specific logic is applied
+    string language = 3;
+
     // Whether to Convert tokens to lowercase
     // Example:
     //   Input: "Quick"

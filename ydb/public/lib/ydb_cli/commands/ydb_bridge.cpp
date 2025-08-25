@@ -185,21 +185,24 @@ int TCommandBridgeList::Run(TConfig& config) {
 
     switch (OutputFormat) {
         case EDataFormat::Json: {
-            NJson::TJsonValue json(NJson::JSON_ARRAY);
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("generation", result.GetGeneration());
+            NJson::TJsonValue piles(NJson::JSON_ARRAY);
             for (const auto& s : state) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item.InsertValue("pile_name", s.PileName);
                 item.InsertValue("state", PileStateToString(s.State));
-                json.AppendValue(item);
+                piles.AppendValue(item);
             }
+            json.InsertValue("piles", piles);
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
         }
         case EDataFormat::Csv: {
-            Cout << "pile_name,state" << Endl;
+            Cout << "pile_name,state,generation" << Endl;
             for (const auto& s : state) {
-                Cout << s.PileName << "," << PileStateToString(s.State) << Endl;
+                Cout << s.PileName << "," << PileStateToString(s.State) << "," << result.GetGeneration() << Endl;
             }
             break;
         }
@@ -208,6 +211,7 @@ int TCommandBridgeList::Run(TConfig& config) {
             for (const auto& s : state) {
                 ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
+            ss << "Generation: " << result.GetGeneration() << Endl;
             Cout << ss.Str();
             break;
         }

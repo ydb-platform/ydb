@@ -203,6 +203,7 @@ struct TSchemeCacheNavigate {
         KindBackupCollection = 23,
         KindTransfer = 24,
         KindSysView = 25,
+        KindSecret = 26,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -327,6 +328,11 @@ struct TSchemeCacheNavigate {
     struct TSysViewInfo : public TAtomicRefCount<TSysViewInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TSysViewDescription Description;
+    };
+
+    struct TSecretInfo : public TAtomicRefCount<TSecretInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSecretDescription Description;
     };
 
     struct TEntry {

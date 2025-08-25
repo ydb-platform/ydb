@@ -168,6 +168,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -389,6 +390,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
+            return *modifyScheme.MutableCreateSecret()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+            return *modifyScheme.MutableAlterSecret()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
@@ -753,7 +760,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpAlterSecret:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
         {
+            // TODO(yurikiselev): Change grants according to discussed [issue:23460]
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
@@ -815,6 +825,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpDropSecret:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));

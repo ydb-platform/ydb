@@ -151,7 +151,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsDirectory();
+                .IsDirectory()
+                .IsValidLeafName(context.UserToken.Get());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

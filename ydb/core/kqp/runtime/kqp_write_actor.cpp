@@ -1184,7 +1184,7 @@ public:
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
-        } else if (state == IKqpTransactionManager::EXECUTING) {
+        } else if (state == IKqpTransactionManager::EXECUTING && !ev->Get()->NotDelivered) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
@@ -1196,7 +1196,8 @@ public:
             return;
         } else if (state == IKqpTransactionManager::PROCESSING
                 || state == IKqpTransactionManager::PREPARING
-                || state == IKqpTransactionManager::PREPARED) {
+                || state == IKqpTransactionManager::PREPARED
+                || (state == IKqpTransactionManager::EXECUTING && ev->Get()->NotDelivered)) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,

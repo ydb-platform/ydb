@@ -3582,18 +3582,66 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    constexpr ui64 MinVectorDimension = 1;
+    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MinLevels = 1;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
+    constexpr ui64 MaxClusters = 2048;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+
+    auto validateInRange = [&](const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue) {
+        if (!value.has_value()) {
+            ctx.Error() << name << " should be set";
+            return false;
+        }
+
+        if (minValue <= *value && *value <= maxValue) {
+            return true;
+        }
+
+        ctx.Error() << "Invalid " << name << ": " << *value << " should be between " << minValue << " and " << maxValue;
+        return false;
+    };
+
     if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
+        return false;
+    }
+    if (Distance && Similarity) {
+        ctx.Error() << "only one of distance or similarity should be set, not both";
         return false;
     }
     if (!VectorType) {
         ctx.Error() << "vector_type should be set";
         return false;
     }
-    if (!VectorDimension) {
-        ctx.Error() << "vector_dimension should be set";
+
+    if (!validateInRange("vector_dimension", VectorDimension, MinVectorDimension, MaxVectorDimension)) {
         return false;
     }
+    if (!validateInRange("levels", Levels, MinLevels, MaxLevels)) {
+        return false;
+    }
+    if (!validateInRange("clusters", Clusters, MinClusters, MaxClusters)) {
+        return false;
+    }
+
+    ui64 clustersPowLevels = 1;
+    for (ui64 i = 0; i < *Levels; ++i) {
+        clustersPowLevels *= *Clusters;
+        if (clustersPowLevels > MaxClustersPowLevels) {
+            ctx.Error() << "Invalid clusters^levels: " << *Clusters << "^" << *Levels << " should be less than " << MaxClustersPowLevels;
+            return false;
+        }
+    }
+
+    if (*VectorDimension * *Clusters > MaxVectorDimensionMultiplyClusters) {
+        ctx.Error() << "Invalid vector_dimension*clusters: " << *VectorDimension << "*" << *Clusters << " should be less than " << MaxVectorDimensionMultiplyClusters;
+        return false;
+    }
+
     return true;
 }
 

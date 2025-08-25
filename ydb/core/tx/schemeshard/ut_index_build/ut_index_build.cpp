@@ -1485,6 +1485,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         const ui32 cols = 4;
         TVector<TCell> cells;
         cells.reserve(totalRows * cols);
+        TDeque<TString> storage; // appending values to deque does not invalidate references
         auto addRow = [&](ui32 key, std::optional<ui32> index1, std::optional<ui32> index2, const TString& value) {
             cells.emplace_back(TCell::Make<ui32>(key));
 
@@ -1500,7 +1501,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                 cells.emplace_back(TCell());
             }
 
-            cells.emplace_back(TCell(value.c_str(), value.size()));
+            auto& storedValue = storage.emplace_back(value);
+            cells.emplace_back(TCell(storedValue.c_str(), storedValue.size()));
 
             UNIT_ASSERT_VALUES_EQUAL(cells.size() % cols, 0);
         };

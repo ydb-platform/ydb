@@ -102,9 +102,8 @@ public:
             return page;
         }
 
-        auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
         PagesSize += info->GetPageSize(pageId);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv));
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { pageId }));
 
         Spent->Alter(false); // pause measurement
         ReleaseResources();
@@ -121,7 +120,7 @@ public:
         ObtainResources();
         Spent->Alter(true); // resume measurement
         
-        for (auto& loaded : msg->Loaded) {
+        for (auto& loaded : msg->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }

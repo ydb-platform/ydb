@@ -41,7 +41,7 @@ public:
 
     virtual void Reallocate() override;
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         return std::make_shared<arrow::ChunkedArray>(Array);
     }
 
@@ -58,9 +58,7 @@ public:
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(scalar);
-        auto builder = NArrow::MakeBuilder(scalar->type, 1);
-        TStatusValidator::Validate(builder->AppendScalar(*scalar));
-        return NArrow::FinishBuilder(std::move(builder));
+        return TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, 1));
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromOptionalScalar(
@@ -130,6 +128,10 @@ private:
         }
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
+        return Array;
+    }
+
 protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
@@ -149,10 +151,6 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
 public:
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
-        return Array;
-    }
-
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

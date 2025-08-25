@@ -6,6 +6,16 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("user").Value(result.User)
+        .EndMap();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TError TCheckPermissionResult::ToError(
     const std::string& user,
     EPermission permission,
@@ -89,4 +99,3 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

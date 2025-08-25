@@ -32,6 +32,8 @@ namespace NActors {
         i16 ForeignSlots = 0;
         bool InPriorityOrder = false;
         TString PoolName;
+        bool ForcedForeignSlots = false;
+        std::vector<i16> AdjacentPools;
     };
 
     struct TPoolThreadRange {
@@ -43,7 +45,7 @@ namespace NActors {
         std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
-    
+
         TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
 

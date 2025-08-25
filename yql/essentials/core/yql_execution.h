@@ -69,12 +69,29 @@ namespace NYql {
 
         TMaybe<TCounters> Counters;
 
+        struct TAlert final {
+            TString Type;
+            TString Message;
+
+            bool operator == (const TAlert& rhs) const noexcept {
+                return (Type == rhs.Type) &&
+                       (Message == rhs.Message);
+            }
+
+            bool operator != (const TAlert& rhs) const noexcept {
+                return !operator==(rhs);
+            }
+        };
+
+        TVector<TAlert> Alerts;
+
         TOperationProgress(const TString& category, ui32 id,
-            EState state, const TString& stage = "")
+            EState state, const TString& stage = "", const TVector<TAlert>& alerts = {})
             : Category(category)
             , Id(id)
             , State(state)
             , Stage(stage, TInstant::Now())
+            , Alerts(alerts)
         {
         }
 

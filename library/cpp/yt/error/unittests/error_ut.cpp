@@ -397,6 +397,22 @@ TEST(TErrorTest, FormatCtor)
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
+TEST(TErrorTest, ExceptionCtor)
+{
+    {
+        auto error = TError(std::runtime_error("Some error"));
+        EXPECT_EQ(error.GetMessage(), "Some error");
+        EXPECT_EQ(error.Attributes().Get<std::string>("exception_type"), "std::runtime_error");
+    }
+    EXPECT_EQ(TError(std::runtime_error("Some bad char sequences: %v %Qv {}")).GetMessage(),
+        "Some bad char sequences: %v %Qv {}");
+
+    EXPECT_EQ(TError(TSimpleException("Some error")).GetMessage(),
+        "Some error");
+    EXPECT_EQ(TError(TSimpleException("Some bad char sequences: %v %d {}")).GetMessage(),
+        "Some bad char sequences: %v %d {}");
+}
+
 TEST(TErrorTest, FindRecursive)
 {
     auto inner = TError("Inner")
@@ -771,6 +787,61 @@ TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
     // swallow([] {
     //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, TErrorCode{}, "Foo%v");
     // });
+}
+
+TEST(TErrorTest, Enrichers)
+{
+    static auto getAttribute = [] (const TError& error) {
+        return error.Attributes().Get<TString>("test_attribute", "");
+    };
+
+    {
+        static thread_local bool testEnricherEnabled = false;
+        testEnricherEnabled = true;
+
+        TError::RegisterEnricher([](TError* error) {
+            if (testEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "X");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "X");
+
+        // std::exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+
+        // Copying.
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "X");
+
+        testEnricherEnabled = false;
+    }
+
+    {
+        static thread_local bool testFromExceptionEnricherEnabled = false;
+        testFromExceptionEnricherEnabled = true;
+
+        TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
+            if (testFromExceptionEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "");
+
+        // From exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+
+        // From exception twice.
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "XX");
+
+        testFromExceptionEnricherEnabled = false;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

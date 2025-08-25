@@ -1,6 +1,6 @@
 RECURSE(
+    async
     core
-    cppcoro
     dnsresolver
     examples
     helpers

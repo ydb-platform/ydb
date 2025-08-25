@@ -523,6 +523,9 @@ struct TOperationSpecBase
     /// If operation doesn't finish in time it will be aborted.
     FLUENT_FIELD_OPTION(TDuration, TimeLimit);
 
+    /// @brief Alias for searching for an operation in the future.
+    FLUENT_FIELD_OPTION(TString, Alias);
+
     /// @brief Title to be shown in web interface.
     FLUENT_FIELD_OPTION(TString, Title);
 
@@ -887,6 +890,15 @@ struct TUserJobSpec
     ///
     /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
     FLUENT_FIELD_OPTION(TDiskRequest, DiskRequest);
+
+    ///
+    /// @brief Activates the RPC proxy within the job proxy.
+    ///
+    /// By enabling this option, the environment variable YT_JOB_PROXY_SOCKET_PATH will be set.
+    /// You can use this variable to obtain the unix domain socket path and then construct a client for sending requests.
+    ///
+    /// @note Do not enable this option without prior discussion with the YTsaurus team.
+    FLUENT_FIELD_DEFAULT(bool, EnableRpcProxyInJobProxy, false);
 
 private:
     TVector<std::tuple<TLocalFilePath, TAddLocalFileOptions>> LocalFiles_;
@@ -2347,6 +2359,7 @@ enum class EOperationAttribute : int
     Spec              /* "spec" */,
     FullSpec          /* "full_spec" */,
     UnrecognizedSpec  /* "unrecognized_spec" */,
+    Alerts            /* "alerts" */,
 };
 
 ///
@@ -2846,6 +2859,45 @@ enum class EJobSortDirection : int
 };
 
 ///
+/// @brief Attributes to request for a job.
+enum class EJobAttribute : int
+{
+    Id                /* "id" */,
+    Type              /* "type" */,
+    State             /* "state" */,
+    Address           /* "address" */,
+    TaskName          /* "task_name" */,
+    StartTime         /* "start_time" */,
+    FinishTime        /* "finish_time" */,
+    Progress          /* "progress" */,
+    StderrSize        /* "stderr_size" */,
+    Error             /* "error" */,
+    Result            /* "result" */,
+    BriefStatistics   /* "brief_statistics" */,
+    InputPaths        /* "input_paths" */,
+    CoreInfos         /* "core_infos" */,
+};
+
+///
+/// @brief A class that specifies which attributes to request when using @ref NYT::IClient::GetJob or @ref NYT::IClient::ListJobs.
+struct TJobAttributeFilter
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TJobAttributeFilter;
+    /// @endcond
+
+    THashSet<EJobAttribute> Attributes_;
+
+    ///
+    /// @brief Add attribute to the filter. Calls are supposed to be chained.
+    TSelf& Add(EJobAttribute attribute)
+    {
+        Attributes_.insert(attribute);
+        return *this;
+    }
+};
+
+///
 /// @brief Options for @ref NYT::IClient::ListJobs.
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list_jobs
@@ -2908,6 +2960,10 @@ struct TListJobsOptions
     ///
     /// @brief Search for jobs with filters encoded in token.
     FLUENT_FIELD_OPTION(TString, ContinuationToken);
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 
     /// @}
 
@@ -3053,6 +3109,10 @@ struct TGetJobOptions
     /// @cond Doxygen_Suppress
     using TSelf = TGetJobOptions;
     /// @endcond
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 };
 
 ///
@@ -3154,7 +3214,7 @@ struct TJobTraceEvent
 
     ///
     /// @brief Index of the trace event.
-    i64 EventIndex;
+    i64 EventIndex = 0;
 
     ///
     /// @brief Raw evenr in json format.
@@ -3261,6 +3321,10 @@ struct IOperation
     ///
     /// @return `Nothing()` if operation has no running jobs yet, e.g. when it is in "materializing" or "pending" state.
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
+
+    ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
 
     ///
     /// @brief Abort operation.

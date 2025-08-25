@@ -3,7 +3,7 @@
 All the {{ ydb-short-name }} DSTool utility subcommands share the same global options.
 
 | Option | Description |
----|---
+| --- | --- |
 | `-?`, `-h`, `--help` | Print the built-in help. |
 | `-v`, `--verbose` | Print detailed output while executing the command. |
 | `-q`, `--quiet` | Suppress non-critical messages when executing the command. |

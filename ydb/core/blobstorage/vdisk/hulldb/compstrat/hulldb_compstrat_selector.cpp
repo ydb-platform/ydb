@@ -1,7 +1,6 @@
 #include "hulldb_compstrat_selector.h"
 #include "hulldb_compstrat_balance.h"
 #include "hulldb_compstrat_delsst.h"
-#include "hulldb_compstrat_lazy.h"
 #include "hulldb_compstrat_promote.h"
 #include "hulldb_compstrat_ratio.h"
 #include "hulldb_compstrat_space.h"
@@ -99,6 +98,13 @@ namespace NKikimr {
                 return action;
             }
 
+            // compact explicitly defined SST's, if set
+            action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
+            if (action != ActNothing) {
+                ++HullCtx->CompactionStrategyGroup.BlocksExplicit();
+                return action;
+            }
+
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
@@ -129,6 +135,13 @@ namespace NKikimr {
                 return action;
             }
 
+            // compact explicitly defined SST's, if set
+            action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
+            if (action != ActNothing) {
+                ++HullCtx->CompactionStrategyGroup.BarriersExplicit();
+                return action;
+            }
+
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
@@ -141,4 +154,3 @@ namespace NKikimr {
 
     } // NHullComp
 } // NKikimr
-

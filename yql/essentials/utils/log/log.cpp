@@ -1,11 +1,16 @@
 #include "log.h"
 
+#include "format.h"
+#include "fwd_backend.h"
+
 #include <yql/essentials/utils/log/proto/logger_config.pb.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/logger/system.h>
 #include <library/cpp/logger/composite.h>
+
 #include <util/datetime/systime.h>
 #include <util/generic/strbuf.h>
 #include <util/stream/format.h>
@@ -26,9 +31,9 @@ namespace {
 class TLimitedLogBackend final : public TLogBackend {
 public:
     TLimitedLogBackend(TAutoPtr<TLogBackend> b, TAtomic& flag, ui64 limit) noexcept
-        : Backend(b)
-        , Flag(flag)
-        , Limit(limit)
+        : Backend_(b)
+        , Flag_(flag)
+        , Limit_(limit)
     {
     }
 
@@ -36,24 +41,24 @@ public:
     }
 
     void ReopenLog() final {
-        Backend->ReopenLog();
+        Backend_->ReopenLog();
     }
 
     void WriteData(const TLogRecord& rec) final {
-        const auto remaining = AtomicGet(Limit);
-        const bool final = remaining > 0 && AtomicSub(Limit, rec.Len) <= 0;
+        const auto remaining = AtomicGet(Limit_);
+        const bool final = remaining > 0 && AtomicSub(Limit_, rec.Len) <= 0;
         if (remaining > 0 || rec.Priority <= TLOG_WARNING) {
-            Backend->WriteData(rec);
+            Backend_->WriteData(rec);
         }
         if (final) {
-            AtomicSet(Flag, 1);
+            AtomicSet(Flag_, 1);
         }
     }
 
 private:
-    THolder<TLogBackend> Backend;
-    TAtomic& Flag;
-    TAtomic Limit;
+    THolder<TLogBackend> Backend_;
+    TAtomic& Flag_;
+    TAtomic Limit_;
 };
 
 class TEmergencyLogOutput: public IOutputStream {
@@ -197,10 +202,39 @@ NYql::NProto::TLoggingConfig::TLogDestination CreateLogDestination(const TString
     return destination;
 }
 
+NYql::NLog::TFormatter Formatter(const NYql::NProto::TLoggingConfig& config) {
+    switch (config.GetFormat().Format_case()) {
+    case NYql::NProto::TLoggingConfig_TFormat::kLegacyFormat:
+        return NYql::NLog::LegacyFormat;
+    case NYql::NProto::TLoggingConfig_TFormat::kJsonFormat:
+        return NYql::NLog::JsonFormat;
+    case NYql::NProto::TLoggingConfig_TFormat::FORMAT_NOT_SET:
+        return NYql::NLog::LegacyFormat;
+    }
+}
+
 } // namspace
 
 namespace NYql {
 namespace NLog {
+
+namespace NImpl {
+
+TString GetThreadId() {
+#ifdef _unix_
+    return ToString(Hex(SystemCurrentThreadIdImpl()));
+#else
+    return ToString(SystemCurrentThreadIdImpl());
+#endif
+}
+
+TString GetLocalTime() {
+    TStringStream time;
+    NYql::NLog::WriteLocalTime(&time);
+    return std::move(time.Str());
+}
+
+}
 
 void WriteLocalTime(IOutputStream* out) {
     struct timeval now;
@@ -216,22 +250,6 @@ void WriteLocalTime(IOutputStream* out) {
 
     out->Write(buf, sizeof(buf) - 1);
 }
-
-/**
- * TYqlLogElement
- * automaticaly adds new line char
- */
-class TYqlLogElement: public TLogElement {
-public:
-    TYqlLogElement(const TLog* parent, ELevel level)
-        : TLogElement(parent, ELevelHelpers::ToLogPriority(level))
-    {
-    }
-
-    ~TYqlLogElement() {
-        *this << '\n';
-    }
-};
 
 TYqlLog::TYqlLog()
     : TLog()
@@ -270,41 +288,44 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
         EComponent component, ELevel level,
         TStringBuf file, int line) const
 {
-    const bool writeMsg = AtomicCas(&WriteTruncMsg_, 0, 1);
-    auto element = MakeHolder<TYqlLogElement>(this, writeMsg ? ELevel::FATAL : level);
-    if (writeMsg) {
-        WriteLogPrefix(element.Get(), EComponent::Default, ELevel::FATAL, __FILE__, __LINE__);
-        *element << "Log is truncated by limit\n";
-        *element << ELevelHelpers::ToLogPriority(level);
+    if (const bool writeMsg = AtomicCas(&WriteTruncMsg_, 0, 1)) {
+        TLogElement fatal(this, ELevelHelpers::ToLogPriority(ELevel::FATAL));
+        Contextify(fatal, EComponent::Default, ELevel::FATAL, __FILE__, __LINE__);
+        fatal << "Log is truncated by limit";
     }
 
-    WriteLogPrefix(element.Get(), component, level, file, line);
+    auto element = MakeHolder<TLogElement>(this, ELevelHelpers::ToLogPriority(level));
+    Contextify(*element, component, level, file, line);
     return element.Release();
 }
 
-void TYqlLog::WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const {
-    // LOG FORMAT:
-    //     {datetime} {level} {procname}(pid={pid}, tid={tid}) [{component}] {source_location}: {message}\n
-    //
+void TYqlLog::Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const {
+    const auto action = [&](std::pair<TString, TString> pair) {
+        element.With(std::move(pair.first), std::move(pair.second));
+    };
+    Contextify(action, component, level, file, line);
+}
 
-    WriteLocalTime(out);
-    *out << ' '
-             << ELevelHelpers::ToString(level) << ' '
-             << ProcName_ << TStringBuf("(pid=") << ProcId_
-             << TStringBuf(", tid=")
-#ifdef _unix_
-             << Hex(SystemCurrentThreadIdImpl())
-#else
-             << SystemCurrentThreadIdImpl()
-#endif
-             << TStringBuf(") [") << EComponentHelpers::ToString(component)
-             << TStringBuf("] ")
-             << file.RAfter(LOCSLASH_C) << ':' << line << TStringBuf(": ");
+void TYqlLog::Contextify(TLogRecord& record, EComponent component, ELevel level, TStringBuf file, int line) const {
+    const auto action = [&](std::pair<TString, TString> pair) {
+        record.MetaFlags.emplace_back(std::move(pair.first), std::move(pair.second));
+    };
+    Contextify(action, component, level, file, line);
 }
 
 void TYqlLog::SetMaxLogLimit(ui64 limit) {
-    auto backend = TLog::ReleaseBackend();
-    TLog::ResetBackend(THolder(new TLimitedLogBackend(backend, WriteTruncMsg_, limit)));
+    THolder<TLogBackend> backend = TLog::ReleaseBackend();
+
+    auto* forwarding = dynamic_cast<TForwardingLogBackend*>(backend.Get());
+    if (!forwarding) {
+        TLog::ResetBackend(THolder(new TLimitedLogBackend(backend, WriteTruncMsg_, limit)));
+        return;
+    }
+
+    TAutoPtr<TLogBackend> child = forwarding->GetChild();
+    TAutoPtr<TLogBackend> limited = new TLimitedLogBackend(child, WriteTruncMsg_, limit);
+    forwarding->SetChild(limited);
+    TLog::ResetBackend(std::move(backend));
 }
 
 void InitLogger(const TString& logType, bool startAsDaemon) {
@@ -367,27 +388,36 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
             }
         }
 
-        // Combine created backends and set them for logger
-        auto& logger = TLoggerOperator<TYqlLog>::Log();
+        THolder<TLogBackend> backend;
         if (backends.size() == 1) {
-            logger.ResetBackend(std::move(backends[0]));
+            backend = std::move(backends[0]);
         } else if (backends.size() > 1) {
-            THolder<TCompositeLogBackend> compositeBackend = MakeHolder<TCompositeLogBackend>();
+            auto compositeBackend = MakeHolder<TCompositeLogBackend>();
             for (auto& backend : backends) {
                 compositeBackend->AddLogBackend(std::move(backend));
             }
-            logger.ResetBackend(std::move(compositeBackend));
+
+            backend = std::move(compositeBackend);
         }
+
+        if (!backend) {
+            return;
+        }
+
+        auto& logger = TLoggerOperator<TYqlLog>::Log();
+        logger.ResetBackend(MakeFormattingLogBackend(Formatter(config), std::move(backend)));
     }
     NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
-void InitLogger(TAutoPtr<TLogBackend> backend) {
+void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter) {
     with_lock(g_InitLoggerMutex) {
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {
             return;
         }
+
+        backend = MakeFormattingLogBackend(std::move(formatter), std::move(backend));
 
         TComponentLevels levels;
         levels.fill(ELevel::INFO);
@@ -396,8 +426,8 @@ void InitLogger(TAutoPtr<TLogBackend> backend) {
     NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
-void InitLogger(IOutputStream* out) {
-    InitLogger(new TStreamLogBackend(out));
+void InitLogger(IOutputStream* out, TFormatter formatter) {
+    InitLogger(new TStreamLogBackend(out), std::move(formatter));
 }
 
 void CleanupLogger() {

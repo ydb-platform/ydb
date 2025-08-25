@@ -46,21 +46,20 @@ std::vector<std::tuple<ui64, std::string, std::string, double, double, double, d
 }
 
 
-const std::vector<std::tuple<ui64, std::string, std::string, double, double, double, double>> TpchSamples = MakeTpchSamples();
-
-
 template<bool LLVM, bool Spilling>
 void RunTestLastTpch()
 {
     TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
-    Cerr << "tpc-h sample has " << TpchSamples.size() << " rows" << Endl;
+    const std::vector<std::tuple<ui64, std::string, std::string, double, double, double, double>> tpchSamples = MakeTpchSamples();
+
+    Cerr << "tpc-h sample has " << tpchSamples.size() << " rows" << Endl;
 
     struct TPairHash { size_t operator()(const std::pair<std::string_view, std::string_view>& p) const { return CombineHashes(std::hash<std::string_view>()(p.first), std::hash<std::string_view>()(p.second)); } };
 
     std::unordered_map<std::pair<std::string_view, std::string_view>, std::pair<ui64, std::array<double, 5U>>, TPairHash> expects;
     const auto t = TInstant::Now();
-    for (auto& sample : TpchSamples) {
+    for (auto& sample : tpchSamples) {
         if (std::get<0U>(sample) <= TpchDateBorder) {
             const auto& ins = expects.emplace(std::pair<std::string_view, std::string_view>{std::get<1U>(sample), std::get<2U>(sample)}, std::pair<ui64, std::array<double, 5U>>{0ULL, {0., 0., 0., 0., 0.}});
             auto& item = ins.first->second;

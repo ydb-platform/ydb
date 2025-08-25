@@ -19,9 +19,9 @@ bool IsPathPointingToAttributes(const TYPath& path);
 //! Eliminates path suffix after the @ token, if it exists.
 TYPath StripAttributes(const TYPath& path);
 
-//! NB! Escapes special characters in literals.
+//! NB: This function escapes special characters in literals.
 template <typename ...TArgs>
-TYPath YPathJoin(const TYPath& path, TArgs&&... literals);
+TYPath YPathJoin(TYPathBuf path, TArgs&&... literals);
 
 ////////////////////////////////////////////////////////////////////////////////
 

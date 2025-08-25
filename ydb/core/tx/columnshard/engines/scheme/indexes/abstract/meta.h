@@ -59,7 +59,7 @@ private:
     }
 
 protected:
-    virtual TConclusion<std::shared_ptr<IPortionDataChunk>> DoBuildIndexOptional(
+    virtual TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
@@ -114,11 +114,9 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    TConclusion<std::shared_ptr<IPortionDataChunk>> BuildIndexOptional(
+    TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> BuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
-        const TIndexInfo& indexInfo) const {
-        return DoBuildIndexOptional(data, recordsCount, indexInfo);
-    }
+        const TIndexInfo& indexInfo) const;
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;

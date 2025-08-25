@@ -80,6 +80,7 @@ ENDIF()
 PEERDIR(
     library/cpp/resource
     library/cpp/yson
+    library/cpp/string_utils/base64
     yql/essentials/core
     yql/essentials/minikql/arrow
     yql/essentials/minikql/computation

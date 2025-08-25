@@ -39,6 +39,8 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
     reflection.ListFields(proto, &fields);
     TStringStream res;
     switch (proto.kind()) {
+        case Ydb::TOperationId::UNUSED:
+            break;
         case Ydb::TOperationId::OPERATION_DDL:
         case Ydb::TOperationId::OPERATION_DML:
             res << "ydb://operation";
@@ -63,6 +65,12 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
             break;
         case Ydb::TOperationId::SCRIPT_EXECUTION:
             res << "ydb://scriptexec";
+            break;
+        case Ydb::TOperationId::INCREMENTAL_BACKUP:
+            res << "ydb://incbackup";
+            break;
+        case Ydb::TOperationId::RESTORE:
+            res << "ydb://restore";
             break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
@@ -301,6 +309,14 @@ TOperationId::EKind ParseKind(const std::string_view value) {
 
     if (value.starts_with("scriptexec")) {
         return TOperationId::SCRIPT_EXECUTION;
+    }
+
+    if (value.starts_with("incbackup")) {
+        return TOperationId::INCREMENTAL_BACKUP;
+    }
+
+    if (value.starts_with("restore")) {
+        return TOperationId::RESTORE;
     }
 
     return TOperationId::UNUSED;

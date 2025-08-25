@@ -1,16 +1,24 @@
 LIBRARY()
 
 SRCS(
+    yql_yt_client.cpp
+    yql_yt_column_group_helpers.cpp
     yql_yt_log_context.cpp
     yql_yt_parse_records.cpp
     yql_yt_table_data_service_key.cpp
+    yql_yt_table_input_streams.cpp
 )
 
 PEERDIR(
     library/cpp/http/io
+    library/cpp/yson_pull
+    yt/cpp/mapreduce/client
     yt/cpp/mapreduce/interface
-    yt/yql/providers/yt/fmr/yt_service/impl
+    yt/yql/providers/yt/fmr/request_options
+    yt/yql/providers/yt/fmr/yt_job_service/interface
+    yt/yql/providers/yt/fmr/table_data_service/interface
     yt/yql/providers/yt/codec
+    yt/yql/providers/yt/lib/yson_helpers
     yql/essentials/utils
 )
 

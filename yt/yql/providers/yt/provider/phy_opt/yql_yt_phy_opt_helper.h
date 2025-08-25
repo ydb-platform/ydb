@@ -49,7 +49,6 @@ NNodes::TCoLambda FallbackLambdaInput(NNodes::TCoLambda lambda, TExprContext& ct
 
 NNodes::TCoLambda FallbackLambdaOutput(NNodes::TCoLambda lambda, TExprContext& ctx);
 
-NNodes::TYtDSink GetDataSink(NNodes::TExprBase input, TExprContext& ctx);
 NNodes::TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 
@@ -116,5 +115,16 @@ bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& 
 NNodes::TExprBase WrapOp(NNodes::TYtOutputOpBase op, TExprContext& ctx);
 
 NNodes::TCoLambda MapEmbedInputFieldsFilter(NNodes::TCoLambda lambda, bool ordered, NNodes::TCoAtomList fields, TExprContext& ctx);
+
+NNodes::TExprBase BuildMapForPruneKeys(
+    const NNodes::TExprBase node,
+    const TExprNode::TPtr extractorLambda,
+    bool isOrdered,
+    const TString& cluster,
+    const TExprNode::TPtr newWorld,
+    const NNodes::TYtSectionList newInput,
+    const TTypeAnnotationNode* outItemType,
+    TExprContext& ctx,
+    const TYtState::TPtr& state);
 
 }  // namespace NYql::NPrivate

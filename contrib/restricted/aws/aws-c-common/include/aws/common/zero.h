@@ -56,11 +56,12 @@ bool aws_is_mem_zeroed(const void *buf, size_t bufsize);
 AWS_COMMON_API
 void aws_secure_zero(void *pBuf, size_t bufsize);
 
+AWS_EXTERN_C_END
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/zero.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ZERO_H */

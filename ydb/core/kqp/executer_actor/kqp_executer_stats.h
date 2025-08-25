@@ -16,6 +16,22 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
+struct TMinStats {
+    std::vector<ui64> Values;
+    ui64 MinValue = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
+struct TMaxStats {
+    std::vector<ui64> Values;
+    ui64 MaxValue = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
 struct TTimeSeriesStats {
     std::vector<ui64> Values;
     ui32 HistorySampleCount = 0;
@@ -36,7 +52,15 @@ struct TPartitionedStats : public TTimeSeriesStats {
 
     void ResizeByTasks(ui32 taskCount);
     void ResizeByParts(ui32 partCount, ui32 taskCount);
-    void SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggSum(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggMin(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+    void SetNonZeroAggMax(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+};
+
+enum EPartitionedAggKind {
+    PartitionedAggSum,
+    PartitionedAggMin,
+    PartitionedAggMax,
 };
 
 struct TTimeMultiSeriesStats {
@@ -44,7 +68,7 @@ struct TTimeMultiSeriesStats {
     ui32 TaskCount = 0;
     ui32 PartCount = 0;
 
-    void SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries);
+    void SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries, EPartitionedAggKind aggKind);
 };
 
 struct TExternalStats : public TTimeMultiSeriesStats {
@@ -52,6 +76,11 @@ struct TExternalStats : public TTimeMultiSeriesStats {
     TPartitionedStats ExternalBytes;
     TPartitionedStats FirstMessageMs;
     TPartitionedStats LastMessageMs;
+    TPartitionedStats CpuTimeUs;
+    TPartitionedStats WaitInputTimeUs;
+    TPartitionedStats WaitOutputTimeUs;
+    TPartitionedStats Finished;
+    ui32 PartitionCount = 0;
 
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
@@ -200,6 +229,10 @@ struct TStageExecutionStats {
     std::vector<ui64> DurationUs;
     TTimeSeriesStats WaitInputTimeUs;
     TTimeSeriesStats WaitOutputTimeUs;
+    TMinStats CurrentWaitInputTimeUs;
+    TMinStats CurrentWaitOutputTimeUs;
+    ui64 UpdateTimeMs = 0;
+    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;
@@ -219,9 +252,11 @@ struct TStageExecutionStats {
     TTimeSeriesStats MaxMemoryUsage;
 
     ui32 HistorySampleCount = 0;
-    ui32 TaskCount = 0;
+    ui32 TaskCount = 0; // rounded to 4 value of Task2Index.size(), which is actual
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
+    std::vector<TStageExecutionStats*> InputStages;
+    std::vector<TStageExecutionStats*> OutputStages;
 
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
@@ -235,16 +270,22 @@ struct TStageExecutionStats {
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
+    bool IsDeadlocked(ui64 deadline);
+    bool IsFinished();
 };
 
 struct TExternalPartitionStat {
-    ui64 ExternalRows;
-    ui64 ExternalBytes;
-    ui64 FirstMessageMs;
-    ui64 LastMessageMs;
+    ui64 ExternalRows = 0;
+    ui64 ExternalBytes = 0;
+    ui64 FirstMessageMs = 0;
+    ui64 LastMessageMs = 0;
+    ui64 CpuTimeUs;
+    ui64 WaitInputTimeUs;
+    ui64 WaitOutputTimeUs;
+    bool Finished = false;
     TExternalPartitionStat() = default;
-    TExternalPartitionStat(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs)
-    : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs)
+    TExternalPartitionStat(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs, ui64 cpuTimeUs, ui64 waitInputTimeUs, ui64 waitOutputTimeUs, bool finished)
+    : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs), CpuTimeUs(cpuTimeUs), WaitInputTimeUs(waitInputTimeUs), WaitOutputTimeUs(waitOutputTimeUs), Finished(finished)
     {}
 };
 
@@ -257,12 +298,12 @@ struct TIngressExternalPartitionStat {
 
 struct TQueryExecutionStats {
 private:
-    std::map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
-    std::map<ui32, bool> UseLlvmByStageId;
-    std::map<ui32, TStageExecutionStats> StageStats;
-    std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
+    std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
+    std::unordered_map<ui32, bool> UseLlvmByStageId;
+    THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
+    std::unordered_map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
-    std::map<ui32, TDuration> LongestTaskDurations;
+    std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
@@ -274,6 +315,7 @@ public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
+    std::optional<ui32> DeadlockedStageId;
 
     // basic stats
     std::unordered_set<ui64> AffectedShards;
@@ -306,6 +348,8 @@ public:
     {
         HistorySampleCount = 32;
     }
+
+    void Prepare();
 
     void AddComputeActorStats(
         ui32 nodeId,

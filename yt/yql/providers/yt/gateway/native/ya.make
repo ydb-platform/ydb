@@ -6,7 +6,6 @@ SRCS(
     yql_yt_native.cpp
     yql_yt_native_folders.cpp
     yql_yt_op_tracker.cpp
-    yql_yt_qb2.cpp
     yql_yt_session.cpp
     yql_yt_spec.cpp
     yql_yt_transform.cpp
@@ -52,6 +51,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/mkql_helpers
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/secret_masker
     yt/yql/providers/yt/lib/skiff
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers

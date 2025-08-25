@@ -62,8 +62,8 @@ namespace {
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
             auto* left = GetBitmapFromArg(args[0]);
-            const auto modifySourceBitmap = args[1].GetOrDefault<bool>(false);
             auto* right = Derived::GetRightBitmap(args[1]);
+            const auto modifySourceBitmap = args[2].GetOrDefault<bool>(false);
             if (modifySourceBitmap) {
                 Derived::PerformInplaceOperation(left, right);
                 if (Derived::UseBinary()) {
@@ -81,31 +81,31 @@ namespace {
     };
 
 // Operation implementations
-#define DEFINE_ROARING_OP(ClassName, OpName, OpFunc, OpFuncInplace, UseBin)                          \
-    class ClassName: public TRoaringOperationBase<ClassName> {                                       \
-    public:                                                                                          \
-        static constexpr bool UseBinary() {                                                          \
-            return UseBin;                                                                           \
-        }                                                                                            \
-        static const TStringRef GetName() {                                                          \
-            return TStringRef::Of(OpName);                                                           \
-        }                                                                                            \
-                                                                                                     \
-        static roaring_bitmap_t* GetRightBitmap(const TUnboxedValuePod& arg) {                       \
-            if constexpr (UseBin) {                                                                  \
-                return DeserializePortable(arg.AsStringRef());                                       \
-            } else {                                                                                 \
-                return GetBitmapFromArg(arg);                                                        \
-            }                                                                                        \
-        }                                                                                            \
-                                                                                                     \
-        static roaring_bitmap_t* PerformOperation(roaring_bitmap_t* left, roaring_bitmap_t* right) { \
-            return OpFunc(left, right);                                                              \
-        }                                                                                            \
-                                                                                                     \
-        static void PerformInplaceOperation(roaring_bitmap_t* left, roaring_bitmap_t* right) {       \
-            OpFuncInplace(left, right);                                                              \
-        }                                                                                            \
+#define DEFINE_ROARING_OP(ClassName, OpName, OpFunc, OpFuncInplace, UseBin)                                         \
+    class ClassName: public TRoaringOperationBase<ClassName> {                                                      \
+    public:                                                                                                         \
+        static constexpr bool UseBinary() {                                                                         \
+            return UseBin;                                                                                          \
+        }                                                                                                           \
+        static const TStringRef GetName() {                                                                         \
+            return TStringRef::Of(OpName);                                                                          \
+        }                                                                                                           \
+                                                                                                                    \
+        static roaring_bitmap_t* GetRightBitmap(const TUnboxedValuePod& arg) {                                      \
+            if constexpr (UseBin) {                                                                                 \
+                return DeserializePortable(arg.AsStringRef());                                                      \
+            } else {                                                                                                \
+                return GetBitmapFromArg(arg);                                                                       \
+            }                                                                                                       \
+        }                                                                                                           \
+                                                                                                                    \
+        static roaring_bitmap_t* PerformOperation(const roaring_bitmap_t* left, const roaring_bitmap_t* right) {    \
+            return OpFunc(left, right);                                                                             \
+        }                                                                                                           \
+                                                                                                                    \
+        static void PerformInplaceOperation(roaring_bitmap_t* left, const roaring_bitmap_t* right) {                \
+            OpFuncInplace(left, right);                                                                             \
+        }                                                                                                           \
     };
 
     DEFINE_ROARING_OP(TRoaringOrWithBinary, "OrWithBinary", roaring_bitmap_or, roaring_bitmap_or_inplace, true)
@@ -428,6 +428,120 @@ namespace {
         }
     };
 
+    class TRoaringIntersect: public TBoxedValue {
+    public:
+        TRoaringIntersect(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("Intersect");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* left = GetBitmapFromArg(args[0]);
+                auto* right = GetBitmapFromArg(args[1]);
+
+                return TUnboxedValuePod(roaring_bitmap_intersect(left, right));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
+    class TRoaringIntersectWithBinary: public TBoxedValue {
+    public:
+        TRoaringIntersectWithBinary(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("IntersectWithBinary");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* left = GetBitmapFromArg(args[0]);
+                auto* right = DeserializePortable(args[1].AsStringRef());
+
+                auto intersect = roaring_bitmap_intersect(left, right);
+                roaring_bitmap_free(right);
+                return TUnboxedValuePod(intersect);
+
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
+    class TRoaringIsEmpty: public TBoxedValue {
+    public:
+        TRoaringIsEmpty(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("IsEmpty");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* left = GetBitmapFromArg(args[0]);
+
+                return TUnboxedValuePod(roaring_bitmap_is_empty(left));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
+    class TRoaringAdd: public TBoxedValue {
+    public:
+        TRoaringAdd(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("Add");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* bitmap = GetBitmapFromArg(args[0]);
+                roaring_bitmap_add(bitmap, args[1].Get<ui32>());
+
+                return args[0];
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
     class TRoaringModule: public IUdfModule {
     public:
         class TMemoryHookInitializer {
@@ -484,15 +598,21 @@ namespace {
                 auto typesOnly = (flags & TFlags::TypesOnly);
 
                 if (TRoaringDeserialize::Name() == name) {
-                    builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TAutoMap<char*>>();
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .OptionalArgs(1)
+                        .Args()
+                        ->Add<TAutoMap<char*>>()
+                        .Add<TOptional<ui32>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringDeserialize(builder.GetSourcePosition()));
                     }
                 } else if (TRoaringFromUint32List::Name() == name) {
                     builder.Returns<TResource<RoaringResourceName>>()
+                        .OptionalArgs(1)
                         .Args()
-                        ->Add<TListType<ui32>>();
+                        ->Add<TListType<ui32>>()
+                        .Add<TOptional<ui32>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringFromUint32List(builder.GetSourcePosition()));
@@ -611,6 +731,41 @@ namespace {
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringNaiveBulkAndWithBinary(builder.GetSourcePosition()));
                     }
+                } else if (TRoaringIntersect::Name() == name) {
+                    builder.Returns<bool>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<TResource<RoaringResourceName>>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringIntersect(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringIntersectWithBinary::Name() == name) {
+                    builder.Returns<bool>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<char*>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringIntersectWithBinary(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringIsEmpty::Name() == name) {
+                    builder.Returns<bool>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringIsEmpty(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringAdd::Name() == name) {
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<ui32>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringAdd(builder.GetSourcePosition()));
+                    }
                 } else {
                     TStringBuilder sb;
                     sb << "Unknown function: " << name.Data();
@@ -645,10 +800,21 @@ namespace {
                 return nullptr;
             }
 
+            // Get the old allocation information.
+            auto oldAllocatedMemPointer = ((void**)oldPointer)[-1];
+            auto oldSizePointer = ((void**)oldPointer)[-2];
+
+            // Calculate the actual old data size (excluding the header).
+            size_t oldSize = (char*)oldSizePointer - (char*)oldAllocatedMemPointer - 2 * sizeof(void*);
+
+            // Allocate new memory.
             auto reallocatedPointer = RoaringMallocUdf(newSize);
-            auto oldAllocatedMemPointer = (char*)((void**)oldPointer)[-1];
-            auto oldSizePointer = (char*)((void**)oldPointer)[-2];
-            memcpy(reallocatedPointer, oldPointer, oldSizePointer - oldAllocatedMemPointer);
+
+            // Copy the minimum of old size and new size.
+            size_t copySize = oldSize < newSize ? oldSize : newSize;
+            memcpy(reallocatedPointer, oldPointer, copySize);
+
+            // Free the old memory.
             RoaringFreeUdf(oldPointer);
 
             return reallocatedPointer;

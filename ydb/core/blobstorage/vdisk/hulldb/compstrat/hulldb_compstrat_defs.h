@@ -281,6 +281,12 @@ namespace NKikimr {
                     TBase::Output(str);
                 }
 
+                TString ToString() const {
+                    TStringStream str;
+                    Output(str);
+                    return str.Str();
+                }
+
                 void Finalize() {
                     TBase::Finalize();
                     Y_ABORT_UNLESS(TargetLevel != (ui32)(-1));

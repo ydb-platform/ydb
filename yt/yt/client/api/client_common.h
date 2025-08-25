@@ -12,6 +12,8 @@
 
 #include <yt/yt/client/tablet_client/public.h>
 
+#include <yt/yt/client/query_client/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NApi {
@@ -157,6 +159,8 @@ struct TSelectRowsOptionsBase
     // COMPAT(lukyan)
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
+    //! Typed expression builder version.
+    int ExpressionBuilderVersion = 1;
 };
 
 struct TSelectRowsOptions
@@ -180,6 +184,14 @@ struct TSelectRowsOptions
     std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
+    //! Tune batch sizes for row processing.
+    std::optional<i64> RowsetProcessingBatchSize;
+    //! Tune write row batch size.
+    std::optional<i64> WriteRowsetSize;
+    //! Tune join row batch size.
+    std::optional<i64> MaxJoinBatchSize;
+    //! Determines the way statistics are aggregated across subqueries.
+    NQueryClient::EStatisticsAggregation StatisticsAggregation = NQueryClient::EStatisticsAggregation::None;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.
@@ -195,6 +207,8 @@ struct TSelectRowsOptions
     //! For internal use only.
     //! Use original table schema in result rowset.
     bool UseOriginalTableSchema = false;
+    //! Minimizes request rate to dictionary tables when executing joins.
+    bool UseOrderByInJoinSubqueries = false;
 };
 
 struct TFallbackReplicaOptions

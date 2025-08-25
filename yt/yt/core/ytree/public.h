@@ -17,7 +17,7 @@ class TAttributeFilter;
 
 } // namespace NProto
 
-struct TAttributeFilter;
+class TAttributeFilter;
 
 struct IYsonStructMeta;
 class TYsonStructBase;
@@ -43,6 +43,7 @@ struct INodeFactory;
 struct ITransactionalNodeFactory;
 
 DECLARE_REFCOUNTED_STRUCT(IAttributeDictionary)
+using IConstAttributeDictionaryPtr = TIntrusivePtr<const IAttributeDictionary>;
 
 struct IAttributeOwner;
 
@@ -51,6 +52,7 @@ struct ISystemAttributeProvider;
 DECLARE_REFCOUNTED_STRUCT(IYPathService)
 DECLARE_REFCOUNTED_STRUCT(IYPathServiceContext)
 DECLARE_REFCOUNTED_STRUCT(ICachedYPathService)
+DECLARE_REFCOUNTED_STRUCT(IServiceCombiner)
 DECLARE_REFCOUNTED_CLASS(TCompositeMapService)
 
 DECLARE_REFCOUNTED_CLASS(TYPathRequest)
@@ -61,8 +63,6 @@ class TTypedYPathRequest;
 
 template <class TRequestMessage, class TResponseMessage>
 class TTypedYPathResponse;
-
-DECLARE_REFCOUNTED_CLASS(TServiceCombiner)
 
 using NYPath::TYPath;
 using NYPath::TYPathBuf;

@@ -1,9 +1,47 @@
 #include "mkql_mem_info.h"
 
 #include <util/generic/yexception.h>
+#include <util/system/env.h>
+#include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
+
+namespace {
+
+#if !defined(NDEBUG)
+static constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
+
+bool ShouldCollectStackTracesForAllocations() {
+    static bool result = []() {
+        auto collectEnvValue = TryGetEnv(TString(COLLECT_STACK_TRACE_KEY));
+        return collectEnvValue.Defined();
+    }();
+    return result;
+}
+
+TMemoryUsageInfo::TAllocatorLocation WrapLocation(TMkqlLocation location) {
+    if (ShouldCollectStackTracesForAllocations()) {
+        THolder<TBackTrace> bt(new TBackTrace());
+        bt->Capture();
+        return std::move(bt);
+    }
+    return location;
+}
+
+TString LocationToString(const THolder<TBackTrace>& backtrace) {
+    return backtrace->PrintToString();
+}
+
+TString LocationToString(TMkqlLocation location) {
+    return TStringBuilder() << location << ". For more detailed location use " << COLLECT_STACK_TRACE_KEY << " environment variable.";
+}
+
+TString LocationToString(const TMemoryUsageInfo::TAllocatorLocation& location) {
+    return std::visit([](const auto& loc) { return LocationToString(loc); }, location);
+}
+
+#endif // !defined(NDEBUG)
+} // namespace
 
 TMemoryUsageInfo::TMemoryUsageInfo(const TStringBuf& title)
     : Title_(title)
@@ -42,9 +80,9 @@ void TMemoryUsageInfo::Take(const void* mem, ui64 size, TMkqlLocation location) 
             AllocationsMap_.erase(it);
         }
     }
-    auto res = AllocationsMap_.insert({mem, { size, std::move(location), false }});
+    auto res = AllocationsMap_.emplace(mem, TAllocationInfo{ size, WrapLocation(std::move(location)), false });
     Y_DEBUG_ABORT_UNLESS(res.second, "Duplicate allocation at: %p, "
-                                "already allocated at: %s", mem, (TStringBuilder() << res.first->second.Location).c_str());
+                                     "already allocated at: %s", mem, LocationToString(res.first->second.Location).c_str());
     //Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
 }
 #endif
@@ -67,9 +105,8 @@ void TMemoryUsageInfo::Return(const void* mem, ui64 size) {
         Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
     }
 
-    Y_DEBUG_ABORT_UNLESS(size == it->second.Size,
-                "Deallocating wrong size at: %p, "
-                "allocated at: %s", mem, (TStringBuilder() << it->second.Location).c_str());
+    Y_DEBUG_ABORT_UNLESS(size == it->second.Size, "Deallocating wrong size at: %p, allocated at: %s. Actual size: %zu, but expected size is: %zu",
+                         mem, LocationToString(it->second.Location).c_str(), size, it->second.Size);
     if (AllowMissing_) {
         it->second.IsDeleted = true;
     } else {
@@ -127,7 +164,7 @@ void TMemoryUsageInfo::VerifyDebug() const {
         ++leakCount;
         Cerr << TStringBuf("Not freed ")
             << it.first << TStringBuf(" size: ") << it.second.Size
-            << TStringBuf(", location: ") << it.second.Location
+            << TStringBuf(", location: ") << LocationToString(it.second.Location)
             << Endl;
     }
 
@@ -140,5 +177,4 @@ void TMemoryUsageInfo::VerifyDebug() const {
 #endif
 }
 
-}
 }

@@ -28,7 +28,7 @@ public:
 
         const auto dict = GetNodeValue(Dict, ctx, block);
 
-        const auto keyp = *Stateless || ctx.AlwaysInline ?
+        const auto keyp = *Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(valueType, 0U, "key", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(valueType, 0U, "key", block);
         GetNodeValue(keyp, Key, ctx, block);

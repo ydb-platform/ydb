@@ -37,7 +37,7 @@ void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::
     }
 }
 
-bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64& hashBase) const {
+bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* hashBase) const {
     if (request.GetSubColumnName()) {
         std::string_view sv = [&]() {
             if (request.GetSubColumnName().StartsWith("$.")) {
@@ -46,7 +46,9 @@ bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress
                 return std::string_view(request.GetSubColumnName().data(), request.GetSubColumnName().size());
             }
         }();
-        hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(sv);
+        if (hashBase) {
+            *hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(sv);
+        }
     }
     return true;
 }

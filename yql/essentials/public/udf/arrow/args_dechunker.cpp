@@ -7,13 +7,13 @@ namespace NYql {
 namespace NUdf {
 
 TArgsDechunker::TArgsDechunker(std::vector<arrow::Datum>&& args)
-    : Args(std::move(args))
-    , Arrays(Args.size())
+    : Args_(std::move(args))
+    , Arrays_(Args_.size())
 {
-    for (size_t i = 0; i < Args.size(); ++i) {
-        if (Args[i].is_arraylike()) {
-            ForEachArrayData(Args[i], [&](const auto& data) {
-                Arrays[i].push_back(data);
+    for (size_t i = 0; i < Args_.size(); ++i) {
+        if (Args_[i].is_arraylike()) {
+            ForEachArrayData(Args_[i], [&](const auto& data) {
+                Arrays_[i].push_back(data);
             });
         }
     }
@@ -26,24 +26,24 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk) {
 
 bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
     chunkLen = 0;
-    if (Finish) {
+    if (Finish_) {
         return false;
     }
 
     size_t minSize = Max<size_t>();
     bool haveData = false;
-    chunk.resize(Args.size());
-    for (size_t i = 0; i < Args.size(); ++i) {
-        if (Args[i].is_scalar()) {
-            chunk[i] = Args[i];
+    chunk.resize(Args_.size());
+    for (size_t i = 0; i < Args_.size(); ++i) {
+        if (Args_[i].is_scalar()) {
+            chunk[i] = Args_[i];
             continue;
         }
-        while (!Arrays[i].empty() && Arrays[i].front()->length == 0) {
-            Arrays[i].pop_front();
+        while (!Arrays_[i].empty() && Arrays_[i].front()->length == 0) {
+            Arrays_[i].pop_front();
         }
-        if (!Arrays[i].empty()) {
+        if (!Arrays_[i].empty()) {
             haveData = true;
-            minSize = std::min<size_t>(minSize, Arrays[i].front()->length);
+            minSize = std::min<size_t>(minSize, Arrays_[i].front()->length);
         } else {
             minSize = 0;
         }
@@ -51,14 +51,14 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
 
     Y_ENSURE(!haveData || minSize > 0, "Block length mismatch");
     if (!haveData) {
-        Finish = true;
+        Finish_ = true;
         return false;
     }
 
-    for (size_t i = 0; i < Args.size(); ++i) {
-        if (!Args[i].is_scalar()) {
-            Y_ENSURE(!Arrays[i].empty(), "Block length mismatch");
-            chunk[i] = arrow::Datum(Chop(Arrays[i].front(), minSize));
+    for (size_t i = 0; i < Args_.size(); ++i) {
+        if (!Args_[i].is_scalar()) {
+            Y_ENSURE(!Arrays_[i].empty(), "Block length mismatch");
+            chunk[i] = arrow::Datum(Chop(Arrays_[i].front(), minSize));
         }
     }
     chunkLen = minSize;

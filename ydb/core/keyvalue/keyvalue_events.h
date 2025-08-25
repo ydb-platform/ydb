@@ -13,7 +13,7 @@ namespace NKeyValue {
     struct TIntermediate;
 };
 
-struct TEvKeyValue {
+namespace TEvKeyValue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,
@@ -24,7 +24,7 @@ struct TEvKeyValue {
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
-        EvCleanUpDataRequest,
+        EvVacuumRequest,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -33,8 +33,8 @@ struct TEvKeyValue {
         EvAcquireLock,
 
         EvResponse = EvRequest + 512,
-        EvForceTabletDataCleanup,
-        EvCleanUpDataResponse,
+        EvForceTabletVacuum,
+        EvVacuumResponse,
 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
@@ -201,58 +201,59 @@ struct TEvKeyValue {
         {}
     };
 
-    struct TEvCleanUpDataResponse;
+    struct TEvVacuumResponse;
 
-    struct TEvCleanUpDataRequest : public TEventPB<TEvCleanUpDataRequest,
-            NKikimrKeyValue::CleanUpDataRequest, EvCleanUpDataRequest> {
-        using TResponse = TEvCleanUpDataResponse;
+    struct TEvVacuumRequest : public TEventPB<TEvVacuumRequest,
+            NKikimrKeyValue::VacuumRequest, EvVacuumRequest> {
+        using TResponse = TEvVacuumResponse;
 
-        TEvCleanUpDataRequest() = default;
-        
-        TEvCleanUpDataRequest(ui64 generation, bool reset=false) {
+        TEvVacuumRequest() = default;
+
+        TEvVacuumRequest(ui64 generation, bool reset=false) {
             Record.set_generation(generation);
             Record.set_reset_actual_generation(reset);
         }
     };
 
-    struct TEvCleanUpDataResponse : public TEventPB<TEvCleanUpDataResponse,
-            NKikimrKeyValue::CleanUpDataResponse, EvCleanUpDataResponse> {
-        using TRequest = TEvCleanUpDataRequest;
+    struct TEvVacuumResponse : public TEventPB<TEvVacuumResponse,
+            NKikimrKeyValue::VacuumResponse, EvVacuumResponse> {
+        using TRequest = TEvVacuumRequest;
 
-        TEvCleanUpDataResponse() = default;
+        TEvVacuumResponse() = default;
 
-        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason, ui64 actualGeneration) {
+        TEvVacuumResponse(ui64 generation, NKikimrKeyValue::VacuumResponse::Status status, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
             Record.set_generation(generation);
             Record.set_status(status);
             Record.set_error_reason(errorReason);
             Record.set_actual_generation(actualGeneration);
+            Record.set_tablet_id(tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "", generation);
+        static std::unique_ptr<TEvVacuumResponse> MakeSuccess(ui64 generation, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_SUCCESS, "", generation, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ABORTED, errorReason, actualGeneration);
+        static std::unique_ptr<TEvVacuumResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ABORTED, errorReason, actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration);
+        static std::unique_ptr<TEvVacuumResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason, actualGeneration);
+        static std::unique_ptr<TEvVacuumResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ERROR, errorReason, actualGeneration, tabletId);
         }
     };
 
-    struct TEvForceTabletDataCleanup : public TEventLocal<TEvForceTabletDataCleanup, EvForceTabletDataCleanup> {
+    struct TEvForceTabletVacuum : public TEventLocal<TEvForceTabletVacuum, EvForceTabletVacuum> {
         ui64 Generation;
 
-        TEvForceTabletDataCleanup(ui64 generation)
+        TEvForceTabletVacuum(ui64 generation)
             : Generation(generation)
         {}
     };
 
-};
+}
 
 } // NKikimr

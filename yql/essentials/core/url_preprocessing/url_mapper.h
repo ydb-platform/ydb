@@ -26,7 +26,7 @@ private:
     };
 
 private:
-    TVector<TCustomScheme> CustomSchemes;
+    TVector<TCustomScheme> CustomSchemes_;
 };
 
 }

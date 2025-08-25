@@ -23,33 +23,34 @@ void TerminateHandler() {
 
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
+        backtrace.PrintTo(Cerr);
+    }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
 
     abort();
 }
 
+TString SignalToString(int signal) {
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
+}
 
-void SegmentationFaultHandler(int) {
+void BackTraceSignalHandler(int signal) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
+    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
+    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
 
     abort();
 }
 
-void FloatingPointExceptionHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-}  // nonymous namespace
+}  // anonymous namespace
 
 
 TRequestResult::TRequestResult()
@@ -93,6 +94,7 @@ void TStatsPrinter::PrintPlan(const TString& plan, IOutputStream& output) const 
 
     NYdb::NConsoleClient::TQueryPlanPrinter printer(PlanFormat, true, output);
     printer.Print(plan);
+    output.Flush();
 }
 
 void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream& output) const {
@@ -192,6 +194,27 @@ TString TStatsPrinter::FormatNumber(i64 number) {
     return stream.str();
 }
 
+TCachedPrinter::TCachedPrinter(const TString& output, TPrinter printer)
+    : Output(output)
+    , Printer(printer)
+{}
+
+void TCachedPrinter::Print(const TString& data, bool allowEmpty) {
+    if ((!data && !allowEmpty) || (PrintedData && data == *PrintedData)) {
+        return;
+    }
+
+    IOutputStream* stream = &Cout;
+    if (Output != "-") {
+        FileOutput = std::make_unique<TFileOutput>(Output);
+        stream = &(*FileOutput);
+    }
+
+    Printer(data, *stream);
+    stream->Flush();
+    PrintedData = data;
+}
+
 TString LoadFile(const TString& file) {
     return TFileInput(file).ReadAll();
 }
@@ -249,8 +272,9 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 
 void SetupSignalActions() {
     std::set_terminate(&TerminateHandler);
-    signal(SIGSEGV, &SegmentationFaultHandler);
-    signal(SIGFPE, &FloatingPointExceptionHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

@@ -26,7 +26,12 @@ class S3ImportTestBase(object):
     @classmethod
     def _get_ydb_config(cls):
         config = KikimrConfigGenerator(
-            extra_feature_flags={"enable_external_data_sources": True}
+            extra_feature_flags={
+                "enable_external_data_sources": True,
+                "enable_move_column_table": True
+            },
+            query_service_config={"available_external_data_sources": ["ObjectStorage"]},
+            table_service_config={}
         )
         config.yaml_config["query_service_config"] = {}
         config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage"]

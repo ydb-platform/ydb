@@ -283,12 +283,12 @@ def main():
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument(
         '--build_type',
-        choices=['relwithdebinfo', 'release-asan'],
+        choices=['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'],
         default='relwithdebinfo',
         type=str,
-        help='build : relwithdebinfo or release-asan',
+        help='build type',
     )
-    parser.add_argument('--branch', default='main', choices=['main'], type=str, help='branch')
+    parser.add_argument('--branch', default='main', type=str, help='branch')
 
     parser.add_argument(
         '--concurent',
@@ -325,7 +325,7 @@ def main():
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
-        default_start_date = datetime.date(2024, 11, 1)
+        default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
         table_path = f'test_results/analytics/tests_monitor'
 
@@ -586,7 +586,7 @@ def main():
         df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
         df['summary'] = df.apply(calculate_summary, axis=1)
         df['owner'] = df['owners'].apply(compute_owner)
-        df['is_test_chunk'] = df['full_name'].str.contains('chunk chunk|chunk\+chunk', regex=True).astype(int)
+        df['is_test_chunk'] = df['full_name'].str.contains(']? chunk|sole chunk|chunk chunk|chunk\+chunk', regex=True).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
         df['success_rate'].astype(int)
         df['state'] = df.apply(determine_state, axis=1)

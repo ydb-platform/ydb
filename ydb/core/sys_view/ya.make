@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/sys_view/auth
     ydb/core/sys_view/common
+    ydb/core/sys_view/compile_cache
     ydb/core/sys_view/nodes
     ydb/core/sys_view/partition_stats
     ydb/core/sys_view/pg_tables
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/core/sys_view/tablets
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
+    ydb/core/wrappers
 )
 
 YQL_LAST_ABI_VERSION()

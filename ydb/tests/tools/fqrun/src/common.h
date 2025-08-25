@@ -11,7 +11,6 @@
 
 namespace NFqRun {
 
-constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr i64 MAX_RESULT_SET_ROWS = 1000;
 
 struct TExternalDatabase {
@@ -46,14 +45,12 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     bool EnableRemoteRd = false;
     std::optional<TExternalDatabase> RowDispatcherDatabase;
 
-    EVerbose VerboseLevel = EVerbose::Info;
+    bool EnableYdbCompute = false;
+    std::optional<TExternalDatabase> SingleComputeDatabase;
+    std::vector<TExternalDatabase> SharedComputeDatabases;
 
-    TString YqlToken;
+    EVerbose VerboseLevel = EVerbose::Info;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    NFq::NConfig::TConfig FqConfig;
-    NKikimrConfig::TLogConfig LogConfig;
-    std::optional<NKikimrConfig::TActorSystemConfig> ActorSystemConfig;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
@@ -62,8 +59,9 @@ struct TRunnerOptions {
     std::unordered_set<ui64> TraceOptIds;
 
     IOutputStream* ResultOutput = nullptr;
-    IOutputStream* AstOutput = nullptr;
-    IOutputStream* PlanOutput = nullptr;
+    std::vector<TString> AstOutputs;
+    std::vector<TString> PlanOutputs;
+    std::vector<TString> StatsOutputs;
 
     bool CanonicalOutput = false;
     NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
@@ -72,10 +70,16 @@ struct TRunnerOptions {
     TFqSetupSettings FqSettings;
 };
 
+struct TFqOptions {
+    TString Scope;
+};
+
 struct TRequestOptions {
     TString Query;
-    FederatedQuery::ExecuteMode Action;
-    ui64 QueryId;
+    FederatedQuery::ExecuteMode Action = FederatedQuery::ExecuteMode::RUN;
+    FederatedQuery::QueryContent::QueryType Type = FederatedQuery::QueryContent::STREAMING;
+    ui64 QueryId = 0;
+    TFqOptions FqOptions;
 };
 
 void SetupAcl(FederatedQuery::Acl* acl);

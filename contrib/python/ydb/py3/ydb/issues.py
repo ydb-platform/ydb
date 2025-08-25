@@ -50,6 +50,7 @@ class StatusCode(enum.IntEnum):
 
     UNAUTHENTICATED = _CLIENT_STATUSES_FIRST + 30
     SESSION_POOL_EMPTY = _CLIENT_STATUSES_FIRST + 40
+    SESSION_POOL_CLOSED = _CLIENT_STATUSES_FIRST + 50
 
 
 # TODO: convert from proto IssueMessage
@@ -176,6 +177,17 @@ class ExternalError(Error):
 
 class SessionPoolEmpty(Error, queue.Empty):
     status = StatusCode.SESSION_POOL_EMPTY
+
+
+class SessionPoolClosed(Error):
+    status = StatusCode.SESSION_POOL_CLOSED
+
+    def __init__(self):
+        super().__init__("Session pool is closed.")
+
+
+class ClientInternalError(Error):
+    status = StatusCode.CLIENT_INTERNAL_ERROR
 
 
 class UnexpectedGrpcMessage(Error):

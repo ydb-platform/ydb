@@ -66,8 +66,8 @@ public:
         bool Next(TUnboxedValue& key) final;
         bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) final;
 
-        const TRefCountedPtr<TMapNode> Parent;
-        ui32 Index;
+        const TRefCountedPtr<TMapNode> Parent_;
+        ui32 Index_;
     };
 
     TMapNode(const TPair* items, ui32 count);

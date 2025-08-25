@@ -20,7 +20,7 @@ using namespace NYT::NBus;
 ////////////////////////////////////////////////////////////////////////////////
 
 static constexpr auto ExpirationCheckInterval = TDuration::Seconds(15);
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -64,7 +64,7 @@ public:
 
 private:
     const TWeakPtr<TCachingChannelFactory> Factory_;
-    const TString Address_;
+    const std::string Address_;
 
     std::atomic<TInstant> LastActivityTime_;
 
@@ -208,7 +208,7 @@ private:
 
         auto deadline = TInstant::Now() - IdleChannelTtl_;
 
-        std::vector<std::pair<TString, TCachedChannelPtr>> expiredItems;
+        std::vector<std::pair<std::string, TCachedChannelPtr>> expiredItems;
         auto it = TtlCheckQueue_.begin();
         while (it != TtlCheckQueue_.end()) {
             auto channel = it->second.Lock();

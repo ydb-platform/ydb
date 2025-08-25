@@ -20,7 +20,6 @@ IF (PY2)
         gen_py3_reg.py
         go_tool.py
         ios_wrapper.py
-        link_dyn_lib.py
         mangle_typeinfo_names.py
         pack_ios.py
         pack_jcoverage_resources.py
@@ -88,6 +87,7 @@ ELSEIF (PY3)
         jni_swig.py
         kt_copy.py
         link_asrc.py
+        link_dyn_lib.py
         link_exe.py
         link_fat_obj.py
         link_jsrc.py

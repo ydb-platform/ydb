@@ -78,6 +78,10 @@ public:
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    TChunkMeta& MutableMeta() {
+        return Meta;
+    }
+
     ui32 GetEntityId() const {
         return ColumnId;
     }

@@ -3,9 +3,12 @@
 #include <yt/yql/providers/yt/lib/init_yt_api/init.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/format.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+
+#include <library/cpp/malloc/api/malloc.h>
 
 #include <util/stream/printf.h>
 #include <util/stream/str.h>
@@ -43,15 +46,34 @@ public:
         }
         if (buffer) {
             try {
-                TUnbufferedFileOutput out(TFile(DebugLogFile_, OpenAlways | WrOnly | Seq | ForAppend | NoReuse));
+                TFileHandle fh(DebugLogFile_, OpenAlways | WrOnly | Seq | ForAppend | NoReuse);
+
+                auto write = [&](const void* buf, size_t numBytes) {
+                    const ui8* ubuf = (const ui8*)buf;
+
+                    while (numBytes) {
+                        const i32 reallyWritten = fh.Write(ubuf, numBytes);
+
+                        if (reallyWritten < 0) {
+                            Cerr << "can't write " << numBytes << " bytes to " << DebugLogFile_ << Endl;
+                            return false;
+                        }
+
+                        ubuf += reallyWritten;
+                        numBytes -= reallyWritten;
+                    }
+                    return true;
+                };
+
+                bool success = true;
                 if (BufferFull_ && BufferWritePos_ < BufferSize_) {
-                    out.Write(buffer.Get() + BufferWritePos_, BufferSize_ - BufferWritePos_);
+                    success = write(buffer.Get() + BufferWritePos_, BufferSize_ - BufferWritePos_);
                 }
-                if (BufferWritePos_ > 0) {
-                    out.Write(buffer.Get(), BufferWritePos_);
+                if (success && BufferWritePos_ > 0) {
+                    write(buffer.Get(), BufferWritePos_);
                 }
-            } catch (...) {
-                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            } catch (const std::exception& e) {
+                Cerr << e.what() << Endl;
             }
         }
     }
@@ -89,19 +111,37 @@ public:
             }
         }
 
-        TStringStream stream;
-        NLog::YqlLogger().WriteLogPrefix(&stream, NLog::EComponent::ProviderYt, yqlLevel, sl.File, sl.Line);
-        NLog::OutputLogCtx(&stream, true);
-        Printf(stream, format, args);
-        stream << Endl;
+        TString message;
+        {
+            TStringStream out;
+            Printf(out, format, args);
+            message = std::move(out.Str());
+        }
+
+        TString path;
+        {
+            TStringStream out;
+            NLog::OutputLogCtx(&out, false);
+            path = std::move(out.Str());
+        }
+
+        TLogRecord record(NLog::ELevelHelpers::ToLogPriority(yqlLevel), message.data(), message.length());
+        NLog::YqlLogger().Contextify(record, NLog::EComponent::ProviderYt, yqlLevel, sl.File, sl.Line);
+        record.MetaFlags.emplace_back(NLog::ToStringBuf(NLog::EContextKey::Path), std::move(path));
 
         if (needLog) {
-            NLog::YqlLogger().Write(NLog::ELevelHelpers::ToLogPriority(yqlLevel), stream.Str().data(), stream.Str().length());
+            ELogPriority level = NLog::ELevelHelpers::ToLogPriority(yqlLevel);
+            NLog::YqlLogger().Write(level, record.Data, record.Len, record.MetaFlags);
         }
+
         with_lock(BufferLock_) {
             if (Buffer_) {
-                const char* ptr = stream.Str().data();
-                size_t remaining = stream.Str().length();
+                // Log format can be distinct from that is YqlLogger,
+                // but we do not care as it is a debug buffer.
+                TString out = NLog::LegacyFormat(record);
+
+                const char* ptr = out.data();
+                size_t remaining = out.length();
                 while (remaining) {
                     const size_t write = Min(remaining, BufferSize_ - BufferWritePos_);
                     MemCopy(Buffer_.Get() + BufferWritePos_, ptr, write);
@@ -140,9 +180,11 @@ void SetYtLoggerGlobalBackend(int level, size_t debugLogBufferSize, const TStrin
 }
 
 void FlushYtDebugLog() {
-    auto logger = NYT::GetLogger();
-    if (auto yqlLogger = dynamic_cast<TGlobalLoggerImpl*>(logger.Get())) {
-        yqlLogger->FlushYtDebugLog();
+    if (!NMalloc::IsAllocatorCorrupted) {
+        auto logger = NYT::GetLogger();
+        if (auto yqlLogger = dynamic_cast<TGlobalLoggerImpl*>(logger.Get())) {
+            yqlLogger->FlushYtDebugLog();
+        }
     }
 }
 

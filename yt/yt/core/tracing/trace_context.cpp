@@ -12,6 +12,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 
 #include <yt/yt/library/tracing/tracer.h>
@@ -45,7 +47,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TracingLogger;
+constinit const auto Logger = TracingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,20 +113,13 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
 {
-    if (NConcurrency::NDetail::PerThreadFls() == NConcurrency::NDetail::CurrentFls() && newContext) {
-        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
-            loc);
-    }
-
-    auto& propagatingStorage = GetCurrentPropagatingStorage();
+    auto& propagatingStorage = CurrentPropagatingStorage();
 
     auto oldContext = newContext
         ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
         : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
-
-    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -618,7 +613,7 @@ void ToProto(
 
     if (sendBaggage) {
         if (auto baggage = context->GetBaggage()) {
-            ext->set_baggage(baggage.ToString());
+            ext->set_baggage(ToProto(baggage));
         }
     }
 }

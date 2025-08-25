@@ -63,4 +63,16 @@ std::unique_ptr<IOutputStream> TUnsupportedCodec::CreateCoder(TBuffer&, int) con
     throw yexception() << "use of unsupported codec";
 }
 
+class TCommonCodecsProvider {
+public:
+    TCommonCodecsProvider() {
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
+        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
+    }
+};
+
+namespace {
+TCommonCodecsProvider COMMON_CODECS_PROVIDER;
+}
+
 }; // namespace NYdb::NTopic

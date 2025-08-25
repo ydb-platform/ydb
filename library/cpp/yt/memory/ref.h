@@ -329,6 +329,9 @@ public:
     //! The memory is marked with a given tag.
     static TSharedRefArray MakeCopy(const TSharedRefArray& array, TRefCountedTypeCookie tagCookie);
 
+    //! Checks if #lhs and #rhs consist of the same number of bitwise-equal parts.
+    static bool AreBitwiseEqual(const TSharedRefArray& lhs, const TSharedRefArray& rhs);
+
 private:
     friend class TSharedRefArrayBuilder;
 
@@ -424,6 +427,12 @@ size_t GetByteSize(const std::vector<T>& parts);
 #include "ref-inl.h"
 #undef REF_INL_H_
 
-//! Serialize TSharedRef like vector<char>. Useful for ::Save, ::Load serialization/deserialization. See util/ysaveload.h.
+//! Serialize TSharedRef like vector<char>.
+/*!
+ *  Useful for ::Save, ::Load serialization/deserialization.
+ *  See util/ysaveload.h.
+ */
 template <>
-class TSerializer<NYT::TSharedRef>: public TVectorSerializer<NYT::TSharedRange<char>> {};
+class TSerializer<NYT::TSharedRef>
+    : public TVectorSerializer<NYT::TSharedRange<char>>
+{ };

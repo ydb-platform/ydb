@@ -6,8 +6,8 @@
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
-#include <util/generic/ptr.h>
 #include <util/generic/map.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -56,6 +56,7 @@ private:
     THashSet<TOperationId> DoneOperations;
     THashSet<TTxId> DoneTransactions;
     THashSet<TShardIdx> ToDeleteShards;
+    THashSet<TShardIdx> ToDeleteSystemShards;  // temporary: special case for deleting tenant's system shards
     TDeque<TDependence> Dependencies;
     TDeque<TPathStateRec> ReleasePathStateRecs;
     THashSet<TPathId> TenantsToUpdate;
@@ -124,6 +125,7 @@ public:
     void PublishAndWaitPublication(TOperationId opId, TPathId pathId);
 
     void DeleteShard(TShardIdx idx);
+    void DeleteSystemShard(TShardIdx idx);
 
     void ToProgress(TIndexBuildId id);
 
@@ -153,6 +155,7 @@ private:
 
     void DoRegisterRelations(TSchemeShard* ss, const TActorContext& ctx);
     void DoTriggerDeleteShards(TSchemeShard* ss, const TActorContext &ctx);
+    void DoTriggerDeleteSystemShards(TSchemeShard *ss, const TActorContext &ctx);
 
     void DoReleasePathState(TSchemeShard* ss, const TActorContext &ctx);
     void DoDoneParts(TSchemeShard* ss, const TActorContext& ctx);
@@ -163,6 +166,7 @@ private:
     void DoActivateOps(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void DoPersistDeleteSystemShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
 
     void DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx);
     void DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext &ctx);

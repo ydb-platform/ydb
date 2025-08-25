@@ -24,7 +24,7 @@ SELECT series_id, title, info, release_date, views, uploaded_user_id
     WHERE views >= someValue
 ```
 
-Сделать [`JOIN`](../join.md) строковых таблиц `series` и `users` c заданным полем `userName` по индексам `users_index` и `name_index` соответственно:
+Сделать [`JOIN`](join.md) строковых таблиц `series` и `users` c заданным полем `userName` по индексам `users_index` и `name_index` соответственно:
 
 ```yql
 SELECT t1.series_id, t1.title

@@ -26,13 +26,13 @@ namespace NYql {
         }
 
         TUserDataKey CreateKey(const NUserData::TUserData& item) {
-            TString name = (item.Disposition_ == EDisposition::RESOURCE) ? item.Content_ : item.Name_;
+            TString name = (item.Disposition == EDisposition::RESOURCE) ? item.Content : item.Name;
 
             if (!name.StartsWith('/')) {
                 name = GetDefaultFilePrefix() + name;
             }
 
-            if (item.Type_ == EType::UDF) {
+            if (item.Type == EType::UDF) {
                 return TUserDataKey::Udf(name);
             } else {
                 return TUserDataKey::File(name);
@@ -45,29 +45,29 @@ namespace NYql {
 
             auto& block = userDataTable[CreateKey(item)];
 
-            switch (item.Disposition_) {
+            switch (item.Disposition) {
                 case EDisposition::INLINE:
-                    block.Data = item.Content_;
+                    block.Data = item.Content;
                     block.Type = EUserDataType::RAW_INLINE_DATA;
                     break;
                 case EDisposition::RESOURCE:
                 case EDisposition::RESOURCE_FILE:
-                    block.Data = NResource::Find(item.Content_);
+                    block.Data = NResource::Find(item.Content);
                     block.Type = EUserDataType::RAW_INLINE_DATA;
                     break;
                 case EDisposition::FILESYSTEM:
-                    block.Data = item.Content_;
+                    block.Data = item.Content;
                     block.Type = EUserDataType::PATH;
                     break;
                 case EDisposition::URL:
-                    block.Data = item.Content_;
+                    block.Data = item.Content;
                     block.Type = EUserDataType::URL;
                     break;
                 default:
-                    ythrow yexception() << "Unknown disposition for user data \"" << item.Name_ << "\": " << item.Disposition_;
+                    ythrow yexception() << "Unknown disposition for user data \"" << item.Name << "\": " << item.Disposition;
             }
 
-            switch (item.Type_) {
+            switch (item.Type) {
                 case EType::LIBRARY:
                     block.Usage.Set(EUserDataBlockUsage::Library, true);
                     break;
@@ -78,28 +78,28 @@ namespace NYql {
                     block.Usage.Set(EUserDataBlockUsage::Udf, true);
                     break;
                 default:
-                    ythrow yexception() << "Unknown type for user data \"" << item.Name_ << "\": " << item.Type_;
+                    ythrow yexception() << "Unknown type for user data \"" << item.Name << "\": " << item.Type;
             }
 
-            if (item.Type_ == EType::LIBRARY) {
-                switch (item.Disposition_) {
+            if (item.Type == EType::LIBRARY) {
+                switch (item.Disposition) {
                     case EDisposition::INLINE:
                     case EDisposition::RESOURCE:
                     case EDisposition::RESOURCE_FILE:
                     case EDisposition::FILESYSTEM: {
-                        if (item.Disposition_ == EDisposition::FILESYSTEM) {
+                        if (item.Disposition == EDisposition::FILESYSTEM) {
                             TFsPath path(block.Data);
                             if (path.Exists() && path.IsFile()) {
                                 TFileInput input(path);
                                 block.Data = input.ReadAll();
                             } else {
-                                ythrow yexception() << "File for user data \"" << item.Name_ << "\" does not exist: " << block.Data;
+                                ythrow yexception() << "File for user data \"" << item.Name << "\" does not exist: " << block.Data;
                             }
                             block.Type = EUserDataType::RAW_INLINE_DATA;
                         }
                     } break;
                     default:
-                        ythrow yexception() << item.Disposition_ << " disposition is not yet supported for libraries (specified for \"" << item.Name_ << "\")";
+                        ythrow yexception() << item.Disposition << " disposition is not yet supported for libraries (specified for \"" << item.Name << "\")";
                 }
             }
         }
@@ -122,7 +122,8 @@ namespace NYql {
         const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags,
         bool optimizeLibraries,
-        THolder<TExprContext> ownedCtx)
+        THolder<TExprContext> ownedCtx,
+        TModuleResolver::TModuleChecker moduleChecker)
     {
         YQL_PROFILE_FUNC(DEBUG);
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
@@ -152,7 +153,7 @@ namespace NYql {
         }
 
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modulesTable), ctx->NextUniqueId,
-            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
+            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx), moduleChecker);
         return mounts;
     }
 
@@ -162,22 +163,25 @@ namespace NYql {
         const TVector<NUserData::TUserData>& userData,
         const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags,
-        bool optimizeLibraries) {
-        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr);
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr, moduleChecker);
     }
 
     bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,
         IModuleResolver::TPtr& moduleResolver,
         const THashMap<TString, TString>& clusterMapping,
-        bool optimizeLibraries) {
-        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr).empty();
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr, moduleChecker).empty();
     }
 
     bool GetYqlDefaultModuleResolverWithContext(
         IModuleResolver::TPtr& moduleResolver,
         const THashMap<TString, TString>& clusterMapping,
-        bool optimizeLibraries) {
-        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>()).empty();
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
     }
 }

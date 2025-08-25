@@ -1,4 +1,4 @@
-# Asynchronous replication
+# Asynchronous Replication
 
 Asynchronous replication allows for synchronizing data between {{ ydb-short-name }} [databases](glossary.md#database) in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases. Such databases can be located in the same {{ ydb-short-name }} [cluster](glossary.md#cluster) as well as in different clusters.
 
@@ -66,13 +66,13 @@ Replicas are created under the user account that was used to create the asynchro
 
 {% endnote %}
 
-### Initial table scan {#initial-scan}
+### Initial Table Scan {#initial-scan}
 
 During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
-### Change data replication {#replication-of-changes}
+### Change Data Replication {#replication-of-changes}
 
 After the initial table scan is completed, the consumers read the change data and write it to replicas.
 
@@ -97,7 +97,7 @@ You can also get the replication lag from the [description](../reference/ydb-cli
 * During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
 * During asynchronous replication, replicas are available only for reading.
 
-## Error handling during asynchronous replication {#error-handling}
+## Error Handling During Asynchronous Replication {#error-handling}
 
 Possible errors during asynchronous replication can be grouped into the following classes:
 
@@ -110,9 +110,33 @@ Currently, asynchronous replication that is aborted due to a critical error cann
 
 {% endnote %}
 
-For more information about error classes and how to address them, refer to [Error handling](../reference/ydb-sdk/error_handling.md).
+For more information about error classes and how to address them, refer to [Error Handling](../reference/ydb-sdk/error_handling.md).
 
-## Asynchronous replication completion {#done}
+## Consistency Levels of Replicated Data {#consistency-levels}
+
+### Row-Level Data Consistency {#consistency-level-row}
+
+The Change Data Capture used for asynchronous replication [guarantees](cdc.md#guarantees) that changes to the same [primary key](datamodel/table.md) are delivered in the exact order in which they occurred at the source. This ensures row-level data consistency.
+
+Data written to replica objects in this mode becomes available for reading immediately.
+
+### Global Data Consistency {#consistency-level-global}
+
+When [transactions](transactions.md) are performed at the source, several rows in a table or even rows in different table partitions may be atomically modified. Global data consistency at the target implies preserving atomicity: changes "appear" (become available for reading) in a consistent manner.
+
+To ensure global data consistency, changefeeds must be created with [barriers](cdc.md#barriers) enabled. Data is buffered directly in the partitions of replica objects between barriers. When the next set of barriers from all topics is received, the changes are committed and become available for reading. As a result, the data at the target is consistent as of the timestamp specified in the barrier. If we assume that barriers are created every 10 seconds at the source (the default value), then under normal conditions the target also commits and publishes the set of changes from the source every 10 seconds.
+
+#### Change Commit Interval {#commit-interval}
+
+By default changes are committed no more than once every 10 seconds. You can override the change commit interval by specifying the [COMMIT_INTERVAL](../yql/reference/syntax/create-async-replication.md#params) option when creating an asynchronous replication instance.
+
+{% note info %}
+
+The change commit interval directly affects the barrier emission interval in the changefeed — the parameter values are synchronized. Thus, changes are usually committed at the same frequency as barriers appear in the changefeeds. However, in some cases, for example, if there is an uneven load across tables, barriers in changefeeds may appear at significantly different times, which can increase the change commit interval. You can find information about the lag in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
+
+{% endnote %}
+
+## Asynchronous Replication Completion {#done}
 
 Completion of asynchronous replication might be an end goal of data migration from one database to another. In this case the client stops writing data to the source, waits for the zero replication lag, and completes replication. After the replication process is completed, replicas become available both for reading and writing. Then you can switch the load from the source database to the target database and complete data migration.
 
@@ -130,7 +154,7 @@ You cannot resume completed asynchronous replication.
 
 To complete asynchronous replication, use the [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md) YQL expression.
 
-## Dropping an asynchronous replication instance {#drop}
+## Dropping an Asynchronous Replication Instance {#drop}
 
 When you drop an asynchronous replication instance:
 

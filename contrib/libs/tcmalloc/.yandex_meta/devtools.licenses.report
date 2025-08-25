@@ -38,184 +38,301 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        tcmalloc/allocation_sample.cc [3:13]
+        tcmalloc/allocation_sample.h [4:14]
+        tcmalloc/allocation_sample_test.cc [3:13]
+        tcmalloc/allocation_sampling.cc [3:13]
+        tcmalloc/allocation_sampling.h [4:14]
         tcmalloc/arena.cc [3:13]
-        tcmalloc/arena.h [3:13]
+        tcmalloc/arena.h [4:14]
         tcmalloc/arena_test.cc [3:13]
         tcmalloc/background.cc [3:13]
         tcmalloc/central_freelist.cc [3:13]
-        tcmalloc/central_freelist.h [3:13]
+        tcmalloc/central_freelist.h [4:14]
         tcmalloc/central_freelist_benchmark.cc [3:13]
+        tcmalloc/central_freelist_fuzz.cc [3:13]
         tcmalloc/central_freelist_test.cc [3:13]
         tcmalloc/common.cc [3:13]
-        tcmalloc/common.h [3:13]
+        tcmalloc/common.h [4:14]
         tcmalloc/cpu_cache.cc [3:13]
-        tcmalloc/cpu_cache.h [3:13]
+        tcmalloc/cpu_cache.h [4:14]
+        tcmalloc/cpu_cache_activate_test.cc [3:13]
         tcmalloc/cpu_cache_test.cc [3:13]
+        tcmalloc/deallocation_profiler.cc [3:13]
+        tcmalloc/deallocation_profiler.h [4:14]
         tcmalloc/experiment.cc [3:13]
-        tcmalloc/experiment.h [3:13]
-        tcmalloc/experiment_config.h [3:13]
+        tcmalloc/experiment.h [4:14]
+        tcmalloc/experiment_config.h [4:14]
         tcmalloc/experiment_config_test.cc [3:13]
         tcmalloc/experiment_fuzz.cc [3:13]
-        tcmalloc/experimental_56_size_class.cc [3:13]
-        tcmalloc/experimental_pow2_below64_size_class.cc [3:13]
         tcmalloc/experimental_pow2_size_class.cc [3:13]
+        tcmalloc/global_stats.cc [3:13]
+        tcmalloc/global_stats.h [4:14]
+        tcmalloc/guarded_allocations.h [4:14]
         tcmalloc/guarded_page_allocator.cc [3:13]
-        tcmalloc/guarded_page_allocator.h [3:13]
+        tcmalloc/guarded_page_allocator.h [4:14]
         tcmalloc/guarded_page_allocator_benchmark.cc [3:13]
+        tcmalloc/guarded_page_allocator_profile_test.cc [3:13]
         tcmalloc/guarded_page_allocator_test.cc [3:13]
-        tcmalloc/heap_profiling_test.cc [3:13]
+        tcmalloc/hinted_tracker_lists.h [4:14]
         tcmalloc/huge_address_map.cc [3:13]
-        tcmalloc/huge_address_map.h [3:13]
+        tcmalloc/huge_address_map.h [4:14]
         tcmalloc/huge_address_map_test.cc [3:13]
         tcmalloc/huge_allocator.cc [3:13]
-        tcmalloc/huge_allocator.h [3:13]
+        tcmalloc/huge_allocator.h [4:14]
         tcmalloc/huge_allocator_test.cc [3:13]
         tcmalloc/huge_cache.cc [3:13]
-        tcmalloc/huge_cache.h [3:13]
+        tcmalloc/huge_cache.h [4:14]
         tcmalloc/huge_cache_test.cc [3:13]
         tcmalloc/huge_page_aware_allocator.cc [3:13]
-        tcmalloc/huge_page_aware_allocator.h [3:13]
+        tcmalloc/huge_page_aware_allocator.h [4:14]
+        tcmalloc/huge_page_aware_allocator_fuzz.cc [3:13]
         tcmalloc/huge_page_aware_allocator_test.cc [3:13]
-        tcmalloc/huge_page_filler.h [3:13]
+        tcmalloc/huge_page_filler.h [4:14]
+        tcmalloc/huge_page_filler_fuzz.cc [3:13]
         tcmalloc/huge_page_filler_test.cc [3:13]
-        tcmalloc/huge_pages.h [3:13]
-        tcmalloc/huge_region.h [3:13]
+        tcmalloc/huge_page_subrelease.h [4:14]
+        tcmalloc/huge_page_subrelease_test.cc [3:13]
+        tcmalloc/huge_pages.h [4:14]
+        tcmalloc/huge_region.h [4:14]
+        tcmalloc/huge_region_fuzz.cc [3:13]
         tcmalloc/huge_region_test.cc [3:13]
-        tcmalloc/internal/atomic_danger.h [3:13]
-        tcmalloc/internal/atomic_stats_counter.h [3:13]
-        tcmalloc/internal/bits.h [3:13]
-        tcmalloc/internal/bits_test.cc [3:13]
+        tcmalloc/internal/affinity.cc [3:13]
+        tcmalloc/internal/affinity.h [4:14]
+        tcmalloc/internal/affinity_test.cc [3:13]
+        tcmalloc/internal/allocation_guard.cc [3:13]
+        tcmalloc/internal/allocation_guard.h [4:14]
+        tcmalloc/internal/allocation_guard_test.cc [3:13]
+        tcmalloc/internal/atomic_danger.h [4:14]
+        tcmalloc/internal/atomic_stats_counter.h [4:14]
         tcmalloc/internal/cache_topology.cc [3:13]
-        tcmalloc/internal/cache_topology.h [3:13]
+        tcmalloc/internal/cache_topology.h [4:14]
         tcmalloc/internal/cache_topology_test.cc [3:13]
-        tcmalloc/internal/clock.h [3:13]
-        tcmalloc/internal/config.h [3:13]
-        tcmalloc/internal/declarations.h [3:13]
+        tcmalloc/internal/clock.h [4:14]
+        tcmalloc/internal/config.h [4:14]
+        tcmalloc/internal/config_test.cc [3:13]
+        tcmalloc/internal/cpu_utils.h [4:14]
+        tcmalloc/internal/declarations.h [4:14]
         tcmalloc/internal/environment.cc [3:13]
-        tcmalloc/internal/environment.h [3:13]
+        tcmalloc/internal/environment.h [4:14]
         tcmalloc/internal/environment_test.cc [3:13]
-        tcmalloc/internal/lifetime_predictions.h [3:13]
-        tcmalloc/internal/lifetime_predictions_test.cc [3:13]
-        tcmalloc/internal/lifetime_tracker.h [3:13]
-        tcmalloc/internal/lifetime_tracker_test.cc [3:13]
-        tcmalloc/internal/linked_list.h [3:13]
+        tcmalloc/internal/explicitly_constructed.h [4:14]
+        tcmalloc/internal/exponential_biased.h [4:14]
+        tcmalloc/internal/exponential_biased_test.cc [3:13]
+        tcmalloc/internal/fake_profile.h [4:14]
+        tcmalloc/internal/linked_list.h [4:14]
         tcmalloc/internal/linked_list_benchmark.cc [3:13]
         tcmalloc/internal/linked_list_test.cc [3:13]
-        tcmalloc/internal/linux_syscall_support.h [3:13]
+        tcmalloc/internal/linux_syscall_support.h [4:14]
         tcmalloc/internal/logging.cc [3:13]
-        tcmalloc/internal/logging.h [3:13]
+        tcmalloc/internal/logging.h [4:14]
         tcmalloc/internal/logging_test.cc [3:13]
         tcmalloc/internal/logging_test_helper.cc [3:13]
         tcmalloc/internal/memory_stats.cc [3:13]
-        tcmalloc/internal/memory_stats.h [3:13]
+        tcmalloc/internal/memory_stats.h [4:14]
         tcmalloc/internal/memory_stats_test.cc [3:13]
+        tcmalloc/internal/memory_tag.cc [3:13]
+        tcmalloc/internal/memory_tag.h [4:14]
         tcmalloc/internal/mincore.cc [3:13]
-        tcmalloc/internal/mincore.h [3:13]
+        tcmalloc/internal/mincore.h [4:14]
         tcmalloc/internal/mincore_benchmark.cc [3:13]
         tcmalloc/internal/mincore_test.cc [3:13]
-        tcmalloc/internal/mock_span.h [3:13]
+        tcmalloc/internal/mismatched_delete_state.h [4:14]
+        tcmalloc/internal/mock_span.h [4:14]
         tcmalloc/internal/numa.cc [3:13]
-        tcmalloc/internal/numa.h [3:13]
+        tcmalloc/internal/numa.h [4:14]
         tcmalloc/internal/numa_test.cc [3:13]
-        tcmalloc/internal/optimization.h [3:13]
-        tcmalloc/internal/parameter_accessors.h [3:13]
+        tcmalloc/internal/optimization.h [4:14]
+        tcmalloc/internal/overflow.h [4:14]
+        tcmalloc/internal/page_size.cc [3:13]
+        tcmalloc/internal/page_size.h [4:14]
+        tcmalloc/internal/pageflags.cc [3:13]
+        tcmalloc/internal/pageflags.h [4:14]
+        tcmalloc/internal/pageflags_test.cc [3:13]
+        tcmalloc/internal/parameter_accessors.h [4:14]
         tcmalloc/internal/percpu.cc [3:13]
-        tcmalloc/internal/percpu.h [3:13]
+        tcmalloc/internal/percpu.h [4:14]
+        tcmalloc/internal/percpu_early_test.cc [3:13]
         tcmalloc/internal/percpu_rseq_asm.S [3:13]
         tcmalloc/internal/percpu_rseq_unsupported.cc [3:13]
-        tcmalloc/internal/percpu_tcmalloc.h [3:13]
+        tcmalloc/internal/percpu_tcmalloc.h [4:14]
         tcmalloc/internal/percpu_tcmalloc_test.cc [3:13]
+        tcmalloc/internal/percpu_test.cc [3:13]
+        tcmalloc/internal/prefetch.h [4:14]
+        tcmalloc/internal/prefetch_test.cc [3:13]
         tcmalloc/internal/proc_maps.cc [3:13]
-        tcmalloc/internal/proc_maps.h [3:13]
-        tcmalloc/internal/range_tracker.h [3:13]
+        tcmalloc/internal/proc_maps.h [4:14]
+        tcmalloc/internal/profile_builder.cc [3:13]
+        tcmalloc/internal/profile_builder.h [4:14]
+        tcmalloc/internal/profile_builder_fuzz.cc [3:13]
+        tcmalloc/internal/profile_builder_no_tcmalloc_test.cc [3:13]
+        tcmalloc/internal/profile_builder_test.cc [3:13]
+        tcmalloc/internal/range_tracker.h [4:14]
         tcmalloc/internal/range_tracker_benchmark.cc [3:13]
         tcmalloc/internal/range_tracker_test.cc [3:13]
-        tcmalloc/internal/timeseries_tracker.h [3:13]
+        tcmalloc/internal/residency.cc [3:13]
+        tcmalloc/internal/residency.h [4:14]
+        tcmalloc/internal/residency_test.cc [3:13]
+        tcmalloc/internal/sampled_allocation.h [4:14]
+        tcmalloc/internal/sampled_allocation_test.cc [3:13]
+        tcmalloc/internal/stacktrace_filter.h [4:14]
+        tcmalloc/internal/stacktrace_filter_test.cc [3:13]
+        tcmalloc/internal/sysinfo.cc [3:13]
+        tcmalloc/internal/sysinfo.h [4:14]
+        tcmalloc/internal/sysinfo_fuzz.cc [3:13]
+        tcmalloc/internal/sysinfo_test.cc [3:13]
+        tcmalloc/internal/timeseries_tracker.h [4:14]
         tcmalloc/internal/timeseries_tracker_test.cc [3:13]
         tcmalloc/internal/util.cc [3:13]
-        tcmalloc/internal/util.h [3:13]
-        tcmalloc/internal_malloc_extension.h [3:13]
+        tcmalloc/internal/util.h [4:14]
+        tcmalloc/internal_malloc_extension.h [4:14]
+        tcmalloc/internal_malloc_tracing_extension.h [4:14]
         tcmalloc/legacy_size_classes.cc [3:13]
-        tcmalloc/libc_override.h [3:13]
-        tcmalloc/libc_override_gcc_and_weak.h [3:13]
-        tcmalloc/libc_override_glibc.h [3:13]
-        tcmalloc/libc_override_redefine.h [3:13]
+        tcmalloc/libc_override.h [4:14]
         tcmalloc/malloc_extension.cc [3:13]
-        tcmalloc/malloc_extension.h [3:13]
+        tcmalloc/malloc_extension.h [4:14]
         tcmalloc/malloc_extension_fuzz.cc [3:13]
-        tcmalloc/malloc_extension_system_malloc_test.cc [3:13]
-        tcmalloc/malloc_extension_test.cc [3:13]
+        tcmalloc/malloc_tracing_extension.cc [3:13]
+        tcmalloc/malloc_tracing_extension.h [4:14]
+        tcmalloc/metadata_allocator.h [4:14]
+        tcmalloc/metadata_object_allocator.h [4:14]
         tcmalloc/mock_central_freelist.cc [3:13]
-        tcmalloc/mock_central_freelist.h [3:13]
+        tcmalloc/mock_central_freelist.h [4:14]
+        tcmalloc/mock_huge_page_static_forwarder.cc [3:13]
+        tcmalloc/mock_huge_page_static_forwarder.h [4:14]
+        tcmalloc/mock_metadata_allocator.h [4:14]
+        tcmalloc/mock_static_forwarder.h [4:14]
         tcmalloc/mock_transfer_cache.cc [3:13]
-        tcmalloc/mock_transfer_cache.h [3:13]
-        tcmalloc/noruntime_size_classes.cc [3:13]
+        tcmalloc/mock_transfer_cache.h [4:14]
+        tcmalloc/mock_virtual_allocator.h [4:14]
+        tcmalloc/new_extension.h [4:14]
+        tcmalloc/new_extension_test.cc [3:13]
         tcmalloc/page_allocator.cc [3:13]
-        tcmalloc/page_allocator.h [3:13]
+        tcmalloc/page_allocator.h [4:14]
         tcmalloc/page_allocator_interface.cc [3:13]
-        tcmalloc/page_allocator_interface.h [3:13]
+        tcmalloc/page_allocator_interface.h [4:14]
         tcmalloc/page_allocator_test.cc [3:13]
-        tcmalloc/page_allocator_test_util.h [3:13]
-        tcmalloc/page_heap.cc [3:13]
-        tcmalloc/page_heap.h [3:13]
-        tcmalloc/page_heap_allocator.h [3:13]
-        tcmalloc/page_heap_test.cc [3:13]
+        tcmalloc/page_allocator_test_util.h [4:14]
         tcmalloc/pagemap.cc [3:13]
-        tcmalloc/pagemap.h [3:13]
+        tcmalloc/pagemap.h [5:15]
         tcmalloc/pagemap_test.cc [3:13]
-        tcmalloc/pages.h [3:13]
+        tcmalloc/pages.h [4:14]
+        tcmalloc/pages_test.cc [3:13]
         tcmalloc/parameters.cc [3:13]
-        tcmalloc/parameters.h [3:13]
+        tcmalloc/parameters.h [4:14]
         tcmalloc/peak_heap_tracker.cc [3:13]
-        tcmalloc/peak_heap_tracker.h [3:13]
+        tcmalloc/peak_heap_tracker.h [4:14]
+        tcmalloc/profile_marshaler.cc [3:13]
+        tcmalloc/profile_marshaler.h [4:14]
+        tcmalloc/profile_marshaler_test.cc [3:13]
         tcmalloc/profile_test.cc [3:13]
-        tcmalloc/realloc_test.cc [3:13]
-        tcmalloc/runtime_size_classes.cc [3:13]
-        tcmalloc/runtime_size_classes.h [3:13]
-        tcmalloc/runtime_size_classes_fuzz.cc [3:13]
-        tcmalloc/runtime_size_classes_test.cc [3:13]
+        tcmalloc/reuse_size_classes.cc [3:13]
         tcmalloc/sampler.cc [3:13]
-        tcmalloc/sampler.h [3:13]
-        tcmalloc/size_class_info.h [3:13]
+        tcmalloc/sampler.h [4:14]
+        tcmalloc/segv_handler.cc [3:13]
+        tcmalloc/segv_handler.h [4:14]
+        tcmalloc/segv_handler_test.cc [3:13]
+        tcmalloc/selsan/report_test.cc [3:13]
+        tcmalloc/selsan/selsan.cc [3:13]
+        tcmalloc/selsan/selsan.h [4:14]
+        tcmalloc/selsan/shadow_test.cc [3:13]
+        tcmalloc/size_class_info.h [4:14]
         tcmalloc/size_classes.cc [3:13]
         tcmalloc/size_classes_test.cc [3:13]
-        tcmalloc/size_classes_with_runtime_size_classes_test.cc [3:13]
+        tcmalloc/sizemap.cc [3:13]
+        tcmalloc/sizemap.h [4:14]
+        tcmalloc/sizemap_fuzz.cc [3:13]
+        tcmalloc/sizemap_test.cc [3:13]
         tcmalloc/span.cc [3:13]
-        tcmalloc/span.h [3:13]
+        tcmalloc/span.h [4:14]
         tcmalloc/span_benchmark.cc [3:13]
-        tcmalloc/span_stats.h [3:13]
+        tcmalloc/span_fuzz.cc [3:13]
+        tcmalloc/span_stats.h [4:14]
         tcmalloc/span_test.cc [3:13]
         tcmalloc/stack_trace_table.cc [3:13]
-        tcmalloc/stack_trace_table.h [3:13]
+        tcmalloc/stack_trace_table.h [4:14]
         tcmalloc/stack_trace_table_test.cc [3:13]
         tcmalloc/static_vars.cc [3:13]
-        tcmalloc/static_vars.h [3:13]
+        tcmalloc/static_vars.h [4:14]
         tcmalloc/stats.cc [3:13]
-        tcmalloc/stats.h [3:13]
+        tcmalloc/stats.h [4:14]
         tcmalloc/stats_test.cc [3:13]
         tcmalloc/system-alloc.cc [3:13]
-        tcmalloc/system-alloc.h [3:13]
-        tcmalloc/system-alloc_test.cc [3:13]
+        tcmalloc/system-alloc.h [4:14]
         tcmalloc/tcmalloc.cc [3:13]
-        tcmalloc/tcmalloc.h [3:13]
-        tcmalloc/tcmalloc_large_test.cc [3:13]
-        tcmalloc/tcmalloc_policy.h [3:13]
+        tcmalloc/tcmalloc.h [4:14]
+        tcmalloc/tcmalloc_policy.h [4:14]
+        tcmalloc/testing/aligned_new_test.cc [3:13]
+        tcmalloc/testing/background_test.cc [3:13]
+        tcmalloc/testing/benchmark_main.cc [3:13]
+        tcmalloc/testing/current_allocated_bytes_test.cc [3:13]
+        tcmalloc/testing/deallocation_profiler_test.cc [3:13]
+        tcmalloc/testing/default_parameters_test.cc [3:13]
+        tcmalloc/testing/disable_numa_test.cc [3:13]
+        tcmalloc/testing/frag_test.cc [3:13]
+        tcmalloc/testing/get_stats_test.cc [3:13]
+        tcmalloc/testing/heap_profiling_test.cc [3:13]
+        tcmalloc/testing/hello_main.cc [3:13]
+        tcmalloc/testing/large_alloc_size_test.cc [3:13]
+        tcmalloc/testing/largesmall_frag_test.cc [3:13]
+        tcmalloc/testing/limit_test.cc [3:13]
+        tcmalloc/testing/malloc_extension_system_malloc_test.cc [3:13]
+        tcmalloc/testing/malloc_extension_test.cc [3:13]
+        tcmalloc/testing/malloc_tracing_extension_test.cc [3:13]
+        tcmalloc/testing/markidle_test.cc [3:13]
+        tcmalloc/testing/memalign_test.cc [3:13]
+        tcmalloc/testing/memory_errors_test.cc [3:13]
+        tcmalloc/testing/no_deps_test.cc [3:13]
+        tcmalloc/testing/numa_locality_test.cc [3:13]
+        tcmalloc/testing/outofmemory_test.cc [3:13]
+        tcmalloc/testing/parallel_test.cc [3:13]
+        tcmalloc/testing/peak_heap_profiling_test.cc [3:13]
+        tcmalloc/testing/profile_drop_frames_test.cc [3:13]
+        tcmalloc/testing/profile_test.cc [3:13]
+        tcmalloc/testing/realized_fragmentation_test.cc [3:13]
+        tcmalloc/testing/realloc_test.cc [3:13]
+        tcmalloc/testing/reclaim_test.cc [3:13]
+        tcmalloc/testing/releasing_test.cc [3:13]
+        tcmalloc/testing/sample_size_class_test.cc [3:13]
+        tcmalloc/testing/sampler_test.cc [3:13]
+        tcmalloc/testing/sampling_memusage_test.cc [3:13]
+        tcmalloc/testing/sampling_test.cc [3:13]
+        tcmalloc/testing/startup_size_test.cc [3:13]
+        tcmalloc/testing/system-alloc_test.cc [3:13]
+        tcmalloc/testing/tcmalloc_benchmark.cc [3:13]
+        tcmalloc/testing/tcmalloc_large_test.cc [3:13]
+        tcmalloc/testing/tcmalloc_test.cc [3:13]
+        tcmalloc/testing/test_allocator_harness.h [4:14]
+        tcmalloc/testing/testutil.cc [3:13]
+        tcmalloc/testing/testutil.h [4:14]
+        tcmalloc/testing/thread_ctor_test.cc [3:13]
+        tcmalloc/testing/thread_ctor_test_lib.cc [3:13]
+        tcmalloc/testing/thread_manager.h [4:14]
+        tcmalloc/testing/threadcachesize_test.cc [3:13]
+        tcmalloc/testing/variants_test.cc [3:13]
+        tcmalloc/testing/want_disable_huge_region_more_often_test_helper.cc [3:13]
+        tcmalloc/testing/want_disable_tcmalloc_big_span_test_helper.cc [3:13]
+        tcmalloc/testing/want_hpaa_test_helper.cc [3:13]
+        tcmalloc/testing/want_pow2below64_size_classes_helper.cc [3:13]
         tcmalloc/thread_cache.cc [3:13]
-        tcmalloc/thread_cache.h [3:13]
+        tcmalloc/thread_cache.h [4:14]
         tcmalloc/thread_cache_test.cc [3:13]
-        tcmalloc/tracking.h [3:13]
         tcmalloc/transfer_cache.cc [3:13]
-        tcmalloc/transfer_cache.h [3:13]
+        tcmalloc/transfer_cache.h [4:14]
         tcmalloc/transfer_cache_benchmark.cc [3:13]
         tcmalloc/transfer_cache_fuzz.cc [3:13]
-        tcmalloc/transfer_cache_internals.h [3:13]
-        tcmalloc/transfer_cache_stats.h [3:13]
+        tcmalloc/transfer_cache_internals.h [4:14]
+        tcmalloc/transfer_cache_stats.h [4:14]
         tcmalloc/transfer_cache_test.cc [3:13]
+        tcmalloc/want_disable_dynamic_slabs.cc [3:13]
+        tcmalloc/want_disable_huge_region_more_often.cc [3:13]
+        tcmalloc/want_disable_tcmalloc_big_span.cc [3:13]
         tcmalloc/want_hpaa.cc [3:13]
-        tcmalloc/want_hpaa_subrelease.cc [3:13]
-        tcmalloc/want_legacy_spans.cc [3:13]
-        tcmalloc/want_no_hpaa.cc [3:13]
+        tcmalloc/want_legacy_size_classes.cc [3:13]
+        tcmalloc/want_legacy_size_classes_test.cc [3:13]
         tcmalloc/want_numa_aware.cc [3:13]
+    Belongs difference:
+        - tcmalloc/internal/ya.make
 
 KEEP     Apache-2.0           24be4e5673a9c71cdba851c53ed9677b
 BELONGS ya.make
@@ -227,6 +344,37 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         tcmalloc/internal/percpu_rseq_aarch64.S [4:14]
+    Belongs difference:
+        + ya.make
+        - tcmalloc/internal/ya.make
+
+KEEP     Apache-2.0           2695f523f6550abd8506fe00ecd5fd73
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        tcmalloc/internal/profile.proto [3:13]
+    Belongs difference:
+        + ya.make
+        - tcmalloc/internal/ya.make
+
+SKIP     LicenseRef-scancode-unknown-license-reference 2b7ce4d6f90a7e895f2cf83f68079656
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: README.md at line 43
+    License text:
+        The TCMalloc library is licensed under the terms of the Apache license. See
+        LICENSE for more information.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [42:43]
 
 KEEP     Apache-2.0           34ef0c6d1296bad9c0b8ea4447611e19
 BELONGS ya.make
@@ -237,21 +385,42 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        tcmalloc/.github/workflows/ci.yml [3:13]
         tcmalloc/BUILD [3:13]
+        tcmalloc/copts.bzl [3:13]
+        tcmalloc/internal/BUILD [3:13]
+        tcmalloc/selsan/BUILD [3:13]
+        tcmalloc/testing/BUILD [3:13]
+        tcmalloc/variants.bzl [3:13]
+    Belongs difference:
+        - tcmalloc/internal/ya.make
 
-KEEP     Apache-2.0           566444825cbcc83578050639168bd08f
+KEEP     Apache-2.0           3ea5060c4f08f5769674fbf0c0fb3992
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: README.md at line 42
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        tcmalloc/internal/sampled_allocation_recorder.h [4:14]
+        tcmalloc/internal/sampled_allocation_recorder_test.cc [3:13]
+    Belongs difference:
+        + ya.make
+        - tcmalloc/internal/ya.make
+
+KEEP     Apache-2.0           546d5c2ec03ff489fdf645b478946134
+BELONGS ya.make
     License text:
-        The TCMalloc library is licensed under the terms of the Apache
-        license. See LICENSE for more information.
+        The TCMalloc library is licensed under the terms of the Apache license. See
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 90.00
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [41:42]
+        README.md [42:42]
 
 SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
 BELONGS ya.make
@@ -274,8 +443,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        tcmalloc/internal/percpu_rseq_ppc.S [4:14]
         tcmalloc/internal/percpu_rseq_x86_64.S [4:14]
+    Belongs difference:
+        + ya.make
+        - tcmalloc/internal/ya.make
 
 SKIP     LicenseRef-scancode-generic-cla 979d7de2e3ff119ee2c22c7efbec766d
 BELONGS ya.make
@@ -301,31 +472,17 @@ BELONGS ya.make
     Files with this license:
         LICENSE [2:202]
 
-SKIP     LicenseRef-scancode-other-permissive cd348406a46a4c91e9edaa5be5e9c074
+SKIP     MIT                  f360ff14698610d13d4c35791f051cde
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: README.md at line 42
-    # File LICENSES allready included
-    License text:
-        license. See LICENSE for more information.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-unknown-license-reference
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
-    Files with this license:
-        README.md [42:42]
-
-KEEP     Apache-2.0           e0f9a998414a9ae203fd34f4452d4dbc
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: README.md at line 42
+FILE_INCLUDE LICENSE found in files: README.md at line 43
     License text:
         \## License
-        The TCMalloc library is licensed under the terms of the Apache
-        license. See LICENSE for more information.
+        The TCMalloc library is licensed under the terms of the Apache license. See
+        LICENSE for more information.
     Scancode info:
         Original SPDX id: MIT
         Score           : 52.63
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [39:42]
+        README.md [40:43]

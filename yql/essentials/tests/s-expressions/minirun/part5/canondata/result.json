@@ -13,6 +13,20 @@
             "uri": "https://{canondata_backend}/1936273/fc47b74ce53fdd3426495bb35fba8f4c1bc5deda/resource.tar.gz#test.test_Blocks-BlockOrderedExtend-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Blocks-BlocksSort+ReplicateScalars-default.txt-Debug]": [
+        {
+            "checksum": "0fbc5abbf96ffc7a704877af748f2330",
+            "size": 615,
+            "uri": "https://{canondata_backend}/1814674/5a45bfb47f6e8fba5018ec876fb8245554089825/resource.tar.gz#test.test_Blocks-BlocksSort+ReplicateScalars-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Blocks-BlocksSort+ReplicateScalars-default.txt-Results]": [
+        {
+            "checksum": "ce4b5ec69129932b188215b28cd20e2a",
+            "size": 887,
+            "uri": "https://{canondata_backend}/1942100/7f62e1d7e5ababbffae9cdcf4da35d121501ff83/resource.tar.gz#test.test_Blocks-BlocksSort+ReplicateScalars-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Builtins-DivePrefixMembersOpt-default.txt-Debug]": [
         {
             "checksum": "7c408ddcedc1deae859a58f6f29ff7fd",
@@ -126,6 +140,20 @@
             "checksum": "b0f65bbacd7624e94be115d020d49278",
             "size": 2720,
             "uri": "https://{canondata_backend}/1942525/ebc309da64241c6f5f13249c90361edaa566a9cc/resource.tar.gz#test.test_EquiJoin-EquiConvertToCommonTypeAlias-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[EquiJoin-FuseEquiJoins-default.txt-Debug]": [
+        {
+            "checksum": "e4789e7f286c2d891f84c3f5a9016dbd",
+            "size": 981,
+            "uri": "https://{canondata_backend}/1942173/e0468c17e455c4e7740e0b19765633d5a5aca7af/resource.tar.gz#test.test_EquiJoin-FuseEquiJoins-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[EquiJoin-FuseEquiJoins-default.txt-Results]": [
+        {
+            "checksum": "d4c82ff9c9a0c83a3f0b79b0472c76af",
+            "size": 2466,
+            "uri": "https://{canondata_backend}/1942173/e0468c17e455c4e7740e0b19765633d5a5aca7af/resource.tar.gz#test.test_EquiJoin-FuseEquiJoins-default.txt-Results_/results.txt"
         }
     ],
     "test.test[EquiJoin-JoinInMemOpt1Opt2-default.txt-Debug]": [

@@ -68,7 +68,28 @@ public:
 
     TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
-        request.mutable_all();
+        auto *all = request.mutable_all();
+        switch (settings.Transform_) {
+            case EFetchAllConfigsTransform::NONE:
+                all->mutable_none();
+                break;
+
+            case EFetchAllConfigsTransform::DETACH_STORAGE_CONFIG_SECTION:
+                all->mutable_detach_storage_config_section();
+                break;
+
+            case EFetchAllConfigsTransform::ATTACH_STORAGE_CONFIG_SECTION:
+                all->mutable_attach_storage_config_section();
+                break;
+
+            case EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG:
+                all->mutable_add_blob_storage_and_domains_config();
+                break;
+
+            case EFetchAllConfigsTransform::ADD_EXPLICIT_SECTIONS:
+                all->mutable_add_explicit_sections();
+                break;
+        }
 
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 

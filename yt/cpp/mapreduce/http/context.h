@@ -23,7 +23,8 @@ struct TClientContext
     TConfigPtr Config = TConfig::Get();
     TMaybe<TString> ProxyAddress;
     TMaybe<TString> RpcProxyRole;
-    TMaybe<TString> ProxyUnixDomainSocket;
+    TMaybe<TString> JobProxySocketPath;
+    TString MultiproxyTargetCluster;
 };
 
 bool operator==(const TClientContext& lhs, const TClientContext& rhs);

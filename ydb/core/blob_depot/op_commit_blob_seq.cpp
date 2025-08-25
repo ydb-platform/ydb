@@ -116,7 +116,8 @@ namespace NKikimr::NBlobDepot {
                     if (!item.GetCommitNotify()) {
                         bool blocksPass = true;
                         if (const auto& v = key.AsVariant(); const auto *id = std::get_if<TLogoBlobID>(&v)) {
-                            blocksPass = Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation());
+                            blocksPass = item.GetIgnoreBlock() ||
+                                Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation());
                         }
                         for (const auto& extra : item.GetExtraBlockChecks()) {
                             if (!blocksPass) {

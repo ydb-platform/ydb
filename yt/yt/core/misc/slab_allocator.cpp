@@ -1,12 +1,13 @@
 #include "slab_allocator.h"
 
+#include "memory_usage_tracker.h"
+
 #include <yt/yt/core/misc/atomic_ptr.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/malloc/malloc.h>
 
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 #include <library/cpp/yt/memory/poison.h>
 
 namespace NYT {

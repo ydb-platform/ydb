@@ -15,7 +15,7 @@ const TString TCommandWithAwsCredentials::AwsCredentialsFile = "~/.aws/credentia
 const TString TCommandWithAwsCredentials::AwsDefaultProfileName = "default";
 
 TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
-    using namespace NConfig;
+    using namespace NIniConfig;
 
     const auto fileName = "AWS Credentials";
     const auto& profileName = AwsProfile.GetOrElse(AwsDefaultProfileName);

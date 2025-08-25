@@ -146,6 +146,10 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
         self.__slots_allocators = []
 
     def get_node_port_allocator(self, node_index):
+        if os.environ.get("YDB_TEST_FIXED_PORT") is not None:
+            # suitable for debugging, don't use in production
+            if node_index == 1:
+                return KikimrFixedNodePortAllocator(0)
         while len(self.__nodes_allocators) <= node_index:
             self.__nodes_allocators.append(KikimrPortManagerNodePortAllocator(self.__port_manager))
         return self.__nodes_allocators[node_index]

@@ -4,12 +4,13 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <algorithm>
 
 namespace NYT::NConcurrency {
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

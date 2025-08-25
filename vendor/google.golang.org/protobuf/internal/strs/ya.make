@@ -2,11 +2,11 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(v1.36.5)
+VERSION(v1.36.6)
 
 SRCS(
     strings.go
-    strings_unsafe_go121.go
+    strings_unsafe.go
 )
 
 END()

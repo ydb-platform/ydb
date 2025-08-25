@@ -95,12 +95,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/sqllogictest_select2-2.test_plan/t1",
                                                                         "ReadColumns": [
-                                                                            "a",
-                                                                            "b",
-                                                                            "c",
-                                                                            "d"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "a (-\u221e, +\u221e)",
                                                                             "b (-\u221e, +\u221e)",
                                                                             "c (-\u221e, +\u221e)",
@@ -127,13 +121,13 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "precompute_0_0",
+                                                        "CTE Name": "precompute",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "ToFlow",
-                                                                "ToFlow": "precompute_0_0"
+                                                                "ToFlow": "precompute"
                                                             }
                                                         ],
                                                         "PlanNodeId": 7
@@ -219,12 +213,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_select2-2.test_plan/t1",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b",
-                                                            "c",
-                                                            "d"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)",
@@ -248,7 +236,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE precompute_0_0"
+                "Subplan Name": "CTE precompute"
             }
         ],
         "Stats": {

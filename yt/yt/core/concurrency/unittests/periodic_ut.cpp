@@ -34,7 +34,7 @@ class TPeriodicTest
 
 TEST_W(TPeriodicTest, Simple)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
@@ -78,7 +78,7 @@ TEST_W(TPeriodicTest, Simple)
 
 TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -111,9 +111,9 @@ TEST_W(TPeriodicTest, ParallelStart)
     TPromise<void> threadStartBarrier = NewPromise<void>();
     TPromise<void> callbackStartBarrier = NewPromise<void>();
     TPromise<void> callbackEndBarrier = NewPromise<void>();
-    std::atomic<int> countStarted = {0};
-    std::atomic<int> countFinished = {0};
-    std::atomic<int> countWaiting = {0};
+    std::atomic<int> countStarted = 0;
+    std::atomic<int> countFinished = 0;
+    std::atomic<int> countWaiting = 0;
 
     auto callback = BIND([&] {
         ++countStarted;
@@ -166,7 +166,7 @@ TEST_W(TPeriodicTest, ParallelStart)
 
 TEST_W(TPeriodicTest, ParallelStop)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;

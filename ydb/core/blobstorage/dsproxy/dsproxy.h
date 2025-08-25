@@ -132,6 +132,7 @@ NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus sta
     XX(TEvBlobStorage::TEvStatus) \
     XX(TEvBlobStorage::TEvPatch) \
     XX(TEvBlobStorage::TEvAssimilate) \
+    XX(TEvBlobStorage::TEvCheckIntegrity) \
 //
 
 #define DSPROXY_ENUM_DISK_EVENTS(XX) \
@@ -193,6 +194,8 @@ public:
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
+
+        std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
     };
 
     struct TTypeSpecificParameters {
@@ -219,6 +222,7 @@ public:
         , LatencyQueueKind(params.Common.LatencyQueueKind)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
+        , ForceGroupGeneration(params.Common.ForceGroupGeneration)
     {
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
@@ -227,6 +231,8 @@ public:
             ParentSpan.Link(Span.GetTraceId());
             Span.Attribute("GroupId", Info->GroupID.GetRawId());
             Span.Attribute("RestartCounter", RestartCounter);
+            Span.Attribute("database", AppData()->TenantName);
+            Span.Attribute("storagePool", Info->GetStoragePoolName());
             params.Common.Event->ToSpan(Span);
         }
 
@@ -234,6 +240,8 @@ public:
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
+
+    bool BootstrapCheck();
 
     virtual void Bootstrap() = 0;
     virtual void ReplyAndDie(NKikimrProto::EReplyStatus status) = 0;
@@ -318,6 +326,8 @@ private:
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
+    std::optional<ui32> ForceGroupGeneration;
+    ui32 RacingGeneration = 0;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
@@ -426,6 +436,16 @@ struct TBlobStorageGroupRestoreGetParameters {
     };
 };
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params);
+
+struct TBlobStorageGroupCheckIntegrityParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvCheckIntegrity> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_CHECKINTEGRITY,
+        .Name = "DSProxy.CheckIntegrity",
+        .Activity = NKikimrServices::TActivity::BS_PROXY_CHECKINTEGRITY_ACTOR,
+    };
+};
+IActor* CreateBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters params);
 
 struct TBlobStorageGroupDiscoverParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvDiscover> Common;

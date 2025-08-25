@@ -2,6 +2,7 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/security_client/acl.h>
 #include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NApi {
@@ -41,13 +42,14 @@ struct TCheckPermissionResult
     NObjectClient::TObjectId ObjectId;
     std::optional<TString> ObjectName;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
+    std::optional<std::string> SubjectName;
 };
 
 struct TCheckPermissionResponse
     : public TCheckPermissionResult
 {
     std::optional<std::vector<TCheckPermissionResult>> Columns;
+    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> Rlaces;
 };
 
 struct TCheckPermissionByAclOptions
@@ -64,8 +66,8 @@ struct TCheckPermissionByAclResult
 
     NSecurityClient::ESecurityAction Action;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
-    std::vector<TString> MissingSubjects;
+    std::optional<std::string> SubjectName;
+    std::vector<std::string> MissingSubjects;
 };
 
 struct TSetUserPasswordOptions
@@ -88,7 +90,7 @@ struct TIssueTemporaryTokenOptions
 
 struct TIssueTokenResult
 {
-    TString Token;
+    std::string Token;
     //! Cypress node corresponding to issued token.
     //! Deleting this node will revoke the token.
     NCypressClient::TNodeId NodeId;
@@ -115,20 +117,35 @@ struct TListUserTokensResult
     THashMap<TString, NYson::TYsonString> Metadata;
 };
 
+struct TGetCurrentUserOptions
+    : public TTimeoutOptions
+{ };
+
+struct TGetCurrentUserResult
+{
+    std::string User;
+};
+
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ISecurityClient
 {
     virtual ~ISecurityClient() = default;
 
+    //! Return information about current user.
+    virtual TFuture<TGetCurrentUserResult> GetCurrentUser(
+        const TGetCurrentUserOptions& options = {}) = 0;
+
     virtual TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionResponse> CheckPermission(
@@ -171,4 +188,3 @@ struct ISecurityClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

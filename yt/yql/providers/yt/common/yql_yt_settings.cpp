@@ -156,7 +156,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
@@ -165,7 +165,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             UseNativeYtTypes = value;
         })
-        .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
+        .Deprecated("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
     REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
@@ -295,7 +295,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             MaxInputTables = value;
         })
-        .Warning("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
+        .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
@@ -334,7 +334,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
                 JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
             }
         })
-        .Warning("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
+        .Deprecated("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
     REGISTER_SETTING(*this, JoinCollectColumnarStatistics)
         .Parser([](const TString& v) { return FromString<EJoinCollectColumnarStatisticsMode>(v); });
     REGISTER_SETTING(*this, JoinColumnarStatisticsFetcherMode)
@@ -365,6 +365,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
         .ValueSetter([this](const TString& cluster, const NYT::TNode& spec) {
             OperationSpec[cluster] = spec;
             HybridDqExecution = false;
+        });
+    REGISTER_SETTING(*this, FmrOperationSpec)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
         });
     REGISTER_SETTING(*this, Annotations)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
@@ -452,6 +459,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
+    REGISTER_SETTING(*this, StaticNetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
@@ -460,10 +468,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
+    REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
+    REGISTER_SETTING(*this, UseNativeYtDefaultColumnOrder);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, EnforceJobUtc);
+    REGISTER_SETTING(*this, _EnforceRegexpProbabilityFail);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
@@ -536,19 +547,23 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             if (cluster != "$all") {
                 throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
             }
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
     REGISTER_SETTING(*this, DefaultRuntimeCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
     REGISTER_SETTING(*this, _AllowRemoteClusterInput);
     REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
+    REGISTER_SETTING(*this, UseNativeDynamicTableRead);
+    REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
+    REGISTER_SETTING(*this, DontForceTransformForInputTables);
+    REGISTER_SETTING(*this, _LocalTableContentLimit);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

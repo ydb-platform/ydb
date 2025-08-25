@@ -61,6 +61,7 @@ public:
         , Sender(ev->Sender)
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
+        , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -68,6 +69,7 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
+        , ResultSetFormatSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
@@ -95,6 +97,13 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+
+        if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
+            YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            YQL_ENSURE(QueryAction == NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
+            YQL_ENSURE(HasImplicitTx());
+            SaveQueryPhysicalGraph = true;
+        }
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -118,6 +127,8 @@ public:
     TQueryData::TPtr QueryData;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
+    bool SaveQueryPhysicalGraph = false;
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
     TActorId RequestActorId;
 
@@ -129,6 +140,7 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientAddress;
@@ -171,6 +183,8 @@ public:
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
+
+    TResultSetFormatSettings ResultSetFormatSettings;
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -250,6 +264,10 @@ public:
         return RequestEv->HasTopicOperations();
     }
 
+    bool HasKafkaApiOperations() const {
+        return RequestEv->HasKafkaApiOperations();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }
@@ -264,6 +282,10 @@ public:
 
     bool IsCreateTableAs() const {
         return IsSplitted();
+    }
+
+    const TResultSetFormatSettings& GetResultSetFormatSettings() const {
+        return ResultSetFormatSettings;
     }
 
     // todo: gvit
@@ -332,8 +354,12 @@ public:
         return RequestEv->GetQuery();
     }
 
-    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperations() const {
+    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperationsFromRequest() const {
         return RequestEv->GetTopicOperations();
+    }
+
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
+        return RequestEv->GetKafkaApiOperations();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -432,14 +458,14 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx() {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
-                QueryData->CreateKqpValueMap(tx);
+                QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
@@ -582,7 +608,7 @@ public:
     }
 
     //// Topic ops ////
-    void AddOffsetsToTransaction();
+    void FillTopicOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);

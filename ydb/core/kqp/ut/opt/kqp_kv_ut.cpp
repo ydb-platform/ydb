@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -152,11 +153,11 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         auto res = FormatResultSetYson(selectResult.GetResultSet());
         CompareYson(R"(
             [
-                [1858343823u;0u;"abcde"];
-                [1921763476782200957u;1u;"abcde"];
-                [3843526951706058091u;2u;"abcde"];
-                [5765290426629915225u;3u;"abcde"];
-                [7687053901553772359u;4u;"abcde"]
+                [[1858343823u];[0u];["abcde"]];
+                [[1921763476782200957u];[1u];["abcde"]];
+                [[3843526951706058091u];[2u];["abcde"]];
+                [[5765290426629915225u];[3u];["abcde"]];
+                [[7687053901553772359u];[4u];["abcde"]]
             ]
         )", TString{res});
     }
@@ -263,11 +264,11 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             CompareYson(R"([
-                [10u;0u;"abcde"];
-                [11u;1u;"abcde"];
-                [12u;2u;"abcde"];
-                [13u;3u;"abcde"];
-                [14u;4u;"abcde"]
+                [[10u];[0u];["abcde"]];
+                [[11u];[1u];["abcde"]];
+                [[12u];[2u];["abcde"]];
+                [[13u];[3u];["abcde"]];
+                [[14u];[4u];["abcde"]]
             ])", TString{res});
         }
         {
@@ -364,7 +365,12 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
         auto res = FormatResultSetYson(selectResult.GetResultSet());
-        CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), TString{res});
+        CompareYson(Sprintf("[[[%du];[%du]]]", valueToReturn_1, valueToReturn_2), TString{res});
+    }
+
+    template <typename FutureT>
+    auto GetValue(TKikimrRunner& kikimr, FutureT&& future) {
+        return kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
     }
 
     Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {
@@ -379,11 +385,16 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         auto settings = TKikimrSettings()
             .SetFeatureFlags(flags)
             .SetWithSampleTables(false)
-            .SetControls(controls);
+            .SetUseRealThreads(false)
+            .SetControls(controls)
+            .SetGrpcServerOptions(NYdbGrpc::TServerOptions()
+                .SetGRpcShutdownDeadline(TDuration::MilliSeconds(0))
+            );
+
         auto kikimr = TKikimrRunner{settings};
 
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto session = GetValue(kikimr, db.CreateSession()).GetSession();
         const auto tableName = "/Root/TestTable";
         const auto keyColumnName_1 = "blob_id";
         const auto keyColumnName_2 = "chunk_num";
@@ -400,7 +411,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         builder.SetPrimaryKeyColumns({keyColumnName_1, keyColumnName_2});
         builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
 
-        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        auto result = GetValue(kikimr, session.CreateTable(tableName, builder.Build()));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TString largeValue(1_MB, 'L');
@@ -417,8 +428,26 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         rows.EndList();
 
-        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        auto upsertResult = GetValue(kikimr, db.BulkUpsert(tableName, rows.Build()));
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto server = &kikimr.GetTestServer();
+
+        WaitForCompaction(server, tableName);
+
+        ui32 blobRequestCount = 0; 
+
+        auto holder = server->GetRuntime()->AddObserver<TEvBlobStorage::TEvGet>([&blobRequestCount](TEvBlobStorage::TEvGet::TPtr& ev) {
+            const auto& msg = ev->Get();
+            for (size_t i = 0; i < msg->QuerySize; i++) {
+                const auto& id = msg->Queries[i].Id;
+                
+                if (id.BlobSize() == 1_MB + 8 /** ext blob meta */) {
+                    blobRequestCount++;
+                    break;
+                }
+            }
+        });
 
         NYdb::TValueBuilder keys;
         keys.BeginList();
@@ -431,11 +460,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
 
-        auto server = &kikimr.GetTestServer();
-
-        WaitForCompaction(server, tableName);
-
-        auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+        auto selectResult = GetValue(kikimr, db.ReadRows(tableName, keys.Build()));
 
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
@@ -443,11 +468,84 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 10);
 
         UNIT_ASSERT(parser.TryNextRow());
+        
+        UNIT_ASSERT_VALUES_EQUAL(UseExtBlobsPrecharge ? 2 : 10, blobRequestCount);
+    }
 
-        auto val = parser.GetValue(0);
-        TValueParser valParser(val);
-        TUuidValue v = valParser.GetUuid();
-        Cout << v.ToString() << Endl;
+    Y_UNIT_TEST(ReadRows_TimeoutCancelsReads) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetUseRealThreads(false)
+            .SetGrpcServerOptions(NYdbGrpc::TServerOptions()
+                .SetGRpcShutdownDeadline(TDuration::MilliSeconds(0))
+            );
+
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = GetValue(kikimr, db.CreateSession()).GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName = "blob_id";
+        const auto dataColumnName = "data";
+
+        TTableBuilder builder;
+        builder.AddNonNullableColumn(keyColumnName, EPrimitiveType::Int32);
+        builder.SetPrimaryKeyColumn(keyColumnName);
+        builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
+        builder.SetUniformPartitions(2);
+        TExplicitPartitions partitions;
+        partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalInt32(5).EndTuple().Build());
+        builder.SetPartitionAtKeys(partitions);
+
+        auto result = GetValue(kikimr, session.CreateTable(tableName, builder.Build()));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (int i = 0; i < 10; i++) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Int32(i)
+                    .AddMember(dataColumnName).String("foo")
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = GetValue(kikimr, db.BulkUpsert(tableName, rows.Build()));
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        ui32 cancelCount = 0;
+        bool droppedOneResult = false;
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (auto *evRead = ev->CastAsLocal<TEvDataShard::TEvReadResult>()) {
+                if (droppedOneResult) {
+                    // Drop one of two results, so only one cancel would be sent to the DataShard
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                droppedOneResult = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (auto *evReadCancel = ev->CastAsLocal<TEvDataShard::TEvReadCancel>()) {
+                cancelCount++;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (int i = 0; i < 10; i++) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Int32(i)
+                .EndStruct();
+        }
+        keys.EndList();
+
+        auto selectResult = GetValue(kikimr, db.ReadRows(tableName, keys.Build()));
+
+        UNIT_ASSERT(!selectResult.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(cancelCount, 1);
     }
     
     TVector<::ReadRowsPgParam> readRowsPgParams
@@ -813,9 +911,9 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             CompareYson(R"(
                 [
-                    ["0.123456789";"0.123456789";"0.123456789";"0.123456789";0u];
-                    ["1.123456789";"1000.123456789";"10.123456789";"1000000.123456789";1u];
-                    ["2.123456789";"2000.123456789";"20.123456789";"2000000.123456789";2u]        
+                    [["0.123456789"];["0.123456789"];["0.123456789"];["0.123456789"];[0u]];
+                    [["1.123456789"];["1000.123456789"];["10.123456789"];["1000000.123456789"];[1u]];
+                    [["2.123456789"];["2000.123456789"];["20.123456789"];["2000000.123456789"];[2u]]        
                 ]
             )", TString{res});
         }
@@ -833,8 +931,62 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
-            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", TString{res});
+            CompareYson(R"([[["inf"];["inf"];["inf"];["inf"];[999999999u]];])", TString{res});
         }        
+    }
+
+    Y_UNIT_TEST(ReadRows_Nulls) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Data Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i * 1921763474923857134ull + 1858343823)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i * 1921763474923857134ull + 1858343823)
+                .EndStruct();
+        }
+        keys.EndList();
+        auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+        Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+        auto res = FormatResultSetYson(selectResult.GetResultSet());
+        CompareYson(R"(
+            [
+                [[1858343823u];#;#];
+                [[1921763476782200957u];#;#];
+                [[3843526951706058091u];#;#];
+                [[5765290426629915225u];#;#];
+                [[7687053901553772359u];#;#]
+            ]
+        )", TString{res});
     }
 
 

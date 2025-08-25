@@ -1,0 +1,608 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-2-Clause         02331e9ea322390a1b6413b63f636c20
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        t2.c [19:38]
+
+KEEP     BSD-2-Clause         039f4cbc2daf1c10b3c72e11871d89f9
+BELONGS ya.make
+    License text:
+         * BSD License, included below. This software may be subject to other third
+         * party and contributor rights, including patent rights, and no such rights
+         * are granted under this license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        t2.c [3:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        t2.c [3:5]
+
+KEEP     BSD-2-Clause         178c8af6750dceedf582cd6a442de403
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        event.c [3:31]
+        event.h [3:31]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        event.c [3:31]
+        event.h [3:31]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 88.94
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        openjpeg.c [3:31]
+        opj_includes.h [3:31]
+
+KEEP     BSD-2-Clause         22e23988905968e9f66379f09bed1e89
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        jp2.h [3:34]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        jp2.h [3:34]
+
+KEEP     BSD-2-Clause         2a63c1dd03ca6a86ca2b0ce923ffc1db
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        mqc.c [3:36]
+        mqc.h [3:36]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        mqc.c [3:36]
+        mqc.h [3:36]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 85.78
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        mqc_inl.h [3:36]
+
+KEEP     BSD-3-Clause         2d3a4121edb1a0c3af2ca7449b65e65a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        sparse_array.c [3:29]
+        sparse_array.h [3:29]
+
+KEEP     BSD-2-Clause         2e083a2b9a6f4f34564b948b20538f43
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 88.94
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        bio.c [3:35]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        bio.h [3:35]
+        pi.h [3:35]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        bio.h [3:35]
+        pi.h [3:35]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 85.78
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        dwt.h [3:35]
+        opj_intmath.h [3:35]
+
+KEEP     BSD-2-Clause         342fd015ffbbbaf8c2f76f28fee0968e
+BELONGS ya.make
+    License text:
+        [link-license]: https://github.com/uclouvain/openjpeg/blob/master/LICENSE "BSD 2-clause \"Simplified\" License"
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        README.md [76:76]
+
+SKIP     LicenseRef-scancode-proprietary-license 3d34ab6fdb373602c812ac673a4d0856
+BELONGS ya.make
+    # it's about encoding test suite
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        INSTALL.md [49:49]
+
+KEEP     BSD-3-Clause         54b53dc3406dd44c9a2ad98427588e9e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        function_list.c [3:29]
+        function_list.h [3:29]
+        invert.c [3:29]
+        invert.h [3:29]
+
+KEEP     BSD-2-Clause         5bac89da1ec9d2bc720eb2e342f9f519
+BELONGS ya.make
+    License text:
+        [comment-license]: https://img.shields.io/github/license/uclouvain/openjpeg.svg "https://img.shields.io/badge/license-BSD--2--Clause-blue.svg"
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        README.md [74:74]
+        README.md [75:75]
+
+SKIP     AGPL-3.0-or-later AND LicenseRef-scancode-commercial-license 5ebf4f73f9447b7e9332ce9279d5710b
+BELONGS ya.make
+    # see text below
+    License text:
+                           l_width + l_stride <= l_tile_comp->data_size / l_height); /*MUPDF*/
+    Scancode info:
+        Original SPDX id: AGPL-3.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/agpl-3.0.html, http://www.gnu.org/licenses/agpl.txt, https://spdx.org/licenses/AGPL-3.0-or-later
+    Files with this license:
+        tcd.c [2307:2307]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-commercial-license
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/commercial-license.LICENSE
+    Files with this license:
+        tcd.c [2307:2307]
+
+KEEP     BSD-2-Clause         5f9455f4055d30be6c326287df3e759c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        openjpeg.h [21:40]
+
+KEEP     BSD-2-Clause         787cbc0227755fdd6add655f7edb48ae
+BELONGS ya.make
+    License text:
+         * BSD License, included below. This software may be subject to other third
+         * party and contributor rights, including patent rights, and no such rights
+         * are granted under this license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        bio.c [3:5]
+        bio.h [3:5]
+        cio.c [3:5]
+        cio.h [3:5]
+        dwt.c [3:5]
+        dwt.h [3:5]
+        event.c [3:5]
+        event.h [3:5]
+        function_list.c [3:5]
+        function_list.h [3:5]
+        image.c [3:5]
+        image.h [3:5]
+        invert.c [3:5]
+        invert.h [3:5]
+        j2k.c [3:5]
+        j2k.h [3:5]
+        jp2.c [3:5]
+        jp2.h [3:5]
+        mct.c [3:5]
+        mct.h [3:5]
+        mqc.c [3:5]
+        mqc.h [3:5]
+        mqc_inl.h [3:5]
+        openjpeg.c [3:5]
+        opj_clock.c [3:5]
+        opj_clock.h [3:5]
+        opj_codec.h [3:5]
+        opj_common.h [3:5]
+        opj_includes.h [3:5]
+        opj_intmath.h [3:5]
+        opj_malloc.c [3:5]
+        opj_malloc.h [3:5]
+        pi.c [3:5]
+        pi.h [3:5]
+        sparse_array.c [3:5]
+        sparse_array.h [3:5]
+        t1.c [3:5]
+        t1.h [3:5]
+        t2.h [3:5]
+        tcd.c [3:5]
+        tcd.h [3:5]
+        tgt.c [3:5]
+        tgt.h [3:5]
+        thread.c [3:5]
+        thread.h [3:5]
+        tls_keys.h [3:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        bio.c [3:5]
+        bio.h [3:5]
+        cio.c [3:5]
+        cio.h [3:5]
+        dwt.c [3:5]
+        dwt.h [3:5]
+        event.c [3:5]
+        event.h [3:5]
+        function_list.c [3:5]
+        function_list.h [3:5]
+        image.c [3:5]
+        image.h [3:5]
+        invert.c [3:5]
+        invert.h [3:5]
+        j2k.c [3:5]
+        j2k.h [3:5]
+        jp2.c [3:5]
+        jp2.h [3:5]
+        mct.c [3:5]
+        mct.h [3:5]
+        mqc.c [3:5]
+        mqc.h [3:5]
+        mqc_inl.h [3:5]
+        openjpeg.c [3:5]
+        opj_clock.c [3:5]
+        opj_clock.h [3:5]
+        opj_codec.h [3:5]
+        opj_common.h [3:5]
+        opj_includes.h [3:5]
+        opj_intmath.h [3:5]
+        opj_malloc.c [3:5]
+        opj_malloc.h [3:5]
+        pi.c [3:5]
+        pi.h [3:5]
+        sparse_array.c [3:5]
+        sparse_array.h [3:5]
+        t1.c [3:5]
+        t1.h [3:5]
+        t2.h [3:5]
+        tcd.c [3:5]
+        tcd.h [3:5]
+        tgt.c [3:5]
+        tgt.h [3:5]
+        thread.c [3:5]
+        thread.h [3:5]
+        tls_keys.h [3:5]
+
+KEEP     BSD-3-Clause         7d1dcf3029ca3a3a7bbfde323ef0f1db
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        thread.c [3:29]
+        thread.h [3:29]
+        tls_keys.h [3:29]
+
+KEEP     BSD-2-Clause         a97a9174f17218e94858e23378249acf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [19:38]
+        cio.c [18:37]
+        cio.h [18:37]
+        dwt.c [19:38]
+        j2k.c [22:41]
+        j2k.h [21:40]
+        jp2.c [19:38]
+        mct.c [18:37]
+        mct.h [18:37]
+        t1.c [19:38]
+        t2.h [19:38]
+        tcd.c [20:39]
+        tcd.h [19:38]
+        tgt.c [18:37]
+        tgt.h [19:38]
+
+KEEP     BSD-2-Clause         ad358b148963caea182797b9a3568f51
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        t1.h [3:37]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        t1.h [3:37]
+
+KEEP     BSD-2-Clause         ae6c51561c26f8a4bf270ff96ee1c148
+BELONGS ya.make
+    License text:
+        // This software is released under the 2-Clause BSD license, included
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        ht_dec.c [2:2]
+
+SKIP     LicenseRef-scancode-unknown-license-reference b356f31c329be98bbc0803bea4d2504f
+BELONGS ya.make
+    # md markup
+    License text:
+        See [LICENSE][link-license] for license and copyright information.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [48:48]
+
+KEEP     BSD-2-Clause         b36c2d0a34cfd03916b8947c26eab2bf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 83.04
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        opj_malloc.h [3:30]
+
+KEEP     BSD-2-Clause         baca4cdca043ccfca36de26aaebd1c8d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 83.41
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        opj_malloc.c [3:30]
+
+KEEP     BSD-2-Clause         c13256700b0cba142f16a31f10850754
+BELONGS ya.make
+    License text:
+        * BSD License, included below. This software may be subject to other third
+        * party and contributor rights, including patent rights, and no such rights
+        * are granted under this license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        openjpeg.h [3:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        openjpeg.h [3:5]
+
+KEEP     BSD-3-Clause         c81c9af175299c33c9f8a282787f6707
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        image.c [3:29]
+        image.h [3:29]
+        opj_clock.c [3:29]
+        opj_clock.h [3:29]
+
+KEEP     BSD-3-Clause         cbc8e86db2c3430d41e9f028b9262db2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        opj_codec.h [3:30]
+
+KEEP     BSD-3-Clause         d2ae7a17d7aa676d0723706a97c0385c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 81.30
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        opj_common.h [3:29]
+
+KEEP     BSD-2-Clause         d48ab5b2d6f9543e6d1ed06bd7b400f2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        pi.c [3:36]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 92.04
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        pi.c [3:36]
+
+KEEP     BSD-2-Clause         db946e2bed90ab172a363f67e00fddbd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 39.11
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        README.md [11:11]
+
+KEEP     BSD-2-Clause         dd1fb4ce22a5cb19adf4991b54514268
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        ht_dec.c [9:30]
+
+KEEP     BSD-2-Clause         e3a0e4a60c9df6d912b04cb18fadc23d
+BELONGS ya.make
+    License text:
+         * BSD License, included below. This software may be subject to other third 
+         * party and contributor rights, including patent rights, and no such rights
+         * are granted under this license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [3:5]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 71.79
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        LICENSE [3:5]
+
+KEEP     BSD-2-Clause         fd4ec76654cd5b99f2e311027a6eb9b8
+BELONGS ya.make
+    License text:
+        [badge-license]: https://img.shields.io/badge/license-BSD--2--Clause-blue.svg "BSD 2-clause \"Simplified\" License"
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        README.md [75:75]

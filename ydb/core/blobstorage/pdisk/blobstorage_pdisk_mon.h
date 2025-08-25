@@ -27,7 +27,7 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds, 
+                    const TVector<float> &thresholds,
                     NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
         Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
@@ -329,7 +329,8 @@ struct TPDiskMon {
     // write queue duration
     TDurationTracker WriteQueueSyncLog;
     TDurationTracker WriteQueueHullFresh;
-    TDurationTracker WriteQueueHullHuge;
+    TDurationTracker WriteQueueHullHugeAsync;
+    TDurationTracker WriteQueueHullHugeUser;
     TDurationTracker WriteQueueHullComp;
 
     // incoming flow burstiness
@@ -358,7 +359,8 @@ struct TPDiskMon {
 
     TSizeTracker WriteSyncLogSizeBytes;
     TSizeTracker WriteHullFreshSizeBytes;
-    TSizeTracker WriteHullHugeSizeBytes;
+    TSizeTracker WriteHullHugeAsyncSizeBytes;
+    TSizeTracker WriteHullHugeUserSizeBytes;
     TSizeTracker WriteHullCompSizeBytes;
 
     // log response time
@@ -373,7 +375,8 @@ struct TPDiskMon {
     // write response time
     THistogram WriteResponseSyncLog;
     THistogram WriteResponseHullFresh;
-    THistogram WriteResponseHullHuge;
+    THistogram WriteResponseHullHugeAsync;
+    THistogram WriteResponseHullHugeUser;
     THistogram WriteResponseHullComp;
 
     // scheduler subgroup
@@ -403,6 +406,8 @@ struct TPDiskMon {
 
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadPayload;
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadSectorFooter;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteBufferCompactedBytes;
 
     struct TIoCounters {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
@@ -468,6 +473,7 @@ struct TPDiskMon {
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
+    TReqCounters YardResize;
 
     TReqCounters ShredPDisk;
     TReqCounters PreShredCompactVDisk;
@@ -476,7 +482,8 @@ struct TPDiskMon {
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
-    TIoCounters WriteHuge;
+    TIoCounters WriteHugeAsync;
+    TIoCounters WriteHugeUser;
     TIoCounters WriteComp;
     TIoCounters Trim;
     TIoCounters ChunkShred;
@@ -507,6 +514,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
 
+    // counter subgroup
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PDiskCount;
+
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
@@ -521,4 +532,3 @@ struct TPDiskMon {
 };
 
 } // NKikimr
-

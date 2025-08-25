@@ -1,5 +1,5 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index d23450f..e9316f3 100644
+index 73ec464..fcf9074 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
 @@ -99,7 +99,7 @@ public:

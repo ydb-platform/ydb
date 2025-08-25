@@ -47,7 +47,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
+            return state;
         } else if (state.IsInvalid()) {
             MakeState(ctx, Limit->GetValue(ctx).GetOrDefault(std::numeric_limits<ui64>::max()), state);
         }

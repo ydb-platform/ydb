@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "user_info.h"
 
 #include <deque>
 
@@ -33,6 +34,10 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 }
 
+bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return config.GetPartitionConfig().HasMirrorFrom();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
@@ -54,7 +59,7 @@ ui64 PutUnitsSize(const ui64 size) {
 }
 
 bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    for (const auto& i : config.GetPartitionConfig().GetImportantClientId()) {
+    for (const auto& i : config.GetPartitionConfig().GetImportantClientId_Deprecated()) {
         if (consumerName == i) {
             return true;
         }
@@ -66,43 +71,43 @@ bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
     // if ReadRules isn`t empty than it is old configuration format
     // when modify new format (add or alter a consumer) readRules is cleared
-    if (config.ReadRulesSize()) {
+    if (config.ReadRules_DeprecatedSize()) {
         config.ClearConsumers();
 
-        for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
+        for(size_t i = 0; i < config.ReadRules_DeprecatedSize(); ++i) {
             auto* consumer = config.AddConsumers();
 
-            consumer->SetName(config.GetReadRules(i));
-            if (i < config.ReadFromTimestampsMsSize()) {
-                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
+            consumer->SetName(config.GetReadRules_Deprecated(i));
+            if (i < config.ReadFromTimestampsMs_DeprecatedSize()) {
+                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs_Deprecated(i));
             }
-            if (i < config.ConsumerFormatVersionsSize()) {
-                consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
+            if (i < config.ConsumerFormatVersions_DeprecatedSize()) {
+                consumer->SetFormatVersion(config.GetConsumerFormatVersions_Deprecated(i));
             }
-            if (i < config.ConsumerCodecsSize()) {
-                auto& src = config.GetConsumerCodecs(i);
+            if (i < config.ConsumerCodecs_DeprecatedSize()) {
+                auto& src = config.GetConsumerCodecs_Deprecated(i);
                 auto* dst = consumer->MutableCodec();
                 dst->CopyFrom(src);
             }
-            if (i < config.ReadRuleServiceTypesSize()) {
-                consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
+            if (i < config.ReadRuleServiceTypes_DeprecatedSize()) {
+                consumer->SetServiceType(config.GetReadRuleServiceTypes_Deprecated(i));
             }
-            if (i < config.ReadRuleVersionsSize()) {
-                consumer->SetVersion(config.GetReadRuleVersions(i));
+            if (i < config.ReadRuleVersions_DeprecatedSize()) {
+                consumer->SetVersion(config.GetReadRuleVersions_Deprecated(i));
             }
-            if (i < config.ReadRuleGenerationsSize()) {
-                consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            if (i < config.ReadRuleGenerations_DeprecatedSize()) {
+                consumer->SetGeneration(config.GetReadRuleGenerations_Deprecated(i));
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
-
-        config.ClearReadRules();
-        config.ClearReadFromTimestampsMs();
-        config.ClearConsumerFormatVersions();
-        config.ClearConsumerCodecs();
-        config.ClearReadRuleServiceTypes();
-        config.ClearReadRuleVersions();
-        config.ClearReadRuleGenerations();
+        config.ClearReadRules_Deprecated();
+        config.ClearReadFromTimestampsMs_Deprecated();
+        config.ClearConsumerFormatVersions_Deprecated();
+        config.ClearConsumerCodecs_Deprecated();
+        config.ClearReadRuleServiceTypes_Deprecated();
+        config.ClearReadRuleVersions_Deprecated();
+        config.ClearReadRuleGenerations_Deprecated();
+        config.MutablePartitionConfig()->ClearImportantClientId_Deprecated();
     }
 
     if (!config.PartitionsSize()) {
@@ -116,16 +121,34 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             config.AddAllPartitions()->CopyFrom(partition);
         }
     }
+
+    bool doAddCompactionConsumer = config.GetEnableCompactification() && AllOf(config.GetConsumers(), [](const auto& consumer) {
+        return NPQ::CLIENTID_COMPACTION_CONSUMER != consumer.GetName();
+    });
+    if (doAddCompactionConsumer) {
+        auto* consumer = config.AddConsumers();
+        consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
+        consumer->SetReadFromTimestampsMs(0);
+        consumer->SetImportant(true);
+    }
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    for (auto& cons : config.GetConsumers()) {
-        if (cons.GetName() == consumerName) {
-            return true;
-        }
-    }
+    return AnyOf(config.GetConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
+}
 
-    return false;
+const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    return FindIfPtr(config.GetConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
+}
+
+NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    return FindIfPtr(*config.MutableConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
 }
 
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config) {
@@ -170,10 +193,10 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
         const auto* n = queue.front();
         queue.pop_front();
 
-        if (n->Children.empty()) {
+        if (n->DirectChildren.empty()) {
             result.emplace(n->Id);
         } else {
-            queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+            queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
         }
     }
 
@@ -186,7 +209,7 @@ void Travers0(std::deque<const TPartitionGraph::Node*>& queue, const std::functi
         queue.pop_front();
 
         if (func(node->Id)) {
-            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
+            queue.insert(queue.end(), node->DirectChildren.begin(), node->DirectChildren.end());
         }
     }
 }
@@ -203,7 +226,7 @@ void TPartitionGraph::Travers(const std::function<bool (ui32 id)>& func) const {
             continue;
         }
 
-        queue.insert(queue.end(), n.Children.begin(), n.Children.end());
+        queue.insert(queue.end(), n.DirectChildren.begin(), n.DirectChildren.end());
     }
 
     Travers0(queue, func);
@@ -220,7 +243,7 @@ void TPartitionGraph::Travers(ui32 id, const std::function<bool (ui32 id)>& func
     }
 
     std::deque<const Node*> queue;
-    queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+    queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
 
     Travers0(queue, func);
 }
@@ -266,17 +289,18 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     std::deque<TPartitionGraph::Node*> queue;
-    for(const auto& p : partitions) {
+
+    for (const auto& p : partitions) {
         auto& node = result[GetPartitionId(p)];
 
-        node.Children.reserve(p.ChildPartitionIdsSize());
+        node.DirectChildren.reserve(p.ChildPartitionIdsSize());
         for (auto id : p.GetChildPartitionIds()) {
-            node.Children.push_back(&result[id]);
+            node.DirectChildren.push_back(&result[id]);
         }
 
-        node.Parents.reserve(p.ParentPartitionIdsSize());
+        node.DirectParents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            node.Parents.push_back(&result[id]);
+            node.DirectParents.push_back(&result[id]);
         }
 
         if (p.GetParentPartitionIds().empty()) {
@@ -284,24 +308,39 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
         }
     }
 
-    while(!queue.empty()) {
+    while (!queue.empty()) {
         auto* n = queue.front();
         queue.pop_front();
 
         bool allCompleted = true;
-        for(auto* c : n->Parents) {
-            if (c->HierarhicalParents.empty() && !c->Parents.empty()) {
+        for (auto* c : n->DirectParents) {
+            if (c->AllParents.empty() && !c->DirectParents.empty()) {
                 allCompleted = false;
                 break;
             }
         }
 
         if (allCompleted) {
-            for(auto* c : n->Parents) {
-                n->HierarhicalParents.insert(c->HierarhicalParents.begin(), c->HierarhicalParents.end());
-                n->HierarhicalParents.insert(c);
+            for (auto* c : n->DirectParents) {
+                n->AllParents.insert(c->AllParents.begin(), c->AllParents.end());
+                n->AllParents.insert(c);
             }
-            queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+            queue.insert(queue.end(), n->DirectChildren.begin(), n->DirectChildren.end());
+        }
+    }
+
+    for (auto& [_, node] : result) {
+        queue.push_back(&node);
+
+        while (!queue.empty()) {
+            auto* current = queue.front();
+            queue.pop_front();
+
+            for (auto* child : current->DirectChildren) {
+                if (node.AllChildren.insert(child).second) {
+                    queue.push_back(child);
+                }
+            }
         }
     }
 
@@ -316,11 +355,11 @@ TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const T
 }
 
 bool TPartitionGraph::Node::IsRoot() const {
-    return Parents.empty();
+    return DirectParents.empty();
 }
 
 bool TPartitionGraph::Node::IsParent(ui32 partitionId) const {
-    return AnyOf(Parents, [=](const auto& p) {
+    return AnyOf(DirectParents, [=](const auto& p) {
         return p->Id == partitionId;
     });
 }

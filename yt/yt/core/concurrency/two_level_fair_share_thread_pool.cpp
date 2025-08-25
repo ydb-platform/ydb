@@ -1272,7 +1272,8 @@ public:
         : TSchedulerThread(
             std::move(callbackEventCount),
             threadGroupName,
-            threadName)
+            threadName,
+            {.ThreadInitializer = [this] () { Initialize(); }})
         , Queue_(std::move(queue))
         , Index_(index)
     { }
@@ -1281,7 +1282,7 @@ protected:
     const TTwoLevelFairShareQueuePtr Queue_;
     const int Index_;
 
-    void OnStart() override
+    void Initialize()
     {
         ThreadCookie() = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
     }

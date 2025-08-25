@@ -1,11 +1,10 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <util/generic/algorithm.h>
 
@@ -24,6 +23,9 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     if (descr.HasCreateSrcCdcStream()) {
         auto* coOp = scheme.MutableCreateCdcStream();
         coOp->CopyFrom(descr.GetCreateSrcCdcStream());
+    }
+    if (descr.HasTargetPathTargetState()) {
+        operation->SetPathState(descr.GetTargetPathTargetState());
     }
 
     return scheme;
@@ -155,10 +157,18 @@ bool CreateConsistentCopyTables(
             sequences.emplace(sequenceName);
         }
 
-        result.push_back(CreateCopyTable(
-                             NextPartId(nextId, result),
-                             CopyTableTask(srcPath, dstPath, descr),
-                             sequences));
+        if (descr.HasTargetPathTargetState()) {
+            result.push_back(CreateCopyTable(
+                                NextPartId(nextId, result),
+                                CopyTableTask(srcPath, dstPath, descr),
+                                sequences,
+                                descr.GetTargetPathTargetState()));
+        } else {
+            result.push_back(CreateCopyTable(
+                                NextPartId(nextId, result),
+                                CopyTableTask(srcPath, dstPath, descr),
+                                sequences));
+        }
 
         TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {

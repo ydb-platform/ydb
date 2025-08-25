@@ -1,6 +1,5 @@
 #pragma once
-#include "defs.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "events.h"
 #include "local_rate_limiter_allocator.h"
 

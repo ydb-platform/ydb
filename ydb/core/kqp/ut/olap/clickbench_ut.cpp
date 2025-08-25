@@ -20,9 +20,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
         {}
 
         void CreateClickBenchTable(TString tableName = "benchTable", ui32 shardsCount = 4) {
-            TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-
-            TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+            TBase::CreateTestOlapTable( "", Sprintf(R"(
                 Name: "%s"
                 ColumnShardCount: %d
                 Schema {

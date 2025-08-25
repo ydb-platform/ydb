@@ -43,6 +43,8 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         break;
     case FederatedQuery::ConnectionSetting::kLogging:
         break;
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        break;
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;
     }
@@ -205,7 +207,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -215,6 +217,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
@@ -245,8 +251,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListConnectionsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
@@ -340,7 +345,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -350,6 +355,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, future.GetValue());
         });
+}
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev)
@@ -379,8 +388,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "DescribeConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token)<< " "
@@ -434,7 +442,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -495,7 +503,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -630,7 +638,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -750,7 +758,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,

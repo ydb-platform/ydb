@@ -18,6 +18,7 @@ SRCS(
     spin_lock.cpp
     spin_wait.cpp
     spin_wait_hook.cpp
+    writer_starving_rw_spin_lock.cpp
 )
 
 PEERDIR(

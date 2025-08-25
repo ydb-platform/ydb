@@ -190,9 +190,6 @@ namespace locale {
     private:
         void set_all_options(localization_backend& backend, const std::string& id) const;
 
-        generator(const generator&);
-        void operator=(const generator&);
-
         struct data;
         hold_ptr<data> d;
     };

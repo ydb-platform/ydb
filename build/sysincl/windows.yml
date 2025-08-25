@@ -176,7 +176,6 @@
   - packon.h
   - packoff.h
   - pathcch.h
-  - p2p.h
   - pdh.h
   - pdhmsg.h
   - perflib.h
@@ -325,6 +324,11 @@
   - xaudio2.h
   - xinput.h
   - xmllite.h
+
+- case_sensitive: false
+  source_filter: "^(?!contrib/libs/nvidia/nccl/)"
+  includes:
+    - p2p.h
 
 # These headers are Microsoft Visual C specific.
 - case_sensitive: false

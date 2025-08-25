@@ -1,4 +1,5 @@
 #include "schemeshard__operation_memory_changes.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
@@ -120,6 +121,29 @@ void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathI
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
 
+void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->SysViews, SysViews);
+}
+
+void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSysViewInfo>(pathId, ss->SysViews, SysViews);
+}
+
+void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
+    Y_ABORT_UNLESS(!ss->LongIncrementalRestoreOps.contains(opId));
+    LongIncrementalRestoreOps.emplace(opId, std::nullopt);
+}
+
+void TMemoryChanges::GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
+    Y_ABORT_UNLESS(ss->LongIncrementalRestoreOps.contains(opId));
+    LongIncrementalRestoreOps.emplace(opId, ss->LongIncrementalRestoreOps.at(opId));
+}
+
+void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
+    Y_ABORT_UNLESS(!ss->IncrementalBackups.contains(id));
+    IncrementalBackups.emplace(id, nullptr);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -212,8 +236,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
-    for (const auto& [id, elem] : SubDomains) {
-        ss->SubDomains[id] = elem;
+    for (const auto& [id, savedState] : SubDomains) {
+        auto& subdomain = ss->SubDomains[id];
+        subdomain = savedState;
+        if (ss->GetCurrentSubDomainPathId() == id) {
+            subdomain->UpdateCounters(ss);
+        }
     }
     SubDomains.clear();
 
@@ -265,6 +293,36 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ResourcePools.erase(id);
         }
         ResourcePools.pop();
+    }
+
+    while (SysViews) {
+        const auto& [id, elem] = SysViews.top();
+        if (elem) {
+            ss->SysViews[id] = elem;
+        } else {
+            ss->SysViews.erase(id);
+        }
+        SysViews.pop();
+    }
+
+    while (LongIncrementalRestoreOps) {
+        const auto& [id, elem] = LongIncrementalRestoreOps.top();
+        if (elem.has_value()) {
+            ss->LongIncrementalRestoreOps[id] = elem.value();
+        } else {
+            ss->LongIncrementalRestoreOps.erase(id);
+        }
+        LongIncrementalRestoreOps.pop();
+    }
+
+    while (IncrementalBackups) {
+        const auto& [id, elem] = IncrementalBackups.top();
+        if (elem) {
+            ss->IncrementalBackups[id] = elem;
+        } else {
+            ss->IncrementalBackups.erase(id);
+        }
+        IncrementalBackups.pop();
     }
 }
 

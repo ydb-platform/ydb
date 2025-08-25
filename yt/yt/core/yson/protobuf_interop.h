@@ -84,6 +84,7 @@ struct TProtobufScalarElement
     // Meaningful only when TYPE == TYPE_ENUM.
     EEnumYsonStorageType EnumStorageType;
     const TProtobufEnumType* EnumType;
+    bool StrictEnumChecks;
 };
 
 struct TProtobufAttributeDictionaryElement
@@ -126,7 +127,20 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CProtobufElement TElementType>
-const TElementType& GetProtobufElementOrThrow(const NYson::TProtobufElement& element);
+consteval std::string_view GetProtobufElementTypeName();
+
+std::string_view GetProtobufElementTypeName(const TProtobufElement& element);
+
+// Version of `NYT::Visit` for `TProtobufElement` which skips `std::unique_ptr` wrappers.
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads);
+
+TProtobufElementType GetProtobufElementType(const TProtobufElement& protobufElement);
+
+NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElement& scalarElement);
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 

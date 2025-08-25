@@ -15,10 +15,26 @@ For profiling memory allocations build fqrun with ya make flags `-D PROFILE_MEMO
 
 ### Queries
 
-* Run select 42:
+* Stream query:
     ```(bash)
     ./fqrun -s "SELECT 42"
     ```
+
+* In place analytics query:
+    ```(bash)
+    ./fqrun -s "SELECT 42" -C analytics
+    ```
+
+* Analytics query with remote compute database:
+    1.  Start shared ydb tenant:
+        ```(bash)
+        ./kqprun -G 12345 --shared db
+        ```
+
+    1. Execute query:
+        ```(bash)
+        ./fqrun -s "SELECT 42" -C analytics --shared-compute-db /Root/db@localhost:12345
+        ```
 
 ### Logs
 

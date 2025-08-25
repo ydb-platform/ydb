@@ -26,6 +26,22 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// -> Nothing
+class TPingDistributedWriteSessionCommand
+    : public TTypedCommand<NApi::TDistributedWriteSessionPingOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPingDistributedWriteSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::INodePtr Session;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 // -> Nothing
 class TFinishDistributedWriteSessionCommand
@@ -48,13 +64,8 @@ private:
 // -> Cookie
 class TWriteTableFragmentCommand
     : public TTypedCommand<NApi::TTableFragmentWriterOptions>
-    , private TWriteTableCommand
 {
 public:
-    // Shadow normal execute in order to fix
-    // ambiguity in dispatch.
-    void Execute(ICommandContextPtr context) override;
-
     REGISTER_YSON_STRUCT_LITE(TWriteTableFragmentCommand);
 
     static void Register(TRegistrar registrar);
@@ -63,10 +74,9 @@ private:
     using TBase = TWriteTableCommand;
 
     NYTree::INodePtr Cookie;
-    TRefCountedPtr TableWriter;
+    i64 MaxRowBufferSize;
 
-    NApi::ITableWriterPtr CreateTableWriter(
-        const ICommandContextPtr& context) override;
+    NApi::ITableFragmentWriterPtr CreateTableWriter(const ICommandContextPtr& context);
 
     void DoExecute(ICommandContextPtr context) override;
 };

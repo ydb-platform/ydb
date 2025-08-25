@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
 
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events[0].first, client);
-        auto* e = dynamic_cast<TEvYdbProxy::TEvTopicEndPartition*>(actorOps.Events[0].second);
+        auto* e = dynamic_cast<TEvYdbProxy::TEvEndTopicPartition*>(actorOps.Events[0].second);
         UNIT_ASSERT(e);
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
 
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events[0].first, client);
-        auto* e = dynamic_cast<TEvYdbProxy::TEvTopicEndPartition*>(actorOps.Events[0].second);
+        auto* e = dynamic_cast<TEvYdbProxy::TEvEndTopicPartition*>(actorOps.Events[0].second);
         UNIT_ASSERT(e);
         UNIT_ASSERT_VALUES_EQUAL(e->Result.AdjacentPartitionsIds, TVector<ui64>{1});
         UNIT_ASSERT_VALUES_EQUAL(e->Result.ChildPartitionsIds, TVector<ui64>{2});

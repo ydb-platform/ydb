@@ -518,6 +518,9 @@ class YqTenant(BaseTenant):
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True
+            fq_config['task_controller'] = {}
+            fq_config['task_controller']['ping_period'] = "5s"      # task_lease_ttl / 4
+            fq_config['task_controller']['aggr_period'] = "1s"
         else:
             fq_config['nodes_manager']['enabled'] = False
             fq_config['pending_fetcher']['enabled'] = False
@@ -703,6 +706,8 @@ class StreamingOverKikimr(object):
                         ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String))
                     ).with_column(
                         ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
+                    ).with_column(
+                        ydb.Column('node', ydb.OptionalType(ydb.DataType.String))
                     ).with_primary_keys('subject_type', 'subject_id')
                 )
 
@@ -715,9 +720,9 @@ class StreamingOverKikimr(object):
             for vtenant, tenant in _tenant_mapping.items():
                 query = query + """UPSERT INTO tenants (tenant, vtenant, common, state, state_time) values("{}", "{}", true, 0, CurrentUtcTimestamp());
                 """.format(tenant, vtenant)
-            for cloud, vtenant in configuration.cloud_mapping.items():
-                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant) values ("cloud", "{}", "{}");
-                """.format(cloud, vtenant)
+            for cloud, vtenant_with_node in configuration.cloud_mapping.items():
+                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant, node) values ("cloud", "{}", "{}", {});
+                """.format(cloud, vtenant_with_node[0], ("\"" + vtenant_with_node[1] + "\"") if vtenant_with_node[1] is not None else 'NULL')
             self.exec_db_statement(query)
             self.control_plane.fq_config['control_plane_storage']['use_db_mapping'] = True
 

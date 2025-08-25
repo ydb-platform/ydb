@@ -1,67 +1,24 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include "formatters_common.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-#include <util/generic/hash.h>
 #include <util/stream/str.h>
-#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    class TFormatFail : public yexception {
-    public:
-        Ydb::StatusIds::StatusCode Status;
-        TString Error;
-
-        TFormatFail(Ydb::StatusIds::StatusCode status, TString error = {})
-            : Status(status)
-            , Error(std::move(error))
-        {}
-    };
-
-    class TResult {
-    public:
-        TResult(TString out)
-            : Out(std::move(out))
-            , Status(Ydb::StatusIds::SUCCESS)
-        {}
-
-        TResult(Ydb::StatusIds::StatusCode status, TString error)
-            : Status(status)
-            , Error(std::move(error))
-        {}
-
-        bool IsSuccess() const {
-            return Status == Ydb::StatusIds::SUCCESS;
-        }
-
-        Ydb::StatusIds::StatusCode GetStatus() const {
-            return Status;
-        }
-
-        const TString& GetError() const {
-            return Error;
-        }
-
-        TString ExtractOut() {
-            return std::move(Out);
-        }
-    private:
-        TString Out;
-
-        Ydb::StatusIds::StatusCode Status;
-        TString Error;
-    };
-
     TCreateTableFormatter()
         : Alloc(__LOCATION__)
     {
@@ -73,13 +30,20 @@ public:
         Alloc.Acquire();
     }
 
-    TResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
+        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
 
 private:
-
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
     bool Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
     bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
+
+    void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId);
+    void Format(const TString& fullTablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
+    void FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc);
 
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
@@ -88,14 +52,21 @@ private:
 
     void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);
 
+    void Format(const NKikimrSchemeOp::TOlapColumnDescription& olapColumnDesc);
+    void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
+    void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
+
+    void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const NKikimrSchemeOp::TFamilyDescription* family);
+    void FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options);
+
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");
     void FormatPrimitive(NYdb::TValueParser& parser);
 
-    void EscapeName(const TString& str);
-    void EscapeString(const TString& str);
-    void EscapeBinary(const TString& str);
-private:
+    TString ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
+
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;
 };

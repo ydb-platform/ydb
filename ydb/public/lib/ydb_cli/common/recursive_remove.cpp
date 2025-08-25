@@ -75,6 +75,10 @@ TStatus RemoveCoordinationNode(NCoordination::TClient& client, const TString& pa
     });
 }
 
+TStatus RemoveReplication(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("ASYNC REPLICATION", client, path, settings);
+}
+
 NYdb::NIssue::TIssues MakeIssues(const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue(error));
@@ -161,6 +165,8 @@ TStatus Remove(
     case ESchemeEntryType::SubDomain:
         // continue silently
         return TStatus(EStatus::SUCCESS, {});
+    case ESchemeEntryType::Replication:
+        return Remove(&RemoveReplication, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -222,28 +228,6 @@ TStatus RemoveDirectoryRecursive(
 
 TStatus RemovePathRecursive(
     const TDriver& driver,
-    const TString& path,
-    const TRemoveDirectoryRecursiveSettings& settings
-) {
-    TSchemeClient schemeClient(driver);
-    auto entity = schemeClient.DescribePath(path).ExtractValueSync();
-    if (!entity.IsSuccess()) {
-        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
-            return TStatus(EStatus::SUCCESS, {});
-        }
-        return entity;
-    }
-
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
-    return remover(entity.GetEntry());
-}
-
-TStatus RemovePathRecursive(
-    const TDriver& driver,
     const TSchemeEntry& entry,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
@@ -256,6 +240,31 @@ TStatus RemovePathRecursive(
     return remover(entry);
 }
 
+TStatus RemovePathRecursive(
+    const TDriver& driver,
+    const TString& path,
+    const TRemoveDirectoryRecursiveSettings& settings
+) {
+    TSchemeClient schemeClient(driver);
+    const auto entity = schemeClient.DescribePath(path).ExtractValueSync();
+    if (!entity.IsSuccess()) {
+        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
+        return entity;
+    }
+
+    auto entry = entity.GetEntry();
+    entry.Name = path;
+    switch (entry.Type) {
+        case NYdb::NScheme::ESchemeEntryType::ColumnStore:
+        case NYdb::NScheme::ESchemeEntryType::Directory:
+            return RemoveDirectoryRecursive(driver, path, settings);
+        default:
+            return RemovePathRecursive(driver, entry, settings);
+    }
+}
+
 namespace NInternal {
 
     TRemover CreateDefaultRemover(
@@ -266,7 +275,7 @@ namespace NInternal {
         NCoordination::TClient& coordinationClient,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
-        return [&](const TSchemeEntry& entry) {
+        return [&, settings](const TSchemeEntry& entry) {
             return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
         };
     }

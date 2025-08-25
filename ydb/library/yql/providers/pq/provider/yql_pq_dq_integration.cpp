@@ -46,10 +46,10 @@ public:
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;
-            auto* partitioninigParams = params.MutablePartitioningParams();
-            partitioninigParams->SetTopicPartitionsCount(topicPartitionsCount);
-            partitioninigParams->SetEachTopicPartitionGroupId(i);
-            partitioninigParams->SetDqPartitionsCount(tasks);
+            auto* partitioningParams = params.MutablePartitioningParams();
+            partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+            partitioningParams->SetEachTopicPartitionGroupId(i);
+            partitioningParams->SetDqPartitionsCount(tasks);
             YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
 
             TString serializedParams;
@@ -95,6 +95,28 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
+            TString serializedWatermarkExpr;
+            if (const auto maybeWatermark = pqReadTopic.Watermark()) {
+                const auto watermark = maybeWatermark.Cast();
+
+                if (wrSettings.WatermarksMode.GetOrElse("") != "default") {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"(Enable watermarks using "PRAGMA dq.WatermarksMode="default";")"));
+                    return {};
+                }
+
+                TStringBuilder err;
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                if (!NYql::SerializeWatermarkExpr(ctx, watermark, &watermarkExprProto, err)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
+                    return {};
+                }
+                if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
+                    return {};
+                }
+            }
+
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -106,6 +128,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
+                    .Watermark().Value(serializedWatermarkExpr).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -115,8 +138,20 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+        return TPqWriteTopic::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        TExprBase writeExpr(writeNode);
+        const auto write = writeExpr.Cast<TPqWriteTopic>();
+
+        return Build<TPqInsert>(ctx, write.Pos())
+            .World(write.World())
+            .DataSink(write.DataSink())
+            .Topic(write.Topic())
+            .Input(write.Input())
+            .Done().Ptr();
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
@@ -156,12 +191,21 @@ public:
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
                 TPqTopic topic = topicSource.Topic();
-                srcDesc.SetTopicPath(TString(topic.Path().Value()));
-                srcDesc.SetDatabase(TString(topic.Database().Value()));
                 const TStringBuf cluster = topic.Cluster().Value();
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    srcDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    srcDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    srcDesc.SetTopicPath(TString(topicPath));
+                    srcDesc.SetDatabase(TString(topicDatabase));
+                }
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
                 const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -205,6 +249,23 @@ public:
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
                 }
+
+                for (auto prop : topic.Props()) {
+                    const TStringBuf name = Name(prop);
+                    if (name == FederatedClustersProp) {
+                        auto clusterList = prop.Value().Cast<TDqPqFederatedClusterList>();
+                        for (auto cluster : clusterList) {
+                            auto federatedCluster = srcDesc.AddFederatedClusters();
+                            federatedCluster->SetName(cluster.Name().StringValue());
+                            federatedCluster->SetEndpoint(cluster.Endpoint().StringValue());
+                            federatedCluster->SetDatabase(cluster.Database().StringValue());
+                            if (cluster.PartitionsCount()) {
+                                federatedCluster->SetPartitionsCount(FromString<ui32>(cluster.PartitionsCount().Cast().StringValue()));
+                            }
+                        }
+                    }
+                }
+
                 srcDesc.SetFormat(format);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
@@ -234,9 +295,29 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
+                *srcDesc.MutableDisposition() = State_->Disposition;
+
+                for (const auto& [label, value] : State_->TaskSensorLabels) {
+                    auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
+                    taskSensorLabel->SetLabel(label);
+                    taskSensorLabel->SetValue(value);
+                }
+                for (auto nodeId : State_->NodeIds) {
+                    srcDesc.AddNodeIds(nodeId);
+                }
+
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
+                YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
+                TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                srcDesc.SetWatermarkExpr(watermarkExprSql);
+
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                }
+                if (sharedReading && !watermarkExprSql.empty()) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
                 }
                 sourceType = "PqSource";
             }
@@ -255,8 +336,17 @@ public:
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
-                sinkDesc.SetTopicPath(TString(topic.Path().Value()));
-                sinkDesc.SetDatabase(TString(topic.Database().Value()));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    sinkDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    sinkDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    sinkDesc.SetTopicPath(TString(topicPath));
+                    sinkDesc.SetDatabase(TString(topicDatabase));
+                }
 
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
@@ -279,6 +369,17 @@ public:
                 sinkType = "PqSink";
             }
         }
+    }
+
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TPqReadTopic::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
     }
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(

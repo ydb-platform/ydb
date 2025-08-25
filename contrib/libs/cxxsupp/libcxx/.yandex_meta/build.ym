@@ -1,13 +1,14 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}8ab82a2dc308c27fbdd0a87b5be7dddc623f1b0e{% endblock %}
-{% block current_date %}2024-07-08{% endblock %}
+{% block current_version %}6d66ac51a49af7ee46f1ccac45d312352d8b942e{% endblock %}
+{% block current_date %}2024-09-20{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/sysincls.py
 include/__config_site
 include/__config_epilogue.h
 include/__memory/pointer_safety.h
+include/__memory/allocator_const.h
 include/__support/win32/atomic_win32.h
 include/math_cuda.h
 include/stlfwd
@@ -111,7 +112,7 @@ ELSEIF (OS_IOS)
         contrib/libs/cxxsupp/builtins
     )
 ELSEIF (OS_LINUX OR OS_DARWIN)
-    IF (ARCH_ARM7)
+    IF (ARCH_ARM6 OR ARCH_ARM7)
         # libcxxrt support for ARM is currently broken, use libcxxabi instead
         SET(CXX_RT "libcxxabi")
     ELSE()

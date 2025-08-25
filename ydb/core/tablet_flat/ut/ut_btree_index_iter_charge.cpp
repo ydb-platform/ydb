@@ -5,6 +5,7 @@
 #include "flat_part_charge_range.h"
 #include "test/libs/table/test_writer.h"
 #include "test/libs/table/wrap_part.h"
+#include <test/libs/table/test_envs.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -95,10 +96,25 @@ namespace {
     }
 
     struct TTestParams {
+        enum ESlices : ui32 {
+            None,
+            Many,
+            Type1,
+            Type2,
+            Type3,
+            Type4,
+            Type5,
+            Type6,
+            Type7,
+            // new types should go here
+
+            End
+        };
+
         const ui32 Levels = Max<ui32>();
         const bool Groups = false;
         const bool History = false;
-        const bool Slices = false;
+        const ESlices Slices = None;
         const ui32 Rows = 40;
         const bool StickSomePages = false;
     };
@@ -164,15 +180,53 @@ namespace {
             auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
                 slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
             };
-            add(0, 2);
-            add(3, 4);
-            add(4, 6);
-            add(7, 8);
-            add(8, 9);
-            add(10, 14);
-            add(16, 17);
-            add(17, 19);
-            add(19, 20);
+
+            switch (params.Slices) {
+            case TTestParams::Many: {
+                add(0, 2);
+                add(3, 4);
+                add(4, 6);
+                add(7, 8);
+                add(8, 9);
+                add(10, 14);
+                add(16, 17);
+                add(17, 19);
+                add(19, 20);
+                break;
+            }
+            case TTestParams::Type1: {
+                add(7, 8);
+                add(8, 9);
+                break;
+            }
+            case TTestParams::Type2: {
+                add(7, 8);
+                break;
+            }
+            case TTestParams::Type3: {
+                add(7, 9);
+                break;
+            }
+            case TTestParams::Type4: {
+                add(7, 10);
+                break;
+            }
+            case TTestParams::Type5: {
+                add(8, 10);
+                break;
+            }
+            case TTestParams::Type6: {
+                add(9, 10);
+                break;
+            }
+            case TTestParams::Type7: {
+                add(2, 4);
+                add(17, 18);
+                break;
+            }
+            default:
+                Y_ABORT("Unknown slices");
+            }
 
             partSlices->clear();
             for (auto s : slices) {
@@ -180,16 +234,12 @@ namespace {
             }
         }
 
-        if (params.Slices) {
-            UNIT_ASSERT_GT(part.Slices->size(), 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        if (params.Slices <= TTestParams::None + 1) {
+            Cerr << DumpPart(part, 3) << Endl;
         }
-
         Cerr << "Slices";
         part.Slices->Describe(Cerr);
         Cerr << Endl;
-        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
         if (params.Groups) {
@@ -233,6 +283,21 @@ namespace {
             }
         }
 
+        UNIT_ASSERT_C(false,  error);
+        return EReady::Page;
+    }
+
+    EReady Retry(std::function<EReady()> action, TForwardEnv& env, const TString& message, ui32 failsAllowed = 10) {
+        Y_UNUSED(env); // loads pages automatically
+
+        for (ui32 attempt = 0; attempt <= failsAllowed; attempt++) {
+            if (auto ready = action(); ready != EReady::Page) {
+                return ready;
+            }
+        }
+
+        TStringBuilder error;
+        error << "Too many fails (" << failsAllowed + 1 << ") " << message << Endl << "Requests ";
         UNIT_ASSERT_C(false,  error);
         return EReady::Page;
     }
@@ -715,8 +780,20 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }, env, message, failsAllowed);
     }
 
+    EReady Seek(TWrapPartImpl<EDirection::Forward>& wrap, TForwardEnv& env, const TCells key1, ESeek seek, const TString& message, ui32 failsAllowed) {
+        return Retry([&]() {
+            return wrap.Seek(key1, seek);
+        }, env, message, failsAllowed);
+    }
+
     template<EDirection Direction>
     EReady Next(TWrapPartImpl<Direction>& wrap, TTouchEnv& env, const TString& message, ui32 failsAllowed) {
+        return Retry([&]() {
+            return wrap.Next();
+        }, env, message, failsAllowed);
+    }
+
+    EReady Next(TWrapPartImpl<EDirection::Forward>& wrap, TForwardEnv& env, const TString& message, ui32 failsAllowed) {
         return Retry([&]() {
             return wrap.Next();
         }, env, message, failsAllowed);
@@ -745,7 +822,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         wrap.StopAfter(key2);
         wrap.Make(&env);
         
-        if (Seek(wrap, env, key1, seek, message + " Seek", failsAllowed) != EReady::Data) {
+        if (Seek(wrap, env, key1, seek, TStringBuilder() << message << " Seek " << seek, failsAllowed) != EReady::Data) {
             return;
         }
         if (history) {
@@ -788,19 +865,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                     TVector<TCell> key = MakeKey(firstCell, secondCell);
 
                     TTouchEnv bTreeEnv, flatEnv;
-                    TWrapPartImpl<Direction> bTree(eggs, btreeRun);
-                    TWrapPartImpl<Direction> flat(eggs, flatRun);
-                    bTree.Make(&bTreeEnv);
-                    flat.Make(&flatEnv);
+                    TWrapPartImpl<Direction> bTreeIt(eggs, btreeRun);
+                    TWrapPartImpl<Direction> flatIt(eggs, flatRun);
+                    bTreeIt.Make(&bTreeEnv);
+                    flatIt.Make(&flatEnv);
 
                     {
                         TStringBuilder message = TStringBuilder() << (reverse ?  "IterateReverse" : "Iterate") << "(" << seek << ") ";
                         for (auto c : key) {
                             message << c.AsValue<ui32>() << " ";
                         }
-                        EReady bTreeReady = Seek(bTree, bTreeEnv, key, seek, message, failsAllowed);
-                        EReady flatReady = Seek(flat, flatEnv, key, seek, message, failsAllowed);
-                        AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                        EReady bTreeReady = Seek(bTreeIt, bTreeEnv, key, seek, message, failsAllowed);
+                        EReady flatReady = Seek(flatIt, flatEnv, key, seek, message, failsAllowed);
+                        AssertEqual(bTreeIt, bTreeReady, flatIt, flatReady, message);
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                     }
 
@@ -810,14 +887,92 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             message << c.AsValue<ui32>() << " ";
                         }
                         message << " --> " << steps << " steps ";
-                        EReady bTreeReady = Next(bTree, bTreeEnv, message, failsAllowed);
-                        EReady flatReady = Next(flat, flatEnv, message, failsAllowed);
-                        AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                        EReady bTreeReady = Next(bTreeIt, bTreeEnv, message, failsAllowed);
+                        EReady flatReady = Next(flatIt, flatEnv, message, failsAllowed);
+                        AssertEqual(bTreeIt, bTreeReady, flatIt, flatReady, message);
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                     }
                 }
             }
         }
+    }
+
+    void CheckIterateFwd(TTestParams params, const TPartEggs& eggs) {
+        const ui32 failsAllowed = GetFailsAllowed(params);
+        const auto part = *eggs.Lone();
+
+        TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
+        MakeRuns(eggs, btreeRun, flatRun);
+
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+
+        for (auto [readLo, readHi] : TVector<std::pair<ui32, ui32>>{{512, 1024}}) {
+        for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
+            for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                for (ui32 secondCell : xrange<ui32>(0, 14)) {
+        #else
+            for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                for (ui32 secondCell : xrange<ui32>(10, 14)) {
+        #endif
+                    TVector<TCell> key = MakeKey(firstCell, secondCell);
+
+                    TTouchEnv bTreeEnv, flatEnv;
+                    TWrapPartImpl<EDirection::Forward> bTreeIt(eggs, btreeRun), flatIt(eggs, flatRun);
+                    bTreeIt.Make(&bTreeEnv);
+                    flatIt.Make(&flatEnv);
+
+                    TForwardEnv bTreeFwdEnv(readLo, readHi), flatFwdEnv(readLo, readHi);
+                    TWrapPartImpl<EDirection::Forward> bTreeFwdIt(eggs, btreeRun), flatFwdIt(eggs, flatRun);
+                    bTreeFwdIt.Make(&bTreeFwdEnv);
+                    flatFwdIt.Make(&flatFwdEnv);
+
+                    {
+                        TStringBuilder message = TStringBuilder() << "IterateFwd(" << readLo << ", " << readHi << ", " << seek << ") ";
+                        for (auto c : key) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+
+                        EReady bTreeReady = Seek(bTreeIt, bTreeEnv, key, seek, message, failsAllowed);
+                        EReady flatReady = Seek(flatIt, flatEnv, key, seek, message, failsAllowed);
+                        AssertEqual(bTreeIt, bTreeReady, flatIt, flatReady, message);
+
+                        EReady bTreeFwdReady = Seek(bTreeFwdIt, bTreeFwdEnv, key, seek, message, failsAllowed);
+                        EReady flatFwdReady = Seek(flatFwdIt, flatFwdEnv, key, seek, message, failsAllowed);
+                        AssertEqual(bTreeFwdIt, bTreeFwdReady, flatFwdIt, flatFwdReady, message);
+
+                        // compare fwd and touch env results:
+                        AssertEqual(bTreeFwdIt, bTreeFwdReady, flatIt, flatReady, message);
+
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message); // TODO: check fwd?
+                    }
+
+                    for (ui32 steps = 1; steps <= 10; steps++) {
+                        TStringBuilder message = TStringBuilder() << "IterateFwd(" << readLo << ", " << readHi << ", " << seek << ") ";
+                        for (auto c : key) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+                        message << " --> " << steps << " steps ";
+                        
+                        EReady bTreeReady = Next(bTreeIt, bTreeEnv, message, failsAllowed);
+                        EReady flatReady = Next(flatIt, flatEnv, message, failsAllowed);
+                        AssertEqual(bTreeIt, bTreeReady, flatIt, flatReady, message);
+
+                        EReady bTreeFwdReady = Next(bTreeFwdIt, bTreeFwdEnv, message, failsAllowed);
+                        EReady flatFwdReady = Next(flatFwdIt, flatFwdEnv, message, failsAllowed);
+                        AssertEqual(bTreeFwdIt, bTreeFwdReady, flatFwdIt, flatFwdReady, message);
+
+                        // compare fwd and touch env results:
+                        AssertEqual(bTreeFwdIt, bTreeFwdReady, flatIt, flatReady, message);
+
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message); // TODO: check fwd?
+                    }
+                }
+            }
+        }}
     }
 
     template<EDirection Direction>
@@ -835,17 +990,17 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
-        for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 1, 2, 5} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 3} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                    for (ui32 firstCellKey2 : xrange<ui32>(0, itemsLimit ? 1 : part.Stat.Rows / 7 + 1)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(0, itemsLimit ? 1 : 14)) {
         #else
-        for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
+        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(10, 14)) {
                     for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(10, 14)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(10, itemsLimit ? 11 : 14)) {
         #endif
                             TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
                             TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
@@ -887,6 +1042,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
 
         CheckIterate<EDirection::Forward>(params, eggs);
         CheckIterate<EDirection::Reverse>(params, eggs);
+
+        CheckIterateFwd(params, eggs);
+
         CheckCharge<EDirection::Forward>(params, eggs);
         CheckCharge<EDirection::Reverse>(params, eggs);
     }
@@ -916,19 +1074,27 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(OneNode_Slices) {
-        CheckPart({.Levels = 1, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(OneNode_Groups_Slices) {
-        CheckPart({.Levels = 1, .Groups = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(OneNode_History_Slices) {
-        CheckPart({.Levels = 1, .History = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(OneNode_Groups_History_Slices) {
-        CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(FewNodes) {
@@ -948,23 +1114,33 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(FewNodes_Slices) {
-        CheckPart({.Levels = 3, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(FewNodes_Groups_Slices) {
-        CheckPart({.Levels = 3, .Groups = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(FewNodes_History_Slices) {
-        CheckPart({.Levels = 3, .History = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
-        CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
     }
 
     Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky) {
-        CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true, .StickSomePages = true});
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
+        }
     }
 }
 

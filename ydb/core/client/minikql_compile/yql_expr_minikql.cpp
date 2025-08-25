@@ -257,9 +257,12 @@ class TKikimrCallableTypeAnnotationTransformer : public TSyncTransformerBase {
 public:
     TKikimrCallableTypeAnnotationTransformer(
             TContext::TPtr mkqlCtx,
-            TAutoPtr<IGraphTransformer> callableTransformer)
+            TAutoPtr<IGraphTransformer> callableTransformer,
+            TTypeAnnotationContext& typeCtx)
         : MkqlCtx(mkqlCtx)
-        , CallableTransformer(callableTransformer) {}
+        , CallableTransformer(callableTransformer)
+        , TypeCtx(typeCtx)
+        {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -323,9 +326,9 @@ public:
                 return NTypeAnnImpl::SortWrapper(input, output, typeAnnCtx);
             }
             if (input->IsCallable("PartialTake")) {
-                NTypeAnnImpl::TContext typeAnnCtx(ctx);
+                NTypeAnnImpl::TExtContext typeAnnCtx(ctx, TypeCtx);
                 TExprNode::TPtr output;
-                return NTypeAnnImpl::TakeWrapper(input, output, typeAnnCtx);
+                return NTypeAnnImpl::TakeWrapperEx(input, output, typeAnnCtx);
             }
         }
 
@@ -809,6 +812,7 @@ private:
 private:
     TContext::TPtr MkqlCtx;
     TAutoPtr<IGraphTransformer> CallableTransformer;
+    TTypeAnnotationContext& TypeCtx;
 };
 
 bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContext::TPtr mkqlContext) {
@@ -820,7 +824,7 @@ bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContex
     types.RandomProvider = CreateDefaultRandomProvider();
 
     TAutoPtr<IGraphTransformer> kikimrTransformer = new TKikimrCallableTypeAnnotationTransformer(
-        mkqlContext, callableTransformer);
+        mkqlContext, callableTransformer, types);
 
     auto typeTransformer = CreateTypeAnnotationTransformer(kikimrTransformer, types);
 

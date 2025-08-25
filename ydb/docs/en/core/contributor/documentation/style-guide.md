@@ -54,6 +54,7 @@ Ensure that text follows proper language rules with no typos, grammar, punctuati
 - **Lists and bullet points.** Use bullet points or numbered lists to break down steps, features, or recommendations.
 - **Visual highlights.** If there's an important warning, information, or tip, highlight it using a `{% note info %} ... {% endnote %}` tag. For smaller inline highlights, sparingly use **bold** or *italic*.
 - **Code and samples.** When including code, use proper syntax highlighting, formatting, and comments to ensure readability. Show example output for queries and CLI commands. Use `code blocks` for everything likely to appear in a console or IDE, but not for visual highlights.
+- **File naming.** Use dashes instead of underscores for spaces in new file and folder names (e.g., `new-folder/new-file.md` instead of `new_folder/new_file.md`). However, underscores are acceptable in keywords that should be written specifically with underscores, such as in setting names.
 - **Linking and references.**
 
     - Provide clear and descriptive links to related resources or additional documentation.

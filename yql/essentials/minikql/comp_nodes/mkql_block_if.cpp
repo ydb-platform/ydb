@@ -248,7 +248,7 @@ IComputationNode* WrapBlockIf(TCallable& callable, const TComputationNodeFactory
         kernel = MakeBlockIfKernel<false, false>(argsTypes, thenType);
     }
 
-    return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 }

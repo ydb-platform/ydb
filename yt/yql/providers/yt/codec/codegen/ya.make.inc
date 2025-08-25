@@ -19,6 +19,10 @@ PEERDIR(
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
+IF (OS_WINDOWS)
+    #TODO llvm18
+    PEERDIR(library/cpp/resource)
+ELSE()
     LLVM_BC(
         yt_codec_bc.cpp
         NAME
@@ -73,6 +77,7 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         GetWrittenBytes
         FillZero
     )
+ENDIF()
 ELSE()
     CFLAGS(
         -DMKQL_DISABLE_CODEGEN

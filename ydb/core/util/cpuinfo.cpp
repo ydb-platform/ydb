@@ -1,9 +1,11 @@
 #include "cpuinfo.h"
 #include <cstdlib>
-#include <dirent.h>
+#if defined (_linux_)
+    #include <dirent.h>
+    #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include <fstream>
-#include <unistd.h>
 #include <unordered_set>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
@@ -181,6 +183,7 @@ void NKikimr::TSystemThreadsMonitor::UpdateSystemThread(pid_t pid, pid_t tid) {
     }
 #else
     Y_UNUSED(tid);
+    Y_UNUSED(pid);
 #endif
 }
 

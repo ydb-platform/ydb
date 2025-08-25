@@ -183,10 +183,8 @@ struct aws_custom_key_op_handler *aws_pkcs11_tls_op_handler_new(
         goto done;
     }
 
-    if (pkcs_user_pin != NULL) {
-        if (aws_pkcs11_lib_login_user(pkcs11_handler->lib, pkcs11_handler->session_handle, pkcs_user_pin)) {
-            goto done;
-        }
+    if (aws_pkcs11_lib_login_user(pkcs11_handler->lib, pkcs11_handler->session_handle, pkcs_user_pin)) {
+        goto done;
     }
 
     if (aws_pkcs11_lib_find_private_key(

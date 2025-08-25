@@ -59,6 +59,7 @@ struct std::hash<NKikimrBlobStorage::TVSlotId> {
 
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr::NHealthCheck {
 
@@ -151,6 +152,8 @@ public:
         SyncState,
         Uptime,
         QuotaUsage,
+        BridgeGroupState,
+        PileComputeState,
     };
 
     enum ETimeoutTag {
@@ -194,6 +197,9 @@ public:
                     return state;
                 }
                 if (info.tabletbootmode() != NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
+                    return state;
+                }
+                if (info.has_lockedtoactor()) {
                     return state;
                 }
                 if (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier) {
@@ -264,13 +270,17 @@ public:
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
         TNodeId MaxTimeDifferenceNodeId = 0;
         TString Path;
+        THashMap<TString, TVector<TNodeId>> PileNodeIds;
     };
 
     struct TGroupState {
+        TGroupId Id;
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
         ui32 Generation;
         bool LayoutCorrect = true;
+        std::vector<TGroupState*> BridgeGroups;
+        TBridgePileId BridgePileId;
     };
 
     struct TSelfCheckResult {
@@ -372,7 +382,7 @@ public:
                 }
                 std::sort(reason.begin(), reason.end());
                 reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
-                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.begin()));
+                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.end()));
                 Ydb::Monitoring::IssueLog& issueLog(issueRecord.IssueLog);
                 issueLog.set_status(status);
                 issueLog.set_message(message);
@@ -484,22 +494,23 @@ public:
         TRequestResponse& operator =(const TRequestResponse&) = delete;
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
-        void Set(std::unique_ptr<T>&& response) {
+        bool Set(std::unique_ptr<T>&& response) {
+            if (IsDone()) {
+                return false;
+            }
             constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TSelfCheckRequest::IsSuccess(r);};
             if constexpr (hasErrorCheck) {
                 if (!TSelfCheckRequest::IsSuccess(response)) {
-                    Error(TSelfCheckRequest::GetError(response));
-                    return;
+                    return Error(TSelfCheckRequest::GetError(response));
                 }
             }
-            if (!IsDone()) {
-                Span.EndOk();
-            }
+            Span.EndOk();
             Response = std::move(response);
+            return true;
         }
 
-        void Set(TAutoPtr<TEventHandle<T>>&& response) {
-            Set(std::unique_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
+            return Set(std::unique_ptr<T>(response->Release().Release()));
         }
 
         bool Error(const TString& error) {
@@ -636,7 +647,7 @@ public:
     }
 
     TString FilterDatabase;
-    THashMap<TSubDomainKey, TString> FilterDomainKey;
+    THashMap<TSubDomainKey, std::optional<TString>> FilterDomainKey; // nullopt for serverless
     TVector<TActorId> PipeClients;
     int Requests = 0;
     TString DomainPath;
@@ -818,6 +829,10 @@ public:
             RequestBsController();
         }
 
+        if (!IsSpecificDatabaseFilter() || IsBridgeMode(TActivationContext::AsActorContext())) {
+            NodeWardenStorageConfig = RequestStorageConfig();
+        }
+
 
         NodesInfo = TRequestResponse<TEvInterconnect::TEvNodesInfo>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvInterconnect::TEvListNodes"));
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
@@ -837,8 +852,21 @@ public:
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        NodeWardenStorageConfig->Set(std::move(ev));
-        if (const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config; config.HasBlobStorageConfig()) {
+        if (!NodeWardenStorageConfig->Set(std::move(ev))) {
+            return;
+        }
+        const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
+        RequestDone("TEvNodeWardenStorageConfig");
+        if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
+            auto result = MakeHolder<TEvSelfCheckResult>();
+            result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_MAINTENANCE_REQUIRED);
+            auto* issue = result->Result.add_issue_log();
+            issue->set_id("0");
+            issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+            issue->set_message("Cluster is not bootstrapped");
+            return ReplyAndPassAway(std::move(result));
+        }
+        if (config.HasBlobStorageConfig()) {
             if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& staticConfig = bsConfig.GetServiceSet();
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
@@ -887,8 +915,6 @@ public:
                 }
             }
         }
-
-        RequestDone("TEvNodeWardenStorageConfig");
     }
 
     STATEFN(StateWait) {
@@ -921,6 +947,7 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
+        BLOG_TRACE("RequestDone(" << name << "): remaining " << Requests);
         if (Requests == 0) {
             ReplyAndPassAway();
         }
@@ -1086,10 +1113,59 @@ public:
     }
 
     template<typename TEvent>
-    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId, std::initializer_list<int> fields = {}) {
+    std::vector<int> GetRequiredFields();
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvSystemStateRequest>() {
+        return {
+                NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLoadAverageFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewPeerIdFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kLocationFieldNumber,
+                NKikimrWhiteboard::TSystemStateInfo::kMaxClockSkewWithPeerUsFieldNumber,
+            };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvVDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kVDiskStateFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kReplicatedFieldNumber,
+                NKikimrWhiteboard::TVDiskStateInfo::kDiskSpaceFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvPDiskStateRequest>() {
+        return {
+                NKikimrWhiteboard::TPDiskStateInfo::kPDiskIdFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kPathFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kAvailableSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kTotalSizeFieldNumber,
+                NKikimrWhiteboard::TPDiskStateInfo::kStateFieldNumber,
+        };
+    }
+
+    template<>
+    std::vector<int> GetRequiredFields<TEvWhiteboard::TEvBSGroupStateRequest>() {
+        return {
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupGenerationFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kGroupIDFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kStoragePoolNameFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kBridgePileIdFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kErasureSpeciesFieldNumber,
+                NKikimrWhiteboard::TBSGroupStateInfo::kVDiskIdsFieldNumber,
+        };
+    }
+
+    template<typename TEvent>
+    [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         auto request = MakeHolder<TEvent>();
-        for (int field : fields) {
+        for (int field : GetRequiredFields<TEvent>()) {
             request->Record.AddFieldsRequired(field);
         }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
@@ -1101,9 +1177,10 @@ public:
         return response;
     }
 
+
     void RequestGenericNode(TNodeId nodeId) {
         if (NodeSystemState.count(nodeId) == 0) {
-            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1}));
+            NodeSystemState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId));
             ++Requests;
         }
     }
@@ -1140,7 +1217,9 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        DatabaseBoardInfo->Set(std::move(ev));
+        if (!DatabaseBoardInfo->Set(std::move(ev))) {
+            return;
+        }
         if (DatabaseBoardInfo->IsOk()) {
             TDatabaseState& database = DatabaseState[FilterDatabase];
             for (const auto& entry : DatabaseBoardInfo->Get()->InfoEntries) {
@@ -1158,22 +1237,34 @@ public:
         auto eventId = ev->Get()->EventId;
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
-            case TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState.erase(nodeId);
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+            case TEvWhiteboard::EvSystemStateRequest: {
+                auto& request = NodeSystemState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                }
                 break;
-            case TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState.erase(nodeId);
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvVDiskStateRequest: {
+                auto& request = NodeVDiskState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
-            case TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState.erase(nodeId);
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvPDiskStateRequest: {
+                auto& request = NodePDiskState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
-            case TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState.erase(nodeId);
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvBSGroupStateRequest: {
+                auto& request = NodeBSGroupState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
+            }
             default:
                 RequestDone("unsupported event scheduled");
                 break;
@@ -1194,7 +1285,9 @@ public:
         TString error = "Undelivered";
         if (ev->Get()->SourceType == TEvWhiteboard::EvSystemStateRequest) {
             if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
-                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+                if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+                    NodeSystemState.erase(nodeId);
+                } else {
                     RequestDone("undelivered of TEvSystemStateRequest");
                     UnavailableComputeNodes.insert(nodeId);
                 }
@@ -1202,7 +1295,9 @@ public:
         }
         if (ev->Get()->SourceType == TEvWhiteboard::EvVDiskStateRequest) {
             if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
-                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
+                if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
+                    NodeVDiskState.erase(nodeId);
+                } else {
                     RequestDone("undelivered of TEvVDiskStateRequest");
                     UnavailableStorageNodes.insert(nodeId);
                 }
@@ -1210,7 +1305,9 @@ public:
         }
         if (ev->Get()->SourceType == TEvWhiteboard::EvPDiskStateRequest) {
             if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
-                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
+                if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
+                    NodePDiskState.erase(nodeId);
+                } else {
                     RequestDone("undelivered of TEvPDiskStateRequest");
                     UnavailableStorageNodes.insert(nodeId);
                 }
@@ -1218,7 +1315,9 @@ public:
         }
         if (ev->Get()->SourceType == TEvWhiteboard::EvBSGroupStateRequest) {
             if (NodeBSGroupState.count(nodeId) && NodeBSGroupState[nodeId].Error(error)) {
-                if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
+                if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
+                    NodeBSGroupState.erase(nodeId);
+                } else {
                     RequestDone("undelivered of TEvBSGroupStateRequest");
                 }
             }
@@ -1229,25 +1328,33 @@ public:
         ui32 nodeId = ev->Get()->NodeId;
         TString error = "NodeDisconnected";
         if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
-            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+            if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+                NodeSystemState.erase(nodeId);
+            } else {
                 RequestDone("node disconnected with TEvSystemStateRequest");
                 UnavailableComputeNodes.insert(nodeId);
             }
         }
         if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
-            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
+            if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
+                NodeVDiskState.erase(nodeId);
+            } else {
                 RequestDone("node disconnected with TEvVDiskStateRequest");
                 UnavailableStorageNodes.insert(nodeId);
             }
         }
         if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
-            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
+            if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
+                NodePDiskState.erase(nodeId);
+            } else {
                 RequestDone("node disconnected with TEvPDiskStateRequest");
                 UnavailableStorageNodes.insert(nodeId);
             }
         }
         if (NodeBSGroupState.count(nodeId) && NodeBSGroupState[nodeId].Error(error)) {
-            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
+            if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId)) {
+                NodeBSGroupState.erase(nodeId);
+            } else {
                 RequestDone("node disconnected with TEvBSGroupStateRequest");
             }
         }
@@ -1352,7 +1459,9 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         bool needComputeFromStaticNodes = !IsSpecificDatabaseFilter();
-        NodesInfo->Set(std::move(ev));
+        if (!NodesInfo->Set(std::move(ev))) {
+            return;
+        }
         for (const auto& ni : NodesInfo->Get()->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
             if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
@@ -1373,28 +1482,36 @@ public:
 
     void Handle(TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestStoragePools);
-        StoragePools->Set(std::move(ev));
+        if (!StoragePools->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetStoragePoolsRequest");
     }
 
     void Handle(TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestGroups);
-        Groups->Set(std::move(ev));
+        if (!Groups->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetGroupsRequest");
     }
 
     void Handle(TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestVSlots);
-        VSlots->Set(std::move(ev));
+        if (!VSlots->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetVSlotsRequest");
     }
 
     void Handle(TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestPDisks);
-        PDisks->Set(std::move(ev));
+        if (!PDisks->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetPDisksRequest");
     }
@@ -1404,7 +1521,9 @@ public:
         TTabletId schemeShardId = TabletRequests.CompleteRequest(TTabletRequestsState::RequestGetPartitionStats);
         if (schemeShardId) {
             auto& partitionStatsResult(GetPartitionStatsResult[schemeShardId]);
-            partitionStatsResult.Set(std::move(ev));
+            if (!partitionStatsResult.Set(std::move(ev))) {
+                return;
+            }
             if (partitionStatsResult.IsOk()) {
                 std::map<double, std::pair<const NKikimrSysView::TPartitionStatsResult*, const NKikimrSysView::TPartitionStats*>> overloadedPaths;
                 for (const NKikimrSysView::TPartitionStatsResult& statsPath : partitionStatsResult.Get()->Record.GetStats()) {
@@ -1471,7 +1590,9 @@ public:
         TabletRequests.CompleteRequest(ev->Cookie);
         TString path = ev->Get()->GetRecord().path();
         auto& response = DescribeByPath[path];
-        response.Set(std::move(ev));
+        if (!response.Set(std::move(ev))) {
+            return;
+        }
         if (response.IsOk()) {
             auto itOverloadedShardHint = OverloadedShardHints.find(path);
             if (itOverloadedShardHint != OverloadedShardHints.end()) {
@@ -1516,10 +1637,13 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& response = NavigateKeySet[ev->Get()->Request->Cookie];
-        response.Set(std::move(ev));
+        if (!response.Set(std::move(ev))) {
+            return;
+        }
         if (response.IsOk()) {
             auto domainInfo = response.Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(response.Get()->Request->ResultSet.begin()->Path);
+            TSubDomainKey subDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId);
             if (domainInfo->IsServerless()) {
                 if (NeedHealthCheckForServerless(domainInfo)) {
                     if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
@@ -1529,12 +1653,12 @@ public:
                     DatabaseState[path].ServerlessComputeResourcesMode = domainInfo->ServerlessComputeResourcesMode;
                 } else {
                     DatabaseState.erase(path);
+                    FilterDomainKey[subDomainKey] = std::nullopt;
                     RequestDone("TEvNavigateKeySetResult");
                     return;
                 }
             }
 
-            TSubDomainKey subDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId);
             FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
@@ -1564,6 +1688,8 @@ public:
                     GetPartitionStatsResult[schemeShardId] = RequestPartitionStats(schemeShardId, subDomainKey);
                 }
             }
+        } else {
+            BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
         }
         RequestDone("TEvNavigateKeySetResult");
     }
@@ -1578,7 +1704,9 @@ public:
         TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         {
             auto& response = HiveNodeStats[hiveId];
-            response.Set(std::move(ev));
+            if (!response.Set(std::move(ev))) {
+                return;
+            }
             if (hiveId != RootHiveId) {
                 for (const NKikimrHive::THiveNodeStats& hiveStat : response.Get()->Record.GetNodeStats()) {
                     if (hiveStat.HasNodeDomain()) {
@@ -1615,13 +1743,17 @@ public:
 
     void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
-        HiveInfo[hiveId].Set(std::move(ev));
+        if (!HiveInfo[hiveId].Set(std::move(ev))) {
+            return;
+        }
         RequestDone("TEvResponseHiveInfo");
     }
 
     void Handle(TEvConsole::TEvListTenantsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
-        ListTenants->Set(std::move(ev));
+        if (!ListTenants->Set(std::move(ev))) {
+            return;
+        }
         RequestSchemeCacheNavigate(DomainPath);
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ListTenants->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
@@ -1635,11 +1767,9 @@ public:
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodeSystemState(NodeSystemState[nodeId]);
-        nodeSystemState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
-            state.set_nodeid(nodeId);
-            MergedNodeSystemState[nodeId] = &state;
-        }
+        if (!nodeSystemState.Set(std::move(ev))) {
+            return;
+      }
         RequestDone("TEvSystemStateResponse");
     }
 
@@ -1655,13 +1785,15 @@ public:
                     auto itDomain = FilterDomainKey.find(tenantId);
                     TDatabaseState* database = nullptr;
                     if (itDomain == FilterDomainKey.end()) {
+                        continue;
+                    } else if (!itDomain->second) {
                         if (!FilterDatabase || FilterDatabase == dbPath) {
                             database = &dbState;
                         } else {
                             continue;
                         }
                     } else {
-                        auto itDatabase = DatabaseState.find(itDomain->second);
+                        auto itDatabase = DatabaseState.find(*itDomain->second);
                         if (itDatabase != DatabaseState.end()) {
                             database = &itDatabase->second;
                         } else {
@@ -1692,8 +1824,8 @@ public:
                     if (hiveStat.HasNodeDomain()) {
                         TSubDomainKey domainKey(hiveStat.GetNodeDomain());
                         auto itFilterDomainKey = FilterDomainKey.find(domainKey);
-                        if (itFilterDomainKey != FilterDomainKey.end()) {
-                            TString path(itFilterDomainKey->second);
+                        if (itFilterDomainKey != FilterDomainKey.end() && itFilterDomainKey->second) {
+                            TString path(*itFilterDomainKey->second);
                             TDatabaseState& state(DatabaseState[path]);
                             state.ComputeNodeIds.emplace_back(hiveStat.GetNodeId());
                             state.NodeRestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
@@ -1720,10 +1852,16 @@ public:
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
             auto& groupState = GroupState[groupId];
+            groupState.Id = groupId;
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
             groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
-            StoragePoolState[poolId].Groups.emplace(groupId);
+            groupState.BridgePileId = TBridgePileId::FromProto(&group.GetInfo(), &NKikimrSysView::TGroupInfo::GetBridgePileId);
+            if (group.GetInfo().HasProxyGroupId()) {
+                GroupState[group.GetInfo().GetProxyGroupId()].BridgeGroups.push_back(&groupState);
+            } else {
+                StoragePoolState[poolId].Groups.emplace(groupId);
+            }
         }
         for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
@@ -1740,6 +1878,53 @@ public:
         for (const auto& pDisk : PDisks->Get()->Record.GetEntries()) {
             auto pDiskId = GetPDiskId(pDisk.GetKey());
             PDisksMap.emplace(pDiskId, &pDisk);
+        }
+    }
+
+    void AggregateWhiteboard() {
+        for (auto& [nodeId, nodeSystemState] : NodeSystemState) {
+            if (nodeSystemState.IsOk()) {
+                for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
+                    state.set_nodeid(nodeId);
+                    MergedNodeSystemState[nodeId] = &state;
+                }
+            }
+        }
+        for (auto& [nodeId, nodeVDiskState] : NodeVDiskState) {
+            if (nodeVDiskState.IsOk()) {
+                for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
+                    state.set_nodeid(nodeId);
+                    auto id = GetVDiskId(state.vdiskid());
+                    MergedVDiskState[id] = &state;
+                }
+            }
+        }
+        for (auto& [nodeId, nodePDiskState] : NodePDiskState) {
+            if (nodePDiskState.IsOk()) {
+                for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
+                    state.set_nodeid(nodeId);
+                    auto id = GetPDiskId(state);
+                    MergedPDiskState[id] = &state;
+                }
+            }
+        }
+        for (auto& [nodeId, nodeBSGroupState] : NodeBSGroupState) {
+            if (nodeBSGroupState.IsOk()) {
+                for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
+                    state.set_nodeid(nodeId);
+                    TString storagePoolName = state.storagepoolname();
+                    TGroupID groupId(state.groupid());
+                    const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
+                    if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
+                        current = &state;
+                    }
+                    if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
+                        continue;
+                    }
+                    StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
+                    StoragePoolStateByName[storagePoolName].Name = storagePoolName;
+                }
+            }
         }
     }
 
@@ -1987,26 +2172,54 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
+        auto report = [](TSelfCheckContext& context, ETags tag) {
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", tag, {ETags::Uptime});
+            context.ReportWithMaxChildStatus("Compute is overloaded", tag, {ETags::OverloadState});
+            context.ReportWithMaxChildStatus("Compute quota usage", tag, {ETags::QuotaUsage});
+        };
         if (databaseState.ResourcePathId
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
-            if (itDatabase != FilterDomainKey.end()) {
-                const TString& sharedDatabaseName = itDatabase->second;
+            if (itDatabase != FilterDomainKey.end() && itDatabase->second) {
+                const TString& sharedDatabaseName = *itDatabase->second;
                 TDatabaseState& sharedDatabase = DatabaseState[sharedDatabaseName];
                 computeNodeIds = &sharedDatabase.ComputeNodeIds;
             }
         }
         std::sort(computeNodeIds->begin(), computeNodeIds->end());
         computeNodeIds->erase(std::unique(computeNodeIds->begin(), computeNodeIds->end()), computeNodeIds->end());
+        bool bridgeMode = NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo;
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
+            std::vector<TString> activePiles = {""};
+            std::unordered_map<TString, TSelfCheckContext> pileContext;
+            if (bridgeMode) {
+                for (size_t i = 0; i < AppData()->BridgeConfig.PilesSize(); ++i) {
+                    const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->Piles[i];
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(i).GetName();
+                    auto [it, _] = pileContext.try_emplace(pileName, &context, "BRIDGE_PILE");
+                    it->second.Location.mutable_compute()->mutable_pile()->set_name(pileName);
+                    if (pile.IsPrimary || pile.IsBeingPromoted) {
+                        activePiles.push_back(pileName);
+                    }
+                }
+            }
+            auto getContext = [&](const TString& pileName) -> TSelfCheckContext* {
+                auto it = pileContext.find(pileName);
+                if (it == pileContext.end()) {
+                    return &context;
+                } else {
+                    return &it->second;
+                }
+            };
             long maxTimeDifferenceUs = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
-                    if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
+                    const TString& pileName = itNodeSystemState->second->GetLocation().GetBridgePileName();
+                    if (std::count(activePiles.begin(), activePiles.end(), pileName) > 0
                             && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
                         maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
                         databaseState.MaxTimeDifferenceNodeId = nodeId;
@@ -2014,8 +2227,16 @@ public:
                 }
             }
             for (TNodeId nodeId : *computeNodeIds) {
+                auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+                TString pileName;
+                if (itNodeSystemState != MergedNodeSystemState.end()) {
+                    pileName = itNodeSystemState->second->GetLocation().GetBridgePileName();
+                }
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {getContext(pileName), "COMPUTE_NODE"});
+            }
+            for (auto& [_, ctx] : pileContext) {
+                report(ctx, ETags::PileComputeState);
             }
         }
         Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
@@ -2023,9 +2244,11 @@ public:
             context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
         }
         FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
-        context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
-        context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
-        context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
+        if (bridgeMode) {
+            context.ReportWithMaxChildStatus("There are compute issues", ETags::ComputeState, {ETags::PileComputeState});
+        } else {
+            report(context, ETags::ComputeState);
+        }
         context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         computeNodeIds->push_back(0); // for tablets without node
@@ -2128,6 +2351,47 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
+    ui32 ParsePDiskStatusOrUnknown(const TString& statusString) {
+        static const auto* descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        const auto* valueDescriptor = descriptor->FindValueByName(statusString);
+        return valueDescriptor ? valueDescriptor->number() : NKikimrBlobStorage::UNKNOWN;
+    }
+
+    void ReportPDiskState(NKikimrBlobStorage::TPDiskState::E stateEnum, TSelfCheckContext& context) {
+        using E = NKikimrBlobStorage::TPDiskState;
+
+        switch (stateEnum) {
+            case E::Normal:
+            case E::Stopped:
+            case E::Initial:
+            case E::InitialFormatRead:
+            case E::InitialSysLogRead:
+            case E::InitialCommonLogRead:
+            case E::Unknown:
+            case E::Reserved15:
+            case E::Reserved16:
+            case E::Reserved17:
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                break;
+            case E::InitialFormatReadError:
+            case E::InitialSysLogReadError:
+            case E::InitialSysLogParseError:
+            case E::InitialCommonLogReadError:
+            case E::InitialCommonLogParseError:
+            case E::CommonLoggerInitError:
+            case E::OpenFileError:
+            case E::ChunkQuotaError:
+            case E::DeviceIoError:
+            case E::Missing:
+            case E::Timeout:
+            case E::NodeDisconnected:
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                    TStringBuilder() << "PDisk state is " << E::E_Name(stateEnum),
+                                    ETags::PDiskState);
+                break;
+        }
+    }
+
     void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
@@ -2148,27 +2412,31 @@ public:
         const auto& pDisk = itPDisk->second->GetInfo();
 
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDisk.GetPath());
-        const auto& statusString = pDisk.GetStatusV2();
-        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
-        auto status = descriptor->FindValueByName(statusString);
-        if (!status) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "Unknown PDisk state: " << statusString,
-                                 ETags::PDiskState);
-        }
-        switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE:
-            case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
-            case NKikimrBlobStorage::FAULTY:
-            case NKikimrBlobStorage::BROKEN:
-            case NKikimrBlobStorage::TO_BE_REMOVED: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                     TStringBuilder() << "PDisk state is " << statusString,
-                                     ETags::PDiskState);
-                break;
+
+        // Prefer the explicit PDisk state if available, as it reflects the current status.
+        // If not set, fall back to pDisk.GetStatusV2() for backward compatibility.
+        if (pDisk.HasState()) {
+            const auto& stateString = pDisk.GetState();
+            const auto* descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+            auto state = descriptor->FindValueByName(stateString);
+            auto stateEnum = state ? static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number()) : NKikimrBlobStorage::TPDiskState::Unknown;
+            ReportPDiskState(stateEnum, context);
+        } else {
+            ui32 statusNumber = ParsePDiskStatusOrUnknown(pDisk.GetStatusV2());
+            switch (statusNumber) {
+                case NKikimrBlobStorage::ACTIVE:
+                case NKikimrBlobStorage::INACTIVE: {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    break;
+                }
+                case NKikimrBlobStorage::FAULTY:
+                case NKikimrBlobStorage::BROKEN:
+                case NKikimrBlobStorage::TO_BE_REMOVED: {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                        TStringBuilder() << "PDisk state is " << pDisk.GetStatusV2(),
+                                        ETags::PDiskState);
+                    break;
+                }
             }
         }
 
@@ -2263,7 +2531,8 @@ public:
             FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
-        if (status->number() == NKikimrBlobStorage::ERROR) {
+        auto statusEnum = static_cast<NKikimrBlobStorage::EVDiskStatus>(status->number());
+        if (statusEnum == NKikimrBlobStorage::ERROR) {
             // the disk is not operational at all
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2279,7 +2548,11 @@ public:
             return;
         }
 
-        switch (status->number()) {
+        switch (statusEnum) {
+            case NKikimrBlobStorage::ERROR: {
+                // already handled above
+                break;
+            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2289,13 +2562,7 @@ public:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
-            default:
-                break;
         }
-
-        context.ReportWithMaxChildStatus("VDisk have space issue",
-                            ETags::VDiskState,
-                            {ETags::PDiskSpace});
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }
@@ -2303,11 +2570,8 @@ public:
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodeVDiskState(NodeVDiskState[nodeId]);
-        nodeVDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetVDiskId(state.vdiskid());
-            MergedVDiskState[id] = &state;
+        if (!nodeVDiskState.Set(std::move(ev))) {
+            return;
         }
         RequestDone("TEvVDiskStateResponse");
     }
@@ -2315,11 +2579,8 @@ public:
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodePDiskState(NodePDiskState[nodeId]);
-        nodePDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetPDiskId(state);
-            MergedPDiskState[id] = &state;
+        if (!nodePDiskState.Set(std::move(ev))) {
+            return;
         }
         RequestDone("TEvPDiskStateResponse");
     }
@@ -2327,20 +2588,8 @@ public:
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
-        nodeBSGroupState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
-            state.set_nodeid(nodeId);
-            TString storagePoolName = state.storagepoolname();
-            TGroupID groupId(state.groupid());
-            const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
-            if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
-                current = &state;
-            }
-            if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
-                continue;
-            }
-            StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
-            StoragePoolStateByName[storagePoolName].Name = storagePoolName;
+        if (!nodeBSGroupState.Set(std::move(ev))) {
+            return;
         }
         RequestDone("TEvBSGroupStateResponse");
     }
@@ -2358,42 +2607,7 @@ public:
         storagePDiskStatus.set_id(pDiskId);
 
         if (pDiskInfo.HasState()) {
-            switch (pDiskInfo.GetState()) {
-                case NKikimrBlobStorage::TPDiskState::Normal:
-                case NKikimrBlobStorage::TPDiskState::Stopped:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                    break;
-                case NKikimrBlobStorage::TPDiskState::Initial:
-                case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
-                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
-                                         ETags::PDiskState);
-                    break;
-                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-                case NKikimrBlobStorage::TPDiskState::OpenFileError:
-                case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
-                case NKikimrBlobStorage::TPDiskState::DeviceIoError:
-                case NKikimrBlobStorage::TPDiskState::Missing:
-                case NKikimrBlobStorage::TPDiskState::Timeout:
-                case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
-                case NKikimrBlobStorage::TPDiskState::Unknown:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                         TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
-                                         ETags::PDiskState);
-                    break;
-                case NKikimrBlobStorage::TPDiskState::Reserved15:
-                case NKikimrBlobStorage::TPDiskState::Reserved16:
-                case NKikimrBlobStorage::TPDiskState::Reserved17:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
-                    break;
-            }
+            ReportPDiskState(pDiskInfo.GetState(), context);
 
             //if (pDiskInfo.HasAvailableSize() && pDiskInfo.GetTotalSize() != 0) {
             if (pDiskInfo.GetAvailableSize() != 0 && pDiskInfo.GetTotalSize() != 0) { // hotfix until KIKIMR-12659
@@ -2521,6 +2735,7 @@ public:
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
         TStackVec<std::pair<ui32, int>> FailedRealms;
+        ETags Tag;
 
         void IncrementFor(ui32 realm) {
             auto itRealm = FindIf(FailedRealms, [realm](const std::pair<ui32, int>& p) -> bool {
@@ -2534,9 +2749,10 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure, const bool layoutCorrect = true)
+        TGroupChecker(const TString& erasure, const bool layoutCorrect = true, ETags tag = ETags::GroupState)
             : ErasureSpecies(erasure)
             , LayoutCorrect(layoutCorrect)
+            , Tag(tag)
         {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
@@ -2557,41 +2773,35 @@ public:
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
             if (!LayoutCorrect) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", Tag);
             }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
                 if (FailedDisks > 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 1) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
                 if (FailedRealms.size() > 2 || (FailedRealms.size() == 2 && FailedRealms[0].second > 1 && FailedRealms[1].second > 1)) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 } else if (FailedRealms.size() == 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
                     }
-                } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
             }
         }
@@ -2602,6 +2812,11 @@ public:
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
+        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+            const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
+            const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(pileId)->Name;
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
+        }
         storageGroupStatus.set_id(ToString(groupId));
         TGroupChecker checker(groupInfo.erasurespecies());
         for (const auto& protoVDiskId : groupInfo.vdiskids()) {
@@ -2646,10 +2861,12 @@ public:
     struct TMergeIssuesContext {
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
+        std::unordered_map<TString, TSelfCheckContext::TIssueRecord*> issueById;
 
         TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
+                issueById.emplace(move->IssueLog.id(), &(*move));
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
             }
         }
@@ -2701,10 +2918,11 @@ public:
         }
 
         void RenameMergingIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
-            for (auto it = records.begin(); it != records.end(); it++) {
+            for (auto it = records.rbegin(); it != records.rend(); it++) {
+                auto message = it->IssueLog.message();
                 if (it->IssueLog.count() > 0) {
-                    TString message = it->IssueLog.message();
                     switch (it->Tag) {
+                        case ETags::BridgeGroupState:
                         case ETags::GroupState: {
                             message = std::regex_replace(message.c_str(), std::regex("^Group has "), "Groups have ");
                             message = std::regex_replace(message.c_str(), std::regex("^Group is "), "Groups are ");
@@ -2726,8 +2944,28 @@ public:
                         default:
                             break;
                     }
-                    it->IssueLog.set_message(message);
                 }
+                if (IsBridgeMode(TActivationContext::AsActorContext()) && it->Tag == ETags::GroupState) {
+                    if (it->IssueLog.reason_size() == 1) {
+                        const auto& reason = issueById[it->IssueLog.reason(0)]->IssueLog;
+                        if (message.find("in pile") == std::string::npos) {
+                            message = TStringBuilder() << reason.message() <<  " in pile " << reason.location().storage().pool().group().pile().name();
+                        }
+                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(reason.location().storage().pool().group().pile());
+                    }
+                }
+                if (IsBridgeMode(TActivationContext::AsActorContext()) && (it->Tag == ETags::PoolState || it->Tag == ETags::StorageState)) {
+                    auto reasonPiles = it->IssueLog.reason() | std::views::transform([this](auto&& reason) {return issueById[reason]->IssueLog.location().storage().pool().group().pile().name();});
+                    std::unordered_set<TString> piles(reasonPiles.begin(), reasonPiles.end());;
+                    if (piles.size() == 1 && !piles.begin()->empty()) {
+                        TString pile = *piles.begin();
+                        if (message.find("in pile") == std::string::npos) {
+                            message = TStringBuilder() << message << " in pile " << pile;
+                        }
+                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
+                    }
+                }
+                it->IssueLog.set_message(message);
             }
         }
 
@@ -2750,9 +2988,13 @@ public:
             for (auto it = records.begin(); it != records.end(); ) {
                 bool isSimilar = it->IssueLog.status() == similar.begin()->IssueLog.status()
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
-                    && it->IssueLog.level() == similar.begin()->IssueLog.level() ;
+                    && it->IssueLog.level() == similar.begin()->IssueLog.level();
                 if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
                     isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                }
+                if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
+                    isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
+                        == similar.begin()->IssueLog.location().storage().pool().group().pile().name();
                 }
                 if (isSimilar) {
                     auto move = it++;
@@ -2806,6 +3048,7 @@ public:
             ids.insert(it->IssueLog.id());
 
             switch (similar.begin()->Tag) {
+                case ETags::BridgeGroupState:
                 case ETags::GroupState: {
                     auto mainGroupIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
                     auto donorGroupIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
@@ -2896,6 +3139,21 @@ public:
         record.IssueLog.set_listed(value);
     }
 
+    void CheckGroupVSlots(TGroupChecker& checker, std::ranges::range auto&& slots, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext& context) {
+        for (const auto* slot : slots) {
+            const auto& slotInfo = slot->GetInfo();
+            auto slotId = GetVSlotId(slot->GetKey());
+            auto [statusIt, inserted] = VDiskStatuses.emplace(slotId, Ydb::Monitoring::StatusFlag::UNSPECIFIED);
+            if (inserted) {
+                Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
+                FillVDiskStatus(slot, vDiskStatus, {&context, "VDISK"});
+                statusIt->second = vDiskStatus.overall();
+            }
+            checker.AddVDiskStatus(statusIt->second, slotInfo.GetFailRealm());
+        }
+        context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
     void FillGroupStatus(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id(ToString(groupId));
@@ -2908,23 +3166,65 @@ public:
             return;
         }
 
-        TGroupChecker checker(itGroup->second.ErasureSpecies, itGroup->second.LayoutCorrect);
-        const auto& slots = itGroup->second.VSlots;
-        for (const auto* slot : slots) {
-            const auto& slotInfo = slot->GetInfo();
-            auto slotId = GetVSlotId(slot->GetKey());
-            auto [statusIt, inserted] = VDiskStatuses.emplace(slotId, Ydb::Monitoring::StatusFlag::UNSPECIFIED);
-            if (inserted) {
-                Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
-                FillVDiskStatus(slot, vDiskStatus, {&context, "VDISK"});
-                statusIt->second = vDiskStatus.overall();
+        if (itGroup->second.BridgeGroups.empty()) {
+            TGroupChecker checker(itGroup->second.ErasureSpecies, itGroup->second.LayoutCorrect);
+            const auto& slots = itGroup->second.VSlots;
+            CheckGroupVSlots(checker, slots, storageGroupStatus, context);
+            checker.ReportStatus(context);
+        } else {
+            auto getStatus = [&](const TGroupState* group) {
+                TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
+                TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
+                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
+                } else { // this fallback should not ever happen - but is used in tests
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());
+                }
+                pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
+                CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);
+                checker.ReportStatus(pileContext);
+                return pileContext.GetOverallStatus();
+            };
+            auto isSyncPile = [&](const TGroupState* group) {
+                if (!group->BridgePileId) {
+                    return true;
+                }
+                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+            };
+            auto [minStatus, maxStatus] = std::ranges::minmax(itGroup->second.BridgeGroups | std::views::filter(isSyncPile) | std::views::transform(getStatus));
+            Ydb::Monitoring::StatusFlag::Status status = maxStatus;
+            if (maxStatus == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
+                status = MaxStatus(minStatus, Ydb::Monitoring::StatusFlag::ORANGE);
             }
-            checker.AddVDiskStatus(statusIt->second, slotInfo.GetFailRealm());
+            context.OverallStatus = status;
+            if (status != Ydb::Monitoring::StatusFlag::GREEN) {
+                TStringBuilder issue;
+                switch (maxStatus) {
+                    default:
+                    case Ydb::Monitoring::StatusFlag::BLUE:
+                        issue << "Group has issues";
+                        break;
+                    case Ydb::Monitoring::StatusFlag::YELLOW:
+                        issue << "Group degraded";
+                        break;
+                    case Ydb::Monitoring::StatusFlag::ORANGE:
+                        issue << "Group has no redundancy";
+                        break;
+                    case Ydb::Monitoring::StatusFlag::RED:
+                        issue << "Group dead";
+                        break;
+                }
+                if (minStatus == maxStatus) {
+                    issue << " in all piles";
+                } else {
+                    issue << " in some piles";
+                }
+                context.ReportStatus(status, issue, ETags::GroupState, {ETags::BridgeGroupState});
+            }
         }
 
-        context.Location.mutable_storage()->clear_node(); // group doesn't have node
-        context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
-        checker.ReportStatus(context);
+        context.Location.mutable_storage()->clear_node(); // group doesn't have node;
 
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
@@ -2933,6 +3233,8 @@ public:
         TMergeIssuesContext mergeContext(records);
         if (Request->Request.merge_records()) {
             MergeLevelRecords(mergeContext, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::BridgeGroupState, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
         }
@@ -2953,8 +3255,6 @@ public:
                 }
             }
         }
-
-        MergeRecords(context.IssueRecords);
 
         switch (context.GetOverallStatus()) {
             case Ydb::Monitoring::StatusFlag::BLUE:
@@ -3025,6 +3325,7 @@ public:
             }
         }
         storageStatus.set_overall(context.GetOverallStatus());
+        MergeRecords(context.IssueRecords);
     }
 
     struct TOverallStateContext {
@@ -3198,6 +3499,7 @@ public:
         AggregateHiveInfo();
         AggregateHiveNodeStats();
         AggregateStoragePools();
+        AggregateWhiteboard();
 
         for (auto& [requestId, request] : TabletRequests.RequestsInFlight) {
             auto tabletId = request.TabletId;
@@ -3207,7 +3509,17 @@ public:
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
 
+        return ReplyAndPassAway(std::move(response));
+    }
+
+    void ReplyAndPassAway(THolder<TEvSelfCheckResult> response) {
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
+        if (NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+            const auto& selfPileName = NodeWardenStorageConfig->Get()->BridgeInfo->SelfNodePile->Name;
+            result.mutable_location()->mutable_pile()->set_name(selfPileName);
+        }
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last

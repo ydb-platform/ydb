@@ -5,7 +5,7 @@ A specific case of predicate pushdown, where filtering expressions specified aft
 |Description|Example|
 |---|---|
 |Filters like `IS NULL`/`IS NOT NULL`|`WHERE column1 IS NULL` or `WHERE column1 IS NOT NULL`|
-|Logical conditions `OR`, `NOT`, `AND`|`WHERE column IS NULL OR column2 is NOT NULL`|
+|Logical conditions `OR`, `NOT`, `AND`|`WHERE column IS NULL OR column2 IS NOT NULL`|
 |Comparison conditions `=`, `<>`, `<`, `<=`, `>`, `>=` with other columns or constants|`WHERE column3 > column4 OR column5 <= 10`|
 
 Supported data types for filter pushdown:

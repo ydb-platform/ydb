@@ -69,6 +69,37 @@ kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=
 
 """
 
+
+CONFIG_V2 = """kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
+kikimr_config="${kikimr_home}/cfg"
+kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
+kikimr_key_file="${kikimr_config}/key.txt"
+
+kikimr_arg="${kikimr_arg} server --config-dir ${kikimr_config} --node static"
+kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_mon_threads:+ --mon-threads ${kikimr_mon_threads}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
+
+if [ ! -z "${kikimr_mon_address}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_mon_address:+ --mon-address ${kikimr_mon_address}}"
+else
+    echo "Monitoring address is not defined."
+fi
+
+if [ -f "${kikimr_auth_token_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
+fi
+
+if [ -f "${kikimr_key_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
+else
+    echo "Key file not found!"
+fi
+kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=${kikimr_cert}}${kikimr_key:+ --key=${kikimr_key}}"
+
+"""
+
 NEW_STYLE_DYNAMIC_CFG = """kikimr_grpc_port="${kikimr_grpc_port:? expected not empty var}"
 kikimr_home="${kikimr_home:? expected not empty var}"
 kikimr_ic_port="${kikimr_ic_port:? expected not empty var}"
@@ -113,6 +144,60 @@ if [ -f "${kikimr_key_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
 else
     echo "Key file not found!"
+fi
+
+if [ -s ${tenant_main_dir}/bridge-pile ]; then
+    kikimr_arg="${kikimr_arg} --bridge-pile-name $(cat ${tenant_main_dir}/bridge-pile)"
+fi
+"""
+
+DYNAMIC_CFG_V2 = """kikimr_grpc_port="${kikimr_grpc_port:? expected not empty var}"
+kikimr_home="${kikimr_home:? expected not empty var}"
+kikimr_ic_port="${kikimr_ic_port:? expected not empty var}"
+kikimr_binaries_base_path="/Berkanavt/kikimr"
+kikimr_mbus_port="${kikimr_mbus_port:? expected not empty var}"
+kikimr_mon_address=""
+kikimr_mon_port="${kikimr_mon_port:? expected not empty var}"
+kikimr_node_broker_port="2135"
+kikimr_syslog_service_tag="${kikimr_syslog_service_tag:? expected not empty var}"
+kikimr_tenant="${kikimr_tenant:? expected not empty var}"
+kikimr_config="${kikimr_home}/cfg"
+kikimr_auth_token_file="${kikimr_home}/token/kikimr.token"
+
+#Custom config
+[ -s /etc/default/kikimr.custom ] && . /etc/default/kikimr.custom
+
+kikimr_arg="${kikimr_arg} server --config-dir ${kikimr_config} --tenant ${kikimr_tenant}"
+kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_node_broker_port:+ --node-broker-port ${kikimr_node_broker_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_syslog_service_tag:+ --syslog-service-tag ${kikimr_syslog_service_tag}}"
+
+if [ -f "${kikimr_auth_token_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
+fi
+
+if [ ! -z "${kikimr_kafka_port}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_kafka_port:+ --kafka-port ${kikimr_kafka_port}}"
+else
+    echo "Kafka port is not defined."
+fi
+
+if [ ! -z "${kikimr_grpcs_port}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_grpcs_port:+ --grpcs-port ${kikimr_grpcs_port}}"
+else
+    echo "GRPCs port is not defined."
+fi
+
+if [ -f "${kikimr_key_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_key_file:+ --key-file ${kikimr_key_file}}"
+else
+    echo "Key file not found!"
+fi
+
+if [ -s ${tenant_main_dir}/bridge-pile ]; then
+    kikimr_arg="${kikimr_arg} --bridge-pile-name $(cat ${tenant_main_dir}/bridge-pile)"
 fi
 """
 
@@ -193,7 +278,7 @@ def local_vars(
     grpc_port=2135,
     mbus_port=2134,
     kikimr_home='/Berkanavt/kikimr',
-    kikimr_binaries_base_path='/Berkanavt/kikimr',
+    kikimr_binaries_base_path="",
     pq_enable=True,
     sqs_port=8771,
     sqs_enable=False,
@@ -239,7 +324,8 @@ def local_vars(
         [
             ('kikimr_ic_port', ic_port),
             ('kikimr_mon_port', mon_port),
-            ('kikimr_home', kikimr_home),
+            ('kikimr_grpc_port', grpc_port),
+            ('kikimr_home', kikimr_home)
         ]
     )
 
@@ -361,14 +447,34 @@ def mbus_arguments(enable_mbus=False):
     )
 
 
+def ydbd_extra_args(extra_args: str = ""):
+    if not extra_args:
+        return []
+
+    return [f'kikimr_arg="${{kikimr_arg}} {extra_args}"',]
+
+
 def dynamic_cfg_new_style(
     enable_cores=False,
+    extra_args="",
 ):
     return "\n".join(
         [
             "kikimr_coregen=\"--core\"" if enable_cores else "",
             NEW_STYLE_DYNAMIC_CFG,
         ]
+        + ydbd_extra_args(extra_args)
+    )
+
+
+def dynamic_cfg_new_style_v2(
+    extra_args="",
+):
+    return "\n".join(
+        [
+            DYNAMIC_CFG_V2,
+        ]
+        + ydbd_extra_args(extra_args)
     )
 
 
@@ -396,13 +502,48 @@ def kikimr_cfg_for_static_node_new_style(
                 kikimr_home=kikimr_home,
                 enable_cores=enable_cores,
                 cert_params=cert_params,
-                default_log_level=None,
-                kikimr_binaries_base_path=None,
+                default_log_level=0,
+                kikimr_binaries_base_path="",
                 new_style_kikimr_cfg=new_style_kikimr_cfg,
                 mbus_enabled=mbus_enabled,
                 pq_enable=pq_enable,
             ),
             NEW_STYLE_CONFIG,
+        ]
+        + mbus_arguments(mbus_enabled)
+    )
+
+
+def kikimr_cfg_for_static_node_new_style_v2(
+    ic_port=19001,
+    mon_port=8765,
+    grpc_port=2135,
+    mon_address="",
+    enable_cores=False,
+    kikimr_home='/Berkanavt/kikimr',
+    tenant=None,
+    cert_params=None,
+    new_style_kikimr_cfg=True,
+    mbus_enabled=False,
+    pq_enable=True,
+):
+    return "\n".join(
+        [
+            local_vars(
+                tenant,
+                ic_port=ic_port,
+                mon_address=mon_address,
+                mon_port=mon_port,
+                grpc_port=grpc_port,
+                kikimr_home=kikimr_home,
+                enable_cores=enable_cores,
+                cert_params=cert_params,
+                kikimr_binaries_base_path="",
+                new_style_kikimr_cfg=new_style_kikimr_cfg,
+                mbus_enabled=mbus_enabled,
+                pq_enable=pq_enable,
+            ),
+            CONFIG_V2,
         ]
         + mbus_arguments(mbus_enabled)
     )

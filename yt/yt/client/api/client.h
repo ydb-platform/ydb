@@ -1,21 +1,23 @@
 #pragma once
 
-#include "connection.h"
 #include "accounting_client.h"
 #include "admin_client.h"
+#include "connection.h"
+#include "chaos_client.h"
 #include "cypress_client.h"
 #include "distributed_table_client.h"
 #include "etc_client.h"
 #include "file_client.h"
+#include "flow_client.h"
 #include "journal_client.h"
 #include "operation_client.h"
-#include "security_client.h"
-#include "transaction_client.h"
-#include "table_client.h"
-#include "queue_client.h"
+#include "prerequisite_client.h"
 #include "query_tracker_client.h"
-#include "flow_client.h"
+#include "queue_client.h"
+#include "security_client.h"
 #include "shuffle_client.h"
+#include "table_client.h"
+#include "transaction_client.h"
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
@@ -60,6 +62,8 @@ DEFINE_REFCOUNTED_TYPE(IClientBase)
  */
 struct IClient
     : public virtual IClientBase
+    , public IChaosClient
+    , public IPrerequisiteClient
     , public ITransactionClient
     , public ITableClient
     , public IQueueClient
@@ -84,7 +88,7 @@ struct IClient
     virtual const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() = 0;
     virtual const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() = 0;
 
-    virtual std::optional<std::string> GetClusterName(bool fetchIfNull = true) = 0;
+    virtual TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)
@@ -103,13 +107,13 @@ public:
     //! NB: Descendants of this class should be able to perform GetNode calls,
     //! so this cannot be used directly in tablet transactions.
     //! Use the transaction's parent client instead.
-    std::optional<std::string> GetClusterName(bool fetchIfNull) override;
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override;
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     std::optional<std::string> ClusterName_;
 
-    std::optional<std::string> FetchClusterNameFromMasterCache();
+    TFuture<std::optional<std::string>> FetchClusterNameFromMasterCache();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

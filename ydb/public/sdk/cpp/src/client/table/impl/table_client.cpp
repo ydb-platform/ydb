@@ -613,6 +613,36 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
     return promise.GetFuture();
 }
 
+TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const std::string& path,
+    const TDescribeSystemViewSettings& settings)
+{
+    auto request = MakeOperationRequest<Ydb::Table::DescribeSystemViewRequest>(settings);
+    request.set_path(path);
+
+    auto promise = NewPromise<TDescribeSystemViewResult>();
+
+    auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Ydb::Table::DescribeSystemViewResult proto;
+        if (any) {
+            any->UnpackTo(&proto);
+        }
+        promise.SetValue(TDescribeSystemViewResult(TStatus(std::move(status)), std::move(proto)));
+    };
+
+    Connections_->RunDeferred<Ydb::Table::V1::TableService,
+                              Ydb::Table::DescribeSystemViewRequest,
+                              Ydb::Table::DescribeSystemViewResponse>(
+        std::move(request),
+        extractor,
+        &Ydb::Table::V1::TableService::Stub::AsyncDescribeSystemView,
+        DbDriverState_,
+        INITIAL_DEFERRED_CALL_DELAY,
+        TRpcRequestSettings::Make(settings)
+    );
+
+    return promise.GetFuture();
+}
+
 TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, const std::string& query,
     const TPrepareDataQuerySettings& settings)
 {
@@ -989,29 +1019,50 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
     SessionRemovedDueBalancing.Set(collector.SessionRemovedDueBalancing);
 }
 
-TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
-    request.set_table(TStringType{table});
-    *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-    *request.mutable_rows()->mutable_value() = rows.GetProto();
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove) {
+    Ydb::Table::BulkUpsertRequest* request = nullptr;
+    std::unique_ptr<Ydb::Table::BulkUpsertRequest> holder;
+
+    if (settings.Arena_) {
+        request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, settings.Arena_);
+    } else {
+        holder = std::make_unique<Ydb::Table::BulkUpsertRequest>(MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
+        request = holder.get();
+    }
+
+    request->set_table(TStringType{table});
+    if (canMove) {
+        request->mutable_rows()->mutable_type()->Swap(&rows.GetType().GetProto());
+        request->mutable_rows()->mutable_value()->Swap(&rows.GetProto());
+    } else {
+        *request->mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
+        *request->mutable_rows()->mutable_value() = rows.GetProto();
+    }
 
     auto promise = NewPromise<TBulkUpsertResult>();
+    auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Y_UNUSED(any);
+        TBulkUpsertResult val(TStatus(std::move(status)));
+        promise.SetValue(std::move(val));
+    };
 
-    auto extractor = [promise]
-        (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Y_UNUSED(any);
-            TBulkUpsertResult val(TStatus(std::move(status)));
-            promise.SetValue(std::move(val));
-        };
-
-    Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
-        std::move(request),
-        extractor,
-        &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
-        DbDriverState_,
-        INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings));
-
+    if (settings.Arena_) {
+        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+            request,
+            extractor,
+            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+    } else {
+        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+            std::move(*holder),
+            extractor,
+            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+    }
     return promise.GetFuture();
 }
 

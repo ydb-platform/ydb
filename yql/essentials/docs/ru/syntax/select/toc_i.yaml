@@ -1,17 +1,17 @@
 items:
-- { name: Обзор,             href: index.md                                                }
-- { name: FROM,              href: from.md                                                 }
-- { name: FROM AS_TABLE,     href: from_as_table.md                                        }
-- { name: FROM SELECT,       href: from_select.md                                          }
-- { name: DISTINCT,          href: distinct.md                                             }
-- { name: UNIQUE DISTINCT,   href: unique_distinct_hints.md                                }
-- { name: UNION,             href: union.md                                                }
-- { name: CONCAT,            href: concat.md                                               }
-- { name: WITH,              href: with.md                                                 }
-- { name: WITHOUT,           href: without.md                                              }
-- { name: WHERE,             href: where.md                                                }
-- { name: ORDER BY,          href: order_by.md                                             }
-- { name: ASSUME ORDER BY,   href: assume_order_by.md                                      }
-- { name: LIMIT OFFSET,      href: limit_offset.md                                         }
-- { name: SAMPLE,            href: sample.md                                               }
-- { name: TABLESAMPLE,       href: sample.md                                               }
+- { name: Обзор,                     href: index.md                                                }
+- { name: FROM,                      href: from.md                                                 }
+- { name: FROM AS_TABLE,             href: from_as_table.md                                        }
+- { name: FROM SELECT,               href: from_select.md                                          }
+- { name: DISTINCT,                  href: distinct.md                                             }
+- { name: UNIQUE DISTINCT,           href: unique_distinct_hints.md                                }
+- { name: UNION INTERSECT EXCEPT,    href: operators.md                                            }
+- { name: CONCAT,                    href: concat.md                                               }
+- { name: WITH,                      href: with.md                                                 }
+- { name: WITHOUT,                   href: without.md                                              }
+- { name: WHERE,                     href: where.md                                                }
+- { name: ORDER BY,                  href: order_by.md                                             }
+- { name: ASSUME ORDER BY,           href: assume_order_by.md                                      }
+- { name: LIMIT OFFSET,              href: limit_offset.md                                         }
+- { name: SAMPLE,                    href: sample.md                                               }
+- { name: TABLESAMPLE,               href: sample.md                                               }

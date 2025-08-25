@@ -11,15 +11,6 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-class TCommonCodecsProvider {
-public:
-    TCommonCodecsProvider() {
-        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
-        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
-    }
-};
-TCommonCodecsProvider COMMON_CODECS_PROVIDER;
-
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))
@@ -376,6 +367,7 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , LastReadTime_(TInstant::Seconds(partitionStats.last_read_time().seconds()))
     , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
     , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
+    , MaxCommittedTimeLag_(TDuration::Seconds(partitionStats.max_committed_time_lag().seconds()))
 {}
 
 uint64_t TPartitionConsumerStats::GetCommittedOffset() const {
@@ -406,9 +398,19 @@ const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
 }
 
+const TDuration& TPartitionConsumerStats::GetMaxCommittedTimeLag() const {
+    return MaxCommittedTimeLag_;
+}
+
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)
     : NodeId_(partitionLocation.node_id())
     , Generation_(partitionLocation.generation())
+{
+}
+
+TPartitionLocation::TPartitionLocation(std::int32_t nodeId, std::int64_t generation)
+    : NodeId_(nodeId)
+    , Generation_(generation)
 {
 }
 

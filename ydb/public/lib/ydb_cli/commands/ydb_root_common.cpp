@@ -80,7 +80,7 @@ void TClientCommandRootCommon::ValidateSettings() {
     } else {
         return;
     }
-    exit(EXIT_FAILURE);
+    throw yexception() << "Invalid client settings";
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {
@@ -155,6 +155,16 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         .RequiredArgument("NAME").StoreResult(&ProfileName);
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
         .Optional().StoreTrue(&config.AssumeYes);
+
+    if (config.HelpCommandVerbosiltyLevel >= 2) {
+        opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection."
+            " If this option is set the user provided endpoint (by -e option) will be used to setup a connections")
+            .Optional().StoreTrue(&config.SkipDiscovery);
+    } else {
+        opts.AddLongOption("no-discovery")
+            .Optional().Hidden().StoreTrue(&config.SkipDiscovery);
+    }
+
     TClientCommandRootBase::Config(config);
 
     TAuthMethodOption* iamTokenAuth = nullptr;
@@ -201,7 +211,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         saKeyAuth = &opts.AddAuthMethodOption("sa-key-file", TStringBuilder() << "Service account" << (Settings.MentionUserAccount.GetRef() ? " (or user account) key file" : " key file"));
         (*saKeyAuth)
             .AuthMethod("sa-key-file")
-            .SimpleProfileDataParam("", true)
+            .SimpleProfileDataParam("sa-key-file", true)
             .DocLink(TStringBuilder() << docsUrl << "/iam/operations/iam-token/create-for-sa")
             .LogToConnectionParams("sa-key-file")
             .Env("SA_KEY_FILE", true, "SA key file")
@@ -229,7 +239,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     }
 
     if (config.UseStaticCredentials) {
-        auto parser = [this](const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly) -> bool {
+        auto parser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
+            Y_UNUSED(isFileName);
             TString user, password;
             bool hasPasswordOption = false;
             if (authData["user"]) {
@@ -302,7 +313,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth = &opts.AddAuthMethodOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file");
         (*oauth2TokenExchangeAuth)
             .AuthMethod("oauth2-key-file")
-            .SimpleProfileDataParam()
+            .SimpleProfileDataParam("oauth2-key-file", true)
             .LogToConnectionParams("oauth2-key-file")
             .DocLink("ydb.tech/docs/en/reference/ydb-cli/connect")
             .Env("YDB_OAUTH2_KEY_FILE", true, "OAuth 2 key file")
@@ -392,7 +403,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     TStringStream stream;
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
 
     // detailed help
@@ -409,7 +420,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+    config.VerbosityLevel = VerbosityLevel;
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
@@ -439,12 +450,13 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
         }
     }
 
+    config.EnableSsl = EnableSsl;
+
     ParseCaCerts(config);
     ParseClientCert(config);
     ParseStaticCredentials(config);
 
     config.Address = Address;
-    config.EnableSsl = EnableSsl;
     config.Database = Database;
     config.ChosenAuthMethod = ParseResult->GetChosenAuthMethod();
 }
@@ -623,10 +635,8 @@ int TClientCommandRootCommon::Run(TConfig& config) {
         prompt = "ydb> ";
     }
 
-    TInteractiveCLI interactiveCLI(config, prompt);
-    interactiveCLI.Run();
-
-    return EXIT_SUCCESS;
+    TInteractiveCLI interactiveCLI(prompt);
+    return interactiveCLI.Run(config);
 }
 
 void TClientCommandRootCommon::ParseCredentials(TConfig& config) {

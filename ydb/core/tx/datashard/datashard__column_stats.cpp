@@ -57,13 +57,15 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);
 
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
+        if (status != EStatus::Done) {
+            record.SetStatus(status == EStatus::Exception
+                ? NKikimrStat::TEvStatisticsResponse::STATUS_ERROR
+                : NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             delete this;
             return nullptr;

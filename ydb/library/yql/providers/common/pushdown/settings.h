@@ -29,7 +29,7 @@ struct TSettings {
         TimestampCtor = 1 << 17,
         JustPassthroughOperators = 1 << 18, // if + coalesce + just
         InOperator = 1 << 19, // IN()
-        IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+        IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM
         DivisionExpressions = 1 << 21, // %, / -- NOTE: division by zero is not handled and also pushdown
 
         // Option which enables partial pushdown for sequence of OR
@@ -40,7 +40,11 @@ struct TSettings {
         // In case of unsupported / complicated expressions $B and $D
         SplitOrOperator = 1 << 22,
         ToBytesFromStringExpressions = 1 << 23, // ToBytes(string like)
-        FlatMapOverOptionals = 1 << 24 // FlatMap(Optional<T>, Lmabda (T) -> Optional<U>)
+        FlatMapOverOptionals = 1 << 24, // FlatMap(Optional<T>, Lambda (T) -> Optional<U>)
+        ToStringFromStringExpressions = 1 << 25, // ToString(string like)
+        IntervalCtor = 1 << 26,
+        MinMax = 1 << 27,
+        NonDeterministic = 1 << 28,
     };
 
     explicit TSettings(NLog::EComponent logComponent)

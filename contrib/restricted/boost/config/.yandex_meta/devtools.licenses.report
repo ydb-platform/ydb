@@ -289,7 +289,6 @@ BELONGS ya.make
         include/boost/config/platform/amigaos.hpp [2:4]
         include/boost/config/platform/beos.hpp [2:4]
         include/boost/config/platform/bsd.hpp [4:6]
-        include/boost/config/platform/cygwin.hpp [2:4]
         include/boost/config/platform/hpux.hpp [6:8]
         include/boost/config/platform/irix.hpp [3:5]
         include/boost/config/platform/linux.hpp [3:5]

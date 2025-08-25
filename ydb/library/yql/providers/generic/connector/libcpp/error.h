@@ -3,7 +3,8 @@
 #include <grpcpp/support/status.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/error.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>

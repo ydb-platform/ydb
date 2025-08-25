@@ -1,8 +1,9 @@
 #include "helpers.h"
-#include "percpu.h"
 #include "private.h"
 #include "producer.h"
 #include "sensor_set.h"
+
+#include <yt/yt/library/profiling/percpu.h>
 
 #include <yt/yt/core/http/http.h>
 

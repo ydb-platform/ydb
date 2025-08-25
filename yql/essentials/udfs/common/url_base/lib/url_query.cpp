@@ -33,7 +33,7 @@ namespace NUrlUdf {
         StringSplitter(query).SplitByString(sep).Collect(&parts);
         if (parts.size() > maxFieldCnt) {
             UdfTerminate((TStringBuilder() << Pos_ << "Max number of fields (" << maxFieldCnt
-                                           << ") exceeded: got " << parts.size()).data());
+                                           << ") exceeded: got " << parts.size()).c_str());
         }
 
         std::vector<std::pair<TString, TString>> pairs;
@@ -45,7 +45,7 @@ namespace NUrlUdf {
             if (nvPair.size() != 2) {
                 if (strict) {
                     UdfTerminate((TStringBuilder() << Pos_ << "Bad query field: \""
-                                                   << nvPair[0] << "\"").data());
+                                                   << nvPair[0] << "\"").c_str());
                 }
                 if (keepBlankValues) {
                     nvPair.emplace_back("");

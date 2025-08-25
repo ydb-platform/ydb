@@ -41,7 +41,7 @@ arrow::Datum MakeIntColumn(ui32 len, EDistribution dist, EShape shape, ui32 buck
             val = (ui32)log(1 + i);
             break;
         }
-  
+
         switch (dist) {
         case EDistribution::Const:
             builder.UnsafeAppend(0);
@@ -110,10 +110,10 @@ private:
 
 public:
     TAggregate(const std::vector<IAggregator*>& aggs)
-        : Aggs(aggs)
-        , RH(sizeof(i64))
+        : Aggs_(aggs)
+        , Rh_(sizeof(i64))
     {
-        Cells.resize(1u << 8);
+        Cells_.resize(1u << 8);
     }
 
     void AddBatch(arrow::Datum keys, arrow::Datum payloads) {
@@ -125,37 +125,37 @@ public:
         for (int64_t i = 0; i < len; ++i) {
             auto key = ptrKeys[i];
             auto payload = ptrPayloads[i];
-            if (!MoreThanOne) {
-                if (One.IsEmpty) {
-                    One.IsEmpty = false;
-                    One.Key = key;
-                    for (const auto& a : Aggs) {
-                        a->Init(&One.State, payload);
+            if (!MoreThanOne_) {
+                if (One_.IsEmpty) {
+                    One_.IsEmpty = false;
+                    One_.Key = key;
+                    for (const auto& a : Aggs_) {
+                        a->Init(&One_.State, payload);
                     }
 
-                    Size = 1;
+                    Size_ = 1;
                     continue;
                 } else {
-                    if (key == One.Key) {
-                        for (const auto& a : Aggs) {
-                            a->Update(&One.State, payload);
+                    if (key == One_.Key) {
+                        for (const auto& a : Aggs_) {
+                            a->Update(&One_.State, payload);
                         }
 
                         continue;
                     } else {
-                        MoreThanOne = true;
+                        MoreThanOne_ = true;
                         if constexpr (UseRH) {
                             bool isNew;
-                            auto iter = RH.Insert(One.Key, isNew);
+                            auto iter = Rh_.Insert(One_.Key, isNew);
                             Y_ASSERT(isNew);
-                            *(i64*)RH.GetPayload(iter) = One.State;
+                            *(i64*)Rh_.GetPayload(iter) = One_.State;
                         } else {
                             bool isNew;
-                            ui64 bucket = AddBucketFromKeyImpl(One.Key, Cells, isNew);
-                            auto& c = Cells[bucket];
+                            ui64 bucket = AddBucketFromKeyImpl(One_.Key, Cells_, isNew);
+                            auto& c = Cells_[bucket];
                             c.PSL = 0;
-                            c.Key = One.Key;
-                            c.State = One.State;
+                            c.Key = One_.Key;
+                            c.State = One_.State;
                         }
                     }
                 }
@@ -163,33 +163,33 @@ public:
 
             if constexpr (UseRH) {
                 bool isNew = false;
-                auto iter = RH.Insert(key, isNew);
+                auto iter = Rh_.Insert(key, isNew);
                 if (isNew) {
-                    for (const auto& a : Aggs) {
-                        a->Init((i64*)RH.GetPayload(iter), payload);
+                    for (const auto& a : Aggs_) {
+                        a->Init((i64*)Rh_.GetPayload(iter), payload);
                     }
 
-                    RH.CheckGrow();
+                    Rh_.CheckGrow();
                 } else {
-                    for (const auto& a : Aggs) {
-                        a->Update((i64*)RH.GetPayload(iter), payload);
+                    for (const auto& a : Aggs_) {
+                        a->Update((i64*)Rh_.GetPayload(iter), payload);
                     }
                 }
             } else {
                 bool isNew = false;
                 ui64 bucket = AddBucketFromKey(key, isNew);
-                auto& c = Cells[bucket];
+                auto& c = Cells_[bucket];
                 if (isNew) {
-                    Size += 1;
-                    for (const auto& a : Aggs) {
+                    Size_ += 1;
+                    for (const auto& a : Aggs_) {
                         a->Init(&c.State, payload);
                     }
 
-                    if (Size * 2 >= Cells.size()) {
+                    if (Size_ * 2 >= Cells_.size()) {
                         Grow();
                     }
                 } else {
-                    for (const auto& a : Aggs) {
+                    for (const auto& a : Aggs_) {
                         a->Update(&c.State, payload);
                     }
                 }
@@ -206,14 +206,14 @@ public:
     }
 
     Y_FORCE_INLINE ui64 AddBucketFromKey(i32 key, bool& isNew) {
-        return AddBucketFromKeyImpl(key, Cells, isNew);
+        return AddBucketFromKeyImpl(key, Cells_, isNew);
     }
 
     Y_FORCE_INLINE ui64 AddBucketFromKeyImpl(i32 key, std::vector<TCell>& cells, bool& isNew) {
         isNew = false;
         ui32 chainLen = 0;
         if constexpr (CalculateHashStats) {
-            HashSearches++;
+            HashSearches_++;
         }
 
         ui64 bucket = MakeHash(key) & (cells.size() - 1);
@@ -222,7 +222,7 @@ public:
         i64 oldState;
         for (;;) {
             if constexpr (CalculateHashStats) {
-                HashProbes++;
+                HashProbes_++;
                 chainLen++;
             }
 
@@ -232,7 +232,7 @@ public:
                 cells[bucket].PSL = distance;
 
                 if constexpr (CalculateHashStats) {
-                    MaxHashChainLen = Max(MaxHashChainLen, chainLen);
+                    MaxHashChainLen_ = Max(MaxHashChainLen_, chainLen);
                 }
 
                 return bucket;
@@ -240,7 +240,7 @@ public:
 
             if (cells[bucket].Key == key) {
                 if constexpr (CalculateHashStats) {
-                    MaxHashChainLen = Max(MaxHashChainLen, chainLen);
+                    MaxHashChainLen_ = Max(MaxHashChainLen_, chainLen);
                 }
 
                 return bucket;
@@ -265,13 +265,13 @@ public:
 
         for (;;) {
             if constexpr (CalculateHashStats) {
-                HashProbes++;
+                HashProbes_++;
                 chainLen++;
             }
 
             if (cells[bucket].PSL < 0) {
                 if constexpr (CalculateHashStats) {
-                    MaxHashChainLen = Max(MaxHashChainLen, chainLen);
+                    MaxHashChainLen_ = Max(MaxHashChainLen_, chainLen);
                 }
 
                 cells[bucket].Key = key;
@@ -295,8 +295,8 @@ public:
 
     void Grow() {
         std::vector<TCell> newCells;
-        newCells.resize(Cells.size() * 2); // must be power of 2
-        for (const auto& c : Cells) {
+        newCells.resize(Cells_.size() * 2); // must be power of 2
+        for (const auto& c : Cells_) {
             if (c.PSL < 0) {
                 continue;
             }
@@ -307,33 +307,33 @@ public:
             nc.State = c.State;
         }
 
-        Cells.swap(newCells);
+        Cells_.swap(newCells);
     }
 
     double GetAverageHashChainLen() {
-        return 1.0*HashProbes/HashSearches;
+        return 1.0*HashProbes_/HashSearches_;
     }
 
     ui32 GetMaxHashChainLen() {
-        return MaxHashChainLen;
+        return MaxHashChainLen_;
     }
 
     void GetResult(arrow::Datum& keys, arrow::Datum& sums) {
         arrow::Int32Builder keysBuilder;
         arrow::Int64Builder sumsBuilder;
-        if (!MoreThanOne) {
-            if (!One.IsEmpty) {
+        if (!MoreThanOne_) {
+            if (!One_.IsEmpty) {
                 ARROW_OK(keysBuilder.Reserve(1));
                 ARROW_OK(sumsBuilder.Reserve(1));
-                keysBuilder.UnsafeAppend(One.Key);
-                sumsBuilder.UnsafeAppend(One.State);
+                keysBuilder.UnsafeAppend(One_.Key);
+                sumsBuilder.UnsafeAppend(One_.State);
             }
         } else {
             ui64 size;
             if constexpr (UseRH) {
-                size = RH.GetSize();
+                size = Rh_.GetSize();
             } else {
-                size = Size;
+                size = Size_;
             }
 
             ARROW_OK(keysBuilder.Reserve(size));
@@ -341,19 +341,19 @@ public:
             i32 maxPSL = 0;
             i64 sumPSL = 0;
             if constexpr (UseRH) {
-                for (auto iter = RH.Begin(); iter != RH.End(); RH.Advance(iter)) {
-                    auto& psl = RH.GetPSL(iter);
+                for (auto iter = Rh_.Begin(); iter != Rh_.End(); Rh_.Advance(iter)) {
+                    auto& psl = Rh_.GetPSL(iter);
                     if (psl.Distance < 0) {
                         continue;
                     }
 
-                    keysBuilder.UnsafeAppend(RH.GetKey(iter));
-                    sumsBuilder.UnsafeAppend(*(i64*)RH.GetPayload(iter));
+                    keysBuilder.UnsafeAppend(Rh_.GetKey(iter));
+                    sumsBuilder.UnsafeAppend(*(i64*)Rh_.GetPayload(iter));
                     maxPSL = Max(psl.Distance, maxPSL);
                     sumPSL += psl.Distance;
                 }
             } else {
-                for (const auto& c : Cells) {
+                for (const auto& c : Cells_) {
                     if (c.PSL < 0) {
                         continue;
                     }
@@ -381,18 +381,18 @@ public:
     }
 
 private:
-    bool MoreThanOne = false;
-    TOneCell One;
-    std::vector<TCell> Cells;
-    ui64 Size = 0;
+    bool MoreThanOne_ = false;
+    TOneCell One_;
+    std::vector<TCell> Cells_;
+    ui64 Size_ = 0;
 
-    const std::vector<IAggregator*> Aggs;
-    ui64 HashProbes = 0;
-    ui64 HashSearches = 0;
-    ui32 MaxHashChainLen = 0;
+    const std::vector<IAggregator*> Aggs_;
+    ui64 HashProbes_ = 0;
+    ui64 HashSearches_ = 0;
+    ui32 MaxHashChainLen_ = 0;
 
-    NKikimr::NMiniKQL::TRobinHoodHashMap<i32> RH;
-    NKikimr::NMiniKQL::TRobinHoodHashSet<i32> RHS;
+    NKikimr::NMiniKQL::TRobinHoodHashMap<i32> Rh_;
+    NKikimr::NMiniKQL::TRobinHoodHashSet<i32> Rhs_;
 };
 
 int main(int argc, char** argv) {

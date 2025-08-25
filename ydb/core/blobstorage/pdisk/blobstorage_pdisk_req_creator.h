@@ -23,6 +23,7 @@ private:
     TPDiskMon *Mon;
     TDriveModel *Model;
     TAtomic *EstimatedLogChunkIdx;
+    bool SeparateHugePriorities = false;
 
 public:
     // Self variables
@@ -95,14 +96,16 @@ private:
                         request->GateId = GateComp;
                         break;
                     case NPriWrite::HullHugeAsyncBlob:
+                        request->GateId = SeparateHugePriorities ? GateHugeAsync : GateHugeUser;
+                        break;
                     case NPriWrite::HullHugeUserData:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                     case NPriWrite::SyncLog:
                         request->GateId = GateSyncLog;
                         break;
                     default:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                 }
                 request->IsSensitive = false;
@@ -170,16 +173,17 @@ private:
 
     template<typename TEv>
     static TString ToString(const TAutoPtr<NActors::TEventHandle<TEv>> &ev) {
-        Y_ABORT_UNLESS(ev && ev->Get());
+        Y_VERIFY(ev && ev->Get());
         return ev->Get()->ToString();
     }
 
 public:
-    TReqCreator(std::shared_ptr<TPDiskCtx> pCtx, TPDiskMon *mon, TDriveModel *model, TAtomic *estimatedChunkIdx)
+    TReqCreator(std::shared_ptr<TPDiskCtx> pCtx, TPDiskMon *mon, TDriveModel *model, TAtomic *estimatedChunkIdx, bool separateHugePriorities)
         : PCtx(std::move(pCtx))
         , Mon(mon)
         , Model(model)
         , EstimatedLogChunkIdx(estimatedChunkIdx)
+        , SeparateHugePriorities(separateHugePriorities)
         , LastReqId(ui64(PCtx->PDiskId) * 10000000ull)
     {}
 
@@ -218,14 +222,9 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TODO: Make all functions in style
-    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, const NWilson::TSpan& parent) {
-        NWilson::TSpan span = parent.CreateChild(TWilson::PDiskTopLevel, "PDisk.ChunkTrim");
-        span.Attribute("chunk_idx", chunkIdx)
-            .Attribute("offset", offset)
-            .Attribute("size", static_cast<i64>(size))
-            .Attribute("pdisk_id", PCtx->PDiskId);
+    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size) {
         Mon->Trim.CountRequest(size);
-        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size, std::move(span));
+        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size);
     }
 
     [[nodiscard]] TLogWrite* CreateLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, double& burstMs, NWilson::TTraceId traceId) {

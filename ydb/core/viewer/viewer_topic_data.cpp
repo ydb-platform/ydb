@@ -49,12 +49,8 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         error << "While trying to find topic: '" << TopicPath << "' got error '" << NavigateResponse->GetError() << "'";
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
-    const auto& response = request.ResultSet.front();
-    if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
-        auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
-        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
-    }
 
+    const auto& response = request.ResultSet[0];
     {
         TString authError;
         auto pathWithName = TStringBuilder() << "topic " << TopicPath;
@@ -67,6 +63,18 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
                 return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", authError));
         }
     }
+    if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+        if (ProcessCdc(response)) {
+            RequestDone();
+            return;
+        }
+    }
+
+    if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
+        auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
+        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
+    }
+
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
     for (auto& partition : partitions) {
         auto partitionId = partition.GetPartitionId();
@@ -78,6 +86,21 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         }
     }
     ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
+}
+
+bool TTopicData::ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) {
+    if (!response.ListNodeEntry) {
+        ReplyAndPassAway(
+                GetHTTPINTERNALERROR("text/plain", "Error trying to describe CDC stream"));
+        return true;
+    }
+    if (response.ListNodeEntry->Children.size() != 1)
+        return false;
+
+    auto privateTopicName = response.ListNodeEntry->Children.at(0).Name;
+    TopicPath = JoinPath(ChildPath(NKikimr::SplitPath(TopicPath), privateTopicName));
+    NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
+    return true;
 }
 
 void TTopicData::SendPQReadRequest() {
@@ -92,6 +115,9 @@ void TTopicData::SendPQReadRequest() {
     cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
     cmdRead->SetCount(TruncateLongMessages ? Limit : 1);
     cmdRead->SetOffset(Offset);
+    if (LastOffset) {
+        cmdRead->SetLastOffset(LastOffset);
+    }
     cmdRead->SetReadTimestampMs(Timestamp);
 
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
@@ -103,9 +129,10 @@ void TTopicData::SendPQReadRequest() {
 }
 
 void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+
     ReadResponse = ev->Release();
     const auto& record = ReadResponse->Record;
-    if (record.GetStatus() ==  NMsgBusProxy::MSTATUS_ERROR) {
+    if (record.GetStatus() == NMsgBusProxy::MSTATUS_ERROR) {
         switch (record.GetErrorCode()) {
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
@@ -131,36 +158,34 @@ void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     RequestDone();
 }
 
-void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize) {
+void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
     ui64 totalSize = 0;
     const auto& response = ReadResponse->Record.GetPartitionResponse();
     if(!response.HasCmdReadResult()) {
         return;
     }
     const auto& cmdRead = response.GetCmdReadResult();
-
+    bool isTruncated = false;
     auto setData = [&](NKikimrViewer::TTopicDataResponse::TMessage& protoMessage, TString&& data) {
         protoMessage.SetOriginalSize(data.size());
-        if (data.size() > maxSingleMessageSize && TruncateLongMessages) {
-            data.resize(maxSingleMessageSize);
+        if (data.size() > MaxSingleMessageSize && TruncateLongMessages) {
+            isTruncated = true;
+            data.resize(MaxSingleMessageSize);
         }
         totalSize += data.size();
         protoMessage.SetMessage(std::move(Base64Encode(data)));
     };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
-    bool truncated = true;
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
 
     for (auto& r : cmdRead.GetResult()) {
         if (totalSize >= maxTotalSize) {
+            isTruncated = true;
             break;
         }
         auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
         auto* messageProto = ProtoResponse.AddMessages();
         messageProto->SetOffset(r.GetOffset());
-
-        if (r.GetOffset() == cmdRead.GetEndOffset() - 1)
-            truncated = false;
 
         messageProto->SetCreateTimestamp(r.GetCreateTimestampMS());
         messageProto->SetWriteTimestamp(r.GetWriteTimestampMS());
@@ -181,7 +206,11 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             setData(*messageProto, std::move(*dataChunk.MutableData()));
         }
         messageProto->SetCodec(dataChunk.GetCodec());
-        messageProto->SetProducerId(r.GetSourceId());
+        TString decodedSrcId;
+        if (!r.GetSourceId().empty()) {
+            decodedSrcId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
+        }
+        messageProto->SetProducerId(decodedSrcId);
         messageProto->SetSeqNo(r.GetSeqNo());
 
         if (dataChunk.MessageMetaSize() > 0) {
@@ -193,7 +222,7 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             }
         }
     }
-    ProtoResponse.SetTruncated(truncated);
+    ProtoResponse.SetTruncated(isTruncated);
 }
 
 void TTopicData::ReplyAndPassAway() {
@@ -242,6 +271,7 @@ void TTopicData::Bootstrap() {
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
     TruncateLongMessages = FromStringWithDefault<bool>(params.Get("truncate"), true);
+    MaxSingleMessageSize = FromStringWithDefault<ui64>(params.Get("message_size_limit"), MaxSingleMessageSize);
 
     if (!params.Has("partition")) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is necessary"));
@@ -249,6 +279,7 @@ void TTopicData::Bootstrap() {
     PartitionId = FromStringWithDefault(params.Get("partition"), PartitionId);
 
     Offset = FromStringWithDefault(params.Get("offset"), Offset);
+    LastOffset = FromStringWithDefault(params.Get("last_offset"), LastOffset);
     Timestamp = FromStringWithDefault(params.Get("read_timestamp"), Timestamp);
 
     Limit = FromStringWithDefault(params.Get("limit"), Limit);
@@ -271,7 +302,7 @@ void TTopicData::Bootstrap() {
 
     TopicPath = params.Get("path");
     if (!TopicPath.empty()) {
-        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
+        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
     } else {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }

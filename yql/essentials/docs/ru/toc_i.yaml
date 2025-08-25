@@ -7,3 +7,5 @@ items:
   include: { mode: link, path: builtins/toc_i.yaml }
 - name: Рецепты
   include: { mode: link, path: recipes/toc_i.yaml }
+- name: Список изменений
+  include: { mode: link, path: changelog/toc_i.yaml }

@@ -22,6 +22,7 @@ TType* UnpackOptional(TRuntimeNode data, bool& isOptional);
 TType* UnpackOptional(TType* type, bool& isOptional);
 TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional);
 TDataType* UnpackOptionalData(TType* type, bool& isOptional);
+TType* UnpackOptionalBlockItemType(TBlockType* type, const TTypeEnvironment& env);
 
 TBlockType::EShape GetResultShape(const TVector<TType*>& types);
 
@@ -35,9 +36,9 @@ public:
     TTupleLiteral* Build();
     void Clear();
 private:
-    const TTypeEnvironment& Env;
-    TVector<TType*> Types;
-    TVector<TRuntimeNode> Values;
+    const TTypeEnvironment& Env_;
+    TVector<TType*> Types_;
+    TVector<TRuntimeNode> Values_;
 };
 
 class TStructTypeBuilder {
@@ -52,8 +53,8 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TVector<TStructMember> Members;
+    const TTypeEnvironment* Env_;
+    TVector<TStructMember> Members_;
 };
 
 class TListLiteralBuilder {
@@ -66,9 +67,9 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TType* Type;
-    TVector<TRuntimeNode> Items;
+    const TTypeEnvironment* Env_;
+    TType* Type_;
+    TVector<TRuntimeNode> Items_;
 };
 
 class TStructLiteralBuilder {
@@ -82,9 +83,9 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TVector<TStructMember> Members;
-    TVector<TRuntimeNode> Values;
+    const TTypeEnvironment* Env_;
+    TVector<TStructMember> Members_;
+    TVector<TRuntimeNode> Values_;
 };
 
 class TDictLiteralBuilder {
@@ -98,10 +99,10 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TType* KeyType;
-    TType* PayloadType;
-    TVector<std::pair<TRuntimeNode, TRuntimeNode>> Items;
+    const TTypeEnvironment* Env_;
+    TType* KeyType_;
+    TType* PayloadType_;
+    TVector<std::pair<TRuntimeNode, TRuntimeNode>> Items_;
 };
 
 class TCallableTypeBuilder {
@@ -119,15 +120,15 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TInternName Name;
-    TType* ReturnType;
-    TVector<TType*> Arguments;
-    ui32 OptionalArgsCount;
-    TVector<TStringBuf> ArgNames;
-    TVector<ui64> ArgFlags;
-    TStringBuf FuncPayload;
-    bool HasPayload;
+    const TTypeEnvironment* Env_;
+    TInternName Name_;
+    TType* ReturnType_;
+    TVector<TType*> Arguments_;
+    ui32 OptionalArgsCount_;
+    TVector<TStringBuf> ArgNames_;
+    TVector<ui64> ArgFlags_;
+    TStringBuf FuncPayload_;
+    bool HasPayload_;
 };
 
 class TCallableBuilder {
@@ -146,17 +147,17 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TInternName Name;
-    TType* ReturnType;
-    bool DisableMerge;
-    TVector<TType*> Arguments;
-    TVector<TRuntimeNode> Inputs;
-    ui32 OptionalArgsCount;
-    TVector<TStringBuf> ArgNames;
-    TVector<ui64> ArgFlags;
-    TStringBuf FuncPayload;
-    bool HasPayload;
+    const TTypeEnvironment* Env_;
+    TInternName Name_;
+    TType* ReturnType_;
+    bool DisableMerge_;
+    TVector<TType*> Arguments_;
+    TVector<TRuntimeNode> Inputs_;
+    ui32 OptionalArgsCount_;
+    TVector<TStringBuf> ArgNames_;
+    TVector<ui64> ArgFlags_;
+    TStringBuf FuncPayload_;
+    bool HasPayload_;
 };
 
 }

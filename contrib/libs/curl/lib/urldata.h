@@ -194,8 +194,8 @@ typedef CURLcode (*Curl_datastream)(struct Curl_easy *data,
 #endif
 
 #ifdef USE_LIBSSH2
-#error #include <libssh2.h>
-#error #include <libssh2_sftp.h>
+#include <libssh2.h>
+#include <libssh2_sftp.h>
 #endif /* USE_LIBSSH2 */
 
 #define READBUFFER_SIZE CURL_MAX_WRITE_SIZE

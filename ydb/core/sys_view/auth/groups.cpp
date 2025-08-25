@@ -2,7 +2,7 @@
 #include "groups.h"
 
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/login/protos/login.pb.h>
@@ -19,10 +19,11 @@ public:
     using TScanBase = TScanActorBase<TGroupsScan>;
     using TAuthBase = TAuthScanBase<TGroupsScan>;
 
-    TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TGroupsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true, false)
+        : TAuthBase(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken), true, false)
     {
     }
 
@@ -40,7 +41,7 @@ protected:
         SortBatch(groups, [](const auto* left, const auto* right) {
             return left->Sid < right->Sid;
         });
-        
+
         TVector<TCell> cells(::Reserve(Columns.size()));
 
         for (const auto* group : groups) {
@@ -63,11 +64,12 @@ protected:
     }
 };
 
-THolder<NActors::IActor> CreateGroupsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+THolder<NActors::IActor> CreateGroupsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TGroupsScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+    return MakeHolder<TGroupsScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

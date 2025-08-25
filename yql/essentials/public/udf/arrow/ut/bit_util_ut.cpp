@@ -80,6 +80,25 @@ Y_UNIT_TEST(ReplicateEachBitFourTimes) {
     UNIT_ASSERT_EQUAL(ReplicateEachBitFourTimes(0x80), 0xF0000000);
 }
 
+Y_UNIT_TEST(ReplicateEachBitEightTimes) {
+    // Test case 1: All zeros
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0x00), 0x00000000);
+
+    // Test case 2: All ones
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0xFF), 0xFFFFFFFFFFFFFFFF);
+
+    // Test case 3: Alternating bits
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0x55), 0x00FF00FF00FF00FF);
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0xAA), 0xFF00FF00FF00FF00);
+
+    // Test case 4: Random pattern
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0x3C), 0x0000FFFFFFFF0000);
+
+    // Test case 5: Single bit set
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0x01), 0x00000000000000FF);
+    UNIT_ASSERT_EQUAL(ReplicateEachBitEightTimes(0x80), 0xFF00000000000000);
+}
+
 Y_UNIT_TEST(BitToByteExpand) {
     auto testBody = [](auto n) {
         using T = decltype(n);
@@ -125,6 +144,7 @@ Y_UNIT_TEST(BitToByteExpand) {
     testBody(ui8());
     testBody(ui16());
     testBody(ui32());
+    testBody(ui64());
 }
 
 } // Y_UNIT_TEST_SUITE(BitExpanding)

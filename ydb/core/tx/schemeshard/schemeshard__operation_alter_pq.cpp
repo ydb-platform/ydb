@@ -1,7 +1,6 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
@@ -9,6 +8,7 @@
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
+
 #include <ydb/services/lib/sharding/sharding.h>
 
 
@@ -792,11 +792,13 @@ public:
             return result;
         }
 
+        const auto& stats = topic->Stats;
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
         const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
+        const PQGroupReserve oldReserveForCheckLimit(tabletConfig, topic->ActivePartitionCount, stats.DataSize);
 
-        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserveForCheckLimit.Storage ? reserveForCheckLimit.Storage - oldReserveForCheckLimit.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();

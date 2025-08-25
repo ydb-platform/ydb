@@ -7,15 +7,15 @@ namespace NYql {
 namespace NCommon {
 
 void TYqlTypeYsonSaverBase::SaveTypeHeader(TStringBuf name) {
-    Writer.OnBeginList();
-    Writer.OnListItem();
-    Writer.OnStringScalar(name);
+    Writer_.OnBeginList();
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(name);
 }
 
 #define SAVE_TYPE_IMPL(type) \
 void TYqlTypeYsonSaverBase::Save ## type() { \
     SaveTypeHeader(#type); \
-    Writer.OnEndList(); \
+    Writer_.OnEndList(); \
 }
 
 SAVE_TYPE_IMPL(Type)
@@ -30,45 +30,45 @@ SAVE_TYPE_IMPL(EmptyDictType)
 
 void TYqlTypeYsonSaverBase::SaveDataType(const TStringBuf& dataType) {
     SaveTypeHeader("DataType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(dataType);
-    Writer.OnEndList();
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(dataType);
+    Writer_.OnEndList();
 }
 
 void TYqlTypeYsonSaverBase::SavePgType(const TStringBuf& pgType) {
     SaveTypeHeader("PgType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(pgType);
-    if (ExtendedForm) {
-        Writer.OnListItem();
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(pgType);
+    if (ExtendedForm_) {
+        Writer_.OnListItem();
         const auto& desc = NYql::NPg::LookupType(TString(pgType));
         char cat = desc.Category;
         if (desc.ArrayTypeId == desc.TypeId) {
             cat = NYql::NPg::LookupType(desc.ElementTypeId).Category;
         }
-        
-        Writer.OnStringScalar(TStringBuf(&cat, 1));
+
+        Writer_.OnStringScalar(TStringBuf(&cat, 1));
     }
-    
-    Writer.OnEndList();
+
+    Writer_.OnEndList();
 }
 
 void TYqlTypeYsonSaverBase::SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo) {
     SaveTypeHeader("DataType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(dataType);
-    Writer.OnListItem();
-    Writer.OnStringScalar(paramOne);
-    Writer.OnListItem();
-    Writer.OnStringScalar(paramTwo);
-    Writer.OnEndList();
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(dataType);
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(paramOne);
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(paramTwo);
+    Writer_.OnEndList();
 }
 
 void TYqlTypeYsonSaverBase::SaveResourceType(const TStringBuf& tag) {
     SaveTypeHeader("ResourceType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(tag);
-    Writer.OnEndList();
+    Writer_.OnListItem();
+    Writer_.OnStringScalar(tag);
+    Writer_.OnEndList();
 }
 
 bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err) {

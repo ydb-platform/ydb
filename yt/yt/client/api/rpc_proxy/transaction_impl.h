@@ -61,10 +61,10 @@ public:
     NTransactionClient::EDurability GetDurability() const override;
     TDuration GetTimeout() const override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const NApi::TPrerequisitePingOptions& options = {}) override;
     TFuture<NApi::TTransactionFlushResult> Flush() override;
     TFuture<NApi::TTransactionCommitResult> Commit(const NApi::TTransactionCommitOptions&) override;
-    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options = {}) override;
+    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options) override;
     void Detach() override;
     void RegisterAlienTransaction(const ITransactionPtr& transaction) override;
 
@@ -241,6 +241,10 @@ public:
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) override;
 
+    TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) override;
+
     TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
@@ -248,9 +252,9 @@ public:
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.
-    //! Empty for non-sticky transactions (e.g.: master) or
+    //! Null for non-sticky transactions (e.g.: master) or
     //! if address resolution is not supported by the implementation.
-    const TString& GetStickyProxyAddress() const;
+    const std::optional<std::string>& GetStickyProxyAddress() const;
 
     //! Flushes all modifications to RPC proxy.
     //!
@@ -278,7 +282,7 @@ private:
     const TDuration Timeout_;
     const bool PingAncestors_;
     const std::optional<TDuration> PingPeriod_;
-    const TString StickyProxyAddress_;
+    const std::optional<std::string> StickyProxyAddress_;
     const i64 SequenceNumberSourceId_;
 
     const NLogging::TLogger Logger;

@@ -1,4 +1,4 @@
-# Working with ClickHouse databases
+# Working with ClickHouse Databases
 
 <!-- markdownlint-disable blanks-around-lists -->
 
@@ -30,7 +30,7 @@ To work with the external ClickHouse database, the following steps must be compl
 3. {% include [!](_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
-## Query syntax {#query}
+## Query Syntax {#query}
 
 To work with ClickHouse, use the following SQL query form:
 
@@ -65,13 +65,13 @@ There are several limitations when working with ClickHouse clusters:
     |`Float`|
     |`Double`|
 
-## Supported data types
+## Supported Data Types
 
 By default, ClickHouse columns cannot physically contain `NULL` values. However, users can create tables with columns of optional or [nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable) types. The column types displayed in {{ ydb-short-name }} when extracting data from the external ClickHouse database will depend on whether primitive or optional types are used in the ClickHouse table. Due to the previously discussed limitations of {{ ydb-short-name }} types used to store dates and times, all similar ClickHouse types are displayed in {{ ydb-short-name }} as [optional](../../yql/reference/types/optional.md).
 
 Below are the mapping tables for ClickHouse and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 
-### Primitive data types
+### Primitive Data Types
 
 |ClickHouse data type|{{ ydb-full-name }} data type|Notes|
 |---|----|------|
@@ -93,7 +93,7 @@ Below are the mapping tables for ClickHouse and {{ ydb-short-name }} types. All 
 |`String`|`String`||
 |`FixedString`|`String`|Null bytes in `FixedString` are transferred to `String` unchanged.|
 
-### Optional data types
+### Optional Data Types
 
 |ClickHouse data type|{{ ydb-full-name }} data type|Notes|
 |---|----|------|

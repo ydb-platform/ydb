@@ -43,8 +43,8 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
         std::make_shared<arrow::Field>("y", args.at(1)->type()), std::make_shared<arrow::Field>("z", args.at(2)->type()) });
     TSchemaColumnResolver resolver(schema);
     NOptimization::TGraph::TBuilder builder(resolver);
-    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
-    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({4, 3}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
+    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1), std::make_shared<TSimpleKernelLogic>()).DetachResult());
+    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({4, 3}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2), std::make_shared<TSimpleKernelLogic>()).DetachResult());
     builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5)));
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
@@ -56,9 +56,9 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
         ++idx;
     }
 
-    chain->Apply(sds, sds->GetResources()).Validate();
-    AFL_VERIFY(sds->GetResources()->GetColumnsCount() == 2)("count", sds->GetResources()->GetColumnsCount());
-    return sds->GetResources()->GetRecordsCountVerified();
+    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2)("count", sds->GetResources().GetColumnsCount());
+    return sds->GetResources().GetRecordsCountActualVerified();
 }
 
 size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EOperation op1, const EOperation op2) {
@@ -74,14 +74,14 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     }
 
     NOptimization::TGraph::TBuilder builder(resolver);
-    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
-    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2, 4}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
+    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1), std::make_shared<TSimpleKernelLogic>()).DetachResult());
+    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2, 4}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2), std::make_shared<TSimpleKernelLogic>()).DetachResult());
     builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5)));
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
-    chain->Apply(sds, sds->GetResources()).Validate();
-    UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 2);
-    return sds->GetResources()->GetRecordsCountVerified();
+    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
+    return sds->GetResources().GetRecordsCountActualVerified();
 }
 
 std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, const std::string& pattern,
@@ -103,7 +103,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
 
     NOptimization::TGraph::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(2), 
-        std::make_shared<TSimpleFunction>(op, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase))).DetachResult());
+        std::make_shared<TSimpleFunction>(op, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase)), std::make_shared<TSimpleKernelLogic>()).DetachResult());
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2 })));
     auto chain = builder.Finish().DetachResult();
 
@@ -114,9 +114,9 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
         ++idx;
     }
 
-    chain->Apply(sds, sds->GetResources()).Validate();
-    UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 1);
-    auto arr = sds->GetResources()->GetAccessorVerified(2)->GetChunkedArray();
+    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+    UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
+    auto arr = sds->GetResources().GetAccessorVerified(2)->GetChunkedArray();
     AFL_VERIFY(arr->type()->id() == arrow::boolean()->id());
     std::vector<bool> vec;
     for (auto&& i : arr->chunks()) {
@@ -148,12 +148,18 @@ struct TSumData {
         return {};
     }
 
-    static void CheckResult(ETest test, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
-        AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
-        auto aggXOriginal = batch->GetArrayVerified(3);
-        auto aggYOriginal = batch->GetArrayVerified(4);
-        auto colXOriginal = batch->GetArrayVerified(1);
-        auto colYOriginal = (numKeys == 2) ? batch->GetArrayVerified(2) : nullptr;
+    static void CheckResult(ETest test, const TAccessorsCollection& batch, ui32 numKeys, bool nullable) {
+        if (test == ETest::EMPTY) {
+            UNIT_ASSERT(!batch.HasData());
+            return;
+        } else {
+            AFL_VERIFY(batch.GetColumnsCount() == numKeys + 2);
+        }
+
+        auto aggXOriginal = batch.GetArrayVerified(3);
+        auto aggYOriginal = batch.GetArrayVerified(4);
+        auto colXOriginal = batch.GetArrayVerified(1);
+        auto colYOriginal = (numKeys == 2) ? batch.GetArrayVerified(2) : nullptr;
 
         UNIT_ASSERT_EQUAL(aggXOriginal->type_id(), arrow::Type::INT64);
         UNIT_ASSERT_EQUAL(aggYOriginal->type_id(), arrow::Type::UINT64);
@@ -163,7 +169,7 @@ struct TSumData {
         }
 
         if (test == ETest::EMPTY) {
-            UNIT_ASSERT_VALUES_EQUAL(batch->GetRecordsCountVerified(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 0);
             return;
         }
 
@@ -172,7 +178,7 @@ struct TSumData {
         auto& colX = static_cast<arrow::Int16Array&>(*colXOriginal);
 
         if (test == ETest::ONE_VALUE) {
-            UNIT_ASSERT_VALUES_EQUAL(batch->GetRecordsCountVerified(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
             if (nullable) {
@@ -184,7 +190,7 @@ struct TSumData {
             return;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(batch->GetRecordsCountVerified(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 2);
 
         for (ui32 row = 0; row < 2; ++row) {
             if (colX.IsNull(row)) {
@@ -218,13 +224,13 @@ struct TMinMaxSomeData {
             schema, 1, std::vector{ NumVecToArray(arrow::int16(), { 1 }), NumVecToArray(arrow::uint32(), { 0 }, null) });
     }
 
-    static void CheckResult(ETest /*test*/, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
+    static void CheckResult(ETest /*test*/, const TAccessorsCollection& batch, ui32 numKeys, bool nullable) {
         UNIT_ASSERT_VALUES_EQUAL(numKeys, 1);
-        auto aggXOriginal = batch->GetArrayVerified(3);
-        auto aggYOriginal = batch->GetArrayVerified(4);
-        auto colXOriginal = batch->GetArrayVerified(1);
+        auto aggXOriginal = batch.GetArrayVerified(3);
+        auto aggYOriginal = batch.GetArrayVerified(4);
+        auto colXOriginal = batch.GetArrayVerified(1);
 
-        UNIT_ASSERT_VALUES_EQUAL(batch->GetColumnsCount(), numKeys + 2);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetColumnsCount(), numKeys + 2);
         UNIT_ASSERT_EQUAL(aggXOriginal->type_id(), arrow::Type::INT16);
         UNIT_ASSERT_EQUAL(aggYOriginal->type_id(), arrow::Type::UINT32);
         UNIT_ASSERT_EQUAL(colXOriginal->type_id(), arrow::Type::INT16);
@@ -233,7 +239,7 @@ struct TMinMaxSomeData {
         auto& aggY = static_cast<arrow::UInt32Array&>(*aggYOriginal);
         auto& colX = static_cast<arrow::Int16Array&>(*colXOriginal);
 
-        UNIT_ASSERT_VALUES_EQUAL(batch->GetRecordsCountVerified(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(colX.Value(0), 1);
         UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
@@ -296,7 +302,7 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT, EAggreg
         ++idx;
     }
 
-    chain->Apply(sds, sds->GetResources()).Validate();
+    sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
 
     switch (aggFunc) {
         case EAggregate::Sum:
@@ -505,7 +511,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         TSchemaColumnResolver resolver(schema);
         NOptimization::TGraph::TBuilder builder(resolver);
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
-        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(EOperation::Add), std::make_shared<TSimpleKernelLogic>()).DetachResult());
         builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(2)));
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2, 4 })));
         auto chain = builder.Finish().DetachResult();
@@ -516,10 +522,10 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        chain->Apply(sds, sds->GetResources()).Validate();
+        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
 
-        AFL_VERIFY(sds->GetResources()->GetColumnsCount() == 2);
-        AFL_VERIFY(sds->GetResources()->GetRecordsCountVerified() == 2);
+        AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2);
+        AFL_VERIFY(sds->GetResources().GetRecordsCountActualVerified() == 2);
     }
 
     Y_UNIT_TEST(TestValueFromNull) {
@@ -533,6 +539,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         std::vector<std::string> data = { "aa", "aaa", "aaaa", "bbbbb" };
         arrow::StringBuilder sb;
         sb.AppendValues(data).ok();
+        using namespace NKikimr::NArrow::NSSA;
 
         auto schema = std::make_shared<arrow::Schema>(
             std::vector{ std::make_shared<arrow::Field>("int", arrow::int64()), std::make_shared<arrow::Field>("string", arrow::utf8()) });
@@ -551,33 +558,33 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({10001}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({10001}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring), 
+                std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, false)).DetachResult();
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1001, 4}), TColumnChainInfo(1101), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1001, 4}), TColumnChainInfo(1101), std::make_shared<TSimpleFunction>(EOperation::Add), 
+                std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult();
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1002), std::make_shared<TSimpleFunction>(EOperation::StartsWith)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1002), std::make_shared<TSimpleFunction>(EOperation::StartsWith), std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(
+                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::StartsWith, true, false)).DetachResult();
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1002, 4}), TColumnChainInfo(1102), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1002, 4}), TColumnChainInfo(1102), std::make_shared<TSimpleFunction>(EOperation::Add),
+                std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult();
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal),
+                std::make_shared<TLogicEquals>(false)).DetachResult();
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1003, 4}), TColumnChainInfo(1103), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1003, 4}), TColumnChainInfo(1103), std::make_shared<TSimpleFunction>(EOperation::Add),
+                std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult();
             builder.Add(proc);
         }
 
@@ -587,7 +594,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
     }
 
     Y_UNIT_TEST(Projection) {
@@ -608,10 +615,10 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        chain->Apply(sds, sds->GetResources()).Validate();
+        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
 
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetRecordsCountVerified(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 4);
     }
 
     Y_UNIT_TEST(MinMax) {
@@ -626,8 +633,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         TSchemaColumnResolver resolver(schema);
         NOptimization::TGraph::TBuilder builder(resolver);
         NAggregation::TWithKeysAggregationProcessor::TBuilder aggrBuilder;
-        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Min)).DetachResult());
-        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Max)).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Min), std::make_shared<TSimpleKernelLogic>()).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Max), std::make_shared<TSimpleKernelLogic>()).DetachResult());
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 })));
         auto chain = builder.Finish().DetachResult();
         auto sds = std::make_shared<TSimpleDataSource>();
@@ -636,14 +643,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             sds->AddBlob(idx, "", i);
             ++idx;
         }
-        chain->Apply(sds, sds->GetResources()).Validate();
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(sds->GetResources()->GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT16);
-        UNIT_ASSERT_EQUAL(sds->GetResources()->GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::TIMESTAMP);
+        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT16);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(4)->type->id(), arrow::Type::TIMESTAMP);
 
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(sds->GetResources()->GetAccessorVerified(3)->GetScalar(0))->value, -1);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(sds->GetResources()->GetAccessorVerified(4)->GetScalar(0))->value, 4);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(sds->GetResources().GetConstantScalarVerified(3))->value, -1);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(sds->GetResources().GetConstantScalarVerified(4))->value, 4);
     }
 
     Y_UNIT_TEST(Sum) {
@@ -655,8 +662,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         TSchemaColumnResolver resolver(schema);
         NOptimization::TGraph::TBuilder builder(resolver);
-        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum)).DetachResult());
-        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum)).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum), std::make_shared<TSimpleKernelLogic>()).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum), std::make_shared<TSimpleKernelLogic>()).DetachResult());
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 })));
         auto chain = builder.Finish().DetachResult();
 
@@ -667,15 +674,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             ++idx;
         }
 
-        chain->Apply(sds, sds->GetResources()).Validate();
+        sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT64);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(4)->type->id(), arrow::Type::UINT64);
 
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(sds->GetResources()->GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT64);
-        UNIT_ASSERT_EQUAL(sds->GetResources()->GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::UINT64);
-
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(sds->GetResources()->GetAccessorVerified(3)->GetScalar(0))->value, 2);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(sds->GetResources()->GetAccessorVerified(4)->GetScalar(0))->value, 10);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(sds->GetResources().GetConstantScalarVerified(3))->value, 2);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(sds->GetResources().GetConstantScalarVerified(4))->value, 10);
     }
 
     Y_UNIT_TEST(SumGroupBy) {

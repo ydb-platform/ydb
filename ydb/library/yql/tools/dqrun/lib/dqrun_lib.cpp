@@ -14,6 +14,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
@@ -50,7 +51,6 @@
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
-#include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/string/builder.h>
@@ -90,6 +90,7 @@ TDqRunTool::TDqRunTool()
     GetRunOptions().ResultStream = &Cout;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Text;
     GetRunOptions().CustomTests = true;
+    GetRunOptions().Verbosity = TLOG_INFO;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
 
@@ -480,7 +481,8 @@ TVector<std::pair<TActorId, TActorSetupCmd>> TDqRunTool::GetFqServices() {
             credentialsFactory,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            GetPqGateway());
+            GetPqGateway(),
+            NActors::TActorId());
 
         services.emplace_back(
             NFq::RowDispatcherServiceActorId(),

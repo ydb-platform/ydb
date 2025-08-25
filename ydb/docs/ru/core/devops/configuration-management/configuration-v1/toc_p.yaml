@@ -1,0 +1,25 @@
+items:
+- name: Обзор конфигурации
+  href: config-overview.md
+- name: Статическая конфигурация
+  href: static-config.md
+- name: Динамическая конфигурация
+  href: dynamic-config.md
+- name: Временная конфигурация
+  href: dynamic-config-volatile-config.md
+- name: DSL конфигурации кластера
+  href: dynamic-config-selectors.md
+- name: Изменение конфигураций через CMS
+  href: cms.md
+- name: Изменение конфигурации актор-системы
+  href: change_actorsystem_configs.md
+- name: Расширение кластера
+  href: cluster-expansion.md
+- name: Перемещение State Storage
+  href: state-storage-move.md
+- name: Перемещение статической группы
+  href: static-group-move.md
+- name: Замена FQDN узла
+  href: replacing-nodes.md
+- name: Аутентификация и авторизация узлов баз данных
+  href: node-authorization.md

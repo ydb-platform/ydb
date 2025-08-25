@@ -40,9 +40,6 @@ struct TLagPenaltyProviderCounters final
 
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter ErrorRequestCount;
-    // Mapping from cluster replica to number of tablets with lag.
-    THashMap<TString, NProfiling::TGauge> TabletWithLagCountPerReplica;
-    NProfiling::TGauge TotalTabletCount;
 };
 
 DEFINE_REFCOUNTED_TYPE(TLagPenaltyProviderCounters)

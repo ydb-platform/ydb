@@ -7,7 +7,7 @@
 #include <ydb/public/api/grpc/draft/ydb_view_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 namespace NYdb::inline Dev {
 namespace NView {
@@ -85,7 +85,7 @@ TAsyncDescribeViewResult TViewClient::DescribeView(const std::string& path, cons
 
 } // NView
 
-const Ydb::View::DescribeViewResult& TProtoAccessor::GetProto(const NView::TDescribeViewResult& result) {
+const Ydb::View::DescribeViewResult& NDraft::TProtoAccessor::GetProto(const NView::TDescribeViewResult& result) {
     return result.GetProto();
 }
 

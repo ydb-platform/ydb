@@ -23,7 +23,6 @@ class TPDiskInfo : public TViewerPipeClient {
 protected:
     using TThis = TPDiskInfo;
     using TBase = TViewerPipeClient;
-    ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
@@ -42,9 +41,14 @@ public:
     {}
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
-        PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
+        TString pDiskId = Params.Get("pdisk_id");
+        if (pDiskId.Contains('-')) {
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), 0);
+        } else {
+            NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
+            PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
+        }
 
         if (PDiskId == Max<ui32>()) {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"), "BadRequest");
@@ -56,16 +60,13 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 3);
+        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 3);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
-
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
         SendBSCRequest();
 
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -82,7 +83,7 @@ public:
         }
     }
 
-    void SendWhiteboardRequest() {
+    void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
@@ -103,7 +104,7 @@ public:
 
     bool RetryRequest() {
         if (Retries) {
-            if (++ActualRetries <= Retries) {
+            if (++ActualRetries < Retries) {
                 TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
@@ -173,16 +174,17 @@ public:
     }
 
     void HandleRetry() {
-        SendWhiteboardRequest();
-    }
-
-    void HandleTimeout() {
-        TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT("text/plain", "Timeout receiving response"), "Timeout");
+        SendWhiteboardRequests();
+        TBase::RequestDone(2); // complete previous requests
     }
 
     void PassAway() override {
         TBase::Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
         TBase::PassAway();
+    }
+
+    void HandleTimeout() {
+        ReplyAndPassAway(); // try to respond with what we have
     }
 
     void ReplyAndPassAway() override {
@@ -236,11 +238,7 @@ public:
                 }
             }
         }
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, proto, {
-            .EnumAsNumbers = false,
-        });
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(proto));
     }
 
     static YAML::Node GetSwagger() {
@@ -251,20 +249,11 @@ public:
             summary: Gets PDisk info
             description: Gets PDisk information from Whiteboard and BSC
             parameters:
-            - name: node_id
-              in: query
-              description: node identifier
-              type: integer
             - name: pdisk_id
               in: query
               description: pdisk identifier
               required: true
-              type: integer
-            - name: timeout
-              in: query
-              description: timeout in ms
-              required: false
-              type: integer
+              type: string
             responses:
               200:
                 description: OK

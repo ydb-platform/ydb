@@ -11,6 +11,9 @@ import _pytest.doctest
 import json
 import library.python.testing.filter.filter as test_filter
 
+if sys.version_info > (3,):
+    import _pytest.stash
+
 
 class LoadedModule(_pytest.python.Module):
     def __init__(self, parent, name, **kwargs):
@@ -22,6 +25,8 @@ class LoadedModule(_pytest.python.Module):
         self.own_markers = []
         self.extra_keyword_matches = set()
         self.fspath = py.path.local()
+        if sys.version_info > (3,):
+            self.stash = _pytest.stash.Stash()
 
     @classmethod
     def from_parent(cls, **kwargs):
@@ -67,7 +72,10 @@ class DoctestModule(LoadedModule):
         module = self._getobj()
         # uses internal doctest module parsing mechanism
         finder = doctest.DocTestFinder()
-        optionflags = _pytest.doctest.get_optionflags(self)
+        if sys.version_info > (3,):
+            optionflags = _pytest.doctest.get_optionflags(self.config)
+        else:
+            optionflags = _pytest.doctest.get_optionflags(self)
         runner = doctest.DebugRunner(verbose=0, optionflags=optionflags)
 
         try:
@@ -90,7 +98,9 @@ def _is_skipped_module_level(module):
     # pytest.skip.Exception https://docs.pytest.org/en/stable/reference/reference.html#pytest-skip
     try:
         module.obj
-    except pytest.skip.Exception:
+    except pytest.skip.Exception as e:
+        if not e.allow_module_level:
+            raise RuntimeError("Using pytest.skip outside of a test will skip the entire module. If that's your intention, pass `allow_module_level=True`.")
         return True
     except Exception:
         # letting other exceptions such as ImportError slip through

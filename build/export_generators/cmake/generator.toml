@@ -159,6 +159,7 @@ target_commands-ITEM="dict"
 target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
+target_commands-flags="list"
 
 target_macroses="list"
 target_macroses-ITEM="dict"
@@ -234,8 +235,7 @@ attrs=[
     "conan-options",
     "conan-generators",
 ]
-copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
-add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
+copy=["cmake/conan_provider.cmake"]
 
 [[rules]]
 attrs=[

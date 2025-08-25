@@ -15,6 +15,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ZombieEpoch)                       (3102))
     ((InvalidRowSequenceNumbers)         (3103))
     ((QueueAgentRetriableError)          (3104))
+    ((QueueAgentObjectIsNotMapped)       (3105))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

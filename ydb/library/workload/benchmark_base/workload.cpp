@@ -2,6 +2,7 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <library/cpp/colorizer/colors.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/string/cast.h>
 #include <util/system/spinlock.h>
@@ -35,14 +36,40 @@ const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
-void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const {
+namespace {
+
+    TString KeysList(const NJson::TJsonValue& table, const TString& key) {
+        TVector<TStringBuf> keysV;
+        for (const auto& k: table[key].GetArray()) {
+            keysV.emplace_back(k.GetString());
+        }
+        return JoinSeq(", ", keysV);
+    }
+
+}
+
+ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return 64;
+}
+
+void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
-    specialTypes["date_type"] = Params.GetDateType();
-    specialTypes["timestamp_type"] = Params.GetTimestampType();
+    switch (Params.GetDatetimeTypes()) {
+    case TWorkloadBaseParams::EDatetimeTypes::DateTime32:
+        specialTypes["date_type"] = "Date";
+        specialTypes["datetime_type"] = "Datetime";
+        specialTypes["timestamp_type"] = "Timestamp";
+        break;
+    case TWorkloadBaseParams::EDatetimeTypes::DateTime64:
+        specialTypes["date_type"] = "Date32";
+        specialTypes["datetime_type"] = "Datetime64";
+        specialTypes["timestamp_type"] = "Timestamp64";
+        break;
+    }
 
     const auto& tableName = table["name"].GetString();
-    const auto path = Params.GetFullTableName(single ? nullptr : tableName.c_str());
+    const auto path = Params.GetFullTableName((single && Params.GetPath())? nullptr : tableName.c_str());
     result << Endl << "CREATE ";
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << "EXTERNAL ";
@@ -65,11 +92,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         }
     }
     result << JoinSeq(",\n", columns);
-    TVector<TStringBuf> keysV;
-    for (const auto& k: table["primary_key"].GetArray()) {
-        keysV.emplace_back(k.GetString());
-    }
-    const TString keys = JoinSeq(", ", keysV);
+    const auto keys = KeysList(table, "primary_key");
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << Endl;
     } else {
@@ -78,8 +101,11 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     result << ")" << Endl;
 
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
-        result << "PARTITION BY HASH (" << keys << ")" << Endl;
+        result << "PARTITION BY HASH (" <<  (table.Has("partition_by") ? KeysList(table, "partition_by") : keys) << ")" << Endl;
     }
+
+    const ui64 partitioning = table["partitioning"].GetUIntegerSafe(
+        common["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)));
 
     result << "WITH (" << Endl;
     switch (Params.GetStoreType()) {
@@ -89,21 +115,24 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         break;
     case TWorkloadBaseParams::EStoreType::Column:
         result << "    STORE = COLUMN," << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
         break;
     case TWorkloadBaseParams::EStoreType::Row:
         result << "    STORE = ROW," << Endl;
         result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
     }
     result << ");" << Endl;
+    if (TString actions = table["actions"].GetStringSafe(common["actions"].GetStringSafe(""))) {
+        SubstGlobal(actions, "{table}", path);
+        result << actions << Endl;
+    }
 }
 
 std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     const auto json = GetTablesJson();
 
     TStringBuilder result;
-    result << "--!syntax_v1" << Endl;
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << "CREATE EXTERNAL DATA SOURCE `" << Params.GetFullTableName(nullptr) << "_s3_external_source` WITH (" << Endl
             << "    SOURCE_TYPE=\"ObjectStorage\"," << Endl
@@ -113,22 +142,36 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     }
 
     for (const auto& table: json["tables"].GetArray()) {
-        GenerateDDLForTable(result.Out, table, false);
+        GenerateDDLForTable(result.Out, table, json["every_table"], false);
     }
     if (json.Has("table")) {
-        GenerateDDLForTable(result.Out, json["table"], true);
+        GenerateDDLForTable(result.Out, json["table"], json["every_table"], true);
+    }
+    if (result) {
+        return "--!syntax_v1\n" + result;
     }
     return result;
 }
 
 NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
     const auto tablesYaml = GetTablesYaml();
+    if (!tablesYaml) {
+        return NJson::JSON_NULL;
+    }
     const auto yaml = YAML::Load(tablesYaml.c_str());
     return NKikimr::NYaml::Yaml2Json(yaml, true);
 }
 
 TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
-    return { Params.GetPath().c_str() };
+    const auto json = GetTablesJson();
+    TVector<std::string> result;
+    for (const auto& table: json["tables"].GetArray()) {
+        result.emplace_back((Params.GetPath() ?  Params.GetPath() + "/" : "") + table["name"].GetString());
+    }
+    if (json.Has("table")) {
+        result.emplace_back(Params.GetPath() ? Params.GetPath() : json["table"]["name"].GetString());
+    }
+    return result;
 }
 
 TWorkloadDataInitializerBase::TWorkloadDataInitializerBase(const TString& name, const TString& description, const TWorkloadBaseParams& params)
@@ -150,6 +193,7 @@ TBulkDataGeneratorList TWorkloadDataInitializerBase::GetBulkInitialData() {
 }
 
 void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int /*workloadType*/) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     switch (commandType) {
     default:
         break;
@@ -173,17 +217,22 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .Optional()
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
-        opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
-            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+        opts.AddLongOption("datetime-types", TStringBuilder() << "Datetime types to use. Available options:"
+            "\n  " << colors.BoldColor() << EDatetimeTypes::DateTime32 << colors.OldColor() << "\n    Date, Datetime and Timestamp"
+            "\n  " << colors.BoldColor() << EDatetimeTypes::DateTime64 << colors.OldColor() << "\n    Date32, Datetime64 and Timestamp64"
+            "\nDefault: " << colors.CyanColor() << "\"" << DatetimeTypes << "\"" << colors.OldColor() << ".").StoreResult(&DatetimeTypes);
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
+        break;
+    case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonical);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")
             .Optional()
             .DefaultValue(Path)
             .Handler1T<TStringBuf>([this](TStringBuf arg) {
-                while(arg.SkipPrefix("/"));
                 while(arg.ChopSuffix("/"));
                 Path = arg;
             });
@@ -191,8 +240,29 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
     }
 }
 
+void TWorkloadBaseParams::Validate(const ECommandType /*commandType*/, int /*workloadType*/) {
+    if (Path.StartsWith('/')) {
+        if (!Path.StartsWith("/" + DbPath)) {
+            throw yexception() << "Absolute path does not start with " << DbPath << ": " << Path;
+        }
+        Path = Path.substr(DbPath.size() + 1);
+    }
+}
+
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return DbPath + "/" + Path + (TStringBuf(table) ? "/" + TString(table) : TString());
+    TStringBuilder result;
+    if (Path.StartsWith('/')) {
+        result << Path;
+    } else {
+        result << DbPath;
+        if (Path) {
+            result << "/" << Path;
+        }
+    }
+    if (TStringBuf(table)){
+        result << "/" << table;
+    }
+    return result;
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)

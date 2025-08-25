@@ -12,7 +12,7 @@
 
 namespace NYql {
 
-class TYqlCalcJob : public TYqlJobBase {
+class TYqlCalcJob : public TYqlJobBase, public NYT::IRawJob {
 public:
     TYqlCalcJob() = default;
     ~TYqlCalcJob() = default;
@@ -28,10 +28,12 @@ public:
     void Save(IOutputStream& stream) const override;
     void Load(IInputStream& stream) override;
 
-protected:
-    void DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) override;
+public:
+    void Do(const NYT::TRawJobContext& jobContext) override;
 
 private:
+    void DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles);
+
     TMaybe<TVector<TString>> Columns_;
     bool UseResultYson_ = false;
 };

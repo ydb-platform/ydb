@@ -121,6 +121,87 @@ message ImportFromS3Response {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ListObjectsInS3ExportSettings {
+    message Item {
+        // Database object path
+        // Recursive for directories
+        string path = 1;
+    }
+
+    string endpoint = 1 [(required) = true];
+    ImportFromS3Settings.Scheme scheme = 2; // HTTPS if not specified
+    string bucket = 3 [(required) = true];
+    string access_key = 4 [(required) = true];
+    string secret_key = 5 [(required) = true];
+    repeated Item items = 6;
+    uint32 number_of_retries = 7;
+
+    // Region to use in requests
+    string region = 8;
+
+    // disables virtual hosting style buckets aws s3 feature
+    // it changes the way bucket appended to url. e.g. https//bucket_name.example.com/ vs https://example.com/bucket_name
+    // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+    // it is especially useful for custom s3 implementations
+    bool disable_virtual_addressing = 9;
+
+    // A default path prefix for all items,
+    // determines that the import works with the list of objects in the SchemaMapping file.
+    // Must be provided for encrypted exports.
+    string prefix = 10;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 11;
+}
+
+message ListObjectsInS3ExportResult {
+    message Item {
+        /* YDB database objects in S3 are stored in one or more S3 objects (see ydb_export.proto).
+          The S3 object name begins with a prefix, followed by:
+            * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+            * '/scheme.pb' - object with information about scheme, indexes, etc;
+            * '/permissions.pb' - object with information about ACL and owner.
+        */
+
+        // S3 object prefix
+        string prefix = 1;
+
+        // Database object path
+        string path = 2;
+    }
+
+    repeated Item items = 1;
+
+    // This token allows you to get the next page of results for ListObjectsInS3Export requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListObjectsInS3Export request. Subsequent ListObjectsInS3Export
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message ListObjectsInS3ExportRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ListObjectsInS3ExportSettings settings = 2 [(required) = true];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListObjectsInS3Export requests.
+    // 0 means that server returns all objects.
+    int64 page_size = 3 [(value) = "<= 10000"];
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInS3Export
+    // request to get the next page of results.
+    string page_token = 4;
+}
+
+message ListObjectsInS3ExportResponse {
+    // operation.result = ListObjectsInS3ExportResult
+    Ydb.Operations.Operation operation = 1;
+}
+
 /// Data
 message YdbDumpFormat {
     repeated string columns = 1;

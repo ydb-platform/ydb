@@ -1,7 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
-
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -15,12 +15,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST_FLAG(BaseCase, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
+
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"SharedDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -45,12 +53,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
                             NLs::ExtractDomainHive(&sharedHive)});
+
         UNIT_ASSERT(sharedHive != 0
                     && sharedHive != (ui64)-1
                     && sharedHive != TTestTxConfig::Hive);
 
         TString createData = TStringBuilder()
-                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } "
+                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << subDomainPathId << " } "
                 << "Name: \"ServerLess0\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -134,6 +143,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                               "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
                               "  Name: \"pool-1\" "
@@ -155,7 +167,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         runtime.UpdateCurrentTime(now);
 
         TString createData = TStringBuilder()
-                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } "
+                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << subDomainPathId << " } "
                 << "Name: \"ServerLessDB\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -242,8 +254,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         {
             TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":13280},"id":"72057594046678944-3-1600452120-1600452179-13280","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
-            meteringData += "\n";
-            UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
+            MeteringDataEqual(meteringMessages, meteringData);
         }
 
         runtime.SetObserverFunc(prevObserver);
@@ -258,9 +269,77 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         {
             TString meteringData = R"({"usage":{"start":1600452180,"quantity":59,"finish":1600452239,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":0},"id":"72057594046678944-3-1600452180-1600452239-0","cloud_id":"CLOUD_ID_VAL","source_wt":1600452240,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
-            meteringData += "\n";
-            UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
+            MeteringDataEqual(meteringMessages, meteringData);
         }
+    }
+
+    Y_UNIT_TEST(StorageBillingLabels) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetAllowServerlessStorageBilling(&runtime, true);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "ServerlessDB"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: %lu
+            }
+        )", TTestTxConfig::SchemeShard, subDomainPathId));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "ServerlessDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "ServerlessDB", AlterUserAttrs({
+            {"cloud_id", "CLOUD_ID_VAL"},
+            {"folder_id", "FOLDER_ID_VAL"},
+            {"database_id", "DATABASE_ID_VAL"},
+            {"label_k", "v"},
+            {"not_a_label_x", "y"},
+        }));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> block(runtime);
+        runtime.WaitFor("metering", [&]{ return block.size() >= 1; });
+
+        const auto& jsonStr = block[0]->Get()->MeteringJson;
+        UNIT_ASSERT_C(jsonStr.Contains(R"("labels":{"k":"v"})"), jsonStr);
+        UNIT_ASSERT_C(!jsonStr.Contains("not_a_label"), jsonStr);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
@@ -272,6 +351,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(Name: "SharedDB")"
         );
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
@@ -318,11 +400,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: %lu
                 }
                 Name: "ServerLess0"
             )",
-            TTestTxConfig::SchemeShard
+            TTestTxConfig::SchemeShard, subDomainPathId
         );
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -391,6 +473,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
                 StoragePools {
@@ -416,11 +501,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: %lu
                 }
                 Name: "ServerLess0"
             )",
-            TTestTxConfig::SchemeShard
+            TTestTxConfig::SchemeShard, subDomainPathId
         );
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -472,6 +557,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
                 StoragePools {
@@ -497,11 +585,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: %lu
                 }
                 Name: "ServerLess0"
             )",
-            TTestTxConfig::SchemeShard
+            TTestTxConfig::SchemeShard, subDomainPathId
         );
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);

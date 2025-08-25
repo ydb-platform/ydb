@@ -66,7 +66,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
         const auto type = ArrayType::get(valType, newSize);
         const auto itmsType = PointerType::getUnqual(type);
-        const auto itms = *Stateless || ctx.AlwaysInline ?
+        const auto itms = *Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(itmsType, 0U, "itms", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(itmsType, 0U, "itms", block);
         const auto result = Cache_.GenNewArray(newSize, itms, ctx, block);

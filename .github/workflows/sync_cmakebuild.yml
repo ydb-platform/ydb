@@ -44,7 +44,7 @@ jobs:
             echo "Conflicts detected, trying to remove referenced CMakeLists* files"
             grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm -f
             git add .
-            git commit -m "Remove conflicted CMakeLists"
+            git diff-index --quiet HEAD || git commit -m "Remove conflicted CMakeLists"
           else
             break
           fi

@@ -3,11 +3,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <openssl/sha.h>
 
 #include <util/folder/path.h>
 #include <util/string/hex.h>
+#include <algorithm>
 
 using namespace NKikimr;
 
@@ -49,6 +52,7 @@ TCommandConfig::TCommandConfig(
     AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandVersionDynamicConfig>(allowEmptyDatabase));
 }
 
 TCommandConfig::TCommandConfig(
@@ -92,6 +96,10 @@ void TCommandConfigFetch::Config(TConfig& config) {
         .StoreTrue(&DedicatedStorageSection);
     config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
         .StoreTrue(&DedicatedClusterSection);
+    config.Opts->AddLongOption("v2-internal-state", "Fetch all managed internal sections in v1 format (in order to downgrade)")
+        .StoreTrue(&FetchInternalState);
+    config.Opts->AddLongOption("v2-explicit-sections", "Add explicit sections to control managed entities manually")
+        .StoreTrue(&FetchExplicitSections);
     config.SetFreeArgsNum(0);
 
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -100,6 +108,12 @@ void TCommandConfigFetch::Config(TConfig& config) {
 
 void TCommandConfigFetch::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+
+    if (FetchInternalState && FetchExplicitSections) {
+        ythrow yexception() << "Can't specify both --v2-internal-state and --v2-explicit-sections at the same time.";
+    } else if (UseLegacyApi && (FetchInternalState || FetchExplicitSections)) {
+        ythrow yexception() << "--v2-internal-state and --v2-explicit-sections can't be used with legacy API.";
+    }
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
@@ -116,12 +130,23 @@ int TCommandConfigFetch::Run(TConfig& config) {
 
     if (!UseLegacyApi) {
         NYdb::NConfig::TFetchAllConfigsSettings settings;
+        if (FetchInternalState) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG);
+        } else if (FetchExplicitSections) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_EXPLICIT_SECTIONS);
+        }
         result = client.FetchAllConfigs(settings).GetValueSync();
     }
 
     // if the new Config API is not supported, fallback to the old DynamicConfig API
     if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        if (FetchInternalState || FetchExplicitSections) {
+            Cerr << "Error: --v2-internal-state and --v2-explicit-sections can't be used with legacy API." << Endl;
+            return EXIT_FAILURE;
+        }
+
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -827,5 +852,114 @@ int TCommandGenerateDynamicConfig::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("version", {}, "Show configuration version on nodes")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandVersionDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("list-nodes", "List nodes with different configuration versions")
+        .StoreTrue(&ListNodes);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::Json,
+        EDataFormat::Csv
+    });
+}
+
+void TCommandVersionDynamicConfig::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParseOutputFormats();
+}
+
+int TCommandVersionDynamicConfig::Run(TConfig& config) {
+    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    auto sortNodes = [&](const auto& list) {
+        std::vector<NYdb::NDynamicConfig::TGetConfigurationVersionResult::TNodeInfo> sortedNodes(list.begin(), list.end());
+        std::sort(sortedNodes.begin(), sortedNodes.end());
+        return sortedNodes;
+    };
+    if (OutputFormat == EDataFormat::Json) {
+        NJson::TJsonValue jsonOutput(NJson::JSON_MAP);
+        auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
+            NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
+            for (const auto& node : sortNodes(listGetter())) {
+                NJson::TJsonValue nodeJson(NJson::JSON_MAP);
+                nodeJson.InsertValue("node_id", node.NodeId);
+                nodeJson.InsertValue("hostname", node.Hostname);
+                nodeJson.InsertValue("port", node.Port);
+                nodesArray.AppendValue(nodeJson);
+            }
+            jsonOutput.InsertValue(key, nodesArray);
+        };
+
+#define ADD_INFO_TO_JSON(type, key) \
+        jsonOutput.InsertValue(#key "_nodes_count", result.Get##type##Nodes()); \
+        if (ListNodes) { \
+            serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
+        }
+
+        ADD_INFO_TO_JSON(V1, v1)
+        ADD_INFO_TO_JSON(V2, v2)
+        ADD_INFO_TO_JSON(Unknown, unknown)
+
+        NJson::WriteJson(&Cout, &jsonOutput, true);
+        Cout << Endl;
+    } else if (OutputFormat == EDataFormat::Csv) {
+        if (ListNodes) {
+            Cout << "config_version,node_id,hostname,port" << Endl;
+            auto printNodesToCsv = [&](const TString& versionString, const auto& listGetter) {
+                for (const auto& node : sortNodes(listGetter())) {
+                    TStringBuilder row;
+                    row << versionString << "," << node.NodeId << ",\"" << node.Hostname << "\"," << node.Port;
+                    Cout << row << Endl;
+                }
+            };
+
+#define PRINT_NODES_TO_CSV(type, key) \
+        printNodesToCsv(#key, [&]() { return result.Get##type##NodesList(); }); \
+
+            PRINT_NODES_TO_CSV(V1, v1)
+            PRINT_NODES_TO_CSV(V2, v2)
+            PRINT_NODES_TO_CSV(Unknown, unknown)
+        } else {
+            Cout << "config_version,nodes_count" << Endl;
+            Cout << "v1," << result.GetV1Nodes() << Endl;
+            Cout << "v2," << result.GetV2Nodes() << Endl;
+            Cout << "unknown," << result.GetUnknownNodes() << Endl;
+        }
+    } else {
+        auto printNodeList = [&](const TString& header, const auto& listGetter) {
+            const auto& nodesVector = sortNodes(listGetter());
+            Cout << header;
+            for (const auto& node : nodesVector) {
+                Cout << "\n";
+                Cout << "  - " << node.Hostname << ":" << node.Port << " (node_id: " << node.NodeId << ")";
+            }
+            Cout << Endl;
+        };
+
+#define PRINT_NODE_VERSION_INFO(type) \
+    Cout << #type " nodes: " << result.Get##type##Nodes() << Endl; \
+    if (ListNodes) { \
+        printNodeList(#type " node list: ", [&]() { return result.Get##type##NodesList(); }); \
+    }
+
+        PRINT_NODE_VERSION_INFO(V1)
+        PRINT_NODE_VERSION_INFO(V2)
+        PRINT_NODE_VERSION_INFO(Unknown)
+    }
+
+    return EXIT_SUCCESS;
+}
+
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

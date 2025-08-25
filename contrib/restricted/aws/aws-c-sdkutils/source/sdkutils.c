@@ -19,6 +19,8 @@ static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO(AWS_ERROR_SDKUTILS_ENDPOINTS_RULESET_EXHAUSTED, "Ruleset was exhausted before finding a matching rule", "aws-c-sdkutils"),
     AWS_DEFINE_ERROR_INFO(AWS_ERROR_SDKUTILS_PARTITIONS_UNSUPPORTED, "Partitions version not supported.", "aws-c-sdkutils"),
     AWS_DEFINE_ERROR_INFO(AWS_ERROR_SDKUTILS_PARTITIONS_PARSE_FAILED, "Partitions parsing failed.", "aws-c-sdkutils"),
+    AWS_DEFINE_ERROR_INFO(AWS_ERROR_SDKUTILS_ENDPOINTS_UNSUPPORTED_REGEX, "Unsupported regex feature.", "aws-c-sdkutils"),
+    AWS_DEFINE_ERROR_INFO(AWS_ERROR_SDKUTILS_ENDPOINTS_REGEX_NO_MATCH, "Text does not match specified regex", "aws-c-sdkutils"),
 };
 /* clang-format on */
 
@@ -33,6 +35,20 @@ static struct aws_log_subject_info s_log_subject_infos[] = {
         "SDKUtils",
         "Subject for SDK utility logging that defies categorization."),
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_SDKUTILS_PROFILE, "AWSProfile", "Subject for AWS Profile parser and utilities"),
+    DEFINE_LOG_SUBJECT_INFO(
+        AWS_LS_SDKUTILS_ENDPOINTS_PARSING,
+        "AWSEndpointsParsing",
+        "Subject for AWS Endpoints ruleset parser"),
+    DEFINE_LOG_SUBJECT_INFO(
+        AWS_LS_SDKUTILS_ENDPOINTS_RESOLVE,
+        "AWSEndpointsResolution",
+        "Subject for AWS Endpoints Engine resolution"),
+    DEFINE_LOG_SUBJECT_INFO(
+        AWS_LS_SDKUTILS_ENDPOINTS_GENERAL,
+        "AWSEndpoints",
+        "Subject for AWS Endpoints Engine general messages"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "AWSEndpoints", "Subject for AWS Partitions parsing"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_SDKUTILS_ENDPOINTS_REGEX, "AWSEndpoints", "Subject for AWS Endpoints Regex engine"),
 };
 
 static struct aws_log_subject_info_list s_sdkutils_log_subjects = {

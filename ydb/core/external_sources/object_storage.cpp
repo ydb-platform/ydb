@@ -63,9 +63,19 @@ struct TObjectStorageExternalSource : public IExternalSource {
             } else if (key.StartsWith("projection.") || key == "storage.location.template") {
                 objectStorage.mutable_projection()->insert({key, value});
             } else if (lowerKey == "partitioned_by") {
-                auto json = NSc::TValue::FromJsonThrow(value);
-                for (const auto& column: json.GetArray()) {
-                    *objectStorage.add_partitioned_by() = column;
+                try {
+                    const auto json = NSc::TValue::FromJsonThrow(value);
+                    if (!json.IsArray()) {
+                        throw TExternalSourceException() << "partitioned_by must be an array of column names";
+                    }
+                    for (const auto& column: json.GetArray()) {
+                        if (!column.IsString()) {
+                            throw TExternalSourceException() << "partitioned_by must be an array of strings";
+                        }
+                        *objectStorage.add_partitioned_by() = column;
+                    }
+                } catch (const std::exception& e) {
+                    throw TExternalSourceException() << "Failed to parse partitioned_by: " << e.what();
                 }
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
@@ -344,7 +354,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         std::shared_ptr<TMetadata> Metadata;
     };
 
-    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
+    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override try {
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
@@ -363,11 +373,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetBasicAuth(params.SerializeAsString(), awsAuth.SecretAccessKey);
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
             if (!CredentialsFactory) {
-                try {
-                    throw yexception{} << "trying to authenticate with service account credentials, internal error";
-                } catch (const yexception& error) {
-                    return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
-                }
+                throw yexception{} << "trying to authenticate with service account credentials, internal error";
             }
             auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
             structuredTokenBuilder.SetServiceAccountIdAuth(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature);
@@ -548,6 +554,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
             throw TExternalSourceException{} << value.Issues().ToOneLineString();
         });
+    } catch (const std::exception&) {
+        return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
     }
 
     virtual bool CanLoadDynamicMetadata() const override {

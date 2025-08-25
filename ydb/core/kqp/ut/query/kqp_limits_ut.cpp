@@ -55,12 +55,9 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_TWIN(QSReplySizeEnsureMemoryLimits, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(true);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 1'000, 100, 1'000, 1'000);
@@ -98,45 +95,45 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(StreamWrite, Allowed) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
-        app.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(64);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
+        CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
-        
+
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 String NOT NULL,
-                    Col3 Int32 NOT NULL,
-                    PRIMARY KEY (Col1)
+                    Key Uint64,
+                    KeyText String,
+                    Data Int64,
+                    DataText String,
+                    PRIMARY KEY (Key)
                 )
-                WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);)",
+                WITH (
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8,
+                    PARTITION_AT_KEYS = (1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000)
+                );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = db.ExecuteQuery(R"(
-                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+                UPSERT INTO `/Root/DataShard` SELECT * FROM `/Root/LargeTable`;
             )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             if (!Allowed) {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_C(
-                    result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
+                    result.GetIssues().ToString().contains("Out of buffer memory."),
                     result.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
     }
@@ -223,16 +220,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(ComputeActorMemoryAllocationFailure, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        settings.AppConfig.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
-        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -257,16 +250,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
 
-        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
         app.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
+        auto settings = TKikimrSettings(app)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
-        CreateLargeTable(kikimr, 0, 0, 0);
+        CreateLargeTable(kikimr, 30, 10, 200000);
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
 
@@ -289,13 +281,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(DatashardProgramSize, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -438,19 +426,16 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-
         auto settings = TKikimrSettings()
-            .SetAppConfig(app)
             .SetWithSampleTables(false)
             .SetStorage(NFake::TStorage{
                 .UseDisk = false,
                 .SectorSize = 4096,
                 .ChunkSize = 32_MB,
                 .DiskSize = 8_GB
-            });
+                });
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
 
@@ -496,7 +481,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
- 
+
             switch (result.GetStatus()) {
             case EStatus::SUCCESS:
                 continue;
@@ -696,38 +681,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
-        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
+        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(23);
 
         TKikimrRunner kikimr(appConfig);
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard20"
+            Name: "ManyShard23"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 20
+            UniformPartitionsCount: 23
         )");
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard21"
+            Name: "ManyShard24"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 21
+            UniformPartitionsCount: 24
         )");
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard20`
+            SELECT COUNT(*) FROM `/Root/ManyShard23`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard21`
+            SELECT COUNT(*) FROM `/Root/ManyShard24`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
@@ -884,12 +869,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     void DoCancelAfterRo(bool follower, bool dependedRead) {
-        NKikimrConfig::TAppConfig appConfig;
-
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1472,12 +1453,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(QSReplySize, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10'000, 100, 1'000, 1'000);
@@ -1495,7 +1472,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
         if (useSink) {
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Out of buffer memory"));
         }
     }
 }

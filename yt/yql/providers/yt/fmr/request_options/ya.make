@@ -5,7 +5,11 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yson/node
     library/cpp/threading/future
+    yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/interface
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

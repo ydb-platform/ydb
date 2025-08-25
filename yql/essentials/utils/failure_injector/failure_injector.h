@@ -29,8 +29,8 @@ private:
     THashMap<TString, TFailureSpec> GetCurrentStateImpl();
 
     std::atomic<bool> Enabled_ = false;
-    THashMap<TString, TFailureSpec> FailureSpecs;
-    TMutex Lock;
+    THashMap<TString, TFailureSpec> FailureSpecs_;
+    TMutex Lock_;
 };
 
 } // NYql

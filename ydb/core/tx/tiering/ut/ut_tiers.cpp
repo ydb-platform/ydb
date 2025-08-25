@@ -55,8 +55,7 @@ public:
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
-        TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(Sprintf(R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -72,7 +71,7 @@ public:
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Sharding {
@@ -88,8 +87,7 @@ public:
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
 
-        TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(Sprintf(R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -105,7 +103,7 @@ public:
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             TtlSettings: {
@@ -190,7 +188,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [](const TActorContext&) {
             });
             Manager->Start(Manager);
-            Manager->ActivateTiers(ExpectedTiers);
+            Manager->ActivateTiers(ExpectedTiers, false);
         }
 
         TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)
@@ -443,6 +441,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         lHelper.CreateTestOlapTable("olapTable", 2);
+        lHelper.StartSchemaRequest(
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`))"
+        );
         lHelper.StartSchemaRequest(
             R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
         Cerr << "Wait tables" << Endl;

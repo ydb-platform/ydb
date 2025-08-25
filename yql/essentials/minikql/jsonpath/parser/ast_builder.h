@@ -46,7 +46,7 @@ private:
 
     void Error(TPosition pos, const TStringBuf message);
 
-    TIssues& Issues;
+    TIssues& Issues_;
 };
 
 }

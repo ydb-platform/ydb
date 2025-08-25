@@ -25,20 +25,20 @@ class TGroupingNode final: public TAstListNode {
 public:
     TGroupingNode(TPosition pos, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Args(args)
+        , Args_(args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
-            ctx.Error(Pos) << "Grouping function should have source";
+            ctx.Error(Pos_) << "Grouping function should have source";
             return false;
         }
         TVector<TString> columns;
-        columns.reserve(Args.size());
-        for (const auto& node: Args) {
+        columns.reserve(Args_.size());
+        for (const auto& node: Args_) {
             auto namePtr = node->GetColumnName();
             if (!namePtr || !*namePtr) {
-                ctx.Error(Pos) << "Grouping function should use columns as arguments";
+                ctx.Error(Pos_) << "Grouping function should use columns as arguments";
                 return false;
             }
             const auto column = *namePtr;
@@ -53,35 +53,35 @@ public:
         if (!src->CalculateGroupingHint(ctx, columns, hint)) {
             return false;
         }
-        Nodes.push_back(BuildAtom(Pos, "Uint64"));
-        Nodes.push_back(BuildQuotedAtom(Pos, IntToString<10>(hint)));
+        Nodes_.push_back(BuildAtom(Pos_, "Uint64"));
+        Nodes_.push_back(BuildQuotedAtom(Pos_, IntToString<10>(hint)));
         return TAstListNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TGroupingNode(Pos, Args);
+        return new TGroupingNode(Pos_, Args_);
     }
 
 private:
-    const TVector<TNodePtr> Args;
+    const TVector<TNodePtr> Args_;
 };
 
 class TBasicAggrFunc final: public TAstListNode {
 public:
     TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name(name)
-        , Aggr(aggr)
-        , Args(args)
+        , Name_(name)
+        , Aggr_(aggr)
+        , Args_(args)
     {}
 
     TCiString GetName() const {
-        return Name;
+        return Name_;
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
-            ctx.Error(Pos) << "Unable to use aggregation function '" << Name << "' without data source";
+            ctx.Error(Pos_) << "Unable to use aggregation function '" << Name_ << "' without data source";
             return false;
         }
         if (!DoInitAggregation(ctx, src)) {
@@ -92,44 +92,44 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release());
-        return new TBasicAggrFunc(Pos, Name, aggrClone, CloneContainer(Args));
+        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr_->Clone().Release());
+        return new TBasicAggrFunc(Pos_, Name_, aggrClone, CloneContainer(Args_));
     }
 
     TAggregationPtr GetAggregation() const override {
-        return Aggr;
+        return Aggr_;
     }
 
 private:
     bool DoInitAggregation(TContext& ctx, ISource* src) {
-        if (!Aggr->InitAggr(ctx, false, src, *this, Args)) {
+        if (!Aggr_->InitAggr(ctx, false, src, *this, Args_)) {
             return false;
         }
-        return src->AddAggregation(ctx, Aggr);
+        return src->AddAggregation(ctx, Aggr_);
     }
 
     void DoUpdateState() const final {
-        State.Set(ENodeState::Const, Args.front()->IsConstant());
-        State.Set(ENodeState::Aggregated);
+        State_.Set(ENodeState::Const, Args_.front()->IsConstant());
+        State_.Set(ENodeState::Aggregated);
     }
 
 protected:
-    const TString Name;
-    TAggregationPtr Aggr;
-    TVector<TNodePtr> Args;
+    const TString Name_;
+    TAggregationPtr Aggr_;
+    TVector<TNodePtr> Args_;
 };
 
 class TBasicAggrFactory final : public TAstListNode {
 public:
     TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
-        , Name(name)
-        , Aggr(aggr)
-        , Args(args)
+        , Name_(name)
+        , Aggr_(aggr)
+        , Args_(args)
     {}
 
     TCiString GetName() const {
-        return Name;
+        return Name_;
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
@@ -137,48 +137,48 @@ public:
             return false;
         }
 
-        auto factory = Aggr->AggregationTraitsFactory();
+        auto factory = Aggr_->AggregationTraitsFactory();
         auto apply = Y("Apply", factory, Y("ListType", "type"));
 
-        auto columnIndices = Aggr->GetFactoryColumnIndices();
+        auto columnIndices = Aggr_->GetFactoryColumnIndices();
         if (columnIndices.size() == 1) {
             apply = L(apply, "extractor");
         } else {
             // make several extractors from main that returns a tuple
             for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
-                auto partial = BuildLambda(Pos, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
+                auto partial = BuildLambda(Pos_, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
                 apply = L(apply, partial);
             }
         }
 
-        Aggr->AddFactoryArguments(apply);
-        Lambda = BuildLambda(Pos, Y("type", "extractor"), apply);
+        Aggr_->AddFactoryArguments(apply);
+        Lambda_ = BuildLambda(Pos_, Y("type", "extractor"), apply);
         return TAstListNode::DoInit(ctx, src);
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Lambda->Translate(ctx);
+        return Lambda_->Translate(ctx);
     }
 
     TNodePtr DoClone() const final {
-        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release());
-        return new TBasicAggrFactory(Pos, Name, aggrClone, CloneContainer(Args));
+        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr_->Clone().Release());
+        return new TBasicAggrFactory(Pos_, Name_, aggrClone, CloneContainer(Args_));
     }
 
     TAggregationPtr GetAggregation() const override {
-        return Aggr;
+        return Aggr_;
     }
 
 private:
     bool DoInitAggregation(TContext& ctx) {
-        return Aggr->InitAggr(ctx, true, nullptr, *this, Args);
+        return Aggr_->InitAggr(ctx, true, nullptr, *this, Args_);
     }
 
 protected:
-    const TString Name;
-    TAggregationPtr Aggr;
-    TVector<TNodePtr> Args;
-    TNodePtr Lambda;
+    const TString Name_;
+    TAggregationPtr Aggr_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Lambda_;
 };
 
 typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
@@ -187,28 +187,28 @@ class TLiteralStringAtom: public INode {
 public:
     TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info)
         : INode(pos)
-        , Node(node)
-        , Info(info)
+        , Node_(node)
+        , Info_(info)
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        if (!Node) {
-            ctx.Error(Pos) << Info;
+        if (!Node_) {
+            ctx.Error(Pos_) << Info_;
             return false;
         }
 
-        if (!Node->Init(ctx, src)) {
+        if (!Node_->Init(ctx, src)) {
             return false;
         }
 
-        Atom = MakeAtomFromExpression(ctx, Node).Build();
+        Atom_ = MakeAtomFromExpression(ctx, Node_).Build();
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Atom->Translate(ctx);
+        return Atom_->Translate(ctx);
     }
 
     TPtr DoClone() const final {
@@ -216,9 +216,9 @@ public:
     }
 
 private:
-    TNodePtr Node;
-    TNodePtr Atom;
-    TString Info;
+    TNodePtr Node_;
+    TNodePtr Atom_;
+    TString Info_;
 };
 
 class TYqlAsAtom: public TLiteralStringAtom {
@@ -239,54 +239,54 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         auto slot = NUdf::FindDataSlot(GetOpName());
         if (!slot) {
-            ctx.Error(Pos) << "Unexpected type " << GetOpName();
+            ctx.Error(Pos_) << "Unexpected type " << GetOpName();
             return false;
         }
 
         if (*slot == NUdf::EDataSlot::Decimal) {
-            MinArgs = MaxArgs = 3;
+            MinArgs_ = MaxArgs_ = 3;
         }
 
         if (!ValidateArguments(ctx)) {
             return false;
         }
 
-        auto stringNode = Args[0];
+        auto stringNode = Args_[0];
         auto atom = stringNode->GetLiteral("String");
         if (!atom) {
-            ctx.Error(Pos) << "Expected literal string as argument in " << GetOpName() << " function";
+            ctx.Error(Pos_) << "Expected literal string as argument in " << GetOpName() << " function";
             return false;
         }
 
         TString value;
         if (*slot == NUdf::EDataSlot::Decimal) {
-            const auto precision = Args[1]->GetLiteral("Int32");
-            const auto scale = Args[2]->GetLiteral("Int32");
+            const auto precision = Args_[1]->GetLiteral("Int32");
+            const auto scale = Args_[2]->GetLiteral("Int32");
 
             if (!NKikimr::NMiniKQL::IsValidDecimal(*atom)) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
             ui8 stub;
             if (!(precision && TryFromString<ui8>(*precision, stub))) {
-                ctx.Error(Pos) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName();
                 return false;
             }
 
             if (!(scale && TryFromString<ui8>(*scale, stub))) {
-                ctx.Error(Pos) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName();
                 return false;
             }
 
-            Args[0] = BuildQuotedAtom(GetPos(), *atom);
-            Args[1] = BuildQuotedAtom(GetPos(), *precision);
-            Args[2] = BuildQuotedAtom(GetPos(), *scale);
+            Args_[0] = BuildQuotedAtom(GetPos(), *atom);
+            Args_[1] = BuildQuotedAtom(GetPos(), *precision);
+            Args_[2] = BuildQuotedAtom(GetPos(), *scale);
             return TCallNode::DoInit(ctx, src);
         } else if (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
             const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom);
             if (!out) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
@@ -306,7 +306,7 @@ public:
             case NUdf::EDataSlot::Interval:
                 value = ToString(out.Get<i64>());
                 if ('T' == atom->back()) {
-                    ctx.Warning(Pos, TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval constant";
+                    ctx.Warning(Pos_, TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval constant";
                 }
                 break;
             default:
@@ -320,26 +320,26 @@ public:
         } else if (NUdf::EDataSlot::Uuid == *slot) {
             char out[0x10];
             if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
             value.assign(out, sizeof(out));
         } else {
             if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                ctx.Error(Pos_) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
             value = *atom;
         }
 
-        Args[0] = BuildQuotedAtom(GetPos(), value);
+        Args_[0] = BuildQuotedAtom(GetPos(), value);
         return TCallNode::DoInit(ctx, src);
     }
 
     TPtr DoClone() const final {
-        return new TYqlData(GetPos(), OpName, CloneContainer(Args));
+        return new TYqlData(GetPos(), OpName_, CloneContainer(Args_));
     }
 };
 
@@ -347,7 +347,7 @@ class TTableName : public TCallNode {
 public:
     TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& cluster)
         : TCallNode(pos, "TableName", 0, 2, args)
-        , Cluster(cluster)
+        , Cluster_(cluster)
     {
     }
 
@@ -356,70 +356,70 @@ public:
             return false;
         }
 
-        if (Args.empty()) {
-            Args.push_back(Y("TablePath", Y("DependsOn", "row")));
+        if (Args_.empty()) {
+            Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
         }
 
-        if (Args.size() == 2) {
-            auto literal = Args[1]->GetLiteral("String");
+        if (Args_.size() == 2) {
+            auto literal = Args_[1]->GetLiteral("String");
             if (!literal) {
-                ctx.Error(Args[1]->GetPos()) << "Expected literal string as second argument in TableName function";
+                ctx.Error(Args_[1]->GetPos()) << "Expected literal string as second argument in TableName function";
                 return false;
             }
 
-            Args[1] = BuildQuotedAtom(Args[1]->GetPos(), to_lower(*literal));
+            Args_[1] = BuildQuotedAtom(Args_[1]->GetPos(), to_lower(*literal));
         } else {
-            if (Cluster.empty()) {
+            if (Cluster_.empty()) {
                 ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name";
                 return false;
             }
 
-            auto service = ctx.GetClusterProvider(Cluster);
+            auto service = ctx.GetClusterProvider(Cluster_);
             if (!service) {
-                ctx.Error() << "Unknown cluster name: " << Cluster;
+                ctx.Error() << "Unknown cluster name: " << Cluster_;
                 return false;
             }
 
-            Args.push_back(BuildQuotedAtom(GetPos(), to_lower(*service)));
+            Args_.push_back(BuildQuotedAtom(GetPos(), to_lower(*service)));
         }
 
         return TCallNode::DoInit(ctx, src);
     }
 
     TPtr DoClone() const final {
-        return new TTableName(GetPos(), CloneContainer(Args), Cluster);
+        return new TTableName(GetPos(), CloneContainer(Args_), Cluster_);
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Const, false);
+        State_.Set(ENodeState::Const, false);
     }
 
 private:
-    TString Cluster;
+    TString Cluster_;
 };
 
 class TYqlParseType final : public INode {
 public:
     TYqlParseType(TPosition pos, const TVector<TNodePtr>& args)
         : INode(pos)
-        , Args(args)
+        , Args_(args)
     {}
 
     TAstNode* Translate(TContext& ctx) const override {
-        if (Args.size() != 1) {
-            ctx.Error(Pos) << "Expected 1 argument in ParseType function";
+        if (Args_.size() != 1) {
+            ctx.Error(Pos_) << "Expected 1 argument in ParseType function";
             return nullptr;
         }
 
-        auto literal = Args[0]->GetLiteral("String");
+        auto literal = Args_[0]->GetLiteral("String");
         if (!literal) {
-            ctx.Error(Args[0]->GetPos()) << "Expected literal string as argument in ParseType function";
+            ctx.Error(Args_[0]->GetPos()) << "Expected literal string as argument in ParseType function";
             return nullptr;
         }
 
-        auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos());
+        auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args_[0]->GetPos());
         if (!parsed) {
-            ctx.Error(Args[0]->GetPos()) << "Failed to parse type";
+            ctx.Error(Args_[0]->GetPos()) << "Failed to parse type";
             return nullptr;
         }
 
@@ -427,11 +427,11 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseType(Pos, Args);
+        return new TYqlParseType(Pos_, Args_);
     }
 
 private:
-    TVector<TNodePtr> Args;
+    TVector<TNodePtr> Args_;
 };
 
 class TYqlAddTimezone: public TCallNode {
@@ -446,12 +446,12 @@ public:
             return false;
         }
 
-        Args[1] = Y("TimezoneId", Args[1]);
+        Args_[1] = Y("TimezoneId", Args_[1]);
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAddTimezone(Pos, CloneContainer(Args));
+        return new TYqlAddTimezone(Pos_, CloneContainer(Args_));
     }
 };
 
@@ -468,39 +468,39 @@ public:
             return false;
         }
 
-        auto literal = Args[1]->GetLiteral("String");
+        auto literal = Args_[1]->GetLiteral("String");
         INode::TPtr type;
         if (literal) {
-            auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos());
+            auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args_[0]->GetPos());
             if (!parsed) {
-                ctx.Error(Args[1]->GetPos()) << "Failed to parse type";
+                ctx.Error(Args_[1]->GetPos()) << "Failed to parse type";
                 return false;
             }
 
             type = AstNode(parsed);
         } else {
-            type = Args[1];
+            type = Args_[1];
         }
 
         if (!type->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = type;
-        if (Args.size() == 3) {
-            if (!Args[2]->Init(ctx, src)) {
+        Args_[1] = type;
+        if (Args_.size() == 3) {
+            if (!Args_[2]->Init(ctx, src)) {
                 return false;
             }
 
-            auto message = MakeAtomFromExpression(ctx, Args[2]).Build();
-            Args[2] = message;
+            auto message = MakeAtomFromExpression(ctx, Args_[2]).Build();
+            Args_[2] = message;
         }
 
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTypeAssert<Strict>(Pos, Args);
+        return new TYqlTypeAssert<Strict>(Pos_, Args_);
     }
 };
 
@@ -515,16 +515,16 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TFromBytes(Pos, Args);
+        return new TFromBytes(Pos_, Args_);
     }
 };
 
@@ -539,11 +539,11 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 };
@@ -555,7 +555,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlAsTagged(Pos, Args);
+        return new TYqlAsTagged(Pos_, Args_);
     }
 };
 
@@ -566,7 +566,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlUntag(Pos, Args);
+        return new TYqlUntag(Pos_, Args_);
     }
 };
 
@@ -581,16 +581,16 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlVariant(Pos, Args);
+        return new TYqlVariant(Pos_, Args_);
     }
 };
 
@@ -605,14 +605,14 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Args.empty()) {
-            Args[0] = BuildFileNameArgument(ctx.Pos(), Args[0]);
+        if (!Args_.empty()) {
+            Args_[0] = BuildFileNameArgument(ctx.Pos(), Args_[0]);
         }
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAtom(Pos, OpName, Args);
+        return new TYqlAtom(Pos_, OpName_, Args_);
     }
 };
 
@@ -623,21 +623,21 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.size() != 3) {
-            ctx.Error(Pos) << OpName << " requires exactly three arguments";
+        if (Args_.size() != 3) {
+            ctx.Error(Pos_) << OpName_ << " requires exactly three arguments";
             return false;
         }
-        for (const auto& arg : Args) {
+        for (const auto& arg : Args_) {
             if (!arg->Init(ctx, src)) {
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TAddMember(Pos, OpName, Args);
+        return new TAddMember(Pos_, OpName_, Args_);
     }
 };
 class TRemoveMember final: public TCallNode {
@@ -647,21 +647,21 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.size() != 2) {
-            ctx.Error(Pos) << OpName << " requires exactly two arguments";
+        if (Args_.size() != 2) {
+            ctx.Error(Pos_) << OpName_ << " requires exactly two arguments";
             return false;
         }
-        for (const auto& arg : Args) {
+        for (const auto& arg : Args_) {
             if (!arg->Init(ctx, src)) {
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TRemoveMember(Pos, OpName, Args);
+        return new TRemoveMember(Pos_, OpName_, Args_);
     }
 };
 
@@ -672,18 +672,18 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.empty()) {
-            ctx.Error(Pos) << "CombineMembers requires at least one argument";
+        if (Args_.empty()) {
+            ctx.Error(Pos_) << "CombineMembers requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args.size(); ++i) {
-            Args[i] = Q(Y(Q(""), Args[i])); // flatten without prefix
+        for (size_t i = 0; i < Args_.size(); ++i) {
+            Args_[i] = Q(Y(Q(""), Args_[i])); // flatten without prefix
         }
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TCombineMembers(Pos, OpName, Args);
+        return new TCombineMembers(Pos_, OpName_, Args_);
     }
 };
 
@@ -694,22 +694,22 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.empty()) {
-            ctx.Error(Pos) << OpName << " requires at least one argument";
+        if (Args_.empty()) {
+            ctx.Error(Pos_) << OpName_ << " requires at least one argument";
             return false;
         }
-        for (size_t i = 0; i < Args.size(); ++i) {
-            if (!Args[i]->Init(ctx, src)) {
+        for (size_t i = 0; i < Args_.size(); ++i) {
+            if (!Args_[i]->Init(ctx, src)) {
                 return false;
             }
-            if (Args[i]->GetTupleSize() == 2) {
+            if (Args_[i]->GetTupleSize() == 2) {
                 // flatten with prefix
-                Args[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args[i]->GetTupleElement(0)).Build(),
-                    Args[i]->GetTupleElement(1)
+                Args_[i] = Q(Y(
+                    MakeAtomFromExpression(ctx, Args_[i]->GetTupleElement(0)).Build(),
+                    Args_[i]->GetTupleElement(1)
                 ));
             } else {
-                ctx.Error(Pos) << OpName << " requires arguments to be tuples of size 2: prefix and struct";
+                ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
                 return false;
             }
         }
@@ -717,7 +717,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TFlattenMembers(Pos, OpName, Args);
+        return new TFlattenMembers(Pos_, OpName_, Args_);
     }
 };
 
@@ -775,15 +775,15 @@ public:
         if (!dataTypeStringNode) {
             return false;
         }
-        auto aliasNode = BuildFileNameArgument(Args[1]->GetPos(), Args[1]);
-        OpName = "Apply";
-        Args[0] = Y("Udf", Q("File.ByLines"), Y("Void"),
+        auto aliasNode = BuildFileNameArgument(Args_[1]->GetPos(), Args_[1]);
+        OpName_ = "Apply";
+        Args_[0] = Y("Udf", Q("File.ByLines"), Y("Void"),
             Y("TupleType",
                 Y("TupleType", Y("DataType", dataTypeStringNode)),
                 Y("StructType"),
                 Y("TupleType")));
 
-        Args[1] = Y("FilePath", aliasNode);
+        Args_[1] = Y("FilePath", aliasNode);
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -792,7 +792,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseFileOp(Pos, Args);
+        return new TYqlParseFileOp(Pos_, Args_);
     }
 };
 
@@ -811,12 +811,12 @@ public:
         if (!dataTypeStringNode) {
             return false;
         }
-        Args[0] = dataTypeStringNode;
+        Args_[0] = dataTypeStringNode;
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlDataType(Pos, Args);
+        return new TYqlDataType(Pos_, Args_);
     }
 };
 
@@ -839,16 +839,16 @@ public:
             return false;
         }
 
-        if (!Args[0]->Init(ctx, src)) {
+        if (!Args_[0]->Init(ctx, src)) {
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args_[0] = MakeAtomFromExpression(ctx, Args_[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlResourceType(Pos, Args);
+        return new TYqlResourceType(Pos_, Args_);
     }
 };
 
@@ -863,16 +863,16 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTaggedType(Pos, Args);
+        return new TYqlTaggedType(Pos_, Args_);
     }
 };
 
@@ -887,23 +887,23 @@ public:
             return false;
         }
 
-        if (!dynamic_cast<TTupleNode*>(Args[0].Get())) {
+        if (!dynamic_cast<TTupleNode*>(Args_[0].Get())) {
             ui32 numOptArgs;
-            if (!Parseui32(Args[0], numOptArgs)) {
-                ctx.Error(Args[0]->GetPos()) << "Expected either tuple or number of optional arguments";
+            if (!Parseui32(Args_[0], numOptArgs)) {
+                ctx.Error(Args_[0]->GetPos()) << "Expected either tuple or number of optional arguments";
                 return false;
             }
 
-            Args[0] = Q(Y(BuildQuotedAtom(Args[0]->GetPos(), ToString(numOptArgs))));
+            Args_[0] = Q(Y(BuildQuotedAtom(Args_[0]->GetPos(), ToString(numOptArgs))));
         }
 
-        if (!dynamic_cast<TTupleNode*>(Args[1].Get())) {
-            Args[1] = Q(Y(Args[1]));
+        if (!dynamic_cast<TTupleNode*>(Args_[1].Get())) {
+            Args_[1] = Q(Y(Args_[1]));
         }
 
-        for (ui32 index = 2; index < Args.size(); ++index) {
-            if (!dynamic_cast<TTupleNode*>(Args[index].Get())) {
-                Args[index] = Q(Y(Args[index]));
+        for (ui32 index = 2; index < Args_.size(); ++index) {
+            if (!dynamic_cast<TTupleNode*>(Args_[index].Get())) {
+                Args_[index] = Q(Y(Args_[index]));
             }
         }
 
@@ -911,7 +911,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableType(Pos, Args);
+        return new TYqlCallableType(Pos_, Args_);
     }
 };
 
@@ -926,16 +926,16 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTupleElementType(Pos, Args);
+        return new TYqlTupleElementType(Pos_, Args_);
     }
 };
 
@@ -950,16 +950,16 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args_[1]->Init(ctx, src)) {
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args_[1] = MakeAtomFromExpression(ctx, Args_[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlStructMemberType(Pos, Args);
+        return new TYqlStructMemberType(Pos_, Args_);
     }
 };
 
@@ -975,17 +975,17 @@ public:
         }
 
         ui32 index;
-        if (!Parseui32(Args[1], index)) {
-            ctx.Error(Args[1]->GetPos()) << "Expected index of the callable argument";
+        if (!Parseui32(Args_[1], index)) {
+            ctx.Error(Args_[1]->GetPos()) << "Expected index of the callable argument";
             return false;
         }
 
-        Args[1] = BuildQuotedAtom(Args[1]->GetPos(), ToString(index));
+        Args_[1] = BuildQuotedAtom(Args_[1]->GetPos(), ToString(index));
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableArgumentType(Pos, Args);
+        return new TYqlCallableArgumentType(Pos_, Args_);
     }
 };
 
@@ -993,28 +993,28 @@ class TStructTypeNode : public TAstListNode {
 public:
     TStructTypeNode(TPosition pos, const TVector<TNodePtr>& exprs)
         : TAstListNode(pos)
-        , Exprs(exprs)
+        , Exprs_(exprs)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        Nodes.push_back(BuildAtom(Pos, "StructType", TNodeFlags::Default));
-        for (const auto& expr : Exprs) {
+        Nodes_.push_back(BuildAtom(Pos_, "StructType", TNodeFlags::Default));
+        for (const auto& expr : Exprs_) {
             const auto& label = expr->GetLabel();
             if (!label) {
                 ctx.Error(expr->GetPos()) << "Structure does not allow anonymous members";
                 return false;
             }
-            Nodes.push_back(Q(Y(Q(label), expr)));
+            Nodes_.push_back(Q(Y(Q(label), expr)));
         }
         return TAstListNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TStructTypeNode(Pos, CloneContainer(Exprs));
+        return new TStructTypeNode(Pos_, CloneContainer(Exprs_));
     }
 
 private:
-    const TVector<TNodePtr> Exprs;
+    const TVector<TNodePtr> Exprs_;
 };
 
 template <bool IsStrict>
@@ -1026,7 +1026,7 @@ public:
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlIf(GetPos(), CloneContainer(Args));
+       return new TYqlIf(GetPos(), CloneContainer(Args_));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -1034,9 +1034,9 @@ private:
             return false;
         }
 
-        Args[0] = Y("Coalesce", Args[0], Y("Bool", Q("false")));
-        if (Args.size() == 2) {
-            Args.push_back(Y("Null"));
+        Args_[0] = Y("Coalesce", Args_[0], Y("Bool", Q("false")));
+        if (Args_.size() == 2) {
+            Args_.push_back(Y("Null"));
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -1050,12 +1050,12 @@ public:
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlSubstring(GetPos(), CloneContainer(Args));
+       return new TYqlSubstring(GetPos(), CloneContainer(Args_));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.size() == 2) {
-            Args.push_back(Y("Uint32", Q(ToString(Max<ui32>()))));
+        if (Args_.size() == 2) {
+            Args_.push_back(Y("Uint32", Q(ToString(Max<ui32>()))));
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -1069,16 +1069,16 @@ public:
 
 private:
     TNodePtr DoClone() const final {
-        return new TYqlIn(Pos, CloneContainer(Args));
+        return new TYqlIn(Pos_, CloneContainer(Args_));
     }
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!ValidateArguments(ctx)) {
             return false;
         }
 
-        auto key = Args[0];
-        auto inNode = Args[1];
-        auto hints = Args[2];
+        auto key = Args_[0];
+        auto inNode = Args_[1];
+        auto hints = Args_[2];
 
         if (!key->Init(ctx, src)) {
             return false;
@@ -1117,9 +1117,9 @@ private:
             hints = BuildTuple(pos, hintElements);
         }
 
-        OpName = "SqlIn";
-        MinArgs = MaxArgs = 3;
-        Args = {
+        OpName_ = "SqlIn";
+        MinArgs_ = MaxArgs_ = 3;
+        Args_ = {
             inNode->GetSource() ? inNode->GetSource() : inNode,
             key,
             hints
@@ -1159,12 +1159,12 @@ private:
 
     void DoUpdateState() const override {
         TCallNode::DoUpdateState();
-        State.Set(ENodeState::Aggregated, false/*!RunConfig || RunConfig->IsAggregated()*/);
-        State.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
+        State_.Set(ENodeState::Aggregated, false/*!RunConfig || RunConfig->IsAggregated()*/);
+        State_.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
     }
 
 private:
-    TNodePtr RunConfig;
+    TNodePtr RunConfig_;
 };
 
 class TYqlUdf final : public TYqlUdfBase {
@@ -1179,7 +1179,7 @@ public:
 
 private:
     TYqlUdf(const TYqlUdf& other)
-        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args))
+        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs_, other.MaxArgs_, CloneContainer(other.Args_))
     {}
 
     TNodePtr DoClone() const final {
@@ -1199,7 +1199,7 @@ public:
 
 private:
     TYqlTypeConfigUdf(const TYqlTypeConfigUdf& other)
-        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args))
+        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs_, other.MaxArgs_, CloneContainer(other.Args_))
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -1207,11 +1207,11 @@ private:
             return false;
         }
 
-        if (!Args[3]->Init(ctx, src)) {
+        if (!Args_[3]->Init(ctx, src)) {
             return false;
         }
 
-        Args[3] = MakeAtomFromExpression(ctx, Args[3]).Build();
+        Args_[3] = MakeAtomFromExpression(ctx, Args_[3]).Build();
         return TYqlUdfBase::DoInit(ctx, src);
     }
 
@@ -1228,7 +1228,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!src) {
-            ctx.Error(Pos) << GetCallExplain() << " unable use without source";
+            ctx.Error(Pos_) << GetCallExplain() << " unable use without source";
             return false;
         }
 
@@ -1239,53 +1239,53 @@ public:
         }
         PrecacheState();
 
-        const auto memberPos = Args[0]->GetPos();
+        const auto memberPos = Args_[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args[1]->GetLiteral("String")) {
+        if (auto literal = Args_[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
                 return false;
             }
 
-            repackArgs.push_back(Args[1]->Q(targetType));
+            repackArgs.push_back(Args_[1]->Q(targetType));
         } else {
-            repackArgs.push_back(Args[1]);
+            repackArgs.push_back(Args_[1]);
         }
 
         TVector<TNodePtr> column;
-        auto namePtr = Args[0]->GetColumnName();
+        auto namePtr = Args_[0]->GetColumnName();
         if (!namePtr || !*namePtr) {
-            ctx.Error(Pos) << GetCallExplain() << " expect as first argument column name";
+            ctx.Error(Pos_) << GetCallExplain() << " expect as first argument column name";
             return false;
         }
         auto memberName = *namePtr;
-        column.push_back(Args[0]->Q(*namePtr));
+        column.push_back(Args_[0]->Q(*namePtr));
 
         if (src->GetJoin() && !src->IsJoinKeysInitializing()) {
-            const auto sourcePtr = Args[0]->GetSourceName();
+            const auto sourcePtr = Args_[0]->GetSourceName();
             if (!sourcePtr || !*sourcePtr) {
-                ctx.Error(Pos) << GetOpName() << " required to have correlation name in case of JOIN for column at first parameter";
+                ctx.Error(Pos_) << GetOpName() << " required to have correlation name in case of JOIN for column at first parameter";
                 return false;
             }
-            column.push_back(Args[0]->Q(*sourcePtr));
+            column.push_back(Args_[0]->Q(*sourcePtr));
             memberName = DotJoin(*sourcePtr, memberName);
         }
         if (!GetLabel()) {
             SetLabel(memberName);
         }
         repackArgs.push_back(BuildTuple(memberPos, column));
-        if (Args.size() == 3) {
-            repackArgs.push_back(Args[2]);
+        if (Args_.size() == 3) {
+            repackArgs.push_back(Args_[2]);
         }
-        ++MinArgs;
-        ++MaxArgs;
-        Args.swap(repackArgs);
+        ++MinArgs_;
+        ++MaxArgs_;
+        Args_.swap(repackArgs);
 
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TWeakFieldOp(Pos, Args);
+        return new TWeakFieldOp(Pos_, Args_);
     }
 };
 
@@ -1297,17 +1297,17 @@ public:
 
     TTableRow(TPosition pos, ui32 argsCount)
         : TAstAtomNode(pos, "row", 0)
-        , ArgsCount(argsCount)
+        , ArgsCount_(argsCount)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!src || src->IsFake()) {
-            ctx.Error(Pos) << "TableRow requires FROM section";
+            ctx.Error(Pos_) << "TableRow requires FROM section";
             return false;
         }
 
-        if (ArgsCount > 0) {
-            ctx.Error(Pos) << "TableRow requires exactly 0 arguments";
+        if (ArgsCount_ > 0) {
+            ctx.Error(Pos_) << "TableRow requires exactly 0 arguments";
             return false;
         }
 
@@ -1316,15 +1316,15 @@ public:
     }
 
     void DoUpdateState() const final {
-        State.Set(ENodeState::Const, false);
+        State_.Set(ENodeState::Const, false);
     }
 
     TNodePtr DoClone() const final {
-        return MakeIntrusive<TTableRow>(Pos, ArgsCount);
+        return MakeIntrusive<TTableRow>(Pos_, ArgsCount_);
     }
 
 private:
-    ui32 ArgsCount;
+    ui32 ArgsCount_;
 };
 
 TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
@@ -1379,18 +1379,18 @@ class TCallableNode final: public INode {
 public:
     TCallableNode(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args)
         : INode(pos)
-        , Module(module)
-        , Name(name)
-        , Args(args)
+        , Module_(module)
+        , Name_(name)
+        , Args_(args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Module == "yql") {
+        if (Module_ == "yql") {
             ui32 flags;
             TString nameParseError;
-            TPosition pos = Pos;
+            TPosition pos = Pos_;
             TString parsedName;
-            if (!TryStringContent(Name, parsedName, flags, nameParseError, pos)) {
+            if (!TryStringContent(Name_, parsedName, flags, nameParseError, pos)) {
                 ctx.Error(pos) << "Failed to parse YQL: " << nameParseError;
                 return false;
             }
@@ -1399,56 +1399,56 @@ public:
             TAstParseResult ast = ParseAst(yql, ctx.Pool.get());
             /// TODO: do not drop warnings
             if (ast.IsOk()) {
-                Node = AstNode(ast.Root->GetChild(0));
+                Node_ = AstNode(ast.Root->GetChild(0));
             } else {
-                ctx.Error(Pos) << "Failed to parse YQL: " << ast.Issues.ToString();
+                ctx.Error(Pos_) << "Failed to parse YQL: " << ast.Issues.ToString();
                 return false;
             }
 
             if (src) {
                 src->AllColumns();
             }
-        } else if (ctx.Settings.ModuleMapping.contains(Module)) {
-            Node = Y("bind", Module + "_module", Q(Name));
+        } else if (ctx.Settings.ModuleMapping.contains(Module_)) {
+            Node_ = Y("bind", Module_ + "_module", Q(Name_));
             if (src) {
                 src->AllColumns();
             }
         } else {
             TNodePtr customUserType = nullptr;
-            if (Module == "Tensorflow" && Name == "RunBatch") {
-                if (Args.size() > 2) {
+            if (Module_ == "Tensorflow" && Name_ == "RunBatch") {
+                if (Args_.size() > 2) {
                     auto passThroughAtom = Q("PassThrough");
-                    auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args[1])), passThroughAtom);
-                    customUserType = Y("AddMemberType", Args[2], passThroughAtom, passThroughType);
-                    Args.erase(Args.begin() + 2);
+                    auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args_[1])), passThroughAtom);
+                    customUserType = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
+                    Args_.erase(Args_.begin() + 2);
                 }
             }
-            auto udfArgs = BuildUdfArgs(ctx, Pos, Args, nullptr, nullptr, customUserType);
-            Node = BuildUdf(ctx, Pos, Module, Name, udfArgs);
+            auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, customUserType);
+            Node_ = BuildUdf(ctx, Pos_, Module_, Name_, udfArgs);
         }
-        return Node->Init(ctx, src);
+        return Node_->Init(ctx, src);
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        return Node_->Translate(ctx);
     }
 
     void DoUpdateState() const override {
-        YQL_ENSURE(Node);
-        State.Set(ENodeState::Const, Node->IsConstant());
-        State.Set(ENodeState::Aggregated, Node->IsAggregated());
+        YQL_ENSURE(Node_);
+        State_.Set(ENodeState::Const, Node_->IsConstant());
+        State_.Set(ENodeState::Aggregated, Node_->IsAggregated());
     }
 
     TNodePtr DoClone() const override {
-        return new TCallableNode(Pos, Module, Name, Args);
+        return new TCallableNode(Pos_, Module_, Name_, Args_);
     }
 
 private:
-    TCiString Module;
-    TString Name;
-    TVector<TNodePtr> Args;
-    TNodePtr Node;
+    TCiString Module_;
+    TString Name_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Node_;
 };
 
 TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) {
@@ -1470,54 +1470,54 @@ class TScriptUdf final: public INode {
 public:
     TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
         : INode(pos)
-        , ModuleName(moduleName)
-        , FuncName(funcName)
-        , Args(args)
+        , ModuleName_(moduleName)
+        , FuncName_(funcName)
+        , Args_(args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos;
+        const bool isPython = ModuleName_.find(TStringBuf("Python")) != TString::npos;
         if (!isPython) {
-            if (Args.size() != 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters";
+            if (Args_.size() != 2) {
+                ctx.Error(Pos_) << ModuleName_ << " script declaration requires exactly two parameters";
                 return false;
             }
         } else {
-            if (Args.size() < 1 || Args.size() > 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires one or two parameters";
+            if (Args_.size() < 1 || Args_.size() > 2) {
+                ctx.Error(Pos_) << ModuleName_ << " script declaration requires one or two parameters";
                 return false;
             }
         }
 
-        auto nameAtom = BuildQuotedAtom(Pos, FuncName);
-        auto scriptNode = Args.back();
+        auto nameAtom = BuildQuotedAtom(Pos_, FuncName_);
+        auto scriptNode = Args_.back();
         if (!scriptNode->Init(ctx, src)) {
             return false;
         }
-        auto scriptStrPtr = Args.back()->GetLiteral("String");
+        auto scriptStrPtr = Args_.back()->GetLiteral("String");
         if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 
         INode::TPtr type;
-        if (Args.size() == 2) {
-            auto literal = Args[0]->GetLiteral("String");
+        if (Args_.size() == 2) {
+            auto literal = Args_[0]->GetLiteral("String");
             if (literal) {
-                auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos());
+                auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args_[0]->GetPos());
                 if (!parsed) {
-                    ctx.Error(Args[0]->GetPos()) << "Failed to parse script signature";
+                    ctx.Error(Args_[0]->GetPos()) << "Failed to parse script signature";
                     return false;
                 }
 
                 type = AstNode(parsed);
             } else {
-                type = Args[0];
+                type = Args_[0];
             }
         } else {
             // Python supports getting functions signatures right from docstrings
             type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply",
                 Y("bind", "core_module", Q("PythonFuncSignature")),
-                Q(ModuleName),
+                Q(ModuleName_),
                 scriptNode,
                 Y("String", nameAtom)
                 )));
@@ -1527,28 +1527,28 @@ public:
             return false;
         }
 
-        Node = Y("ScriptUdf", Q(ModuleName), nameAtom, type, scriptNode);
+        Node_ = Y("ScriptUdf", Q(ModuleName_), nameAtom, type, scriptNode);
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
         Y_UNUSED(ctx);
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        return Node_->Translate(ctx);
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, true);
     }
 
     TNodePtr DoClone() const final {
-        return new TScriptUdf(GetPos(), ModuleName, FuncName, CloneContainer(Args));
+        return new TScriptUdf(GetPos(), ModuleName_, FuncName_, CloneContainer(Args_));
     }
 private:
-    TString ModuleName;
-    TString FuncName;
-    TVector<TNodePtr> Args;
-    TNodePtr Node;
+    TString ModuleName_;
+    TString FuncName_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Node_;
 };
 
 template <bool Sorted>
@@ -1556,26 +1556,26 @@ class TYqlToDict final: public TCallNode {
 public:
     TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ToDict", 4, 4, args)
-        , Mode(mode)
+        , Mode_(mode)
     {}
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlToDict<Sorted>(GetPos(), Mode, CloneContainer(Args));
+       return new TYqlToDict<Sorted>(GetPos(), Mode_, CloneContainer(Args_));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (Args.size() != 1) {
-            ctx.Error(Pos) << "ToDict required exactly one argument";
+        if (Args_.size() != 1) {
+            ctx.Error(Pos_) << "ToDict required exactly one argument";
             return false;
         }
-        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("0"))));
-        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("1"))));
-        Args.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode))));
+        Args_.push_back(BuildLambda(Pos_, Y("val"), Y("Nth", "val", Q("0"))));
+        Args_.push_back(BuildLambda(Pos_, Y("val"), Y("Nth", "val", Q("1"))));
+        Args_.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode_))));
         return TCallNode::DoInit(ctx, src);
     }
 private:
-    TString Mode;
+    TString Mode_;
 };
 
 template <bool IsStart>
@@ -1597,11 +1597,11 @@ private:
 
         auto window = src->GetHoppingWindowSpec();
         if (!window) {
-            ctx.Error(Pos) << "No hopping window parameters in aggregation";
+            ctx.Error(Pos_) << "No hopping window parameters in aggregation";
             return false;
         }
 
-        Nodes.clear();
+        Nodes_.clear();
 
         if (!IsStart) {
             Add("Member", "row", Q("_yql_time"));
@@ -1615,7 +1615,7 @@ private:
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Aggregated, true);
+        State_.Set(ENodeState::Aggregated, true);
     }
 };
 
@@ -1623,12 +1623,12 @@ class TInvalidBuiltin final: public INode {
 public:
     TInvalidBuiltin(TPosition pos, const TString& info)
         : INode(pos)
-        , Info(info)
+        , Info_(info)
     {
     }
 
     bool DoInit(TContext& ctx, ISource*) override {
-        ctx.Error(Pos) << Info;
+        ctx.Error(Pos_) << Info_;
         return false;
     }
 
@@ -1640,7 +1640,7 @@ public:
         return {};
     }
 private:
-    TString Info;
+    TString Info_;
 };
 
 enum EAggrFuncTypeCallback {

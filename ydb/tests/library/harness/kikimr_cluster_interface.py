@@ -8,6 +8,7 @@ from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
 from ydb.tests.library.clients.kikimr_scheme_client import scheme_client_factory
+from ydb.tests.library.clients.kikimr_config_client import config_client_factory
 from ydb.tests.library.common.protobuf_console import (
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
     RemoveTenantRequest, GetOperationRequest)
@@ -26,6 +27,7 @@ class KiKiMRClusterInterface(object):
         self.__client = None
         self.__kv_client = None
         self.__scheme_client = None
+        self.__config_client = None
         self.__clients = None
         self.__monitors = None
         self.__ready_timeout_seconds = 60
@@ -110,6 +112,17 @@ class KiKiMRClusterInterface(object):
             )
         return self.__scheme_client
 
+    @property
+    def config_client(self):
+        if self.__config_client is None:
+            self.__config_client = config_client_factory(
+                server=self.nodes[1].host,
+                port=self.nodes[1].grpc_port,
+                cluster=self,
+                retry_count=10,
+            )
+        return self.__config_client
+
     def _send_get_tenant_status_request(self, database_name, token=None):
         req = GetTenantStatusRequest(database_name)
 
@@ -140,7 +153,7 @@ class KiKiMRClusterInterface(object):
             self,
             database_name,
             expected_computational_units=None,
-            timeout_seconds=120,
+            timeout_seconds=240,
             token=None
     ):
         def predicate():

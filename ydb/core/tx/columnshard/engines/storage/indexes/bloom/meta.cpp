@@ -1,6 +1,7 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -11,7 +12,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
@@ -59,14 +60,14 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
             });
         dataOwners.pop_front();
     }
-
-    return GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
+    const TString indexData = GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
+    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::set<ui64> hashes;
-    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     const ui32 bitsCount = data.GetBitsCount();
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
@@ -88,8 +89,8 @@ bool TBloomIndexMeta::DoCheckValueImpl(
 
 std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
     ui64 result;
-    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     if (subColumnName) {
         return result;
     } else {

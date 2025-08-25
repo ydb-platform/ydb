@@ -1,318 +1,220 @@
-select 
+$start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
 
-    Db ,
+$all_suites = (
+    SELECT 
+        Suite, Test 
+    FROM (
+        SELECT
+            Suite,
+            ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
+        FROM `perfomance/olap/tests_results`
+        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        GROUP BY Suite 
+    ) 
+    FLATTEN LIST BY Tests AS Test
+);
+
+$launch_times = (
+    SELECT 
+        launch_times_raw.*,
+        all_suites.*,
+        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
+        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
+        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
+    FROM (
+        SELECT
+            Db,
+            Version,
+            LunchId,
+            CAST(Min(RunId / 1000UL) AS Timestamp) AS Run_start_timestamp,
+            ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version,
+            JSON_VALUE(MAX_BY(Info, RunId), "$.ci_version") AS CiVersion,
+            JSON_VALUE(MAX_BY(Info, RunId), "$.test_tools_version") AS TestToolsVersion,
+        FROM `perfomance/olap/tests_results`
+        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        GROUP BY
+            Db,
+            JSON_VALUE(Info, "$.cluster.version") AS Version,
+            JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
+    ) AS launch_times_raw
+    CROSS JOIN $all_suites AS all_suites
+);
+
+$all_tests_raw =
+    SELECT 
+        tests_results.*,
+        JSON_VALUE(Info, "$.report_url") AS Report,
+        JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
+        JSON_VALUE(Info, "$.ci_version") AS CiVersion_n,
+        JSON_VALUE(Info, "$.test_tools_version") AS TestToolsVersion_n,
+        JSON_VALUE(tests_results.Info, "$.ci_launch_id") AS LunchId_n,
+        CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
+        IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
+        IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
+        IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
+        CAST(RunId / 1000UL AS Timestamp) AS RunTs,
+        IF (JSON_VALUE(Stats, "$.errors.other") = "true",
+            "red",
+            IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
+            "blue",
+                IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
+                    "yellow",
+                    "green"
+                )
+            )
+        ) AS Color
+    FROM `perfomance/olap/tests_results` AS tests_results
+    WHERE Timestamp >= $start_timestamp  and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'));
+
+SELECT 
+    Db,
     Suite, 
     Test,
-    Next_Run_start_timestamp ,
     Run_start_timestamp,
     Run_number_in_version,
-    Run_number_in_branch_desc,
-    MaxDuration ,
-    MeanDuration ,
-    MedianDuration ,
-    MinDuration ,
-    YdbSumMax ,
-    YdbSumMeans ,
-    YdbSumMin ,
+    MaxDuration,
+    MeanDuration,
+    MedianDuration,
+    MinDuration,
+    YdbSumMax,
+    YdbSumMeans,
+    YdbSumMin,
     Version,
+    CiVersion,
+    TestToolsVersion,
     Branch,
-    diff_response ,
+    CiBranch,
+    TestToolsBranch,
+    diff_response,
     Timestamp,
-    COALESCE(Success ,0) as Success ,
-    max(Kind) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as Kind,
-    max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as Report,
-    max(RunId) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as RunId,
-    max(RunTs) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as RunTs,
+    COALESCE(Success,0) AS Success,
+    max(Kind) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS Kind,
+    max(Report) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS Report,
+    max(RunId) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS RunId,
+    max(RunTs) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS RunTs,
     YdbSumMeans IS NULL AS errors,
-    max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
-    Color
- from (
+    max(Report) OVER (PARTITION  by Db, Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
+    Color,
+    CASE
+        WHEN Db LIKE '%sas%' THEN 'sas'
+        WHEN Db LIKE '%vla%' THEN 'vla'
+        ELSE 'other'
+    END AS DbDc,
 
-SELECT
-    null_template.Db AS Db,  --only from null_template
-    COALESCE(real_data.Kind, null_template.Kind) AS Kind,
-    COALESCE(real_data.MaxDuration, null_template.MaxDuration) AS MaxDuration,
-    COALESCE(real_data.MeanDuration, null_template.MeanDuration) AS MeanDuration,
-    COALESCE(real_data.MedianDuration, null_template.MedianDuration) AS MedianDuration,
-    COALESCE(real_data.MinDuration, null_template.MinDuration) AS MinDuration,
-    null_template.Next_Run_start_timestamp AS Next_Run_start_timestamp,  --only from null_template
-    COALESCE(real_data.Report, null_template.Report) AS Report,
-    COALESCE(real_data.Branch, null_template.Branch) AS Branch,
-    COALESCE(real_data.RunId, null_template.RunId) AS RunId,
-    COALESCE(real_data.RunTs, null_template.RunTs) AS RunTs,
-    null_template.Run_number_in_version AS Run_number_in_version,  --only from null_template
-    null_template.Run_start_timestamp AS Run_start_timestamp,  --only from null_template
-    COALESCE(real_data.Run_number_in_branch_desc, null_template.Run_number_in_branch_desc) AS Run_number_in_branch_desc,
-    COALESCE(real_data.Success, null_template.Success) AS Success,
-    null_template.Suite AS Suite,  --only from null_template
-    null_template.Test AS Test,  --only from null_template
-    COALESCE(real_data.Timestamp, null_template.Timestamp) AS Timestamp,
-    COALESCE(real_data.Version, null_template.Version) AS Version,
-    COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
-    COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
-    COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
-    COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
-    COALESCE(real_data.Color, null_template.Color) AS Color,
+    CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbType,
 
+    CASE
+        WHEN Db LIKE '%sas-daily%' THEN 'sas_small_'
+        WHEN Db LIKE '%sas-perf%' THEN 'sas_big_'
+        WHEN Db LIKE '%sas%' THEN 'sas_'
+        WHEN Db LIKE '%vla-acceptance%' THEN 'vla_small_'
+        WHEN Db LIKE '%vla-perf%' THEN 'vla_big_'
+        WHEN Db LIKE '%vla4-8154%' THEN 'vla_8154_'
+        WHEN Db LIKE '%vla4-8161%' THEN 'vla_8161_'
+        WHEN Db LIKE '%vla%' THEN 'vla_'
+        ELSE 'new_db_'
+    END || CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbAlias,
 FROM (
-    SELECT 
-        all_tests.*,
-        launch_times.*
-    FROM (
-        SELECT 
-            launch_times.*,
-            all_suites.*
-        FROM (
-            SELECT DISTINCT 
-                Db, 
-                Version, 
-                Branch, 
-                Run_start_timestamp, 
-                Run_number_in_version, 
-                Next_Run_start_timestamp,
-                ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Run_start_timestamp DESC) AS Run_number_in_branch_desc
-            FROM (
-                SELECT 
-                    Db, 
-                    Version, 
-                    Run_start_timestamp, 
-                    Next_Run_start_timestamp,
-                    ROW_NUMBER() OVER (PARTITION BY t1.Db, t1.Version ORDER BY t1.Run_start_timestamp ASC) AS Run_number_in_version,
-                    Unicode::SplitToList(Version, '.')[0] AS Branch
-                FROM (
-                    SELECT 
-                        runs.Db AS Db, 
-                        runs.Version AS Version,
-                        run_start.Run_start_timestamp AS Run_start_timestamp,
-                        run_start.Next_Run_start_timestamp AS Next_Run_start_timestamp
-                    FROM (
-                        SELECT DISTINCT
-                            Db, 
-                            Timestamp,
-                            JSON_VALUE(Info, "$.cluster.version") AS Version,
-                            CAST(RunId / 1000 AS Timestamp) AS RunTs
-                        FROM `perfomance/olap/tests_results`
-                        WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                    ) AS runs
-                    LEFT JOIN (
-                        SELECT 
-                            Db,
-                            JSON_VALUE(Info, "$.cluster.version") AS Version,
-                            Timestamp AS Run_start_timestamp,
-                            LEAD(Timestamp) OVER (PARTITION BY Db, JSON_VALUE(Info, "$.cluster.version") ORDER BY Timestamp) AS Next_Run_start_timestamp
-                        FROM `perfomance/olap/tests_results`
-                        WHERE Suite = 'Clickbench' AND Test = '_Verification'
-                        And Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                        ORDER BY Db, Run_start_timestamp DESC, Version
-                    ) AS run_start
-                    ON runs.Db = run_start.Db AND runs.Version = run_start.Version
-                    WHERE (
-                        (runs.Timestamp >= run_start.Run_start_timestamp AND runs.Timestamp < run_start.Next_Run_start_timestamp) OR 
-                        (runs.Timestamp >= run_start.Run_start_timestamp AND run_start.Next_Run_start_timestamp IS NULL)
-                    )
-                ) AS t1
-                GROUP BY Db, Version, Run_start_timestamp, Next_Run_start_timestamp
-            ) AS run_start
-            GROUP BY Db, Branch, Version, Run_start_timestamp, Run_number_in_version, Next_Run_start_timestamp
-        ) AS launch_times
-        CROSS JOIN (
-            SELECT 
-                Suite, Test 
-            FROM (
-                SELECT 
-                    Suite, 
-                    ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
-                FROM `perfomance/olap/tests_results`
-                WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                GROUP BY Suite 
-                ORDER BY Suite
-            ) 
-            FLATTEN LIST BY Tests AS Test
-            ORDER BY Suite, Test
-        ) AS all_suites
-    ) AS launch_times
-    LEFT JOIN (
-        SELECT 
-            all_tests.*,
-            JSON_VALUE(Info, "$.report_url") AS Report,
-            JSON_VALUE(all_tests.Info, "$.cluster.version") AS Version_n,
-            CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
-            IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
-            IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
-            IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
-            CAST(RunId / 1000 AS Timestamp) AS RunTs,
-            IF (JSON_VALUE(Stats, "$.errors.other") = "true",
-                "red",
-                IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
-                "blue",
-                    IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
-                        "yellow",
-                        "green"
-                    )
-                )
-            ) as Color
-        FROM `perfomance/olap/tests_results` AS all_tests
-        Where   JSON_VALUE(all_tests.Info, "$.cluster.version") is Null --and Test != '_Verification'
-        and Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-    ) AS all_tests
-    ON all_tests.Db = launch_times.Db
-    AND all_tests.Suite = launch_times.Suite
-    AND all_tests.Test = launch_times.Test
-   -- WHERE (  all_tests.Version_n is Null)
-    
-
-    ORDER BY Run_start_timestamp DESC, Db, launch_times.Version, RunId
-) AS null_template
-Full OUTER join 
-(SELECT
-    real_data.Db AS Db,
-    real_data.Kind AS Kind,
-    real_data.MaxDuration AS MaxDuration,
-    real_data.MeanDuration AS MeanDuration,
-    real_data.MedianDuration AS MedianDuration,
-    real_data.MinDuration AS MinDuration,
-    real_data.Next_Run_start_timestamp AS Next_Run_start_timestamp,
-    real_data.Report AS Report,
-    real_data.Branch AS Branch,
-    real_data.RunId AS RunId,
-    real_data.RunTs AS RunTs,
-    real_data.Run_number_in_version AS Run_number_in_version,
-    real_data.Run_start_timestamp AS Run_start_timestamp,
-    real_data.Run_number_in_branch_desc AS Run_number_in_branch_desc,
-    --real_data.Stats AS Stats,
-    real_data.Success AS Success,
-    real_data.Suite AS Suite,
-    real_data.Test AS Test,
-    real_data.Timestamp AS Timestamp,
-    real_data.Version AS Version,
-    real_data.YdbSumMax AS YdbSumMax,
-    real_data.YdbSumMeans AS YdbSumMeans,
-    real_data.YdbSumMin AS YdbSumMin,
-    real_data.diff_response AS diff_response,
-    real_data.Color AS Color,
-
+    SELECT
+        null_template.Db AS Db,  --only from null_template
+        COALESCE(real_data.Kind, null_template.Kind) AS Kind,
+        COALESCE(real_data.MaxDuration, null_template.MaxDuration) AS MaxDuration,
+        COALESCE(real_data.MeanDuration, null_template.MeanDuration) AS MeanDuration,
+        COALESCE(real_data.MedianDuration, null_template.MedianDuration) AS MedianDuration,
+        COALESCE(real_data.MinDuration, null_template.MinDuration) AS MinDuration,
+        COALESCE(real_data.Report, null_template.Report) AS Report,
+        COALESCE(real_data.Branch, null_template.Branch) AS Branch,
+        COALESCE(real_data.CiBranch, null_template.CiBranch) AS CiBranch,
+        COALESCE(real_data.TestToolsBranch, null_template.TestToolsBranch) AS TestToolsBranch,
+        COALESCE(real_data.RunId, null_template.RunId) AS RunId,
+        COALESCE(real_data.RunTs, null_template.RunTs) AS RunTs,
+        null_template.Run_number_in_version AS Run_number_in_version,  --only from null_template
+        null_template.Run_start_timestamp AS Run_start_timestamp,  --only from null_template
+        COALESCE(real_data.Success, null_template.Success) AS Success,
+        null_template.Suite AS Suite,  --only from null_template
+        null_template.Test AS Test,  --only from null_template
+        COALESCE(real_data.Timestamp, null_template.Timestamp) AS Timestamp,
+        COALESCE(real_data.Version, null_template.Version) AS Version,
+        COALESCE(real_data.CiVersion, null_template.CiVersion) AS CiVersion,
+        COALESCE(real_data.TestToolsVersion, null_template.TestToolsVersion) AS TestToolsVersion,
+        COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
+        COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
+        COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
+        COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
+        COALESCE(real_data.Color, null_template.Color) AS Color,
     FROM (
         SELECT 
             all_tests.*,
-            launch_times.*,
-
-        FROM (
-            SELECT 
-                launch_times.*,
-                all_suites.*
-            FROM (
-                SELECT DISTINCT 
-                    Db, 
-                    Version, 
-                    Branch, 
-                    Run_start_timestamp, 
-                    Run_number_in_version, 
-                    Next_Run_start_timestamp,
-                    ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Run_start_timestamp DESC) AS Run_number_in_branch_desc
-                FROM (
-                    SELECT 
-                        Db, 
-                        Version, 
-                        Run_start_timestamp, 
-                        Next_Run_start_timestamp,
-                        ROW_NUMBER() OVER (PARTITION BY t1.Db, t1.Version ORDER BY t1.Run_start_timestamp ASC) AS Run_number_in_version,
-                        Unicode::SplitToList(Version, '.')[0] AS Branch
-                    FROM (
-                        SELECT 
-                            runs.Db AS Db, 
-                            runs.Version AS Version,
-                            run_start.Run_start_timestamp AS Run_start_timestamp,
-                            run_start.Next_Run_start_timestamp AS Next_Run_start_timestamp
-                        FROM (
-                            SELECT DISTINCT
-                                Db, 
-                                Timestamp,
-                                JSON_VALUE(Info, "$.cluster.version") AS Version,
-                                CAST(RunId / 1000 AS Timestamp) AS RunTs
-                            FROM `perfomance/olap/tests_results`
-                            WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                        ) AS runs
-                        LEFT JOIN (
-                            SELECT 
-                                Db,
-                                JSON_VALUE(Info, "$.cluster.version") AS Version,
-                                Timestamp AS Run_start_timestamp,
-                                LEAD(Timestamp) OVER (PARTITION BY Db, JSON_VALUE(Info, "$.cluster.version") ORDER BY Timestamp) AS Next_Run_start_timestamp
-                            FROM `perfomance/olap/tests_results`
-                            WHERE Suite = 'Clickbench' AND Test = '_Verification'
-                            And Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                            ORDER BY Db, Run_start_timestamp DESC, Version
-                        ) AS run_start
-                        ON runs.Db = run_start.Db AND runs.Version = run_start.Version
-                        WHERE (
-                            (runs.Timestamp >= run_start.Run_start_timestamp AND runs.Timestamp < run_start.Next_Run_start_timestamp) OR 
-                            (runs.Timestamp >= run_start.Run_start_timestamp AND run_start.Next_Run_start_timestamp IS NULL)
-                        )
-                    ) AS t1
-                    GROUP BY Db, Version, Run_start_timestamp, Next_Run_start_timestamp
-                ) AS run_start
-                GROUP BY Db, Branch, Version, Run_start_timestamp, Run_number_in_version, Next_Run_start_timestamp
-            ) AS launch_times
-            CROSS JOIN (
-                SELECT 
-                    Suite, Test 
-                FROM (
-                    SELECT 
-                        Suite, 
-                        ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
-                    FROM `perfomance/olap/tests_results`
-                    WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
-                    GROUP BY Suite 
-                    ORDER BY Suite
-                    
-                ) 
-                FLATTEN LIST BY Tests AS Test
-                ORDER BY Suite, Test
-            ) AS all_suites
-        ) AS launch_times
+            launch_times.*
+        FROM $launch_times AS launch_times
         LEFT JOIN (
-            SELECT 
-                all_tests.*,
-                JSON_VALUE(Info, "$.report_url") AS Report,
-                JSON_VALUE(all_tests.Info, "$.cluster.version") AS Version_n,
-                CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
-                IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
-                IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
-                IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
-                CAST(RunId / 1000 AS Timestamp) AS RunTs,
-                IF (JSON_VALUE(Stats, "$.errors.other") = "true",
-                    "red",
-                    IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
-                    "blue",
-                        IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
-                            "yellow",
-                            "green"
-                        )
-                    )
-                ) as Color
-            FROM `perfomance/olap/tests_results` AS all_tests
-            WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
+            SELECT
+                *
+            FROM $all_tests_raw AS all_tests_raw
+            WHERE JSON_VALUE(all_tests_raw.Info, "$.cluster.version") is NULL
         ) AS all_tests
         ON all_tests.Db = launch_times.Db
         AND all_tests.Suite = launch_times.Suite
         AND all_tests.Test = launch_times.Test
-        AND all_tests.Version_n = launch_times.Version
-        WHERE (
-            (all_tests.Timestamp >= launch_times.Run_start_timestamp AND all_tests.Timestamp < launch_times.Next_Run_start_timestamp) OR
-            (all_tests.Timestamp >= launch_times.Run_start_timestamp AND launch_times.Next_Run_start_timestamp IS NULL) 
-            OR all_tests.RunId IS NULL 
-        
-        )
-        
-        ORDER BY Run_start_timestamp DESC, Db, Version, RunId
+    -- WHERE (  all_tests.Version_n is NULL)
+    ) AS null_template
+    FULL OUTER JOIN (
+        SELECT
+            real_data.Db AS Db,
+            real_data.Kind AS Kind,
+            real_data.MaxDuration AS MaxDuration,
+            real_data.MeanDuration AS MeanDuration,
+            real_data.MedianDuration AS MedianDuration,
+            real_data.MinDuration AS MinDuration,
+            real_data.Report AS Report,
+            real_data.Branch AS Branch,
+            real_data.CiBranch AS CiBranch,
+            real_data.TestToolsBranch AS TestToolsBranch,
+            real_data.RunId AS RunId,
+            real_data.RunTs AS RunTs,
+            real_data.Run_number_in_version AS Run_number_in_version,
+            real_data.Run_start_timestamp AS Run_start_timestamp,
+            --real_data.Stats AS Stats,
+            real_data.Success AS Success,
+            real_data.Suite AS Suite,
+            real_data.Test AS Test,
+            real_data.Timestamp AS Timestamp,
+            real_data.Version AS Version,
+            real_data.CiVersion AS CiVersion,
+            real_data.TestToolsVersion AS TestToolsVersion,
+            real_data.YdbSumMax AS YdbSumMax,
+            real_data.YdbSumMeans AS YdbSumMeans,
+            real_data.YdbSumMin AS YdbSumMin,
+            real_data.diff_response AS diff_response,
+            real_data.Color AS Color,
+        FROM (
+            SELECT 
+                all_tests.*,
+                launch_times.*,
+            FROM $launch_times AS launch_times
+            LEFT JOIN $all_tests_raw AS all_tests
+            ON all_tests.Db = launch_times.Db
+            AND all_tests.Suite = launch_times.Suite
+            AND all_tests.Test = launch_times.Test
+            AND all_tests.Version_n = launch_times.Version
+            WHERE (
+                all_tests.LunchId_n == launch_times.LunchId
+                OR all_tests.RunId IS NULL 
+            )
+        ) AS real_data
     ) AS real_data
-) as real_data
-
-on null_template.Db = real_data.Db
-and null_template.Run_start_timestamp = real_data.Run_start_timestamp
-and null_template.Suite = real_data.Suite
-and null_template.Test = real_data.Test
+    ON null_template.Db = real_data.Db
+    AND null_template.Run_start_timestamp = real_data.Run_start_timestamp
+    AND null_template.Suite = real_data.Suite
+    AND null_template.Test = real_data.Test
 )
-
-
-

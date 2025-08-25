@@ -253,7 +253,7 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
 
     google::protobuf::Arena arena;
     const auto* parserProto = NSQLTranslationV1::SqlAST(
-        parsers, queryStr, "query", issues, 0, settings.AnsiLexer, settings.Antlr4Parser, &arena
+        parsers, queryStr, "query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Antlr4Parser, &arena
     );
     if (!parserProto) {
         return false;

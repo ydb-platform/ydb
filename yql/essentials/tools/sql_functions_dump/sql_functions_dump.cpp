@@ -10,16 +10,17 @@ int Main(int argc, const char *argv[])
     Y_UNUSED(argc);
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
-    json.BeginObject();
+    json.BeginList();
     NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind) {
-        json.WriteKey(name);
         json.BeginObject();
+        json.WriteKey("name");
+        json.WriteString(name);
         json.WriteKey("kind");
         json.WriteString(kind);
         json.EndObject();
     });
 
-    json.EndObject();
+    json.EndList();
     Cout << json.Str() << Endl;
 
     return 0;

@@ -6,7 +6,6 @@ SRCS(
     backoff.cpp
     cache.cpp
     cache.h
-    cache_cache.h
     circular_queue.h
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
@@ -24,6 +23,7 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    frequently_called_hptimer.h
     gen_step.cpp
     gen_step.h
     hazard.cpp

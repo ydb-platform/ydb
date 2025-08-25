@@ -46,15 +46,21 @@ public:
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
                 
                 TString transformLambda;
+                TString runAsUser;
+                TString directoryPath;
                 if (auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(target.Config)) {
                     transformLambda = p->GetTransformLambda();
+                    runAsUser = p->GetRunAsUser();
+                    directoryPath = p->GetDirectoryPath();
                 }
 
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
-                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda)
+                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
+                    NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
+                    NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
                 CLOG_N(ctx, "Add target"

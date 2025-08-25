@@ -83,6 +83,7 @@ public:
 
     // Chaos
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingChaosLease);
 
     // Queues
     // COMPAT(nadya73): For compatability with old versions of clients.
@@ -112,6 +113,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperationEvents);
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);
@@ -181,6 +183,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RequestRestart);
 
     // Security
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetCurrentUser);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermission);
@@ -197,6 +200,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineState);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FlowExecute);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);
@@ -210,6 +214,7 @@ public:
 
     // Distributed table client
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
         .SetStreamingEnabled(true));

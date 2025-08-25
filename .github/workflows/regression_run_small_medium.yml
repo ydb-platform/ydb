@@ -2,8 +2,14 @@ name: Regression-run_Small_and_Medium
 
 on:
   schedule:
-    - cron: "0 23 * * *"  # At 23:00 every day
+    - cron: "30 23 * * *"  # At 23:30 every day
   workflow_dispatch:
+    inputs:
+      use_default_branches:
+        description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
+        type: boolean
+        required: false
+        default: true
 
 jobs:
   main:
@@ -13,9 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/
       test_size: small,medium
+      branches: ${{ inputs.use_default_branches != true && github.ref_name || '' }}
+      branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}
-

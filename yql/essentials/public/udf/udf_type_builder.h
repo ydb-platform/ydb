@@ -448,20 +448,20 @@ template <typename... TArgs> struct TCallableArgsHelper;
 
 struct TSourcePosition {
     TSourcePosition(ui32 row = 0, ui32 column = 0, TStringRef file = {})
-        : Row_(row)
-        , Column_(column)
-        , File_(file)
+        : Row(row)
+        , Column(column)
+        , File(file)
     {}
 
-    ui32 Row_;
-    ui32 Column_;
-    TStringRef File_;
+    ui32 Row;
+    ui32 Column;
+    TStringRef File;
 };
 
 UDF_ASSERT_TYPE_SIZE(TSourcePosition, 24);
 
 inline IOutputStream& operator<<(IOutputStream& os, const TSourcePosition& pos) {
-    os << (pos.File_.Size() ? TStringBuf(pos.File_) : TStringBuf("<main>")) << ':' << pos.Row_ << ':' << pos.Column_ << ':';
+    os << (pos.File.Size() ? TStringBuf(pos.File) : TStringBuf("<main>")) << ':' << pos.Row << ':' << pos.Column << ':';
     return os;
 }
 
@@ -647,7 +647,20 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+class IFunctionTypeInfoBuilder18: public IFunctionTypeInfoBuilder17 {
+public:
+    virtual void SetMinLangVer(ui32 langver) = 0;
+
+    virtual void SetMaxLangVer(ui32 langver) = 0;
+
+    virtual ui32 GetCurrentLangVer() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder18;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder17;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder16;

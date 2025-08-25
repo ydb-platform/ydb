@@ -207,7 +207,7 @@ private:
     }
 };
 
-class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest> {
+class TCreatePartitionsActor : public TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicRequestCtx> {
 public:
 
     TCreatePartitionsActor(
@@ -216,7 +216,7 @@ public:
             TString topicPath,
             TString databaseName,
             ui32 partitionsNumber)
-        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicModificationRequest>(
+        : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicRequestCtx>(
             requester,
             userToken,
             topicPath,

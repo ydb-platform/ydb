@@ -104,6 +104,9 @@ protected:
     THolder<NQuery::TQueryClient> QueryClient;
     int Type = 0;
     bool DryRun = false;
+
+private:
+    void RmParentIfEmpty(TStringBuf path, TConfig& config);
 };
 
 class TWorkloadCommandInit final: public TWorkloadCommandBase {
@@ -112,7 +115,6 @@ public:
     virtual void Config(TConfig& config) override;
 
 private:
-    NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     bool Clear = false;
 };

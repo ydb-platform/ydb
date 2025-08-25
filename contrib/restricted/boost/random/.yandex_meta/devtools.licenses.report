@@ -79,6 +79,22 @@ BELONGS ya.make
     Files with this license:
         include/boost/random/detail/iterator_mixin.hpp [4:10]
 
+KEEP     BSL-1.0              c40d3be317abfa1ac190fbe151cd69c4
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0. (See
+                * accompanying file LICENSE_1_0.txt or copy at
+         * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/random/detail/size.hpp [3:5]
+        include/boost/random/detail/xoshiro_base.hpp [3:5]
+        include/boost/random/xoshiro.hpp [3:5]
+
 KEEP     BSL-1.0              f20f9faff5dff60d6b8844771d700dd5
 BELONGS ya.make
     License text:
@@ -122,9 +138,11 @@ BELONGS ya.make
         include/boost/random/faure.hpp [4:6]
         include/boost/random/fisher_f_distribution.hpp [4:6]
         include/boost/random/gamma_distribution.hpp [5:7]
+        include/boost/random/generalized_inverse_gaussian_distribution.hpp [4:6]
         include/boost/random/generate_canonical.hpp [4:6]
         include/boost/random/hyperexponential_distribution.hpp [4:6]
         include/boost/random/independent_bits.hpp [4:6]
+        include/boost/random/inverse_gaussian_distribution.hpp [4:6]
         include/boost/random/laplace_distribution.hpp [4:6]
         include/boost/random/linear_feedback_shift.hpp [5:7]
         include/boost/random/negative_binomial_distribution.hpp [4:6]

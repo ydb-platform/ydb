@@ -77,6 +77,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartCheckIntegrity;
 
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto;
 
@@ -130,4 +131,3 @@ struct TDsProxyNodeMon : public TThrRefBase {
 };
 
 } // NKikimr
-

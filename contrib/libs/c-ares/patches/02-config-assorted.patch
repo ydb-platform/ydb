@@ -5,3 +5,8 @@ index 4df7961..b9a1fd5 100644
 @@ -28,1 +28,1 @@
 -#ifdef HAVE_CONFIG_H
 +#if defined(HAVE_CONFIG_H) && !defined(_MSC_VER)
+--- a/src/lib/ares_config-linux.h	(24e054e0c77143510ecea1b6de0843598748cbbf)
++++ b/src/lib/ares_config-linux.h	(bf4f33e27ee899c59608a9544a5ff2769794294d)
+@@ -399,1 +399,1 @@
+-#define HAVE_ARC4RANDOM_BUF 1
++/* #undef HAVE_ARC4RANDOM_BUF */

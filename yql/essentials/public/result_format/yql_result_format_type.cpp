@@ -202,12 +202,12 @@ void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
 }
 
 TTypeBuilder::TTypeBuilder() {
-    Stack.push_back(&Root);
+    Stack_.push_back(&Root_);
 }
 
 const NYT::TNode& TTypeBuilder::GetResult() const {
-    CHECK(Stack.size() == 1);
-    return Root;
+    CHECK(Stack_.size() == 1);
+    return Root_;
 }
 
 void TTypeBuilder::OnVoid() {
@@ -360,7 +360,7 @@ void TTypeBuilder::OnDecimal(ui32 precision, ui32 scale) {
 }
 
 NYT::TNode& TTypeBuilder::Top() {
-    return *Stack.back();
+    return *Stack_.back();
 }
 
 void TTypeBuilder::OnBeginOptional() {
@@ -383,14 +383,14 @@ void TTypeBuilder::OnEndList() {
 
 void TTypeBuilder::OnBeginTuple() {
     Top() = NYT::TNode().Add("TupleType").Add(NYT::TNode::CreateList());
-    Stack.push_back(&Top().AsList()[1]);
+    Stack_.push_back(&Top().AsList()[1]);
 }
 
 void TTypeBuilder::OnTupleItem() {
     if (!Top().AsList().empty()) {
         Pop();
     }
-    
+
     Push();
 }
 
@@ -404,7 +404,7 @@ void TTypeBuilder::OnEndTuple() {
 
 void TTypeBuilder::OnBeginStruct() {
     Top() = NYT::TNode().Add("StructType").Add(NYT::TNode::CreateList());
-    Stack.push_back(&Top().AsList()[1]);
+    Stack_.push_back(&Top().AsList()[1]);
 }
 
 void TTypeBuilder::OnStructItem(TStringBuf member) {
@@ -416,7 +416,7 @@ void TTypeBuilder::OnStructItem(TStringBuf member) {
     auto& pair = Top().AsList().back();
     pair.Add(member);
     auto ptr = &pair.Add();
-    Stack.push_back(ptr);
+    Stack_.push_back(ptr);
 }
 
 void TTypeBuilder::OnEndStruct() {
@@ -429,7 +429,7 @@ void TTypeBuilder::OnEndStruct() {
 
 void TTypeBuilder::OnBeginDict() {
     Top() = NYT::TNode().Add("DictType");
-    Stack.push_back(&Top());
+    Stack_.push_back(&Top());
 }
 
 
@@ -471,11 +471,11 @@ void TTypeBuilder::OnPg(TStringBuf name, TStringBuf category) {
 
 void TTypeBuilder::Push() {
     auto ptr = &Top().Add();
-    Stack.push_back(ptr);
+    Stack_.push_back(ptr);
 }
 
 void TTypeBuilder::Pop() {
-    Stack.pop_back();
+    Stack_.pop_back();
 }
 
 void TSameActionTypeVisitor::OnVoid() {

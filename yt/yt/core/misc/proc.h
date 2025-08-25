@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/misc/fs.h>
 
+#include <vector>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,6 +27,30 @@ bool IsSystemError(const TError& error);
 #else
     using TFileDescriptor = int;
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFileDescriptorGuard
+{
+public:
+    TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+
+    ~TFileDescriptorGuard();
+
+    TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator = (const TFileDescriptorGuard&) = delete;
+
+    TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator = (TFileDescriptorGuard&& other) noexcept;
+
+    TFileDescriptor Get() const noexcept;
+
+    TFileDescriptor Release() noexcept;
+    void Reset() noexcept;
+
+private:
+    TFileDescriptor FD_ = -1;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -354,6 +380,11 @@ TFile MemfdCreate(const TString& name);
 ////////////////////////////////////////////////////////////////////////////////
 
 const TString& GetLinuxKernelVersion();
+std::vector<int> ParseLinuxKernelVersion();
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsUringEnabled();
 
 ////////////////////////////////////////////////////////////////////////////////
 

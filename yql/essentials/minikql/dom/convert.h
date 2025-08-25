@@ -288,25 +288,25 @@ public:
     using TConverter = std::function<TUnboxedValuePod(TUnboxedValuePod)>;
 
     TLazyConveter(TUnboxedValue&& original, TConverter&& converter)
-        : Original(std::move(original)), Converter(std::move(converter))
+        : Original_(std::move(original)), Converter_(std::move(converter))
     {}
 private:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
     public:
         TIterator(TUnboxedValue&& original, const TConverter& converter)
-            : Original(std::move(original)), Converter(converter)
+            : Original_(std::move(original)), Converter_(converter)
         {}
 
     private:
         bool Skip() final {
-            return Original.Skip();
+            return Original_.Skip();
         }
 
         bool Next(TUnboxedValue& value) final {
-            if (Original.Next(value)) {
+            if (Original_.Next(value)) {
                 if constexpr (!NoSwap) {
-                    value = Converter(value.Release());
+                    value = Converter_(value.Release());
                 }
                 return true;
             }
@@ -314,75 +314,75 @@ private:
         }
 
         bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) final {
-            if (Original.NextPair(key, payload)) {
+            if (Original_.NextPair(key, payload)) {
                 if constexpr (NoSwap) {
-                    payload = Converter(payload.Release());
+                    payload = Converter_(payload.Release());
                 } else {
-                    key = Converter(key.Release());
+                    key = Converter_(key.Release());
                 }
                 return true;
             }
             return false;
         }
 
-        const TUnboxedValue Original;
-        const TConverter Converter;
+        const TUnboxedValue Original_;
+        const TConverter Converter_;
     };
 
     ui64 GetDictLength() const final {
-        return Original.GetDictLength();
+        return Original_.GetDictLength();
     }
 
     ui64 GetListLength() const final {
-        return Original.GetListLength();
+        return Original_.GetListLength();
     }
 
     bool HasFastListLength() const final {
-        return Original.HasFastListLength();
+        return Original_.HasFastListLength();
     }
 
     bool HasDictItems() const final {
-        return Original.HasDictItems();
+        return Original_.HasDictItems();
     }
 
     bool HasListItems() const final {
-        return Original.HasListItems();
+        return Original_.HasListItems();
     }
 
     TUnboxedValue GetListIterator() const final {
-        return TUnboxedValuePod(new TIterator<false>(Original.GetListIterator(), Converter));
+        return TUnboxedValuePod(new TIterator<false>(Original_.GetListIterator(), Converter_));
     }
 
     TUnboxedValue GetDictIterator() const final {
-        return TUnboxedValuePod(new TIterator<true>(Original.GetDictIterator(), Converter));
+        return TUnboxedValuePod(new TIterator<true>(Original_.GetDictIterator(), Converter_));
     }
 
     TUnboxedValue GetKeysIterator() const final {
-        return TUnboxedValuePod(new TIterator<true>(Original.GetKeysIterator(), Converter));
+        return TUnboxedValuePod(new TIterator<true>(Original_.GetKeysIterator(), Converter_));
     }
 
     TUnboxedValue GetPayloadsIterator() const {
-        return TUnboxedValuePod(new TIterator<false>(Original.GetPayloadsIterator(), Converter));
+        return TUnboxedValuePod(new TIterator<false>(Original_.GetPayloadsIterator(), Converter_));
     }
 
     bool Contains(const TUnboxedValuePod& key) const final {
-        return Original.Contains(key);
+        return Original_.Contains(key);
     }
 
     TUnboxedValue Lookup(const TUnboxedValuePod& key) const final {
-        if (auto lookup = Original.Lookup(key)) {
-            return Converter(lookup.Release().GetOptionalValue()).MakeOptional();
+        if (auto lookup = Original_.Lookup(key)) {
+            return Converter_(lookup.Release().GetOptionalValue()).MakeOptional();
         }
         return {};
     }
 
     bool IsSortedDict() const final {
-        return Original.IsSortedDict();
+        return Original_.IsSortedDict();
     }
 
 private:
-    const TUnboxedValue Original;
-    const TConverter Converter;
+    const TUnboxedValue Original_;
+    const TConverter Converter_;
 };
 
 }

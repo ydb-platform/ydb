@@ -1,5 +1,7 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+
+FORK_SUBTESTS()
 
 TEST_SRCS(
     base.py
@@ -17,7 +19,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 END()

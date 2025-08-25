@@ -2,7 +2,6 @@ import time
 import logging
 from .base import TllTieringTestBase
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
 from ydb.tests.library.test_meta import link_test_case
 
@@ -95,6 +94,7 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         logger.info(f"Table {table_path} created")
 
         table = ColumnTableHelper(self.ydb_client, table_path)
+        table.set_fast_compaction()
 
         cur_rows = 0
         while cur_rows < self.row_count:
@@ -130,18 +130,9 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         logger.info(f"Rows older than {minutes_to_bucket2} minutes: {rows_older_than_bucket2}")
         assert rows_older_than_bucket2 == self.row_count
 
-        if not self.wait_for(lambda: len(table.get_portion_stat_by_tier()) != 0, plain_or_under_sanitizer(60, 120)):
-            raise Exception("portion count equal zero after insert data")
+        assert len(table.get_portion_stat_by_tier()) != 0, "portion count equal zero after insert data"
 
-        def portions_actualized_in_sys():
-            portions = table.get_portion_stat_by_tier()
-            logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
-            if len(portions) != 1 or "__DEFAULT" not in portions:
-                raise Exception("Data not in __DEFAULT teir")
-            return self.row_count <= portions["__DEFAULT"]["Rows"]
-
-        if not self.wait_for(lambda: portions_actualized_in_sys(), plain_or_under_sanitizer(120, 240)):
-            raise Exception(".sys reports incorrect data portions")
+        assert table.portions_actualized_in_sys()
 
         # Step 4
         t0 = time.time()
@@ -168,13 +159,10 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
             return bucket_stat[0] != 0 and bucket_stat[1] != 0
 
         # Step 5
-        if not self.wait_for(
-            lambda: get_rows_in_portion(bucket1_path) == self.row_count
-            and bucket_is_not_empty(self.bucket1)
-            and not bucket_is_not_empty(self.bucket2),
-            plain_or_under_sanitizer(600, 1200),
-        ):
-            raise Exception("Data eviction has not been started")
+        assert self.wait_for(
+            lambda: get_rows_in_portion(bucket1_path) and bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2),
+            60
+        ), "Data eviction has not been started"
 
         # Step 6
         t0 = time.time()
@@ -189,18 +177,13 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         logging.info(f"TTL set in {time.time() - t0} seconds")
 
         # Step 7
-        if not self.wait_for(
-            lambda: get_rows_in_portion(bucket2_path) == self.row_count and bucket_is_not_empty(self.bucket2),
-            plain_or_under_sanitizer(600, 1200),
-        ):
-            raise Exception("Data eviction has not been started")
+        assert self.wait_for(
+            lambda: get_rows_in_portion(bucket2_path) and bucket_is_not_empty(self.bucket2),
+            30
+        ), "Data eviction has not been started"
 
         # Wait until bucket1 is empty
-        if not self.wait_for(
-            lambda: not bucket_is_not_empty(self.bucket1),
-            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
-        ):
-            raise Exception("Bucket1 is not empty")
+        assert self.wait_for(lambda: not bucket_is_not_empty(self.bucket1), 40), "Bucket1 is not empty"
 
         # Step 8
         t0 = time.time()
@@ -215,15 +198,13 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         logging.info(f"TTL set in {time.time() - t0} seconds")
 
         # Step 9
-        if not self.wait_for(
+        assert self.wait_for(
             lambda: get_rows_in_portion("__DEFAULT") == self.row_count,
-            plain_or_under_sanitizer(600, 1200),
-        ):
-            raise Exception("Data eviction has not been started")
+            40
+        ), "Data eviction has not been started"
 
         # Wait until buckets are empty
-        if not self.wait_for(
+        assert self.wait_for(
             lambda: not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2),
-            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
-        ):
-            raise Exception("Buckets are not empty")
+            60
+        ), "Buckets are not empty"

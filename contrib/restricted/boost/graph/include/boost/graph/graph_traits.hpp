@@ -21,6 +21,7 @@
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/mpl/void.hpp>
 #include <boost/mpl/identity.hpp>
+#include <boost/mpl/and.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/iterator/iterator_categories.hpp>
 #include <boost/iterator/iterator_adaptor.hpp>

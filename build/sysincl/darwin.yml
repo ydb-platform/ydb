@@ -126,6 +126,7 @@
   - os/proc.h
   - os/signpost.h
   - os/trace.h
+  - os/trace_base.h
   - panel.h
   - pthread/introspection.h
   - pthread/qos.h
@@ -149,6 +150,7 @@
   - sys/filio.h
   - sys/ioccom.h
   - sys/kauth.h
+  - sys/kdebug_signpost.h
   - sys/kern_control.h
   - sys/lock.h
   - sys/malloc.h
@@ -216,8 +218,10 @@
   - CoreServices/CoreServices.h
   - CoreTelephony/CTCarrier.h
   - CoreTelephony/CTTelephonyNetworkInfo.h
+  - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
+  - CoreWLAN/CoreWLAN.h
   - DeviceCheck/DCAppAttestService.h
   - Files.h
   - Foundation/Foundation.h

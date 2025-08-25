@@ -19,7 +19,7 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
 
     AFL_VERIFY(!!LockGuard);
     const auto& index = shard.GetIndexAs<TColumnEngineForLogs>();
-    THashMap<TInternalPathId, std::vector<TPortionDataAccessor>> portionsByPath;
+    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>> portionsByPath;
     THashSet<TString> StoragesIds;
     for (auto&& i : GetPathIdsForStart()) {
         const auto& g = index.GetGranuleVerified(i);

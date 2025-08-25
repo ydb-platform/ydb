@@ -101,6 +101,11 @@ namespace NKikimr {
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired"
+            << ", required: " << compact
+            << ", yardFreeUpToLsn: " << yardFreeUpToLsn
+            << ", force: " << force
+            << ", allowGarbageCollection: " << allowGarbageCollection);
         if (compact) {
             CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx, ctx,
                 allowGarbageCollection);

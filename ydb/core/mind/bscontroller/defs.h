@@ -53,6 +53,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/aclib/aclib.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <type_traits>
 #include <util/generic/algorithm.h>

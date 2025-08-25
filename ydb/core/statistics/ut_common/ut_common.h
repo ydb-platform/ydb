@@ -18,7 +18,8 @@ static constexpr ui32 ColumnTableRowsNumber = 1000;
 
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false,
+        std::function<void(Tests::TServerSettings&)> modifySettings = [](Tests::TServerSettings&) {});
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {

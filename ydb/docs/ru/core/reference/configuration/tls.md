@@ -1,6 +1,6 @@
-# Настройка TLS
+# tls
 
-{{ ydb-short-name }} поддерживает [шифрование данных при передаче по сети](../../security/encryption/data-in-transit.md), и каждый сетевой протокол может иметь свои настройки [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security). Этот раздел документации предоставляет справочную информацию по настройке TLS в {{ ydb-short-name }}.
+Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
 ## Interconnect
 
@@ -64,7 +64,7 @@ kafka_proxy_config:
 
 ### HTTP
 
-{{ ydb-short-name }} открывает отдельный HTTP порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд.
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
 
 Пример включения TLS на HTTP-порту, что делает его использования HTTPS:
 
@@ -103,7 +103,7 @@ auth_config:
   scheme: "ldaps"
 ```
 
-Подробнее этот механизм описан в [{#T}](index.md#ldap-auth-config).
+Подробнее этот механизм описан в [{#T}](../../devops/configuration-management/configuration-v1/#ldap-auth-config).
 
 ### Федеративные запросы
 
@@ -128,5 +128,7 @@ tracing_config:
 ## Асинхронная репликация
 
 [Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+
+При использовании пользовательского удостоверяющего центра (Certificate Authority, CA) передайте его сертификат в параметре `CA_CERT` при создании экземпляра асинхронной репликации.
 
 {% endif %}

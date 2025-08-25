@@ -49,11 +49,12 @@ class TestResult(ExecutableItem):
     fullName = attrib(default=None)
     labels = attrib(default=Factory(list))
     links = attrib(default=Factory(list))
+    titlePath = attrib(default=Factory(list))
 
 
 @attrs
 class TestStepResult(ExecutableItem):
-    id = attrib(default=None)
+    id = attrib(default=None)  # noqa: A003
 
 
 @attrs
@@ -82,7 +83,7 @@ class Label:
 
 @attrs
 class Link:
-    type = attrib(default=None)
+    type = attrib(default=None)  # noqa: A003
     url = attrib(default=None)
     name = attrib(default=None)
 
@@ -99,7 +100,7 @@ class StatusDetails:
 class Attachment:
     name = attrib(default=None)
     source = attrib(default=None)
-    type = attrib(default=None)
+    type = attrib(default=None)  # noqa: A003
 
 
 class Status:

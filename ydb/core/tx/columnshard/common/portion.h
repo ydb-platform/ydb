@@ -1,10 +1,12 @@
 #pragma once
-#include <util/system/types.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+
 #include <util/generic/string.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NOlap::NPortion {
 // NOTE: These values are persisted in LocalDB so they must be stable
-enum EProduced: ui32 {
+enum EProduced : ui32 {
     UNSPECIFIED = 0,
     INSERTED,
     COMPACTED,
@@ -25,4 +27,25 @@ public:
     static constexpr const ui32 SPEC_COL_DELETE_FLAG_INDEX = SPEC_COL_PLAN_STEP_INDEX + 3;
 };
 
-}
+class TPortionInfoForCompaction {
+private:
+    YDB_READONLY(ui64, TotalBlobBytes, 0);
+    const NArrow::TSimpleRow FirstPK;
+    const NArrow::TSimpleRow LastPK;
+
+public:
+    TPortionInfoForCompaction(const ui64 totalBlobBytes, const NArrow::TSimpleRow& firstPK, const NArrow::TSimpleRow& lastPK)
+        : TotalBlobBytes(totalBlobBytes)
+        , FirstPK(firstPK)
+        , LastPK(lastPK) {
+    }
+
+    const NArrow::TSimpleRow& GetFirstPK() const {
+        return FirstPK;
+    }
+    const NArrow::TSimpleRow& GetLastPK() const {
+        return LastPK;
+    }
+};
+
+}   // namespace NKikimr::NOlap::NPortion

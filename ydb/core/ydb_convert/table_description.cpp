@@ -242,7 +242,7 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     for (const auto& drop : req->drop_changefeeds()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
         auto op = modifyScheme->MutableDropCdcStream();
-        op->SetStreamName(drop);
+        op->AddStreamName(drop);
         op->SetTableName(name);
     }
 
@@ -539,12 +539,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         }
     }
 
-    if (in.HasTTLSettings()) {
-        if (in.GetTTLSettings().HasEnabled()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
-                ythrow yexception() << "invalid TTL settings: " << error;
+    if constexpr (!std::is_same_v<TYdbProto, Ydb::Table::DescribeSystemViewResult>) {
+        if (in.HasTTLSettings()) {
+            if (in.GetTTLSettings().HasEnabled()) {
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                    ythrow yexception() << "invalid TTL settings: " << error;
+                }
             }
         }
     }
@@ -555,17 +557,27 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in) {
+    NKikimrMiniKQL::TType splitKeyType;
+    FillColumnDescriptionImpl(out, splitKeyType, in);
+}
+
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
-void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+template <typename TYdbProto>
+void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
+
+        if (column.HasColumnFamilyName()) {
+            newColumn->set_family(column.GetColumnFamilyName());
+        }
     }
 
     for (auto& name : schema.GetKeyColumnNames()) {
@@ -590,6 +602,14 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     }
 
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+}
+
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -1002,6 +1022,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
 
     FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+    FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
@@ -1041,7 +1062,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -1050,10 +1071,18 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(1)
             );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(2)
+                );
+            }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
+        }
         default:
             break;
         };
@@ -1157,6 +1186,7 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
 
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
+    out.set_schema_changes(in.GetSchemaChanges());
     out.set_aws_region(in.GetAwsRegion());
 
     if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
@@ -1222,6 +1252,7 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
+    out.SetSchemaChanges(in.schema_changes());
     out.SetAwsRegion(in.aws_region());
 
     if (in.has_resolved_timestamps_interval()) {
@@ -1381,6 +1412,10 @@ void FillStorageSettingsImpl(TYdbProto& out,
                 if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
                     settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
                 }
+
+                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount()) {
+                    settings->set_external_data_channels_count(externalChannelsCount);
+                }
             }
 
             // Check legacy settings for enabled external blobs
@@ -1415,6 +1450,50 @@ void FillStorageSettings(Ydb::Table::CreateTableRequest& out,
     FillStorageSettingsImpl(out, in);
 }
 
+void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFamilyDescription& in, bool isColumnTable) {
+    if (in.HasName() && !in.GetName().empty()) {
+        out.set_name(in.GetName());
+    } else if (IsDefaultFamily(in)) {
+        out.set_name("default");
+    } else if (in.HasId()) {
+        out.set_name(TStringBuilder() << "<id: " << in.GetId() << ">");
+    } else {
+        out.set_name(in.GetName());
+    }
+
+    if (!isColumnTable && in.HasStorageConfig() && in.GetStorageConfig().HasData()) {
+        FillStoragePool(&out, &Ydb::Table::ColumnFamily::mutable_data, in.GetStorageConfig().GetData());
+    }
+
+    if (in.HasColumnCodec()) {
+        switch (in.GetColumnCodec()) {
+            case NKikimrSchemeOp::ColumnCodecPlain:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+                break;
+            case NKikimrSchemeOp::ColumnCodecLZ4:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+                break;
+            case NKikimrSchemeOp::ColumnCodecZSTD: {
+                if (!isColumnTable) {
+                    break; // FIXME: not supported
+                }
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+                break;
+            }
+        }
+    } else if (in.GetCodec() == 1) {
+        // Legacy setting, see datashard
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+    } else {
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+    }
+
+    // Check legacy settings for permanent in-memory cache
+    if (in.GetInMemory() || in.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
+        out.set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+    }
+}
+
 template <typename TYdbProto>
 void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
@@ -1432,42 +1511,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
         const auto& family = partConfig.GetColumnFamilies(i);
         auto* r = out.add_column_families();
 
-        if (family.HasName() && !family.GetName().empty()) {
-            r->set_name(family.GetName());
-        } else if (IsDefaultFamily(family)) {
-            r->set_name("default");
-        } else if (family.HasId()) {
-            r->set_name(TStringBuilder() << "<id: " << family.GetId() << ">");
-        } else {
-            r->set_name(family.GetName());
-        }
-
-        if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            FillStoragePool(r, &Ydb::Table::ColumnFamily::mutable_data, family.GetStorageConfig().GetData());
-        }
-
-        if (family.HasColumnCodec()) {
-            switch (family.GetColumnCodec()) {
-                case NKikimrSchemeOp::ColumnCodecPlain:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecLZ4:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecZSTD:
-                    break; // FIXME: not supported
-            }
-        } else if (family.GetCodec() == 1) {
-            // Legacy setting, see datashard
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-        } else {
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-        }
-
-        // Check legacy settings for permanent in-memory cache
-        if (family.GetInMemory() || family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
-            r->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-        }
+        FillColumnFamily(*r, family, false);
     }
 }
 
@@ -1481,7 +1525,34 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     FillColumnFamiliesImpl(out, in);
 }
 
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    const auto& schema = in.GetSchema();
+    for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
+        const auto& family = schema.GetColumnFamilies(i);
+        auto* r = out.add_column_families();
+
+        FillColumnFamily(*r, family, true);
+    }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TPathDescription& in) {
+    FillAttributesImpl(out, in);
+}
+
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
 }
@@ -1586,6 +1657,11 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
 
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillReadReplicasSettingsImpl(out, in);
+}
+
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
 }
 

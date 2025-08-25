@@ -171,7 +171,7 @@ public:
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     THashMap<TNodeId, const TNodeDescriptor*> IdToDescriptor_;
-    THashMap<TString, const TNodeDescriptor*> AddressToDescriptor_;
+    THashMap<std::string, const TNodeDescriptor*> AddressToDescriptor_;
     THashSet<TNodeDescriptor> Descriptors_;
 
     THashMap<TNodeId, TPromise<const TNodeDescriptor*>> IdToPromise_;

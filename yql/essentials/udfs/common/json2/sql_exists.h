@@ -105,7 +105,7 @@ namespace NJson2Udf {
 
                 return TUnboxedValuePod(!result.GetNodes().empty());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

@@ -3,7 +3,15 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
+namespace {
 
+std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBufferAndResize(size_t size, arrow::MemoryPool* pool) {
+    auto result = NYql::NUdf::AllocateResizableBuffer(size, pool);
+    ARROW_OK(result->Resize(size));
+    return result;
+}
+
+}
 template <typename T>
 arrow::compute::InputType GetPrimitiveInputArrowType(bool tz) {
     return arrow::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow::ValueDescr::ANY);
@@ -168,7 +176,7 @@ std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
     const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(propagateTz == EPropagateTz::FromLeft ? *input1 : *input2);
     const auto tzId = structScalar.value[1];
     return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value,tzId}, propagateTz == EPropagateTz::FromLeft ? input1->type : input2->type);
-}    
+}
 
 std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool,
@@ -178,7 +186,7 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeOf * res->length, pool));
+    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
     res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, { nullptr, buffer }));
     res->child_data.push_back(input->child_data[1]);
     return res->child_data[0];
@@ -194,7 +202,7 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeOf * res->length, pool));
+    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
     res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, { nullptr, buffer }));
     if (propagateTz == EPropagateTz::FromLeft) {
         res->child_data.push_back(input1->child_data[1]);
@@ -217,7 +225,7 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeOf * res->length, pool));
+    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
     res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, { nullptr, buffer }));
     if (propagateTz == EPropagateTz::FromLeft) {
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input1);
@@ -240,7 +248,7 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeOf * res->length, pool));
+    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
     res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, { nullptr, buffer }));
     if (propagateTz == EPropagateTz::FromLeft) {
         res->child_data.push_back(input1->child_data[1]);
@@ -251,7 +259,7 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     return res->child_data[0];
 }
 
-TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, 
+TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
     NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
     TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
@@ -271,7 +279,7 @@ bool TPlainKernel::IsPolymorphic() const {
     return false;
 }
 
-TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, 
+TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
     NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
     TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
@@ -296,7 +304,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
 
     MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
     MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
-    
+
     auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
     auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
 

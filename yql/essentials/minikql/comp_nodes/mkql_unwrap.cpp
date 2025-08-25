@@ -20,6 +20,10 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        return DoCalculateImpl(compCtx).Release();
+    }
+
+    NUdf::TUnboxedValue DoCalculateImpl(TComputationContext& compCtx) const {
         auto value = Optional()->GetValue(compCtx);
         if (value) {
             return value.GetOptionalValue();
@@ -65,11 +69,11 @@ private:
     }
 
     IComputationNode* Optional() const {
-        return Left;
+        return Left_;
     };
 
     IComputationNode* Message() const {
-        return Right;
+        return Right_;
     };
 
     const NUdf::TSourcePosition Pos;

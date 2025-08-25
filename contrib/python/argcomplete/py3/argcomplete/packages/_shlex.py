@@ -177,6 +177,9 @@ class shlex:
                 elif self.whitespace_split:
                     self.token = nextchar
                     self.state = 'a'
+                    # Modified by argcomplete: Record last wordbreak position
+                    if nextchar in self.wordbreaks:
+                        self.last_wordbreak_pos = len(self.token) - 1
                 else:
                     self.token = nextchar
                     if self.token or (self.posix and quoted):

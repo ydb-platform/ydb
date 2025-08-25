@@ -6,7 +6,7 @@ croaring = CMakeNinjaNixProject(
     arcdir="contrib/libs/croaring",
     nixattr="croaring",
     copy_sources=[
-        "cpp/*.hh",
+        "cpp/roaring/*.hh",
     ],
     disable_includes=[
         "sys/byteorder.h",
@@ -14,5 +14,5 @@ croaring = CMakeNinjaNixProject(
     addincl_global={
         ".": ["./include"],
     },
-    inclink={"include/roaring": ["cpp/*.hh"]},
+    inclink={"include/roaring": ["cpp/roaring/*.hh"]},
 )

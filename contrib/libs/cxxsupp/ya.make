@@ -34,6 +34,7 @@ IF (NOT USE_STL_SYSTEM)
     RECURSE(
         libcxx
         libcxxabi
+        libcxxcuda11
         libcxxmsvc
         libcxxrt
         openmp

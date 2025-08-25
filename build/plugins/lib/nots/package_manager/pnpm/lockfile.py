@@ -1,5 +1,4 @@
 import base64
-import yaml
 import os
 import io
 import re
@@ -7,6 +6,11 @@ import re
 from urllib import parse as urlparse
 
 from ..base import PackageJson, BaseLockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
+
+try:
+    import ymakeyaml as yaml
+except Exception:
+    import yaml
 
 LOCKFILE_VERSION = "lockfileVersion"
 IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)
@@ -269,12 +273,15 @@ class PnpmLockfile(BaseLockfile):
         return {".": importer} if importer else {}
 
     def validate_importers(self):
+        validate_keys = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
         importers = self.get_importers()
         pkg = importers.get(".")
         peers = set(["."])
         problem_importers = []
 
-        for _, deps in pkg.items():
+        for deps_key, deps in pkg.items():
+            if deps_key not in validate_keys:
+                continue
             for _, dep in deps.items():
                 specifier = dep.get("specifier")
                 if specifier and specifier.startswith(WS_PREFIX):

@@ -177,6 +177,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
         .Default(false);
+    registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -390,6 +392,10 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .GreaterThan(0)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
+
+    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+        .Default()
+        .DontSerializeDefault();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

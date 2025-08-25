@@ -1,12 +1,11 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     test_liveness_wardens.py
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

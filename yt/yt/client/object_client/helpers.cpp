@@ -25,7 +25,8 @@ bool IsSequoiaNode(NObjectClient::EObjectType type)
 {
     return
         type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::SequoiaLink;
+        type == EObjectType::SequoiaLink ||
+        type == EObjectType::Scion;
 }
 
 bool IsVersionedType(EObjectType type)
@@ -52,7 +53,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::OverreplicatedChunkMap ||
         type == EObjectType::UnderreplicatedChunkMap ||
         type == EObjectType::DataMissingChunkMap ||
+        type == EObjectType::DataMissingChunksSampleMap ||
         type == EObjectType::ParityMissingChunkMap ||
+        type == EObjectType::ParityMissingChunksSampleMap ||
         type == EObjectType::OldestPartMissingChunkMap ||
         type == EObjectType::QuorumMissingChunkMap ||
         type == EObjectType::UnsafelyPlacedChunkMap ||
@@ -256,6 +259,16 @@ bool IsChaosTableReplicaType(EObjectType type)
     return type == EObjectType::ChaosTableReplica;
 }
 
+bool IsReplicationCardType(EObjectType type)
+{
+    return type == EObjectType::ReplicationCard;
+}
+
+bool IsChaosLeaseType(EObjectType type)
+{
+    return type == EObjectType::ChaosLease;
+}
+
 bool IsCollocationType(EObjectType type)
 {
     return
@@ -309,6 +322,7 @@ bool IsCompositeNodeType(EObjectType type)
         type == EObjectType::MapNode ||
         type == EObjectType::Scion ||
         type == EObjectType::PortalExit ||
+        type == EObjectType::SysNode ||
         type == EObjectType::ListNode;
 }
 
@@ -351,4 +365,3 @@ bool IsGlobalCellId(TCellId cellId)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NObjectClient
-

@@ -111,6 +111,7 @@ public:
     const TInstant& GetLastReadTime() const;
     const TDuration& GetMaxReadTimeLag() const;
     const TDuration& GetMaxWriteTimeLag() const;
+    const TDuration& GetMaxCommittedTimeLag() const;
 
 private:
     uint64_t CommittedOffset_;
@@ -120,12 +121,14 @@ private:
     TInstant LastReadTime_;
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
+    TDuration MaxCommittedTimeLag_;
 };
 
 // Topic partition location
 class TPartitionLocation {
 public:
     TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    TPartitionLocation(std::int32_t nodeId, std::int64_t generation);
     int32_t GetNodeId() const;
     int64_t GetGeneration() const;
 
@@ -766,6 +769,8 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 };
 
 // Settings for commit offset request.
-struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
+struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {
+    FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
+};
 
 }  // namespace NYdb::NTopic

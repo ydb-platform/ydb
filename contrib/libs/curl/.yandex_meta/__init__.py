@@ -131,7 +131,7 @@ def post_install(self):
 
 
 curl = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "g:geoapps_infra"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/curl",
     nixattr="curl",
     ignore_commands=[
@@ -153,7 +153,6 @@ curl = GNUMakeNixProject(
         "cipher.mih",
         "config-*",
         "curl_gssapi.h",
-        "curl_path.h",
         "curlmsg_vms.h",
         "exec/execbase.h",
         "exec/types.h",
@@ -169,8 +168,6 @@ curl = GNUMakeNixProject(
         "libpsl.h",
         "librtmp/rtmp.h",
         "libssh/",
-        "libssh2.h",
-        "libssh2_sftp.h",
         "lwip/",
         "mbedtls/",
         "mbedtls_threadlock.h",

@@ -108,6 +108,7 @@ import os
 import re
 import tempfile
 import warnings
+from collections import defaultdict
 from email import message_from_bytes
 from email.message import EmailMessage, Message
 from io import BufferedIOBase, BytesIO, TextIOWrapper
@@ -252,16 +253,16 @@ monthname_lower = [name and name.lower() for name in monthname]
 
 def _parseRequestLine(line: bytes) -> tuple[bytes, bytes, bytes]:
     """
-    Parse an HTTP request line, which looks like:
+    Parse an HTTP request line, which looks like::
 
         GET /foo/bar HTTP/1.1
 
     This function attempts to validate the well-formedness of
-    the line. RFC 9112 section 3 provides this ABNF:
+    the line. RFC 9112 section 3 provides this ABNF::
 
         request-line   = method SP request-target SP HTTP-version
 
-    We allow any method that is a valid token:
+    We allow any method that is a valid token::
 
         method         = token
         token          = 1*tchar
@@ -272,7 +273,7 @@ def _parseRequestLine(line: bytes) -> tuple[bytes, bytes, bytes]:
     We allow any non-empty request-target that contains only printable
     ASCII characters (no whitespace).
 
-    The RFC defines HTTP-version like this:
+    The RFC defines HTTP-version like this::
 
         HTTP-version  = HTTP-name "/" DIGIT "." DIGIT
         HTTP-name     = %s"HTTP"
@@ -283,7 +284,7 @@ def _parseRequestLine(line: bytes) -> tuple[bytes, bytes, bytes]:
 
     @returns: C{(method, request, version)} three-tuple
 
-    @raises: L{ValueError} when malformed
+    @raises ValueError: when malformed
     """
     method, request, version = line.split(b" ")
 
@@ -323,7 +324,7 @@ def _getMultiPartArgs(content: bytes, ctype: bytes) -> dict[bytes, list[bytes]]:
     """
     Parse the content of a multipart/form-data request.
     """
-    result = {}
+    result = defaultdict(list)
     multiPartHeaders = b"MIME-Version: 1.0\r\n" + b"Content-Type: " + ctype + b"\r\n"
     msg = message_from_bytes(multiPartHeaders + content)
     if not msg.is_multipart():
@@ -339,7 +340,7 @@ def _getMultiPartArgs(content: bytes, ctype: bytes) -> dict[bytes, list[bytes]]:
         if not name:
             continue
         payload: bytes = part.get_payload(decode=True)  # type:ignore[assignment]
-        result[name.encode("utf8")] = [payload]
+        result[name.encode("utf8")].append(payload)
     return result
 
 
@@ -921,17 +922,26 @@ class Request:
     etag = None
     lastModified = None
     args = None
-    path = None
+    path: bytes = None  # type:ignore[assignment]
     content = None
     _forceSSL = 0
     _disconnected = False
     _log = Logger()
+    _parsePOSTFormSubmission: bool
 
-    def __init__(self, channel: HTTPChannel, queued: object = _QUEUED_SENTINEL) -> None:
+    def __init__(
+        self,
+        channel: HTTPChannel,
+        queued: object = _QUEUED_SENTINEL,
+        parsePOSTFormSubmission: bool = True,
+    ) -> None:
         """
         @param channel: the channel we're connected to.
         @param queued: (deprecated) are we in the request queue, or can we
             start writing to the transport?
+        @param parsePOSTFormSubmission: If C{True}, the default, parse MIME multipart and
+            URL-encoded body uploads into C{request.args}. This can use large
+            amounts of memory for large uploads.
         """
         self.notifications: List[Deferred[None]] = []
         self.channel = channel
@@ -952,6 +962,7 @@ class Request:
             queued = False
 
         self.queued = queued
+        self._parsePOSTFormSubmission = parsePOSTFormSubmission
 
     def _cleanup(self):
         """
@@ -1069,7 +1080,12 @@ class Request:
         if ctype is not None:
             ctype = ctype[0]
 
-        if self.method == b"POST" and ctype and clength:
+        if (
+            self.method == b"POST"
+            and ctype
+            and clength
+            and self._parsePOSTFormSubmission
+        ):
             mfd = b"multipart/form-data"
             key = _parseContentType(ctype)
             if key == b"application/x-www-form-urlencoded":
@@ -1362,10 +1378,9 @@ class Request:
             other than HTTP (and HTTPS) requests
         @type httpOnly: L{bool}
 
-        @param sameSite: One of L{None} (default), C{'lax'} or C{'strict'}.
-            Direct browsers not to send this cookie on cross-origin requests.
-            Please see:
-            U{https://tools.ietf.org/html/draft-west-first-party-cookies-07}
+        @param sameSite: One of L{None} (default), C{'lax'}, C{'none'} or C{'strict'}.
+        Direct browsers not to send this cookie on cross-origin requests.
+        See: U{https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value}
         @type sameSite: L{None}, L{bytes} or L{str}
 
         @raise ValueError: If the value for C{sameSite} is not supported.
@@ -1416,7 +1431,15 @@ class Request:
             cookie = cookie + b"; HttpOnly"
         if sameSite:
             sameSite = _ensureBytes(sameSite).lower()
-            if sameSite not in [b"lax", b"strict"]:
+            # See more info about sameSite usage here
+            # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
+            if not secure and sameSite == b"none":
+                raise ValueError(
+                    "Invalid value for sameSite: "
+                    + repr(sameSite)
+                    + '. Missing the "secure" attribute'
+                )
+            if sameSite not in [b"lax", b"strict", b"none"]:
                 raise ValueError("Invalid value for sameSite: " + repr(sameSite))
             cookie += b"; SameSite=" + sameSite
         self.cookies.append(cookie)
@@ -2529,6 +2552,29 @@ class HTTPChannel(basic.LineReceiver, policies.TimeoutMixin):
 
         req = self.requests[-1]
         req.requestReceived(command, path, version)
+
+    def _protocolUpgradeForWebsockets(self, protocol: IProtocol) -> None:
+        """
+        Monkeypatch the C{dataReceived} and C{connectionLost} methods on this
+        L{HTTPChannel} to deliver data to a websocket protocol implementation.
+
+        This API is used by Twisted's own websocket implementation in
+        L{twisted.web.websocket} and is tested with the same, but is
+        intentionally NOT publicly exposed yet, and would need to be tested for
+        a bunch of additional edge cases (in particular, being invoked in other
+        parts of the request lifecycle and delivering sensible errors) if it
+        were going to be.
+
+        @param protocol: The byte-level protocol implementing a websocket
+            transport, which will fully handle all delivered data for this
+            channel.
+        """
+        self.dataReceived = protocol.dataReceived  # type:ignore[method-assign]
+        self.connectionLost = protocol.connectionLost  # type:ignore[method-assign]
+        assert (
+            self.transport is not None
+        ), "websocket upgraded attempted on disconnected HTTP channel"
+        protocol.makeConnection(self.transport)
 
     def rawDataReceived(self, data: bytes) -> None:
         """

@@ -1,9 +1,11 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Архитектура
+  href: architecture.md
 - name: Соединение с БД
   href: connect.md
-- name: Модель данных и схема
+- name: Структура кластера
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
@@ -14,6 +16,8 @@ items:
   href: transactions.md
 - name: Вторичные индексы
   href: secondary_indexes.md
+- name: Векторный поиск
+  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

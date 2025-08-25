@@ -21,81 +21,80 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TStreamLogicProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce()));
+    AFL_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
     return IResourceProcessor::EExecutionResult::Success;
+}
+
+TConclusion<bool> TStreamLogicProcessor::AddMonoValue(
+    const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const {
+    if (Operation == NKernels::EOperation::And) {
+        if (monoValue) {
+            if (!accResult) {
+                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            }
+            return false;
+        } else {
+            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
+                NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            return true;
+        }
+    } else if (Operation == NKernels::EOperation::Or) {
+        if (!monoValue) {
+            if (!accResult) {
+                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            }
+            return false;
+        } else {
+            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
+                NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            return true;
+        }
+    }
+    Y_FAIL();
+    return false;
 }
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto accInput = context.GetResources()->GetAccessorVerified(inputId);
+    AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
+    const auto& accResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
 
-    std::shared_ptr<arrow::Scalar> monoValue;
-    AFL_VERIFY(!context.GetResources()->HasMarker(FinishMarker));
-    const auto accResult = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
-
-    const auto isMonoValue = accInput->CheckOneValueAccessor(monoValue);
-    if (isMonoValue && *isMonoValue) {
-        const auto isFalseConclusion = ScalarIsFalse(monoValue);
-        if (isFalseConclusion.IsFail()) {
-            return isFalseConclusion;
+    if (auto accInput = context.GetResources().GetAccessorOptional(inputId)) {
+        TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accInput);
+        if (isMonoInput.IsFail()) {
+            return isMonoInput;
         }
-        const auto isTrueConclusion = ScalarIsTrue(monoValue);
-        if (isTrueConclusion.IsFail()) {
-            return isTrueConclusion;
+        if (isMonoInput.GetResult()) {
+            return AddMonoValue(*isMonoInput.GetResult(), accResult, context);
         }
-        AFL_VERIFY(*isFalseConclusion || *isTrueConclusion);
-        if (Operation == NKernels::EOperation::And) {
-            if (*isTrueConclusion) {
-                if (!accResult) {
-                    context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        std::make_shared<NAccessor::TSparsedArray>(
-                            std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-                        false);
-                }
-                return false;
-            } else {
-                if (accResult) {
-                    context.GetResources()->Remove(GetOutputColumnIdOnce(), true);
-                }
-                context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                    std::make_shared<NAccessor::TSparsedArray>(
-                        std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-                    false);
-                return true;
+        if (!accResult) {
+            AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
+            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
+        } else {
+            auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
+            if (result.IsFail()) {
+                return result;
             }
-        } else if (Operation == NKernels::EOperation::Or) {
-            if (*isFalseConclusion) {
-                if (!accResult) {
-                    context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        std::make_shared<NAccessor::TSparsedArray>(
-                            std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-                        false);
-                }
-                return false;
-            } else {
-                if (accResult) {
-                    context.GetResources()->Remove(GetOutputColumnIdOnce(), true);
-                }
-                context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                    std::make_shared<NAccessor::TSparsedArray>(
-                        std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-                    false);
+            auto datum = result.DetachResult();
+            context.MutableResources().Remove(GetOutputColumnIdOnce());
+            context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), datum);
+            if (IsFinishDatum(datum)) {
                 return true;
             }
         }
-    }
-
-    if (!accResult) {
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(), accInput, false);
+        return false;
     } else {
-        auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
-        if (result.IsFail()) {
-            return result;
+        const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
+
+        TConclusion<bool> isMonoInput = GetMonoInput(scalarInput);
+        if (isMonoInput.IsFail()) {
+            return isMonoInput;
         }
-        context.GetResources()->Remove(GetOutputColumnIdOnce());
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(), std::move(*result), false);
+
+        return AddMonoValue(isMonoInput.GetResult(), accResult, context);
     }
-    return false;
 }
 
 ui64 TStreamLogicProcessor::DoGetWeight() const {
@@ -160,6 +159,65 @@ NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("op", ::ToString(Operation));
     return result;
+}
+
+bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
+    const auto arrChecker = [&](const arrow::Array& arr) {
+        AFL_VERIFY(arr.type()->id() == arrow::uint8()->id());
+        const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
+        const ui8* values = ui8Arr.raw_values();
+        if (Operation == NKernels::EOperation::And) {
+            for (ui32 i = 0; i < ui8Arr.length(); ++i) {
+                if (values[i] != 0) {
+                    return false;
+                }
+            }
+        } else if (Operation == NKernels::EOperation::Or) {
+            for (ui32 i = 0; i < ui8Arr.length(); ++i) {
+                if (values[i] == 0) {
+                    return false;
+                }
+            }
+        } else {
+            AFL_VERIFY(false)("op", Operation);
+        }
+        return true;
+    };
+    if (datum.is_array()) {
+        auto arr = datum.make_array();
+        return arrChecker(*arr);
+    } else if (datum.is_arraylike()) {
+        auto arr = datum.chunked_array();
+        AFL_VERIFY(arr->type()->id() == arrow::uint8()->id());
+        for (auto&& chunk : arr->chunks()) {
+            if (!arrChecker(*chunk)) {
+                return false;
+            }
+        }
+        return true;
+    } else {
+        AFL_VERIFY(false)("kind", (ui32)datum.kind());
+        return false;
+    }
+}
+
+TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {
+    std::shared_ptr<arrow::Scalar> monoValue;
+    const auto isMonoValue = inputArray->CheckOneValueAccessor(monoValue);
+    if (!isMonoValue || !*isMonoValue) {
+        return std::optional<bool>();
+    }
+    const auto isFalseConclusion = ScalarIsFalse(monoValue);
+    if (isFalseConclusion.IsFail()) {
+        return isFalseConclusion;
+    }
+    return !*isFalseConclusion;
+}
+
+TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
+    AFL_VERIFY(scalar);
+    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id())("type", scalar->type->ToString());
+    return static_cast<const arrow::UInt8Scalar*>(scalar.get())->value != 0;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

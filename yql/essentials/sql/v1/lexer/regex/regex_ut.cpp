@@ -8,12 +8,18 @@ using namespace NSQLTranslationV1;
 
 namespace {
     auto grammar = NSQLReflect::LoadLexerGrammar();
-    auto defaultRegexes = MakeRegexByOtherNameMap(grammar, /* ansi = */ false);
-    auto ansiRegexes = MakeRegexByOtherNameMap(grammar, /* ansi = */ true);
+    auto defaultRegexes = MakeRegexByOtherName(grammar, /* ansi = */ false);
+    auto ansiRegexes = MakeRegexByOtherName(grammar, /* ansi = */ true);
+
+    TString Get(const TVector<std::tuple<TString, TString>>& regexes, const TStringBuf name) {
+        return std::get<1>(*FindIf(regexes, [&](const auto& pair) {
+            return std::get<0>(pair) == name;
+        }));
+    }
 
     void CheckRegex(bool ansi, const TStringBuf name, const TStringBuf expected) {
         const auto& regexes = ansi ? ansiRegexes : defaultRegexes;
-        const TString regex = regexes.at(name);
+        const TString regex = Get(regexes, name);
 
         const RE2 re2(regex);
         Y_ENSURE(re2.ok(), re2.error());
@@ -56,7 +62,14 @@ Y_UNIT_TEST_SUITE(SqlRegexTests) {
         CheckRegex(
             /* ansi = */ false,
             "DIGITS",
-            R"(([0-9]+)|(0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+))");
+            R"((0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+)|([0-9]+))");
+    }
+
+    Y_UNIT_TEST(IntegerValue) {
+        CheckRegex(
+            /* ansi = */ false,
+            "INTEGER_VALUE",
+            R"(((0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+)|([0-9]+))(([pP]|[uU])?([lL]|[sS]|[tT]|[iI]|[bB]|[nN])?))");
     }
 
     Y_UNIT_TEST(Real) {
@@ -70,7 +83,7 @@ Y_UNIT_TEST_SUITE(SqlRegexTests) {
         CheckRegex(
             /* ansi = */ false,
             "WS",
-            R"(( |\r|\t|\n))");
+            R"(( |\r|\t|\f|\n))");
     }
 
     Y_UNIT_TEST(Comment) {
@@ -83,8 +96,8 @@ Y_UNIT_TEST_SUITE(SqlRegexTests) {
     Y_UNIT_TEST(AnsiCommentSameAsDefault) {
         // Because of recursive definition
         UNIT_ASSERT_VALUES_EQUAL(
-            ansiRegexes.at("COMMENT"),
-            defaultRegexes.at("COMMENT"));
+            Get(ansiRegexes, "COMMENT"),
+            Get(defaultRegexes, "COMMENT"));
     }
 
 } // Y_UNIT_TEST_SUITE(SqlRegexTests)

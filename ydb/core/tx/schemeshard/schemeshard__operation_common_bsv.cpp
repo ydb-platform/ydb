@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
-
 #include "schemeshard_private.h"
+
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 

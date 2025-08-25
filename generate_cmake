@@ -197,7 +197,23 @@ if __name__ == "__main__":
             generate_graph_for_platform, generate_graph_for_platform_commands
         )
 
-    yexport_args = [yexport_binary_path, "--export-root", f"\"{root_folder}\"", "--target", "YDB", "--generator", "cmake"]
+    yexport_args = [
+        yexport_binary_path,
+        "--export-root", f"\"{root_folder}\"",
+        "--configuration", ydb_metadata_folder_path,
+        "--target", "YDB",
+        "--generator", "cmake",
+    ]
+
+    yexport_toml = f"{ydb_metadata_folder_path}/yexport.toml"
+    with open(yexport_toml, "w") as f:
+        f.write("\n".join([
+            '[add_attrs.root]',
+            'use_conan2 = true',
+            '',
+            '[add_attrs.dir]',
+            'use_conan2 = true',
+        ]))
 
     for index, platform in enumerate(platforms):
         errors_for_platform_size = len(errors_for_platform[index])

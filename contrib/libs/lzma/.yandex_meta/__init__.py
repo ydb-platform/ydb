@@ -13,6 +13,7 @@ lzma = GNUMakeNixProject(
     flags=["--localedir=/var/empty"],
     disable_includes=[
         "crc32_arm64.h",
+        "crc32_loongarch.h",
         "crc32_table_be.h",
         "crc64_table_be.h",
         "dpmi.h",

@@ -197,10 +197,10 @@ Y_UNIT_TEST_SUITE(RegexLexerTests) {
 
         TString expected =
             "SELECT WS(\n) "
-            "WS( ) WS( ) INTEGER_VALUE(123467) COMMA(,) WS(\n) "
+            "WS( ) WS( ) DIGITS(123467) COMMA(,) WS(\n) "
             "WS( ) WS( ) STRING_VALUE(\"Hello, {name}!\") COMMA(,) WS(\n) "
-            "WS( ) WS( ) LPAREN(() INTEGER_VALUE(1) WS( ) PLUS(+) WS( ) LPAREN(() INTEGER_VALUE(5) WS( ) "
-            "ASTERISK(*) WS( ) INTEGER_VALUE(1) WS( ) SLASH(/) WS( ) INTEGER_VALUE(0) RPAREN()) "
+            "WS( ) WS( ) LPAREN(() DIGITS(1) WS( ) PLUS(+) WS( ) LPAREN(() DIGITS(5) WS( ) "
+            "ASTERISK(*) WS( ) DIGITS(1) WS( ) SLASH(/) WS( ) DIGITS(0) RPAREN()) "
             "RPAREN()) COMMA(,) WS(\n) "
             "WS( ) WS( ) ID_PLAIN(MIN) LPAREN(() ID_PLAIN(identifier) RPAREN()) COMMA(,) WS(\n) "
             "WS( ) WS( ) ID_PLAIN(Bool) LPAREN(() ID_PLAIN(field) RPAREN()) COMMA(,) WS(\n) "

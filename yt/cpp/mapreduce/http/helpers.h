@@ -24,12 +24,6 @@ TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool 
 
 void LogRequest(const THttpHeader& header, const TString& url, bool includeParameters, const TString& requestId, const TString& hostName);
 
-// Sometimes errors may not include any specific inner errors and appear to be generic.
-// To differentiate these errors and reduce reliance on HTTP status codes, we need to extend inner error information.
-//
-// XXX(hiddenpath): Remove this method when server will respond with specific errors.
-void ExtendGenericError(TErrorResponse& errorResponse, int code, TString message);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

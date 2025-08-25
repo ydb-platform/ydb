@@ -1,4 +1,5 @@
 #include "yql_join.h"
+#include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
@@ -21,6 +22,7 @@ namespace {
 
     struct TJoinState {
         bool Used = false;
+        bool IsMultiget = false;
     };
 
     IGraphTransformer::TStatus ParseJoinKeys(TExprNode& side, TVector<std::pair<TStringBuf, TStringBuf>>& keys,
@@ -190,89 +192,6 @@ namespace {
             return status;
         }
 
-        std::vector<std::string_view> lCheck;
-        lCheck.reserve(leftKeys.size());
-        for (const auto& x : leftKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
-                lCheck.emplace_back(ctx.AppendString(name));
-            if (!myLeftScope.contains(x.first)) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
-        }
-
-        TVector<std::pair<TStringBuf, TStringBuf>> rightKeys;
-        TVector<const TTypeAnnotationNode*> rightKeyTypes;
-        if (const auto status = ParseJoinKeys(*joins.Child(4), rightKeys, rightKeyTypes, labels, ctx, cross); status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
-        std::vector<std::string_view> rCheck;
-        rCheck.reserve(rightKeys.size());
-        for (const auto& x : rightKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
-                rCheck.emplace_back(ctx.AppendString(name));
-            if (!myRightScope.contains(x.first)) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
-        }
-
-        if (leftKeys.size() != rightKeys.size()) {
-            ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                TStringBuilder() << "Mismatch of key column count in equality between " << leftKeys.front().first
-                << " and " << rightKeys.front().first));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
-            if (strictKeys && leftKeyTypes[i] != rightKeyTypes[i]) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Strict key type match requested, but keys have different types: ("
-                    << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        if (cross) {
-            for (const auto& x : myLeftScope) {
-                joinsStates[*labels.FindInputIndex(x)].Used = true;
-            }
-
-            for (const auto& x : myRightScope) {
-                joinsStates[*labels.FindInputIndex(x)].Used = true;
-            }
-        }
-
-        scope.clear();
-
-        const bool singleSide = joinType.Content().ends_with("Only") || joinType.Content().ends_with("Semi");
-        const bool rightSide = joinType.Content().starts_with("Right");
-        const bool leftSide = joinType.Content().starts_with("Left");
-
-        if (!singleSide || !rightSide) {
-            scope.insert(myLeftScope.cbegin(), myLeftScope.cend());
-        }
-
-        if (!singleSide || !leftSide) {
-            scope.insert(myRightScope.cbegin(), myRightScope.cend());
-        }
-
         const auto linkOptions = joins.Child(5);
         if (!EnsureTuple(*linkOptions, ctx)) {
             return IGraphTransformer::TStatus::Error;
@@ -280,6 +199,7 @@ namespace {
 
         std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
         bool hasJoinStrategyHint = false;
+        bool isMultiget = false;
         for (auto child : linkOptions->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx)) {
                 return IGraphTransformer::TStatus::Error;
@@ -325,6 +245,31 @@ namespace {
                                     "streamlookup() expects KEY VALUE... pairs"));
                         return IGraphTransformer::TStatus::Error;
                     }
+                    for (ui32 i = 1; i + 1 < child->ChildrenSize(); i += 2) {
+                        auto& name = *child->Child(i);
+                        auto& value = *child->Child(i + 1);
+                        if (!EnsureAtom(value, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (name.IsAtom("MultiGet")) {
+                            if (!TryFromString(value.Content(), isMultiget)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                            "streamlookup(" << name.Content() << "...): Expected bool, but got: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
+                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                            ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                        "streamlookup(): Unsupported option: " << name.Content()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!TryFromString<ui64>(value.Content())) {
+                            ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                        "streamlookup(" << name.Content() << "...): Expected integer, but got: " << value.Content()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
                 } else {
                     if (!EnsureTupleSize(*child, 1, ctx)) {
                         return IGraphTransformer::TStatus::Error;
@@ -340,12 +285,16 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
-            else if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
-                //do nothing
-            }
             else if (option.IsAtom("compact")) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
+                }
+            }
+            else if (IsCachedJoinLinkOption(option.Content())) {
+                if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
+                    //do nothing
+                } else {
+                    YQL_ENSURE(false, "Cached join link option '" << option.Content() << "' not handled");
                 }
             }
             else {
@@ -353,6 +302,117 @@ namespace {
                     "Unknown option name: " << option.Content()));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        std::vector<std::string_view> lCheck;
+        lCheck.reserve(leftKeys.size());
+        for (const auto& x : leftKeys) {
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+                lCheck.emplace_back(ctx.AppendString(name));
+            if (!myLeftScope.contains(x.first)) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
+        }
+
+        TVector<std::pair<TStringBuf, TStringBuf>> rightKeys;
+        TVector<const TTypeAnnotationNode*> rightKeyTypes;
+        if (const auto status = ParseJoinKeys(*joins.Child(4), rightKeys, rightKeyTypes, labels, ctx, cross); status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        std::vector<std::string_view> rCheck;
+        rCheck.reserve(rightKeys.size());
+        for (const auto& x : rightKeys) {
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+                rCheck.emplace_back(ctx.AppendString(name));
+            if (!myRightScope.contains(x.first)) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
+            joinsStates[*labels.FindInputIndex(x.first)].IsMultiget = isMultiget;
+        }
+
+        if (leftKeys.size() != rightKeys.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                TStringBuilder() << "Mismatch of key column count in equality between " << leftKeys.front().first
+                << " and " << rightKeys.front().first));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
+            auto leftKeyType = leftKeyTypes[i];
+            auto rightKeyType = rightKeyTypes[i];
+            if (leftKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                leftKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rightKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                rightKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isMultiget) {
+                if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
+                    leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (ETypeAnnotationKind::List != leftKeyType->GetKind()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                                TStringBuilder() << "MultiGet option requested, left side key is expected to be List[], but "
+                                << leftKeys[i].first << "." << leftKeys[i].second
+                                << " has type: " << *leftKeyType));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
+            }
+            if (strictKeys && leftKeyType != rightKeyType) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Strict key type match requested, but keys have different types: ("
+                    << leftKeys[i].first << "." << leftKeys[i].second
+                    << " has type: " << *leftKeyType << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyType << ")"));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyType, rightKeyType)) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
+                    << " has type: " << *leftKeyType << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyType << ")"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (cross) {
+            for (const auto& x : myLeftScope) {
+                joinsStates[*labels.FindInputIndex(x)].Used = true;
+            }
+
+            for (const auto& x : myRightScope) {
+                joinsStates[*labels.FindInputIndex(x)].Used = true;
+            }
+        }
+
+        scope.clear();
+
+        const bool singleSide = joinType.Content().ends_with("Only") || joinType.Content().ends_with("Semi");
+        const bool rightSide = joinType.Content().starts_with("Right");
+        const bool leftSide = joinType.Content().starts_with("Left");
+
+        if (!singleSide || !rightSide) {
+            scope.insert(myLeftScope.cbegin(), myLeftScope.cend());
+        }
+
+        if (!singleSide || !leftSide) {
+            scope.insert(myRightScope.cbegin(), myRightScope.cend());
         }
 
         const bool lAny = leftHints && (leftHints->contains("unique") || leftHints->contains("any"));
@@ -506,7 +566,8 @@ namespace {
 
         return true;
     }
-}
+
+} // namespace
 
 TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
     Tables.clear();
@@ -787,40 +848,42 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             options.Flatten = true;
         } else if (optionName == "strict_keys") {
             options.StrictKeys = true;
-        } else if (optionName == "preferred_sort") {
-            THashSet<TStringBuf> sortBySet;
-            TVector<TStringBuf> sortBy;
-            if (!EnsureTupleSize(*child, 2, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (!EnsureTupleMinSize(*child->Child(1), 1, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            for (auto column : child->Child(1)->Children()) {
-                if (!EnsureAtom(*column, ctx)) {
+        } else if (IsCachedJoinOption(optionName)) {
+            if (optionName == "preferred_sort") {
+                THashSet<TStringBuf> sortBySet;
+                TVector<TStringBuf> sortBy;
+                if (!EnsureTupleSize(*child, 2, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-                if (!sortBySet.insert(column->Content()).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() <<
-                        "Duplicated preferred_sort column: " << column->Content()));
+                if (!EnsureTupleMinSize(*child->Child(1), 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-                sortBy.push_back(column->Content());
+                for (auto column : child->Child(1)->Children()) {
+                    if (!EnsureAtom(*column, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!sortBySet.insert(column->Content()).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() <<
+                            "Duplicated preferred_sort column: " << column->Content()));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    sortBy.push_back(column->Content());
+                }
+                if (!options.PreferredSortSets.insert(sortBy).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
+                        "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
+                }
+            } else if (optionName == "cbo_passed") {
+                // do nothing
+            } else if (optionName == "multiple_joins") {
+                // do nothing
+            } else if (optionName == "prune_keys_added") {
+                if (!EnsureTupleSize(*child, 1, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                YQL_ENSURE(false, "Cached join option '" << optionName << "' not handled");
             }
-            if (!options.PreferredSortSets.insert(sortBy).second) {
-                ctx.AddError(TIssue(ctx.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
-                    "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
-            }
-        } else if (optionName == "cbo_passed") {
-            // do nothing
-        } else if (optionName == "join_algo") {
-            // do nothing
-        } else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
-            // do nothing
-        } else if (optionName == "multiple_joins") {
-            // do nothing
-        } else if (optionName == "compact") {
-            options.Compact = true;
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
                 "Unknown option name: " << optionName));
@@ -878,11 +941,20 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     TVector<const TItemExprType*> resultFields;
     TMap<TString, TFlattenState> flattenFields; // column -> table
     THashSet<TString> processedRenames;
-    for (auto it: labels.Inputs) {
+    for (ui32 i = 0; i != labels.Inputs.size(); ++i) {
+        const auto& it = labels.Inputs[i];
         for (auto item: it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
-            auto type = columnTypes.FindPtr(fullName);
-            if (type) {
+            auto typeIt = columnTypes.find(fullName);
+            if (typeIt != columnTypes.end()) {
+                auto type = typeIt->second;
+                if (joinsStates[i].IsMultiget) {
+                    auto wasOptional = type->IsOptionalOrNull();
+                    type = ctx.MakeType<TListExprType>(type);
+                    if (wasOptional) {
+                        type = AddOptionalType(type, ctx);
+                    }
+                }
                 TVector<TStringBuf> fullNames;
                 fullNames.push_back(fullName);
                 if (!processedRenames.contains(fullName)) {
@@ -900,7 +972,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                         auto iter = flattenFields.find(columnName);
                         if (iter != flattenFields.end()) {
                             if (AreSameJoinKeys(joins, tableName, columnName, iter->second.Table, columnName)) {
-                                iter->second.AllTypes.push_back(*type);
+                                iter->second.AllTypes.push_back(type);
                                 continue;
                             }
 
@@ -911,11 +983,11 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                         }
 
                         TFlattenState state;
-                        state.AllTypes.push_back(*type);
+                        state.AllTypes.push_back(type);
                         state.Table = TString(tableName);
                         flattenFields.emplace(TString(columnName), state);
                     } else {
-                        resultFields.push_back(ctx.MakeType<TItemExprType>(fullName, *type));
+                        resultFields.push_back(ctx.MakeType<TItemExprType>(fullName, type));
                     }
                 }
             }
@@ -989,8 +1061,21 @@ THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& jo
     return result;
 }
 
-TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
-    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) {
+bool IsSkipNullsUnessential(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "EmitSkipNullOnPushdownUsingUnessential";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+TExprNode::TPtr FilterOutNullJoinColumns(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TJoinLabel& label,
+    const TSet<TString>& optionalKeyColumns,
+    bool ordered,
+    const TTypeAnnotationContext* types,
+    TExprContext& ctx
+) {
     if (optionalKeyColumns.empty()) {
         return input;
     }
@@ -1002,6 +1087,36 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
         SplitTableName(fullColumnName, table, column);
         auto memberName = label.MemberName(table, column);
         optColumns.push_back(ctx.NewAtom(pos, memberName));
+    }
+
+    if (IsSkipNullsUnessential(types)) {
+        return ctx.Builder(pos)
+            .Callable(ordered ? "OrderedFilter" : "Filter")
+                .Add(0, input)
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("Unessential")
+                        .Callable(0, "And")
+                            .Do([&optColumns] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                size_t i = 0;
+                                for (const auto& column : optColumns) {
+                                    parent.Callable(i++, "Not")
+                                        .Callable(0, "HasNull")
+                                            .Callable(0, "Member")
+                                                .Arg(0, "row")
+                                                .Add(1, column)
+                                            .Seal()
+                                        .Seal()
+                                    .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .Add(1, MakeBool<true>(pos, ctx))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
     }
 
     return ctx.Builder(pos)
@@ -1921,22 +2036,25 @@ void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andT
     }
 }
 
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx) {
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx) {
     TExprNode::TPtr prevAndNode = nullptr;
     TNodeSet added;
-    for (const auto& otherAndTerm : andTerms) {
-        if (otherAndTerm == exclude) {
-            continue;
+    for (auto term : andTerms) {
+        if (term == exclude) {
+            if (!replaceWith) {
+                continue;
+            }
+            term = std::move(replaceWith);
         }
 
-        if (!added.insert(otherAndTerm.Get()).second) {
+        if (!added.insert(term.Get()).second) {
             continue;
         }
 
         if (!prevAndNode) {
-            prevAndNode = otherAndTerm;
+            prevAndNode = term;
         } else {
-            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
+            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, term });
         }
     }
 
@@ -1976,6 +2094,16 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
+    if (!IsEquality(predicate, leftMember, rightMember)) {
+        return false;
+    }
+
+    return
+        leftMember->IsCallable("Member") && &leftMember->Head() == &row &&
+        rightMember->IsCallable("Member") && &rightMember->Head() == &row;
+}
+
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
@@ -2002,6 +2130,163 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
             break;
         }
     }
+}
+
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs
+){
+    bool memberOnly = true;
+    VisitExpr(
+        expr,
+        [&](const TExprNode::TPtr& node) {
+            if (!memberOnly) {
+                return false;
+            } else if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                return false;
+            }
+
+            return true;
+        },
+        [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                auto field = node->Tail().Content();
+                // rename used fields
+                if (auto renamed = backRenameMap.FindPtr(field)) {
+                    field = *renamed;
+                }
+
+                TStringBuf part1;
+                TStringBuf part2;
+                SplitTableName(field, part1, part2);
+                inputs[node.Get()] = {*labels.FindInputIndex(part1)};
+            } else if (node.Get() == &row) {
+                // non-Member usage of row struct
+                memberOnly = false;
+            } else {
+                TSet<ui32> usedInputs;
+                for (const auto& child : node->Children()) {
+                    auto& childUsedInputs = inputs[child.Get()];
+                    usedInputs.insert(childUsedInputs.begin(), childUsedInputs.end());
+                }
+                inputs[node.Get()] = std::move(usedInputs);
+            }
+
+            return true;
+        }
+    );
+
+    return memberOnly;
+}
+
+bool IsCachedJoinOption(TStringBuf name) {
+    static THashSet<TStringBuf> CachedJoinOptions = {"preferred_sort", "cbo_passed", "multiple_joins", "prune_keys_added"};
+    return CachedJoinOptions.contains(name);
+}
+
+bool IsCachedJoinLinkOption(TStringBuf name) {
+    static THashSet<TStringBuf> CachedJoinLinkOptions = {"shuffle_lhs_by", "shuffle_rhs_by"};
+    return CachedJoinLinkOptions.contains(name);
+}
+
+void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor) {
+    auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+    TStringBuf joinKind = joinTree.Type().Value();
+
+    auto left = joinTree.LeftScope();
+    if (!left.Maybe<TCoAtom>()) {
+        GetPruneKeysColumnsForJoinLeaves(left.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+    } else {
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+            if (!settings.LeftHints.contains("unique")) {
+                CollectEquiJoinKeyColumnsFromLeaf(joinTree.LeftKeys().Ref(), columnsForPruneKeysExtractor);
+            }
+        }
+    }
+
+    auto right = joinTree.RightScope();
+    if (!right.Maybe<TCoAtom>()) {
+        GetPruneKeysColumnsForJoinLeaves(right.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+    } else {
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+            if (!settings.RightHints.contains("unique")) {
+                CollectEquiJoinKeyColumnsFromLeaf(joinTree.RightKeys().Ref(), columnsForPruneKeysExtractor);
+            }
+        }
+    }
+}
+
+TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx) {
+    const auto& joinType = joinTree->Child(TCoEquiJoinTuple::idx_Type)->Content();
+    auto settings = GetEquiJoinLinkSettings(*joinTree->Child(TCoEquiJoinTuple::idx_Options));
+    bool settingsChanged = false;
+
+    auto canDropAny = [&](const TStringBuf& label, const TStringBuf& joinType, bool leftSide) {
+        auto input = labels.FindInput(label);
+        YQL_ENSURE(input.Defined());
+
+        auto it = keyColumnsByLabel.find(label);
+        YQL_ENSURE(it != keyColumnsByLabel.end());
+        auto& keyColumns = it->second;
+
+        if ((*input)->Distinct && (*input)->Distinct->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            return true;
+        }
+
+        if ((*input)->Unique && (*input)->Unique->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            if (joinType == "Inner" ||
+                (
+                    leftSide
+                    ? (joinType == "Right" || joinType == "RightSemi" || joinType == "RightOnly")
+                    : (joinType == "Left" || joinType == "LeftSemi" || joinType == "LeftOnly")
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    auto left = joinTree->ChildPtr(TCoEquiJoinTuple::idx_LeftScope);
+    if (!left->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(left, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != left) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_LeftScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.LeftHints.contains("any") && canDropAny(left->Content(), joinType, true)) {
+            settings.LeftHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    auto right = joinTree->ChildPtr(TCoEquiJoinTuple::idx_RightScope);
+    if (!right->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(right, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != right) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_RightScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.RightHints.contains("any") && canDropAny(right->Content(), joinType, false)) {
+            settings.RightHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    if (settingsChanged) {
+        joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_Options, BuildEquiJoinLinkSettings(settings, ctx));
+    }
+
+    return joinTree;
+}
+
+bool IsNoPullColumn(TStringBuf columnName) {
+    if (columnName.Contains('.')) {
+        TStringBuf table, column;
+        SplitTableName(columnName, table, column);
+        columnName = column;
+    }
+    return columnName.StartsWith(YqlCanaryColumnName) || columnName.StartsWith(YqlJoinKeyColumnName);
 }
 
 } // namespace NYql

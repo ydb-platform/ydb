@@ -125,21 +125,25 @@ SELECT * FROM (
 
 ## FLATTEN COLUMNS {#flatten-columns}
 
-Converts a table where all columns must be structures to a table with columns corresponding to each element of each structure from the source columns.
 
-The names of the source column structures are not used and not returned in the result. Be sure that the structure element names aren't repeated in the source columns.
+
+Transforms each column of type `Struct` into individual columns, one for each field within the struct. The names of the new columns are the names of the fields from the original struct columns. Columns that are not structs remain unchanged.
+  
+- Only one level of the struct is flattened.
+- The original struct columns are not included in the result; their names are not used anywhere.
+- All column names in the resulting table (including names from struct fields in the original columns and names of non-struct columns) must be unique; name conflicts result in an error.
 
 #### Example
 
 ```yql
-SELECT x, y, z
+SELECT x, y, z, not_struct
 FROM (
   SELECT
     AsStruct(
         1 AS x,
         "foo" AS y),
     AsStruct(
-        false AS z)
+        false AS z),
+    1 as not_struct,
 ) FLATTEN COLUMNS;
 ```
-

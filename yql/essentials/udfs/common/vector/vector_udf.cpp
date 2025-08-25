@@ -10,37 +10,37 @@ namespace {
 
 class TVector {
 private:
-    std::vector<TUnboxedValue, TUnboxedValue::TAllocator> Vector;
+    std::vector<TUnboxedValue, TUnboxedValue::TAllocator> Vector_;
 
 public:
     TVector()
-        : Vector()
+        : Vector_()
     {}
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Vector.size(), values);
-        std::copy(Vector.begin(), Vector.end(), values);
+        auto list = builder->NewArray(Vector_.size(), values);
+        std::copy(Vector_.begin(), Vector_.end(), values);
 
         return list;
     }
 
     void Emplace(const ui64 index, const TUnboxedValuePod& value) {
-        if (index < Vector.size()) {
-            Vector[index] = value;
+        if (index < Vector_.size()) {
+            Vector_[index] = value;
         } else {
-            Vector.push_back(value);
+            Vector_.push_back(value);
         }
     }
 
     void Swap(const ui64 a, const ui64 b) {
-        if (a < Vector.size() && b < Vector.size()) {
-            std::swap(Vector[a], Vector[b]);
+        if (a < Vector_.size() && b < Vector_.size()) {
+            std::swap(Vector_[a], Vector_[b]);
         }
     }
 
     void Reserve(ui64 expectedSize) {
-        Vector.reserve(expectedSize);
+        Vector_.reserve(expectedSize);
     }
 };
 

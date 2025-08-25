@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
@@ -36,15 +38,17 @@ public:
 
 class IChunkedArray {
 public:
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        CompositeChunkedArray,
-        SparsedArray,
-        SubColumnsArray,
-        SubColumnsPartialArray
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -92,9 +96,13 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
-            return position - GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 global) const {
+            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            return global - GlobalStartPosition;
+        }
+
+        ui32 GetGlobalIndex(const ui32 local) const {
+            return local + GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {
@@ -264,6 +272,8 @@ private:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
         const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
         return std::make_shared<arrow::Schema>(fields);
@@ -328,6 +338,8 @@ protected:
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
+
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
@@ -344,7 +356,6 @@ public:
     }
 
     virtual void Reallocate() {
-
     }
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
@@ -358,7 +369,7 @@ public:
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
             auto result = actor(arrCurrent->GetArray());
-            if (!!result) {
+            if (result) {
                 return result;
             }
             currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
@@ -444,7 +455,8 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const;
+    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
@@ -463,6 +475,7 @@ public:
             case EType::SubColumnsArray:
             case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

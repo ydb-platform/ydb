@@ -7,8 +7,10 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -426,7 +428,7 @@ private:
 
 class TResourcePoolsCache {
     struct TClassifierInfo {
-        const TString MemberName;
+        const std::optional<TString> MemberName;
         const TString PoolId;
         const i64 Rank;
 
@@ -485,15 +487,18 @@ public:
     std::optional<TPoolInfo> GetPoolInfo(const TString& databaseId, const TString& poolId, TActorContext actorContext) const {
         auto it = PoolsCache.find(GetPoolKey(databaseId, poolId));
         if (it == PoolsCache.end()) {
+            Y_ASSERT(!poolId.empty());
+
+            actorContext.Send(MakeKqpSchedulerServiceId(actorContext.SelfID.NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
             actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
             return std::nullopt;
         }
         return it->second;
     }
 
-    void UpdateFeatureFlags(const NKikimrConfig::TFeatureFlags& featureFlags, TActorContext actorContext) {
-        EnableResourcePools = featureFlags.GetEnableResourcePools();
-        EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
+    void UpdateConfig(const NKikimrConfig::TFeatureFlags& featureFlags, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig, TActorContext actorContext) {
+        EnableResourcePools = featureFlags.GetEnableResourcePools() || workloadManagerConfig.GetEnabled();
+        EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless() || workloadManagerConfig.GetEnabled();
         UpdateResourcePoolClassifiersSubscription(actorContext);
     }
 
@@ -584,9 +589,7 @@ private:
         for (const auto& [_, classifier] : databaseInfo.ResourcePoolsClassifiers) {
             const auto& classifierSettings = classifier.GetClassifierSettings();
             databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifierSettings)});
-            if (!PoolsCache.contains(classifierSettings.ResourcePool)) {
-                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, classifierSettings.ResourcePool));
-            }
+            (void)GetPoolInfo(databaseId, classifierSettings.ResourcePool, actorContext);
         }
     }
 
@@ -599,17 +602,13 @@ private:
         TString poolId = "";
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
-            if (classifier.MemberName != userSID) {
+            if (classifier.MemberName.value_or(userSID) != userSID) {
                 continue;
             }
 
-            auto it = PoolsCache.find(GetPoolKey(databaseId, classifier.PoolId));
-            if (it == PoolsCache.end()) {
-                actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, classifier.PoolId));
+            if (auto poolInfo = GetPoolInfo(databaseId, classifier.PoolId, actorContext); !poolInfo) {
                 continue;
-            }
-
-            if (userToken && !userToken->GetSerializedToken().empty() && !it->second.SecurityObject->CheckAccess(NACLib::DescribeSchema | NACLib::SelectRow, *userToken)) {
+            } else if (userToken && !userToken->GetSerializedToken().empty() && !poolInfo->SecurityObject->CheckAccess(NACLib::DescribeSchema | NACLib::SelectRow, *userToken)) {
                 continue;
             }
 

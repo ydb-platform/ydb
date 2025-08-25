@@ -8,7 +8,6 @@ import shlex
 import sys
 from functools import reduce
 
-import six
 import ymake
 
 import _common
@@ -101,7 +100,7 @@ def format_recipes(data: str | None) -> str:
 
 def prepare_recipes(data: str | None) -> bytes:
     formatted = format_recipes(data)
-    return base64.b64encode(six.ensure_binary(formatted))
+    return base64.b64encode(formatted.encode('utf-8'))
 
 
 def prepare_env(data):
@@ -159,7 +158,7 @@ def _get_external_resources_from_canon_data(data):
             if resource:
                 res.add(resource)
         else:
-            for k, v in six.iteritems(data):
+            for k, v in data.items():
                 res.update(_get_external_resources_from_canon_data(v))
     elif isinstance(data, list):
         for e in data:
@@ -418,6 +417,26 @@ class EslintConfigPath:
         return {cls.KEY: _resolve_config_path(unit, test_runner, rel_to=rel_to)}
 
 
+class ParallelTestsInSingleNode:
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        value = unit.get('PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS')
+
+        if value:
+            value = value.lower()
+            if value != 'all' and not (value.isnumeric() and int(value) > 0):
+                ymake.report_configure_error(
+                    'Incorrect value of PARALLEL_TESTS_ON_YT_WITHIN_NODE. Expected either "all" or a positive integer value, got: {}'.format(
+                        value,
+                    ),
+                )
+                raise DartValueError()
+
+        return {cls.KEY: value}
+
+
 class ForkMode:
     KEY = 'FORK-MODE'
 
@@ -551,6 +570,17 @@ class KtlintBaselineFile:
                 return {cls.KEY: baseline_path_relative}
 
 
+class KtlintRuleset:
+    KEY = 'KTLINT_RULESET'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if unit.get('_USE_KTLINT_OLD') != 'yes':
+            ruleset_rel_path = unit.get('_KTLINT_RULESET')
+            if ruleset_rel_path:
+                return {cls.KEY: ruleset_rel_path}
+
+
 class KtlintBinary:
     KEY = 'KTLINT_BINARY'
 
@@ -566,6 +596,15 @@ class Linter:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return {cls.KEY: spec_args['LINTER'][0]}
+
+
+class LintWrapperScript:
+    KEY = 'LINT-WRAPPER-SCRIPT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if spec_args.get('WRAPPER_SCRIPT'):
+            return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
 
 
 class LintConfigs:
@@ -598,33 +637,9 @@ class LintConfigs:
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
-        resolved_configs = []
-
-        if (custom_config := spec_args.get('CUSTOM_CONFIG')) and '/' in custom_config[0]:
-            # black if custom config is passed.
-            # XXX During migration we want to use the same macro parameter
-            # for path to linter config and config type
-            # thus, we check if '/' is present, if it is then it's a path
-            # TODO delete once custom configs migrated to autoincludes scheme
-            custom_config = custom_config[0]
-            assert_file_exists(unit, custom_config)
-            resolved_configs.append(custom_config)
-            return {cls.KEY: serialize_list(resolved_configs)}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
-
-        if project_to_config_map := spec_args.get('PROJECT_TO_CONFIG_MAP'):
-            # ruff, TODO delete once custom configs migrated to autoincludes scheme
-            project_to_config_map = project_to_config_map[0]
-            assert_file_exists(unit, project_to_config_map)
-            resolved_configs.append(project_to_config_map)
-            cfgs = get_linter_configs(unit, project_to_config_map).values()
-            for c in cfgs:
-                assert_file_exists(unit, c)
-                resolved_configs.append(c)
-            return {cls.KEY: serialize_list(resolved_configs)}
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -636,10 +651,10 @@ class LintConfigs:
             ymake.report_configure_error(message)
             raise DartValueError()
         assert_file_exists(unit, config)
-        resolved_configs.append(config)
+        configs = [config]
         if linter_name in ('flake8', 'py2_flake8'):
-            resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
-        return {cls.KEY: serialize_list(resolved_configs)}
+            configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
+        return {cls.KEY: serialize_list(configs)}
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
@@ -1017,16 +1032,27 @@ class DockerImage:
                         link
                     )
             else:
-                msg = 'Invalid docker image: {}. Image should be provided in format <link>=<tag>'.format(img)
+                msg = 'Invalid docker image: {}. Image should be provided in format <tag>=<link>'.format(img)
             if msg:
                 ymake.report_configure_error(msg)
                 raise DartValueError(msg)
 
+    @staticmethod
+    def unify_images(images):
+        res = []
+        for image in images:
+            if not image.startswith('docker://'):
+                alias, url = image.split('=', 1)
+                image = url + "=" + alias
+            res.append(image)
+        return res
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        raw_value = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
-        images = sorted(raw_value)
+        images = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
         if images:
+            images = cls.unify_images(images)
+            images = sorted(images)
             cls._validate(images)
         return {cls.KEY: serialize_list(images)}
 
@@ -1131,27 +1157,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _GRUT_PREFIX = 'grut'
-    _GRUT_INCLUDE_LINTER_TEST_PATHS = (
-        'grut/libs/bigrt/clients',
-        'grut/libs/bigrt/common',
-        'grut/libs/bigrt/data',
-        'grut/libs/bigrt/event_filter',
-        'grut/libs/bigrt/graph',
-        'grut/libs/bigrt/info_keepers',
-        'grut/libs/bigrt/processor',
-        'grut/libs/bigrt/profile',
-        'grut/libs/bigrt/profiles',
-        'grut/libs/bigrt/queue_info_config',
-        'grut/libs/bigrt/resharder/compute_shard_number',
-        'grut/libs/bigrt/server',
-        'grut/libs/bigrt/testlib',
-        'grut/libs/bigrt/transaction',
-        'grut/libs/shooter',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_RENDERER_PREFIX = 'maps/renderer'
     _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
         'maps/renderer/cartograph',
@@ -1161,18 +1166,23 @@ class TestFiles:
         'maps/renderer/libs/data_sets/yt_data_set',
         'maps/renderer/libs/design',
         'maps/renderer/libs/geosx',
+        'maps/renderer/libs/geojson_to_yt',
         'maps/renderer/libs/gltf',
         'maps/renderer/libs/golden',
         'maps/renderer/libs/hd3d',
         'maps/renderer/libs/image',
         'maps/renderer/libs/kv_storage',
+        'maps/renderer/libs/mapreduce',
         'maps/renderer/libs/marking',
         'maps/renderer/libs/mesh',
         'maps/renderer/libs/serializers',
         'maps/renderer/libs/style2',
         'maps/renderer/libs/style2_layer_bundle',
         'maps/renderer/libs/terrain',
+        'maps/renderer/libs/threading',
         'maps/renderer/libs/vec',
+        'maps/renderer/libs/yql',
+        'maps/renderer/libs/yt',
         'maps/renderer/tilemill',
         'maps/renderer/tools/fontograph',
         'maps/renderer/tools/terrain_cli',
@@ -1240,9 +1250,10 @@ class TestFiles:
         return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
-    def ts_input_files(cls, unit, flat_args, spec_args):
+    def tsc_typecheck_input_files(cls, unit, flat_args, spec_args):
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
-        test_files = [_common.resolve_common_const(f) for f in typecheck_files]
+        typecheck_test_files = get_values_list(unit, "TS_INPUT_TEST_FILES")
+        test_files = [_common.resolve_common_const(f) for f in typecheck_files + typecheck_test_files]
         value = serialize_list(test_files)
         return {cls.KEY: value, cls.KEY2: value}
 
@@ -1276,18 +1287,14 @@ class TestFiles:
             lint_name = LintName.value(unit, flat_args, spec_args)[LintName.KEY]
             message = 'No files to lint for {}'.format(lint_name)
             raise DartValueError(message)
-        test_files = serialize_list(test_files)
+        # XXX: we may have duplicated files because of macroses used to gather extra files for linting
+        # including those that use globs
+        test_files = serialize_list(_common.sort_uniq(test_files))
         return {cls.KEY: test_files, cls.KEY2: test_files}
 
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-        if upath.startswith(cls._GRUT_PREFIX):
-            for path in cls._GRUT_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise DartValueError()
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
@@ -1393,6 +1400,14 @@ class TestPartition:
         return {cls.KEY: unit.get("TEST_PARTITION")}
 
 
+class TestExperimentalFork:
+    KEY = 'TEST_EXPERIMENTAL_FORK'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: unit.get("TEST_EXPERIMENTAL_FORK")}
+
+
 class TestRecipes:
     KEY = 'TEST-RECIPES'
 
@@ -1471,7 +1486,7 @@ class SystemProperties:
             ymake.report_configure_error(error_mgs)
             raise DartValueError()
 
-        props = base64.b64encode(six.ensure_binary(json.dumps(props)))
+        props = base64.b64encode(json.dumps(props).encode('utf-8'))
         return {cls.KEY: props}
 
 

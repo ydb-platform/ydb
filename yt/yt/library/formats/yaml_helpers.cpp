@@ -120,7 +120,7 @@ std::pair<ENodeType, TNonStringScalar> ParseAndValidateYamlInteger(const std::st
             return TryIntFromString<10>(adjustedValue, result);
         } else if (base == 16) {
             return TryIntFromString<16>(adjustedValue, result);
-        } else if (base = 8) {
+        } else if (base == 8) {
             return TryIntFromString<8>(adjustedValue, result);
         } else {
             YT_ABORT();

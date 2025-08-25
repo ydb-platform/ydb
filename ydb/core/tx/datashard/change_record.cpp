@@ -6,6 +6,17 @@
 
 namespace NKikimr::NDataShard {
 
+static void ParseBody(google::protobuf::Message& proto, const TString& body) {
+    Y_ENSURE(proto.ParseFromArray(body.data(), body.size()));
+}
+
+template <typename T>
+static T ParseBody(const TString& body) {
+    T proto;
+    ParseBody(proto, body);
+    return proto;
+}
+
 void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) const {
     record.SetOrder(Order);
     record.SetGroup(Group);
@@ -15,28 +26,17 @@ void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) cons
     record.SetLocalPathId(PathId.LocalPathId);
 
     switch (Kind) {
-        case EKind::AsyncIndex: {
-            Y_ENSURE(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::IncrementalRestore: {
-            Y_ENSURE(record.MutableIncrementalRestore()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::CdcDataChange: {
-            Y_ENSURE(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
-            break;
-        }
-        case EKind::CdcHeartbeat: {
-            break;
-        }
+        case EKind::AsyncIndex:
+            return ParseBody(*record.MutableAsyncIndex(), Body);
+        case EKind::IncrementalRestore:
+            return ParseBody(*record.MutableIncrementalRestore(), Body);
+        case EKind::CdcDataChange:
+            return ParseBody(*record.MutableCdcDataChange(), Body);
+        case EKind::CdcSchemaChange:
+            return ParseBody(*record.MutableCdcSchemaChange(), Body);
+        case EKind::CdcHeartbeat:
+            return;
     }
-}
-
-static auto ParseBody(const TString& protoBody) {
-    NKikimrChangeExchange::TDataChange body;
-    Y_ENSURE(body.ParseFromArray(protoBody.data(), protoBody.size()));
-    return body;
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey() const {
@@ -48,7 +48,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
         case EKind::AsyncIndex:
         case EKind::IncrementalRestore:
         case EKind::CdcDataChange: {
-            const auto parsed = ParseBody(Body);
+            const auto parsed = ParseBody<NKikimrChangeExchange::TDataChange>(Body);
 
             TSerializedCellVec key;
             Y_ENSURE(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
@@ -57,6 +57,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
             break;
         }
 
+        case EKind::CdcSchemaChange:
         case EKind::CdcHeartbeat: {
             Y_ENSURE(false, "Not supported");
         }
@@ -79,6 +80,7 @@ TInstant TChangeRecord::GetApproximateCreationDateTime() const {
 
 bool TChangeRecord::IsBroadcast() const {
     switch (Kind) {
+        case EKind::CdcSchemaChange:
         case EKind::CdcHeartbeat:
             return true;
         default:

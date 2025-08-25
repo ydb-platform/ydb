@@ -2,6 +2,7 @@
 
 #ifndef IO_INL_H_
 #error "Direct inclusion of this file is not allowed, use io.h"
+#include "io.h" // For the sake of sane code completion.
 #endif
 #undef IO_INL_H_
 
@@ -624,9 +625,35 @@ inline TTableReaderPtr<T> IIOClient::CreateTableReader(
         return new TTableReader<T>(CreateProtoReader(path, options, prototype.Get()));
     } else if constexpr (TIsSkiffRow<T>::value) {
         const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
-        auto schema = GetSkiffSchema<T>(hints);
+        auto requestedSchema = GetSkiffSchema<T>(hints);
+        auto parserSchema = GetParserSkiffSchema<T>(hints);
         auto skipper = CreateSkiffSkipper<T>(hints);
-        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, schema), hints);
+        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
+    } else {
+        static_assert(TDependentFalse<T>, "Unsupported type for table reader");
+    }
+}
+
+template <>
+inline TTableReaderPtr<TNode> IIOClient::CreateTablePartitionReader<TNode>(
+    const TString& cookie, const TTablePartitionReaderOptions& options)
+{
+    return new TTableReader<TNode>(CreateNodeTablePartitionReader(cookie, options));
+}
+
+template <class T>
+inline TTableReaderPtr<T> IIOClient::CreateTablePartitionReader(
+    const TString& path, const TTablePartitionReaderOptions& options)
+{
+    if constexpr (TIsBaseOf<Message, T>::Value) {
+        T prototype;
+        return new TTableReader<T>(CreateProtoReader(path, options, &prototype));
+    } else if constexpr (TIsSkiffRow<T>::value) {
+        const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
+        auto requestedSchema = GetSkiffSchema<T>(hints);
+        auto parserSchema = GetParserSkiffSchema<T>(hints);
+        auto skipper = CreateSkiffSkipper<T>(hints);
+        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
     } else {
         static_assert(TDependentFalse<T>, "Unsupported type for table reader");
     }

@@ -14,6 +14,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -99,7 +100,11 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("sink", "PqSink");
+            if (Counters) {
+                SubGroup = Counters->GetSubgroup("sink", "PqSink");
+            } else {
+                SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            }
             auto sink = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = sink->GetSubgroup("task_id", ToString(taskId));
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
@@ -317,19 +322,21 @@ private:
                 : NYdb::NTopic::ECodec::GZIP);
     }
 
-    ITopicClient& GetTopicClient() {
-        if (!TopicClient) {
-            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+    IFederatedTopicClient& GetFederatedTopicClient() {
+        if (!FederatedTopicClient) {
+            FederatedTopicClient = PqGateway->GetFederatedTopicClient(Driver, GetFederatedTopicClientSettings());
         }
-        return *TopicClient;
+        return *FederatedTopicClient;
     }
 
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
-        return PqGateway->GetTopicClientSettings()
-            .Database(SinkParams.GetDatabase())
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const {
+        NYdb::NFederatedTopic::TFederatedTopicClientSettings opts = PqGateway->GetFederatedTopicClientSettings();
+        opts.Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
             .CredentialsProviderFactory(CredentialsProviderFactory);
+
+        return opts;
     }
 
     static i64 GetItemSize(const TString& item) {
@@ -338,7 +345,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
-            WriteSession = GetTopicClient().CreateWriteSession(GetWriteSessionSettings());
+            WriteSession = GetFederatedTopicClient().CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
     }
@@ -496,7 +503,7 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    ITopicClient::TPtr TopicClient;
+    IFederatedTopicClient::TPtr FederatedTopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;
@@ -562,7 +569,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 driver,
                 credentialsFactory,
                 args.Callback,
-                counters,
+                counters ? counters : args.TaskCounters,
                 pqGateway
             );
         });

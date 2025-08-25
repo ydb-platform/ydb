@@ -43,6 +43,7 @@
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_execution_retries.h>
 
 namespace NFq {
 
@@ -400,6 +401,7 @@ protected:
         RTS_CREATE_DATABASE,
         RTS_DESCRIBE_DATABASE,
         RTS_MODIFY_DATABASE,
+        RTS_DELETE_FOLDER_RESOURCES,
         RTS_MAX,
     };
 
@@ -427,7 +429,8 @@ protected:
         "PingTask",
         "CreateDatabase",
         "DescribeDatabase",
-        "ModifyDatabase"
+        "ModifyDatabase",
+        "DeleteFolderResources"
     };
 
     enum ERequestTypeCommon {
@@ -461,6 +464,7 @@ protected:
         RTC_CREATE_DATABASE,
         RTC_DESCRIBE_DATABASE,
         RTC_MODIFY_DATABASE,
+        RTC_DELETE_FOLDER_RESOURCES,
         RTC_MAX,
     };
 
@@ -514,7 +518,8 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
             { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
-            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") }
+            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -522,11 +527,13 @@ protected:
 
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::THistogramPtr LeaseLeftMs;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NFq::TControlPlaneStorageConfig& config)
             : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , Counters(counters)
+            , LeaseLeftMs(Counters->GetHistogram("LeaseLeftMs", ::NMonitoring::ExplicitHistogram({100, 1000, 5000, 10000, 20000})))
         {
             for (auto& request: CommonRequests) {
                 request->Register(Counters);
@@ -639,6 +646,14 @@ protected:
     std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionInternal> GetCreateConnectionProtos(
         const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
 
+    // List connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const;
+
+    // Describe connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const;
+
     // Create binding request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev) const;
@@ -647,6 +662,10 @@ protected:
 
     std::pair<FederatedQuery::Binding, FederatedQuery::Internal::BindingInternal> GetCreateBindingProtos(
         const FederatedQuery::CreateBindingRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
+
+    // List bindings request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev) const;
 
     // Write result data request
 
@@ -676,11 +695,11 @@ protected:
     void UpdateTaskInfo(
         NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
+        NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
 
     void FillQueryStatistics(
         const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const;
+        const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter) const;
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 
@@ -700,18 +719,20 @@ protected:
         requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
     }
 
+    // Beware! Borrows ownership of ev content, nullify ev
     template <class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,
         NActors::TActorSystem* actorSystem,
         const TAsyncStatus& status,
         TActorId self,
-        const RequestEventPtr& ev,
+        RequestEventPtr&& ev,
         const TInstant& startTime,
         const TRequestCounters& requestCounters,
         const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        using TRequestEventSharedPtr = std::shared_ptr<typename std::decay_t<RequestEventPtr>::TValueType>; // TEv*::TPtr is TAutoPtr
+        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev=TRequestEventSharedPtr(ev.Release()), requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -793,12 +814,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 {
     using TBase = TControlPlaneStorageBase;
 
+    using TQueryQuotasMap = THashMap<TString, std::array<ui32, 3>>; // 3 = max(FederatedQuery::QueryContent::QueryType) + 1
+
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
-
     // Query Quota
-    THashMap<TString, ui32> QueryQuotas;
+    TQueryQuotasMap QueryQuotas;
     THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
     TInstant QuotasUpdatedAt = TInstant::Zero();
     bool QuotasUpdating = false;
@@ -846,6 +868,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
@@ -885,6 +908,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev);
+
+    void Handle(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev);

@@ -15,7 +15,7 @@ public:
     using TPtr = TIntrusivePtr<IClientDataConsumer>;
 
 public:
-    virtual TVector<TSchemaColumn> GetColumns() const = 0;
+    virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
     virtual const TString& GetWhereFilter() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;

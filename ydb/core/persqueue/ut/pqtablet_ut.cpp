@@ -1,6 +1,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -13,6 +14,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -34,6 +36,7 @@ struct TTxOperation {
     TMaybe<ui64> End;
     TString Path;
     TMaybe<ui32> SupportivePartition;
+    bool KafkaTransaction = false;
 };
 
 struct TConfigParams {
@@ -94,15 +97,24 @@ struct TWriteRequestParams {
     TMaybe<ui64> Cookie;
 };
 
+struct TAppSendReadSetParams {
+  ui64 Step = 0;
+  ui64 TxId = 0;
+  TMaybe<ui64> SenderId;
+  bool Predicate = true;
+};
+
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
-}
+} // namespace NHelpers
 
 Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
 class TPQTabletFixture : public NUnitTest::TBaseFixture {
 protected:
+
+    inline static const TString DEFAULT_OWNER = "-=[ 0wn3r ]=-";
     struct TProposeTransactionResponseMatcher {
         TMaybe<ui64> TxId;
         TMaybe<NKikimrPQ::TEvProposeTransactionResult::EStatus> Status;
@@ -167,6 +179,20 @@ protected:
         TMaybe<ui64> Cookie;
     };
 
+    struct TAppSendReadSetMatcher {
+        TMaybe<bool> Status;
+    };
+
+    struct TSendReadSetViaAppTestParams {
+        size_t TabletsCount = 0;
+        NKikimrTx::TReadSetData::EDecision Decision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
+        size_t TabletsRSCount = 0;
+        NKikimrTx::TReadSetData::EDecision AppDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
+        bool ExpectedAppResponseStatus = true;
+        NKikimrPQ::TEvProposeTransactionResult::EStatus ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE;
+    };
+
+
     using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
     using TPlanStepParams = NHelpers::TPlanStepParams;
     using TReadSetParams = NHelpers::TReadSetParams;
@@ -174,6 +200,7 @@ protected:
     using TCancelTransactionProposalParams = NHelpers::TCancelTransactionProposalParams;
     using TGetOwnershipRequestParams = NHelpers::TGetOwnershipRequestParams;
     using TWriteRequestParams = NHelpers::TWriteRequestParams;
+    using TAppSendReadSetParams = NHelpers::TAppSendReadSetParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
@@ -197,6 +224,7 @@ protected:
 
     void WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TReadSetAckMatcher& matcher);
     void SendReadSetAck(NHelpers::TPQTabletMock& tablet);
+    void WaitForNoReadSetAck(NHelpers::TPQTabletMock& tablet);
 
     void SendDropTablet(const TDropTabletParams& params);
     void WaitDropTabletReply(const TDropTabletReplyMatcher& matcher);
@@ -206,7 +234,7 @@ protected:
 
     void SendCancelTransactionProposal(const TCancelTransactionProposalParams& params);
 
-    void StartPQWriteTxsObserver();
+    void StartPQWriteTxsObserver(TAutoPtr<IEventHandle>* ev = nullptr);
     void WaitForPQWriteTxs();
 
     template <class T> void WaitForEvent(size_t count);
@@ -215,19 +243,25 @@ protected:
 
     void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
 
-    void StartPQWriteObserver(bool& flag, unsigned cookie);
+    void StartPQWriteObserver(bool& flag, unsigned cookie, TAutoPtr<IEventHandle>* ev = nullptr);
     void WaitForPQWriteComplete(bool& flag);
 
     bool FoundPQWriteState = false;
     bool FoundPQWriteTxs = false;
 
     void SendGetOwnershipRequest(const TGetOwnershipRequestParams& params);
-    void WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
+    // returns ownerCookie
+    TString WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
     void SyncGetOwnership(const TGetOwnershipRequestParams& params,
-                          const TGetOwnershipResponseMatcher& matcher);
+                             const TGetOwnershipResponseMatcher& matcher);
 
     void SendWriteRequest(const TWriteRequestParams& params);
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
+
+    // returns owner cookie for this supportive partition
+    TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId);
+    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie);
+    void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId);
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
@@ -241,6 +275,34 @@ protected:
     void WaitForTxState(ui64 txId, NKikimrPQ::TTransaction::EState state);
     void WaitForExecStep(ui64 step);
 
+    void InterceptSaveTxState(TAutoPtr<IEventHandle>& event);
+    void SendSaveTxState(TAutoPtr<IEventHandle>& event);
+
+    void WaitForTheTransactionToBeDeleted(ui64 txId);
+
+    TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
+    TVector<TString> GetSupportivePartitionsKeysFromKV();
+    NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
+    NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
+
+    void SendAppSendRsRequest(const TAppSendReadSetParams& params);
+    void WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher);
+    void TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params);
+
+    template<class EventType>
+    void AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
+
+    void ExpectNoExclusiveLockAcquired();
+    void ExpectNoReadQuotaAcquired();
+    void SendAcquireExclusiveLock();
+    void SendAcquireReadQuota(ui64 cookie, const TActorId& sender);
+    void SendReadQuotaConsumed(ui64 cookie);
+    void SendReleaseExclusiveLock();
+    void WaitExclusiveLockAcquired();
+    void WaitReadQuotaAcquired();
+
+    void EnsureReadQuoterExists();
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -253,6 +315,17 @@ protected:
     TTestActorRuntimeBase::TEventObserver PrevEventObserver;
 
     TActorId Pipe;
+
+    struct TReadQuoter {
+        NKikimrPQ::TPQConfig PQConfig;
+        NPersQueue::TTopicConverterPtr TopicConverter;
+        NKikimrPQ::TPQTabletConfig PQTabletConfig;
+        TPartitionId PartitionId;
+        TTabletCountersBase Counters;
+        TActorId Quoter;
+    };
+
+    TMaybe<TReadQuoter> ReadQuoter;
 };
 
 void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
@@ -331,13 +404,16 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             auto* operation = body->MutableOperations()->Add();
             operation->SetPartitionId(txOp.Partition);
             if (txOp.Begin.Defined()) {
-                operation->SetBegin(*txOp.Begin);
-                operation->SetEnd(*txOp.End);
+                operation->SetCommitOffsetsBegin(*txOp.Begin);
+                operation->SetCommitOffsetsEnd(*txOp.End);
                 operation->SetConsumer(*txOp.Consumer);
             }
             operation->SetPath(txOp.Path);
             if (txOp.SupportivePartition.Defined()) {
                 operation->SetSupportivePartition(*txOp.SupportivePartition);
+            }
+            if (txOp.KafkaTransaction) {
+                operation->SetKafkaTransaction(true);
             }
 
             partitions.insert(txOp.Partition);
@@ -522,6 +598,17 @@ void TPQTabletFixture::WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TRe
     }
 }
 
+void TPQTabletFixture::WaitForNoReadSetAck(NHelpers::TPQTabletMock& tablet)
+{
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return tablet.ReadSetAck.Defined();
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(2));
+
+    UNIT_ASSERT(!tablet.ReadSetAck.Defined());
+}
+
 void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
 {
     auto event = MakeHolder<TEvPersQueue::TEvDropTablet>();
@@ -655,7 +742,8 @@ void TPQTabletFixture::SendGetOwnershipRequest(const TGetOwnershipRequestParams&
                request.release());
 }
 
-void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
+// returns owner cookie
+TString TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
     UNIT_ASSERT(event != nullptr);
@@ -672,6 +760,8 @@ void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatch
         UNIT_ASSERT(event->Record.HasErrorCode());
         UNIT_ASSERT_VALUES_EQUAL((int)*matcher.ErrorCode, (int)event->Record.GetErrorCode());
     }
+
+    return event->Record.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 }
 
 void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
@@ -717,6 +807,77 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
                event.Release());
 }
 
+TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId) {
+    EnsurePipeExist();
+
+    auto request = MakeGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
+void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie) {
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(0);
+    request->SetCookie(123);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(0);
+
+    auto* writeId = request->MutableWriteId();
+    writeId->SetKafkaTransaction(true);
+    auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+    requestProducerInstanceId->SetId(producerInstanceId.Id);
+    requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+
+    EnsurePipeExist();
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
+    cmdWrite->SetSeqNo(0);
+    TString data = "123test123";
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+
+    // wait for response
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(response != nullptr);
+    UNIT_ASSERT(response->Record.GetPartitionResponse().HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(123, response->Record.GetPartitionResponse().GetCookie());
+}
+
+void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId) {
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                    {.Partition=0, .Path="/topic", .KafkaTransaction=true},
+                                  },
+                                  .WriteId=TWriteId(producerInstanceId)
+                                  });
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 {
     bool found = false;
@@ -745,18 +906,21 @@ void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
-void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
+void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie, TAutoPtr<IEventHandle>* ev)
 {
     flag = false;
 
-    auto observer = [&flag, cookie](TAutoPtr<IEventHandle>& event) {
+    auto observer = [&flag, cookie, ev](TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
-            if (kvResponse->Record.HasCookie()) {
-            }
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
                 (kvResponse->Record.GetCookie() == cookie)) {
                 flag = true;
+
+                if (ev) {
+                    *ev = event;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
             }
         }
 
@@ -793,9 +957,9 @@ void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionPro
                event.Release());
 }
 
-void TPQTabletFixture::StartPQWriteTxsObserver()
+void TPQTabletFixture::StartPQWriteTxsObserver(TAutoPtr<IEventHandle>* event)
 {
-    StartPQWriteObserver(FoundPQWriteTxs, 5); // TPersQueue::WRITE_TX_COOKIE
+    StartPQWriteObserver(FoundPQWriteTxs, 5, event); // TPersQueue::WRITE_TX_COOKIE
 }
 
 void TPQTabletFixture::WaitForPQWriteTxs()
@@ -1028,6 +1192,215 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
     }
 
     UNIT_FAIL("expected execution step " << step);
+}
+
+void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
+{
+    bool found = false;
+
+    TTestActorRuntimeBase::TEventFilter prev;
+    auto filter = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == 5)) { // WRITE_TX_COOKIE
+                ev = event;
+                found = true;
+                return true;
+            }
+        }
+
+        return false;
+    };
+    prev = Ctx->Runtime->SetEventFilter(filter);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(found);
+
+    Ctx->Runtime->SetEventFilter(prev);
+}
+
+void TPQTabletFixture::SendSaveTxState(TAutoPtr<IEventHandle>& event)
+{
+    Ctx->Runtime->Send(event);
+}
+
+void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
+{
+    const TString key = GetTxKey(txId);
+
+    for (size_t i = 0; i < 200; ++i) {
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+        auto cmd = request->Record.AddCmdReadRange();
+        auto range = cmd->MutableRange();
+        range->SetFrom(key);
+        range->SetIncludeFrom(true);
+        range->SetTo(key);
+        range->SetIncludeTo(true);
+        cmd->SetIncludeData(false);
+        SendToPipe(Ctx->Edge, request.release());
+
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+        const auto& result = response->Record.GetReadRangeResult(0);
+        if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+            continue;
+        }
+
+        if (result.GetStatus() == NKikimrProto::NODATA) {
+            return;
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+}
+
+TVector<TString> TPQTabletFixture::WaitForExactSupportivePartitionsCount(ui32 expectedCount) {
+    for (size_t i = 0; i < 200; ++i) {
+        auto result = GetSupportivePartitionsKeysFromKV();
+
+        if (result.empty() && expectedCount == 0) {
+            return result;
+        } else if (expectedCount == result.size()) {
+            return result;
+        } else {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+    return {};
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::WaitForExactTxWritesCount(ui32 expectedCount) {
+    for (size_t i = 0; i < 200; ++i) {
+        auto result = GetTxWritesFromKV();
+
+        if (result.TxWritesSize() == 0 && expectedCount == 0) {
+            return result;
+        } else if (expectedCount == result.TxWritesSize()) {
+            return result;
+        } else {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+    return {};
+}
+
+std::string GetSupportivePartitionKeyFrom() {
+    return std::string{TKeyPrefix::EServiceType::ServiceTypeData};
+}
+
+std::string GetSupportivePartitionKeyTo() {
+    return std::string{static_cast<char>(TKeyPrefix::EServiceType::ServiceTypeData + 1)};
+}
+
+TVector<TString> TPQTabletFixture::GetSupportivePartitionsKeysFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto cmd = request->Record.AddCmdReadRange();
+    auto range = cmd->MutableRange();
+    range->SetFrom(GetSupportivePartitionKeyFrom());
+    range->SetIncludeFrom(true);
+    range->SetTo(GetSupportivePartitionKeyTo());
+    range->SetIncludeTo(false);
+    cmd->SetIncludeData(false);
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    TVector<TString> supportivePartitionsKeys;
+    const auto& result = response->Record.GetReadRangeResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        for (ui32 i = 0; i < result.PairSize(); i++) {
+            supportivePartitionsKeys.emplace_back(result.GetPair(i).GetKey());
+        }
+        return supportivePartitionsKeys;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return supportivePartitionsKeys;
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto* cmd = request->Record.AddCmdRead();
+    cmd->SetKey("_txinfo");
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    const auto& result = response->Record.GetReadResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        NKikimrPQ::TTabletTxInfo info;
+        if (!info.ParseFromString(result.GetValue())) {
+            UNIT_FAIL("tx writes read error");
+        }
+        return info;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return {};
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
+}
+
+
+void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params) {
+    auto makeEv = [this, &params]() {
+        TCgiParameters cgi{
+            {"TabletID", ToString(Ctx->TabletId)},
+            {"SendReadSet", "1"},
+            {"decision", params.Predicate ? "commit" : "abort"},
+            {"step", ToString(params.Step)},
+            {"txId", ToString(params.TxId)},
+        };
+        if (params.SenderId.Defined()) {
+            cgi.InsertUnescaped("senderTablet", ToString(*params.SenderId));
+        } else {
+            cgi.InsertUnescaped("allSenderTablets", "1");
+        }
+        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?" << cgi.Print());
+    };
+    Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
+}
+
+void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher) {
+    THolder<NMon::TEvRemoteJsonInfoRes> handle = Ctx->Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>();
+    UNIT_ASSERT(handle != nullptr);
+    const TString& response = handle->Json;
+    NJson::TJsonValue value;
+    UNIT_ASSERT(ReadJsonTree(response, &value, false));
+    if (matcher.Status.Defined()) {
+        const bool resultOk = value["result"].GetStringSafe() == "OK"sv;
+        UNIT_ASSERT_VALUES_EQUAL(resultOk, *matcher.Status);
+    }
+}
+
+template<class EventType>
+void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenEvent && input->CastAsLocal<EventType>()) {
+            seenEvent = true;
+            return callback(input);
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -1564,7 +1937,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
 
     SendGetOwnershipRequest({.Partition=0,
                             .WriteId=writeId,
-                            .Owner="-=[ 0wn3r ]=-",
+                            .Owner=DEFAULT_OWNER,
                             .Cookie=cookie});
     WaitGetOwnershipResponse({.Cookie=cookie});
 
@@ -1586,7 +1959,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
                      .NeedSupportivePartition=true,
-                     .Owner="-=[ 0wn3r ]=-",
+                     .Owner=DEFAULT_OWNER,
                      .Cookie=4},
                      {.Cookie=4,
                      .Status=NMsgBusProxy::MSTATUS_OK});
@@ -1599,7 +1972,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
-                     .Owner="-=[ 0wn3r ]=-",
+                     .Owner=DEFAULT_OWNER,
                      .Cookie=5},
                      {.Cookie=5,
                      .Status=NMsgBusProxy::MSTATUS_ERROR});
@@ -1924,6 +2297,766 @@ Y_UNIT_TEST_F(After_Restarting_The_Tablet_Sends_A_TEvReadSet_For_Transactions_In
 
     // the PQ tablet should send a TEvReadSet for the executed transaction
     WaitReadSetEx(*tablet, {.Step=100, .TxId=txId_1, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=2});
+}
+
+Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForCalcPredicateResult();
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    //WaitProposeTransactionResponse({.TxId=txId,
+    //                               .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    TAutoPtr<IEventHandle> kvRequest;
+    InterceptSaveTxState(kvRequest);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitForNoReadSetAck(*tablet);
+
+    SendSaveTxState(kvRequest);
+
+    WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = MakeTabletID(false, 22222);
+
+    // We are simulating a situation where the recipient of TEvReadSet has already completed a transaction
+    // and has been deleted.
+    //
+    // To do this, we "forget" the TEvReadSet from the PQ tablet and send TEvClientConnected with the Dead flag
+    // instead of TEvReadSetAck.
+    TTestActorRuntimeBase::TEventFilter prev;
+    auto filter = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvReadSet>()) {
+            const auto& r = msg->Record;
+            if (r.GetTabletSource() == Ctx->TabletId) {
+                runtime.Send(event->Sender,
+                             Ctx->Edge,
+                             new TEvTabletPipe::TEvClientConnected(mockTabletId,
+                                                                   NKikimrProto::ERROR,
+                                                                   event->Sender,
+                                                                   TActorId(),
+                                                                   true,
+                                                                   true, // Dead
+                                                                   0));
+                return true;
+            }
+        }
+        return false;
+    };
+    prev = Ctx->Runtime->SetEventFilter(filter);
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    // We are sending a TEvReadSet so that the PQ tablet can complete the transaction.
+    tablet->SendReadSet(*Ctx->Runtime,
+                        {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
+    // will switch from the WAIT_RS_AKS state to the DELETING state.
+    WaitForTheTransactionToBeDeleted(txId);
+}
+
+Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
+{
+    const ui64 mockTabletId = MakeTabletID(false, 22222);
+    const ui64 txId = 67890;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < 1002; ++i) {
+        SendProposeTransactionRequest({.TxId=txId + i,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+    }
+
+    size_t preparedCount = 0;
+    size_t overloadedCount = 0;
+
+    for (ui64 i = 0; i < 1002; ++i) {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+        UNIT_ASSERT(event != nullptr);
+
+        UNIT_ASSERT(event->Record.HasStatus());
+
+        const auto status = event->Record.GetStatus();
+        switch (status) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            ++preparedCount;
+            break;
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
+            ++overloadedCount;
+            break;
+        default:
+            UNIT_FAIL("unexpected transaction status " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(status));
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(preparedCount, 1000);
+    UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+
+    // validate supportive partition was created
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(0);
+    WaitForExactTxWritesCount(0);
+}
+
+Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_After_Timeout, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    // create Topic API transaction
+    SyncGetOwnership({.Partition=0,
+                     .WriteId=TWriteId{0, 3},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4},
+                     {.Cookie=4,
+                     .Status=NMsgBusProxy::MSTATUS_OK});
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), false);
+
+    // create Kafka transaction
+    CreateSupportivePartitionForKafka({1, 0});
+    auto txInfo2 = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo2.TxWritesSize(), 2);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for this kafka transaction is deleted
+    auto txInfo3 = WaitForExactTxWritesCount(1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo3.GetTxWrites(0).GetKafkaTransaction(), false);
+}
+
+Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Should_Be_Deleted, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId1 = {1, 0};
+    NKafka::TProducerInstanceId producerInstanceId2 = {2, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    // create first kafka-transacition and write data to it
+    TString ownerCookie1 = CreateSupportivePartitionForKafka(producerInstanceId1);
+    SendKafkaTxnWriteRequest(producerInstanceId1, ownerCookie1);
+    WaitForExactSupportivePartitionsCount(1);
+    ResetPipe();
+
+    // advance time to value strictly less then kafka transaction timeout
+    ui64 testTimeAdvanceMs = KAFKA_TRANSACTION_DELETE_DELAY_MS / 2;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(testTimeAdvanceMs));
+
+    // create second kafka-transacition and write data to it
+    EnsurePipeExist();
+    TString ownerCookie2 = CreateSupportivePartitionForKafka(producerInstanceId2);
+    SendKafkaTxnWriteRequest(producerInstanceId2, ownerCookie2);
+    WaitForExactSupportivePartitionsCount(2);
+
+    // increment time till after timeout for the first transaction
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(
+        Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() + testTimeAdvanceMs + 1));
+    // trigger expired transactions cleanup
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+
+    // wait till supportive partition for first kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(1);
+    // validate that TxWrite for first transaction is deleted and for the second is preserved
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_Came_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    ui32 fisrtSupportivePartitionId = WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
+
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
+    bool seenEvent = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
+        return TTestActorRuntimeBase::EEventAction::DROP;
+    });
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    // wait for delete response and save it
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
+    SendGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=5});
+    // now we can eventually send TEvPQ::TEvDeletePartitionDone
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             deleteDoneEvent.Release(),
+                             0, 0);
+    WaitForTheTransactionToBeDeleted(txId);
+
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
+    UNIT_ASSERT_VALUES_UNEQUAL(txInfo.GetTxWrites(0).GetInternalPartitionId(), fisrtSupportivePartitionId);
+    TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    TAutoPtr<TEvKeyValue::TEvResponse> keyValueResponse;
+    bool seenDeletePartitionsDoneEvent = false;
+    bool seenKeyValResponse = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenDeletePartitionsDoneEvent && input->CastAsLocal<TEvPQ::TEvDeletePartitionDone>()) {
+            seenDeletePartitionsDoneEvent = true;
+        } else if (seenDeletePartitionsDoneEvent && !seenKeyValResponse && input->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            // next TEvKeyValue::TEvResponse after TEvPQ::TEvDeletePartitionDone contains info about successull deletion of writeInfo from KV
+            keyValueResponse = input->Release<TEvKeyValue::TEvResponse>();
+            seenKeyValResponse = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    // wait for delete response and save it
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenKeyValResponse]() {return seenKeyValResponse;};
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
+    SendGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=5});
+
+    // eventually send TEvKeyValue::TEvResponse
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             keyValueResponse.Release(),
+                             0, 0);
+
+    // wait for a deferred response for last GetOwnership request we sent
+    TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params)
+{
+    Y_ABORT_UNLESS(params.TabletsRSCount <= params.TabletsCount);
+    const ui64 txId = 67890;
+
+    TVector<NHelpers::TPQTabletMock*> tablets;
+    TVector<ui64> tabletIds;
+    for (size_t i = 0; i < params.TabletsCount; ++i) {
+        tabletIds.push_back(22222 + i);
+        tablets.push_back(CreatePQTabletMock(tabletIds.back()));
+    }
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders=tabletIds, .Receivers=tabletIds,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    for (auto* tablet : tablets) {
+        WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=tablet->TabletID(), .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    }
+    for (size_t i = 0; i < Min(params.TabletsRSCount, params.TabletsCount); ++i) {
+        tablets[i]->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=params.Decision});
+    }
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(500));
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=Nothing(), .Predicate=(params.AppDecision == NKikimrTx::TReadSetData::DECISION_COMMIT),});
+    WaitForAppSendRsResponse({.Status = params.ExpectedAppResponseStatus,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=params.ExpectedStatus});
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c0c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 0,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c3c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 3,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c5c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 5,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = false,  // получены все RS до вызова app
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c0a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 0,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c3a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 3,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5c5a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .TabletsRSCount = 5,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = false,  // получены все RS до вызова app
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5a4c, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .TabletsRSCount = 4,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_Send_ReadSet_Via_App_5a4a, TPQTabletFixture)
+{
+    TestSendingTEvReadSetViaApp({
+        .TabletsCount = 5,
+        .Decision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .TabletsRSCount = 4,
+        .AppDecision = NKikimrTx::TReadSetData::DECISION_ABORT,
+        .ExpectedAppResponseStatus = true,
+        .ExpectedStatus = NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+}
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = true,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForAppSendRsResponse({.Status = true,});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Commit_After_Abort, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = true,});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_With_Abort_After_Commit, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId, .SenderId=22222, .Predicate=false,});
+    WaitForAppSendRsResponse({.Status = true,});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED}); // RS=commit + ручной abort -> abort
+}
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Tx, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendAppSendRsRequest({.Step=100, .TxId=txId+1, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = false,});
+}
+
+Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Step, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_ABORT});
+
+    SendAppSendRsRequest({.Step=101, .TxId=txId, .SenderId=22222, .Predicate=true,});
+    WaitForAppSendRsResponse({.Status = false,});
+}
+
+
+void TPQTabletFixture::ExpectNoExclusiveLockAcquired()
+{
+    EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>(TDuration::Seconds(5));
+    UNIT_ASSERT(event == nullptr);
+}
+
+void TPQTabletFixture::ExpectNoReadQuotaAcquired()
+{
+    EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>(TDuration::Seconds(10));
+    UNIT_ASSERT(event == nullptr);
+}
+
+void TPQTabletFixture::SendAcquireExclusiveLock()
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvAcquireExclusiveLock());
+}
+
+class TEvReadTestEventHandle: public NActors::IEventHandle {
+public:
+    TEvReadTestEventHandle(THolder<TEvPQ::TEvRead>&& event, const TActorId& sender)
+        : NActors::IEventHandle(TActorId{}, sender, event.Release())
+    {}
+};
+
+void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender) {
+    EnsureReadQuoterExists();
+
+    auto request = MakeHolder<TEvPQ::TEvRead>(cookie, 0, 99999, 0, 9999, "", "client", 999, 99999, 99999, 0, "", false, TActorId{});
+    auto handle = new TEvReadTestEventHandle(std::move(request), sender);
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvRequestQuota(cookie, handle));
+}
+
+void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
+}
+
+void TPQTabletFixture::SendReleaseExclusiveLock()
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvReleaseExclusiveLock());
+}
+
+void TPQTabletFixture::WaitExclusiveLockAcquired()
+{
+    EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>();
+    UNIT_ASSERT(event);
+}
+
+void TPQTabletFixture::WaitReadQuotaAcquired()
+{
+    EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>();
+    UNIT_ASSERT(event);
+}
+
+void TPQTabletFixture::EnsureReadQuoterExists()
+{
+    if (ReadQuoter) {
+        return;
+    }
+
+    Cerr << "Ctx->Edge=" << Ctx->Edge << Endl;
+
+    ReadQuoter.ConstructInPlace();
+    ReadQuoter->Quoter = Ctx->Runtime->Register(new NPQ::TReadQuoter(ReadQuoter->PQConfig,
+                                                                     ReadQuoter->TopicConverter,
+                                                                     ReadQuoter->PQTabletConfig,
+                                                                     ReadQuoter->PartitionId,
+                                                                     TActorId{}, // TabletActor
+                                                                     Ctx->Edge,
+                                                                     1234567890, // TabletId
+                                                                     ReadQuoter->Counters));
+    Ctx->Runtime->EnableScheduleForActor(ReadQuoter->Quoter);
+    Ctx->Runtime->Send(ReadQuoter->Quoter, TActorId{}, new TEvents::TEvBootstrap());
+    //Ctx->Runtime->DispatchEvents();
+}
+
+Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
+{
+    EnsureReadQuoterExists();
+    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
+    //Ctx->Runtime->DispatchEvents();
+    SendAcquireReadQuota(1, Ctx->Edge);
+    WaitReadQuotaAcquired();
+
+    SendAcquireExclusiveLock();
+    ExpectNoExclusiveLockAcquired();
+
+    SendReadQuotaConsumed(1);
+    WaitExclusiveLockAcquired();
+
+    SendAcquireReadQuota(2, Ctx->Edge);
+    ExpectNoReadQuotaAcquired();
+
+    SendReleaseExclusiveLock();
+    WaitReadQuotaAcquired();
 }
 
 }

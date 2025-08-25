@@ -16,6 +16,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
@@ -50,11 +51,12 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , LLVMSettings_(std::move(options.LLVMSettings))
     , BlockEngineMode_(options.BlockEngineMode)
     , ExprOutputStream_(options.ExprOutputStream)
-    , CountersProvider_(options.CountersProvider_)
-    , NativeYtTypeFlags_(options.NativeYtTypeFlags_)
-    , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)
+    , CountersProvider_(options.CountersProvider)
+    , NativeYtTypeFlags_(options.NativeYtTypeFlags)
+    , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed)
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
+    , LangVer_(options.LangVer)
 {
     // Prepare input struct types and extract all column names from inputs
 
@@ -106,11 +108,11 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     // Translate
 
-    if (options.TranslationMode_ == ETranslationMode::Mkql) {
+    if (options.TranslationMode == ETranslationMode::Mkql) {
         SerializedProgram_ = TString{options.Query};
     } else {
-        ExprRoot_ = Compile(options.Query, options.TranslationMode_,
-            options.ModuleResolver, options.SyntaxVersion_, options.Modules,
+        ExprRoot_ = Compile(options.Query, options.TranslationMode,
+            options.ModuleResolver, options.SyntaxVersion, options.LangVer, options.Modules,
             options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode);
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
@@ -139,6 +141,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     ETranslationMode mode,
     IModuleResolver::TPtr factoryModuleResolver,
     ui16 syntaxVersion,
+    NYql::TLangVersion langver,
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
@@ -150,12 +153,21 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
     }
 
+    TMaybe<TIssue> verIssue;
+    if (!CheckLangVersion(langver, GetMaxReleasedLangVersion(), verIssue)) {
+        TIssues issues;
+        issues.AddIssue(*verIssue);
+        ythrow TCompileError("", issues.ToString());
+    }
+
     // Prepare type annotation context
 
     TTypeAnnotationContextPtr typeContext;
 
     IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
     typeContext = MakeIntrusive<TTypeAnnotationContext>();
+    typeContext->LangVer = langver;
+    typeContext->UseTypeDiffForConvertToError = true;
     typeContext->RandomProvider = CreateDefaultRandomProvider();
     typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
         CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :
@@ -185,6 +197,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             settings.PgParser = true;
         }
 
+        settings.LangVer = langver;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
@@ -230,6 +243,10 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
         astRes = ParseAst(TString(query));
+    }
+
+    if (verIssue) {
+        ExprContext_.IssueManager.RaiseIssue(*verIssue);
     }
 
     ExprContext_.IssueManager.AddIssues(astRes.Issues);
@@ -285,12 +302,14 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             LLVMSettings_,
             CountersProvider_,
             NativeYtTypeFlags_,
-            DeterministicTimeProviderSeed_
+            DeterministicTimeProviderSeed_,
+            langver,
+            true
         );
 
-        with_lock (graph.ScopedAlloc_) {
-            const auto value = graph.ComputationGraph_->GetValue();
-            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType_), nullptr);
+        with_lock (graph.ScopedAlloc) {
+            const auto value = graph.ComputationGraph->GetValue();
+            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), nullptr);
         }
         writer.OnEndMap();
 
@@ -303,7 +322,11 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                             ? PurecalcBlockInputCallableName
                             : PurecalcInputCallableName);
 
-    TTransformationPipeline pipeline(typeContext);
+    TTypeAnnCallableFactory typeAnnCallableFactory = [&]() {
+        return MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName);
+    };
+
+    TTransformationPipeline pipeline(typeContext, typeAnnCallableFactory);
 
     pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_, processorMode, selfName),
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
@@ -312,7 +335,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName));
+    pipeline.AddTypeAnnotationTransformer();
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -499,7 +522,7 @@ TString TWorkerFactory<TBase>::GetCompiledProgram() {
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);
-        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env);
+        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env.GetNodeStack());
     }
 
     return SerializedProgram_;
@@ -536,7 +559,8 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             LLVMSettings_,                                                              \
             CountersProvider_,                                                          \
             NativeYtTypeFlags_,                                                         \
-            DeterministicTimeProviderSeed_                                              \
+            DeterministicTimeProviderSeed_,                                             \
+            LangVer_                                                                    \
         ));                                                                             \
     }
 

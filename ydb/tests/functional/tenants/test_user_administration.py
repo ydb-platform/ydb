@@ -96,8 +96,10 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
 
             session.execute_scheme("create group ordinarygroup")
             session.execute_scheme("create user dbadmin2 password '1234'")
+            session.execute_scheme("create user dbadmin3 password '1234' nologin")
+            session.execute_scheme("create user dbadmin4 password '1234'")
             session.execute_scheme("create group dbsubadmins")
-            session.execute_scheme('alter group dbadmins add user dbadmin2, dbsubadmins')
+            session.execute_scheme('alter group dbadmins add user dbadmin2, dbadmin3, dbadmin4, dbsubadmins')
 
         # setup for database admins, second
         # make dbadmin the real admin of the database
@@ -114,10 +116,14 @@ def login_user(endpoint, database, user, password):
     return credentials._make_token_request()['access_token']
 
 
-def test_ordinaryuser_can_change_password_for_himself(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
+@pytest.mark.parametrize('subject_user', [
+    'ordinaryuser',
+    pytest.param('dbadmin4', id='dbadmin')
+])
+def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, subject_user):
     database_path = prepared_tenant_db
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'ordinaryuser', '1234')
+    user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '1234')
     credentials = ydb.AuthTokenCredentials(user_auth_token)
 
     with ydb_client(database_path, credentials=credentials) as driver:
@@ -125,9 +131,9 @@ def test_ordinaryuser_can_change_password_for_himself(ydb_endpoint, prepared_roo
 
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
-            session.execute_scheme("alter user ordinaryuser password '4321'")
+            session.execute_scheme(f"alter user {subject_user} password '4321'")
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'ordinaryuser', '4321')
+    user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '4321')
 
 
 def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
@@ -154,7 +160,6 @@ def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_d
     pytest.param('alter group dbadmins drop user dbsubadmins', id='remove-subgroup'),
     pytest.param('drop group dbadmins', id='remove-admin-group'),
     pytest.param('alter group dbadmins rename to dbadminsdemoted', id='rename-admin-group'),
-
 ])
 def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
     database_path = prepared_tenant_db
@@ -172,6 +177,30 @@ def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_
 
             assert exc_info.type is ydb.issues.Unauthorized
             assert 'Access denied.' in exc_info.value.message
+
+
+@pytest.mark.parametrize('query', [
+    pytest.param('alter user dbadmin2 password "4321"', id='change-password'),
+    pytest.param('alter user dbadmin2 nologin', id='block'),
+    pytest.param('alter user dbadmin3 login', id='unblock'),
+])
+def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
+    database_path = prepared_tenant_db
+
+    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
+    credentials = ydb.AuthTokenCredentials(user_auth_token)
+
+    with ydb_client(database_path, credentials=credentials) as driver:
+        driver.wait()
+
+        pool = ydb.SessionPool(driver)
+        with pool.checkout() as session:
+            with pytest.raises(ydb.issues.Error) as exc_info:
+                session.execute_scheme(query)
+
+        assert exc_info.type is ydb.issues.Unauthorized
+        logger.debug(exc_info.value.message)
+        assert 'Access denied.' in exc_info.value.message
 
 
 def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):

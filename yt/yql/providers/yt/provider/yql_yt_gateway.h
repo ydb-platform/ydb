@@ -13,6 +13,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 
@@ -251,6 +252,7 @@ public:
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -360,6 +362,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -386,6 +389,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
@@ -432,6 +436,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TCalcResult : public NCommon::TOperationResult {
@@ -635,6 +640,19 @@ public:
         TMaybe<TString> Token;
     };
 
+    struct TGetTableFilePathOptions: public TCommonOptions {
+        using TSelf = TGetTableFilePathOptions;
+
+        TGetTableFilePathOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Path)
+        OPTION_FIELD(bool, IsTemp)
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -697,6 +715,9 @@ public:
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 
     virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
+
+    virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
+
 };
 
 }

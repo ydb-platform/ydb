@@ -3,8 +3,7 @@ import json
 import os
 import io
 
-from six.moves.urllib import parse as urlparse
-from six import iteritems
+import urllib.parse as urlparse
 
 from ..base import BaseLockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
 
@@ -53,7 +52,7 @@ class NpmLockfile(BaseLockfile):
         """
         packages = self.data.get("packages", {})
 
-        for key, meta in iteritems(packages):
+        for key, meta in packages.items():
             if self._should_skip_package(key, meta):
                 continue
             meta["resolved"] = fn(_parse_package_meta(key, meta, allow_file_protocol=True))

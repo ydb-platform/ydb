@@ -3,19 +3,19 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-void QStorageTestEmpty_Impl(const NYql::IQStoragePtr& storage);
-void QStorageTestNoCommit_Impl(const NYql::IQStoragePtr& storage);
-void QStorageTestOne_Impl(const NYql::IQStoragePtr& storage);
-void QStorageTestManyKeys_Impl(const NYql::IQStoragePtr& storage);
-void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage, bool commit);
-void QStorageTestLimitWriterItems_Impl(const NYql::IQStoragePtr& storage);
-void QStorageTestLimitWriterBytes_Impl(const NYql::IQStoragePtr& storage);
+void QStorageTestEmptyImpl(const NYql::IQStoragePtr& storage);
+void QStorageTestNoCommitImpl(const NYql::IQStoragePtr& storage);
+void QStorageTestOneImpl(const NYql::IQStoragePtr& storage);
+void QStorageTestManyKeysImpl(const NYql::IQStoragePtr& storage);
+void QStorageTestInterleaveReadWriteImpl(const NYql::IQStoragePtr& storage, bool commit);
+void QStorageTestLimitWriterItemsImpl(const NYql::IQStoragePtr& storage);
+void QStorageTestLimitWriterBytesImpl(const NYql::IQStoragePtr& storage);
 
 #define GENERATE_ONE_TEST(NAME, FACTORY) \
     Y_UNIT_TEST(NAME) { \
         auto storage = FACTORY(); \
         if (storage) { \
-            QStorageTest##NAME##_Impl(storage); \
+            QStorageTest##NAME##Impl(storage); \
         } \
     }
 
@@ -23,9 +23,9 @@ void QStorageTestLimitWriterBytes_Impl(const NYql::IQStoragePtr& storage);
     Y_UNIT_TEST(NAME) { \
         auto storage = FACTORY(); \
         if (storage) { \
-            QStorageTest##NAME##_Impl(storage, OPT); \
+            QStorageTest##NAME##Impl(storage, OPT); \
         } \
-    }    
+    }
 
 #define GENERATE_TESTS(FACTORY, commit)\
     GENERATE_ONE_TEST(Empty, FACTORY) \

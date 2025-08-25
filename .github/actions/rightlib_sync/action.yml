@@ -1,12 +1,22 @@
 name: rightlib sync
 description: Automatically sync rightlib branch into main
 inputs:
-  command:
+  base_branch:
     required: true
-    description: "create-pr or check-pr"
+    description: "Branch to merge into"
+  head_branch:
+    required: true
+    description: "Branch to merge into base"
+  label:
+    required: true
+    description: "Label to mark your PR with"
   repository:
     required: true
     description: "token for access GitHub"
+  merge_ours:
+    description: "File to resolve with --ours (base branch) upon merge conflict"
+  merge_theirs:
+    description: "File to resolve with --theirs (head branch) upon merge conflict"
   gh_personal_access_token:
     required: true
     description: "token for access GitHub"
@@ -21,8 +31,9 @@ runs:
     - name: configure
       shell: bash
       run: |
-        git config --global user.email "alex@ydb.tech"
-        git config --global user.name "Alexander Smirnov"
+          git config --global user.name YDBot
+          git config --global user.email ydbot@ydb.tech
+          git config --local github.token ${{ inputs.gh_personal_access_token }}
 
     - name: run-command
       shell: bash
@@ -31,5 +42,13 @@ runs:
         TOKEN: ${{ inputs.gh_personal_access_token }}
       run: |
         cd ./ydb/ci/rightlib
-        ./sync-rightlib.py "${{ inputs.command }}"
+        MERGE_ARGS=''
+        if [ -n "${{ inputs.merge_ours }}" ]; then
+          MERGE_ARGS+="--merge-ours ${{ inputs.merge_ours }}"
+        fi
+        if [ -n "${{ inputs.merge_theirs }}" ]; then
+          MERGE_ARGS+=" --merge-theirs ${{ inputs.merge_theirs }}"
+        fi
+        echo $MERGE_ARGS
+        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}" $MERGE_ARGS
 

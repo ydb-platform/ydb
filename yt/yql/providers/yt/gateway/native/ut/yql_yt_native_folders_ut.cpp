@@ -1,5 +1,6 @@
 #include "library/cpp/testing/unittest/registar.h"
 #include <library/cpp/yson/node/node_io.h>
+#include <yt/yql/providers/yt/lib/secret_masker/dummy/dummy_secret_masker.h>
 #include <yt/yql/providers/yt/lib/ut_common/yql_ut_common.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/mock_server/server.h>
@@ -190,6 +191,7 @@ std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TP
     auto gatewaysConfig = MakeGatewaysConfig(port);
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
+    nativeServices.SecretMasker = CreateDummySecretMasker();
 
     auto ytGateway = CreateYtNativeGateway(nativeServices);
     auto ytState = MakeIntrusive<TYtState>(types);

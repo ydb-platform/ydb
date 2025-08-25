@@ -20,19 +20,20 @@ private:
 
     virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
-    virtual bool DoIsAppropriateFor(const TString& /*subColumnName*/, const EOperation op) const override {
-        return op == EOperation::Equals;
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
+        return op.GetOperation() == EOperation::Equals && op.GetCaseSensitive();
     }
 
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override;
-    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
 public:
     TBloomIndexMeta() = default;

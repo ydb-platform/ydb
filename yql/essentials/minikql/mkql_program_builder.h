@@ -4,6 +4,7 @@
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include "mkql_type_builder.h"
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 
@@ -142,7 +143,8 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = t
 
 class TProgramBuilder : public TTypeBuilder {
 public:
-    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
+    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
+        NYql::TLangVersion langver = NYql::UnknownLangVersion);
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -158,7 +160,7 @@ public:
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), true);
     }
 
 
@@ -166,7 +168,7 @@ public:
     TRuntimeNode NewTzDataLiteral(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) const {
         auto data = NUdf::TUnboxedValuePod(value);
         data.SetTimezoneId(tzId);
-        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env), true);
+        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), true);
     }
 
     template <NUdf::EDataSlot Type>
@@ -245,8 +247,8 @@ public:
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
     TRuntimeNode ListFromBlocks(TRuntimeNode list);
-    TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
-    TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
+    TRuntimeNode WideSkipBlocks(TRuntimeNode stream, TRuntimeNode count);
+    TRuntimeNode WideTakeBlocks(TRuntimeNode stream, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -264,9 +266,9 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockStorage(TRuntimeNode stream, TType* returnType);
-    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+    TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
+    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
         const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
     );
@@ -406,7 +408,7 @@ public:
     TRuntimeNode SkipNullElements(TRuntimeNode list, const TArrayRef<const ui32>& elements);
 
     TRuntimeNode ExpandMap(TRuntimeNode flow, const TExpandLambda& handler);
-    TRuntimeNode WideMap(TRuntimeNode flow, const TWideLambda& handler);
+    TRuntimeNode WideMap(TRuntimeNode flowOrStream, const TWideLambda& handler);
     TRuntimeNode NarrowMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowFlatMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowMultiMap(TRuntimeNode flow, const TWideLambda& handler);
@@ -804,7 +806,8 @@ private:
     TRuntimeNode BuildFilterNulls(TRuntimeNode list, const TArrayRef<std::conditional_t<OnStruct, const std::string_view, const ui32>>& members,
         const std::conditional_t<OnStruct, std::vector<std::pair<std::string_view, TType*>>, std::vector<TType*>>& filteredItems);
 
-    TRuntimeNode BuildWideTopOrSort(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
+    TRuntimeNode BuildWideTopOrSort(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys, bool isBlocks);
+    TRuntimeNode BuildWideTopOrSortImpl(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys, TType::EKind streamKind);
 
     TRuntimeNode InvokeBinary(const std::string_view& callableName, TType* type, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
@@ -866,9 +869,10 @@ private:
 
     bool IsNull(TRuntimeNode arg);
 protected:
-    const IFunctionRegistry& FunctionRegistry;
-    const bool VoidWithEffects;
-    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    const IFunctionRegistry& FunctionRegistry_;
+    const bool VoidWithEffects_;
+    const NYql::TLangVersion LangVer_;
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 
 bool CanExportType(TType* type, const TTypeEnvironment& env);

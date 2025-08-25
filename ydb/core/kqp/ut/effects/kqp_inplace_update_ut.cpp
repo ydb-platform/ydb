@@ -69,14 +69,10 @@ void Test(
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
+    auto settings = TKikimrSettings().SetKqpSettings({ setting });
     if (useSink) {
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
     }
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({setting});
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -254,7 +250,6 @@ Y_UNIT_TEST_TWIN(SingleRowIf, UseSink) {
         UseSink);
 }
 
-// allow multiple keys in KqpLookupTable to enable this test
 Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, UseSink) {
     Test(
         R"( DECLARE $key AS Uint32; -- not Uint64
@@ -295,18 +290,6 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, UseSink) {
 }
 
 Y_UNIT_TEST_TWIN(Negative_SingleRowWithValueCast, UseSink) {
-/*
-    (
-    (declare $key (DataType 'Uint64))
-    (declare $value (DataType 'Int32))
-    (let $1 (KqpTable '"/Root/InplaceUpdate" '"72057594046644480:11" '"" '1))
-    (let $2 (DataType 'Uint64))
-    (let $3 (KqpLookupTable $1 (Iterator (AsList (AsStruct '('"Key" $key)))) '('"Key")))
-    (return (FlatMap $3 (lambda '($4) (Just (AsStruct '('"Key" (Member $4 '"Key")) '('"ValueInt" (Just (Convert $value $2))))))))
-    )
-
-    `Convert` is not safe callable, so there is no InplaceUpdate optimization here
-*/
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS Int32; -- not Uint64
@@ -371,7 +354,6 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowListFromRange, UseSink) {
         UseSink);
 }
 
-// allow multiple keys in KqpLookupTable to enable this test
 Y_UNIT_TEST_TWIN(Negative_BatchUpdate, UseSink) {
     Test(
         R"( DECLARE $key1 AS Uint64;
@@ -433,11 +415,7 @@ Y_UNIT_TEST(BigRow) {
     unsafeCommitSetting.SetValue("true");
 
     // source read use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
+    auto settings = TKikimrSettings().SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();

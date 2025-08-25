@@ -4,8 +4,6 @@
  */
 
 #include "aws/s3/private/s3_request_messages.h"
-#include "aws/s3/private/s3_checksums.h"
-#include "aws/s3/private/s3_client_impl.h"
 #include "aws/s3/private/s3_meta_request_impl.h"
 #include "aws/s3/private/s3_util.h"
 #include <aws/cal/hash.h>
@@ -13,9 +11,8 @@
 #include <aws/common/encoding.h>
 #include <aws/common/string.h>
 #include <aws/http/request_response.h>
+#include <aws/io/async_stream.h>
 #include <aws/io/stream.h>
-#include <aws/io/uri.h>
-#include <aws/s3/s3.h>
 #include <inttypes.h>
 
 const struct aws_byte_cursor g_s3_create_multipart_upload_excluded_headers[] = {
@@ -118,6 +115,7 @@ const struct aws_byte_cursor g_s3_complete_multipart_upload_with_checksum_exclud
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-object-lock-legal-hold"),
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-copy-source"),
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-copy-source-range"),
+    AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-sdk-checksum-algorithm"),
 };
 
 const struct aws_byte_cursor g_s3_list_parts_excluded_headers[] = {
@@ -340,7 +338,7 @@ struct aws_http_message *aws_s3_upload_part_message_new(
 
     if (should_compute_content_md5) {
         if (!checksum_config || checksum_config->location == AWS_SCL_NONE) {
-            /* MD5 will be skiped if flexible checksum used */
+            /* MD5 will be skipped if flexible checksum used */
             if (aws_s3_message_util_add_content_md5_header(allocator, buffer, message)) {
                 goto error_clean_up;
             }
@@ -420,111 +418,112 @@ error_clean_up:
     return NULL;
 }
 
-/* Creates a HEAD GetObject request to get the size of the specified object. */
-struct aws_http_message *aws_s3_get_object_size_message_new(
-    struct aws_allocator *allocator,
-    struct aws_http_message *base_message,
-    struct aws_byte_cursor source_bucket,
-    struct aws_byte_cursor source_key) {
-
-    (void)base_message;
-
-    AWS_PRECONDITION(allocator);
-
-    struct aws_http_message *message = aws_http_message_new_request(allocator);
-
-    if (message == NULL) {
-        return NULL;
-    }
-
-    const struct aws_byte_cursor head_operation = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("HEAD");
-    if (aws_http_message_set_request_method(message, head_operation)) {
-        goto error_clean_up;
-    }
-
-    char destination_path[1024];
-    snprintf(destination_path, sizeof(destination_path), "/%.*s", (int)source_key.len, source_key.ptr);
-    /* TODO: url encode */
-
-    if (aws_http_message_set_request_path(message, aws_byte_cursor_from_c_str(destination_path))) {
-        goto error_clean_up;
-    }
-
-    char host_header_value[1024];
-    /* TODO: Fix the hard-coded host name. */
-    snprintf(
-        host_header_value,
-        sizeof(host_header_value),
-        "%.*s.s3.us-west-2.amazonaws.com",
-        (int)source_bucket.len,
-        source_bucket.ptr);
-    struct aws_http_header host_header = {
-        .name = g_host_header_name,
-        .value = aws_byte_cursor_from_c_str(host_header_value),
-    };
-    aws_http_message_add_header(message, host_header);
-
-    aws_http_message_set_body_stream(message, NULL);
-
-    return message;
-
-error_clean_up:
-
-    if (message != NULL) {
-        aws_http_message_release(message);
-        message = NULL;
-    }
-
-    return NULL;
-}
-
-/* Creates a HEAD GetObject sub-request to get the size of the source object of a Copy meta request. */
+static const struct aws_byte_cursor s_slash_char = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("/");
+/**
+ * For the CopyObject operation, create the initial HEAD message to retrieve the size of the copy source.
+ */
 struct aws_http_message *aws_s3_get_source_object_size_message_new(
     struct aws_allocator *allocator,
     struct aws_http_message *base_message) {
+    struct aws_http_message *message = NULL;
+    struct aws_byte_buf head_object_host_header;
+    AWS_ZERO_STRUCT(head_object_host_header);
+
     AWS_PRECONDITION(allocator);
 
-    struct aws_http_message *message = NULL;
-
-    /* find the x-amz-copy-source header */
+    /* Find the x-amz-copy-source header, to extract source bucket/key information. */
     struct aws_http_headers *headers = aws_http_message_get_headers(base_message);
-
-    struct aws_byte_cursor source_bucket;
-    AWS_ZERO_STRUCT(source_bucket);
-
-    const struct aws_byte_cursor copy_source_header = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-copy-source");
-    if (aws_http_headers_get(headers, copy_source_header, &source_bucket) != AWS_OP_SUCCESS) {
-        AWS_LOGF_ERROR(AWS_LS_S3_GENERAL, "CopyRequest is missing the x-amz-copy-source header");
+    if (!headers) {
+        AWS_LOGF_ERROR(AWS_LS_S3_GENERAL, "CopyRequest is missing headers");
         return NULL;
     }
 
-    if (source_bucket.len > 1 && source_bucket.ptr[0] == '/') {
-        /* skip the leading slash */
-        aws_byte_cursor_advance(&source_bucket, 1);
+    struct aws_byte_cursor source_header;
+    const struct aws_byte_cursor copy_source_header = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("x-amz-copy-source");
+    if (aws_http_headers_get(headers, copy_source_header, &source_header) != AWS_OP_SUCCESS) {
+        AWS_LOGF_ERROR(AWS_LS_S3_GENERAL, "CopyRequest is missing the x-amz-copy-source header");
+        return NULL;
     }
-    /* as we skipped the optional leading slash, from this point source format is always {bucket}/{key}. split them.
-     */
-    struct aws_byte_cursor source_key = source_bucket;
-
-    while (source_key.len > 0) {
-        if (*source_key.ptr == '/') {
-            source_bucket.len = source_key.ptr - source_bucket.ptr;
-            aws_byte_cursor_advance(&source_key, 1); /* skip the / between bucket and key */
-            break;
-        }
-        aws_byte_cursor_advance(&source_key, 1);
+    struct aws_byte_cursor host;
+    if (aws_http_headers_get(headers, g_host_header_name, &host) != AWS_OP_SUCCESS) {
+        AWS_LOGF_ERROR(AWS_LS_S3_GENERAL, "CopyRequest is missing the Host header");
+        return NULL;
     }
 
-    if (source_bucket.len == 0 || source_key.len == 0) {
+    struct aws_byte_cursor request_path = source_header;
+
+    /* Skip optional leading slash. */
+    if (aws_byte_cursor_starts_with(&request_path, &s_slash_char)) {
+        aws_byte_cursor_advance(&request_path, 1);
+    }
+
+    /* From this point forward, the format is {bucket}/{key} - split
+    components.*/
+
+    struct aws_byte_cursor source_bucket = {0};
+
+    if (aws_byte_cursor_next_split(&request_path, '/', &source_bucket)) {
+        aws_byte_cursor_advance(&request_path, source_bucket.len);
+    }
+
+    if (source_bucket.len == 0 || request_path.len == 0) {
         AWS_LOGF_ERROR(
             AWS_LS_S3_GENERAL,
-            "The CopyRequest x-amz-copy-source header must contain the bucket and object key separated by a slash");
+            "CopyRequest x-amz-copy-source header does not follow expected bucket/key format: " PRInSTR,
+            AWS_BYTE_CURSOR_PRI(source_header));
         goto error_cleanup;
     }
-    message = aws_s3_get_object_size_message_new(allocator, base_message, source_bucket, source_key);
+
+    if (aws_byte_buf_init_copy_from_cursor(&head_object_host_header, allocator, source_bucket)) {
+        goto error_cleanup;
+    }
+
+    /* Reuse the domain name from the original Host header for the HEAD request.
+     * TODO: following code works by replacing bucket name in the host with the
+     * source bucket name. this only works for virtual host endpoints and has a
+     * slew of other issues, like not supporting source in a different region.
+     * This covers common case, but we need to rethink how we can support all
+     * cases in general.
+     */
+    struct aws_byte_cursor domain_name;
+    const struct aws_byte_cursor dot = aws_byte_cursor_from_c_str(".");
+    if (aws_byte_cursor_find_exact(&host, &dot, &domain_name)) {
+        AWS_LOGF_ERROR(AWS_LS_S3_GENERAL, "CopyRequest Host header not in FQDN format");
+        goto error_cleanup;
+    }
+
+    if (aws_byte_buf_append_dynamic(&head_object_host_header, &domain_name)) {
+        goto error_cleanup;
+    }
+
+    message = aws_http_message_new_request(allocator);
+    if (message == NULL) {
+        goto error_cleanup;
+    }
+
+    if (aws_http_message_set_request_method(message, g_head_method)) {
+        goto error_cleanup;
+    }
+
+    struct aws_http_header host_header = {
+        .name = g_host_header_name,
+        .value = aws_byte_cursor_from_buf(&head_object_host_header),
+    };
+    if (aws_http_message_add_header(message, host_header)) {
+        goto error_cleanup;
+    }
+
+    if (aws_http_message_set_request_path(message, request_path)) {
+        goto error_cleanup;
+    }
+
+    aws_byte_buf_clean_up(&head_object_host_header);
+    return message;
 
 error_cleanup:
-    return message;
+    aws_byte_buf_clean_up(&head_object_host_header);
+    aws_http_message_release(message);
+    return NULL;
 }
 
 static const struct aws_byte_cursor s_complete_payload_begin = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(
@@ -553,14 +552,13 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
     struct aws_http_message *base_message,
     struct aws_byte_buf *body_buffer,
     const struct aws_string *upload_id,
-    const struct aws_array_list *etags,
-    struct aws_byte_buf *checksums,
+    const struct aws_array_list *parts,
     enum aws_s3_checksum_algorithm algorithm) {
     AWS_PRECONDITION(allocator);
     AWS_PRECONDITION(base_message);
     AWS_PRECONDITION(body_buffer);
     AWS_PRECONDITION(upload_id);
-    AWS_PRECONDITION(etags);
+    AWS_PRECONDITION(parts);
 
     const struct aws_byte_cursor *mpu_algorithm_checksum_name = aws_get_complete_mpu_name_from_algorithm(algorithm);
 
@@ -601,7 +599,7 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
         goto error_clean_up;
     }
 
-    /* Create XML payload with all of the etags of finished parts */
+    /* Create XML payload with all the etags of finished parts */
     {
         aws_byte_buf_reset(body_buffer, false);
 
@@ -609,18 +607,17 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
             goto error_clean_up;
         }
 
-        for (size_t etag_index = 0; etag_index < aws_array_list_length(etags); ++etag_index) {
-            struct aws_string *etag = NULL;
+        for (size_t part_index = 0; part_index < aws_array_list_length(parts); ++part_index) {
+            struct aws_s3_mpu_part_info *part = NULL;
 
-            aws_array_list_get_at(etags, &etag, etag_index);
-
-            AWS_FATAL_ASSERT(etag != NULL);
+            aws_array_list_get_at(parts, &part, part_index);
+            AWS_FATAL_ASSERT(part != NULL);
 
             if (aws_byte_buf_append_dynamic(body_buffer, &s_part_section_string_0)) {
                 goto error_clean_up;
             }
 
-            struct aws_byte_cursor etag_byte_cursor = aws_byte_cursor_from_string(etag);
+            struct aws_byte_cursor etag_byte_cursor = aws_byte_cursor_from_string(part->etag);
 
             if (aws_byte_buf_append_dynamic(body_buffer, &etag_byte_cursor)) {
                 goto error_clean_up;
@@ -631,7 +628,7 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
             }
 
             char part_number_buffer[32] = "";
-            int part_number = (int)(etag_index + 1);
+            int part_number = (int)(part_index + 1);
             int part_number_num_char = snprintf(part_number_buffer, sizeof(part_number_buffer), "%d", part_number);
             struct aws_byte_cursor part_number_byte_cursor =
                 aws_byte_cursor_from_array(part_number_buffer, part_number_num_char);
@@ -643,8 +640,9 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
             if (aws_byte_buf_append_dynamic(body_buffer, &s_close_part_number_tag)) {
                 goto error_clean_up;
             }
+
             if (mpu_algorithm_checksum_name) {
-                struct aws_byte_cursor checksum = aws_byte_cursor_from_buf(&checksums[etag_index]);
+                struct aws_byte_cursor checksum = aws_byte_cursor_from_buf(&part->checksum_base64);
 
                 if (aws_byte_buf_append_dynamic(body_buffer, &s_open_start_bracket)) {
                     goto error_clean_up;
@@ -745,6 +743,8 @@ struct aws_input_stream *aws_s3_message_util_assign_body(
     }
 
     struct aws_input_stream *input_stream = aws_input_stream_new_from_cursor(allocator, &buffer_byte_cursor);
+    struct aws_byte_buf content_encoding_header_buf;
+    AWS_ZERO_STRUCT(content_encoding_header_buf);
 
     if (input_stream == NULL) {
         goto error_clean_up;
@@ -754,11 +754,31 @@ struct aws_input_stream *aws_s3_message_util_assign_body(
         if (checksum_config->location == AWS_SCL_TRAILER) {
             /* aws-chunked encode the payload and add related headers */
 
-            /* set Content-Encoding header. TODO: the aws-chunked should be appended to the existing content encoding.
+            /* set Content-Encoding header. If the header already exists, append the exisiting value to aws-chunked
+             * We already made sure that the existing value is not 'aws_chunked' in 'aws_s3_client_make_meta_request'
+             * function.
              */
-            if (aws_http_headers_set(headers, g_content_encoding_header_name, g_content_encoding_header_aws_chunked)) {
+            struct aws_byte_cursor content_encoding_header_cursor;
+            bool has_content_encoding_header =
+                aws_http_headers_get(headers, g_content_encoding_header_name, &content_encoding_header_cursor) ==
+                AWS_OP_SUCCESS;
+            size_t content_encoding_header_buf_size =
+                has_content_encoding_header
+                    ? g_content_encoding_header_aws_chunked.len + content_encoding_header_cursor.len + 1
+                    : g_content_encoding_header_aws_chunked.len;
+            aws_byte_buf_init(&content_encoding_header_buf, allocator, content_encoding_header_buf_size);
+
+            if (has_content_encoding_header) {
+                aws_byte_buf_append_dynamic(&content_encoding_header_buf, &content_encoding_header_cursor);
+                aws_byte_buf_append_byte_dynamic(&content_encoding_header_buf, ',');
+            }
+            aws_byte_buf_append_dynamic(&content_encoding_header_buf, &g_content_encoding_header_aws_chunked);
+
+            if (aws_http_headers_set(
+                    headers, g_content_encoding_header_name, aws_byte_cursor_from_buf(&content_encoding_header_buf))) {
                 goto error_clean_up;
             }
+
             /* set x-amz-trailer header */
             if (aws_http_headers_set(
                     headers,
@@ -803,12 +823,13 @@ struct aws_input_stream *aws_s3_message_util_assign_body(
     aws_http_message_set_body_stream(out_message, input_stream);
     /* Let the message take the full ownership */
     aws_input_stream_release(input_stream);
-
+    aws_byte_buf_clean_up(&content_encoding_header_buf);
     return input_stream;
 
 error_clean_up:
     AWS_LOGF_ERROR(AWS_LS_S3_CLIENT, "Failed to assign body for s3 request http message, from body buffer .");
     aws_input_stream_release(input_stream);
+    aws_byte_buf_clean_up(&content_encoding_header_buf);
     return NULL;
 }
 
@@ -916,49 +937,6 @@ struct aws_http_message *aws_s3_message_util_copy_http_message_no_body_filter_he
 error_clean_up:
     aws_http_message_release(message);
     return NULL;
-}
-
-/* Copy message and retain all headers, but replace body with one that reads directly from a filepath. */
-struct aws_http_message *aws_s3_message_util_copy_http_message_filepath_body_all_headers(
-    struct aws_allocator *allocator,
-    struct aws_http_message *base_message,
-    struct aws_byte_cursor filepath) {
-
-    bool success = false;
-    struct aws_string *filepath_str = NULL;
-    struct aws_input_stream *body_stream = NULL;
-    struct aws_http_message *message = NULL;
-
-    /* Copy message and retain all headers */
-    message = aws_s3_message_util_copy_http_message_no_body_filter_headers(
-        allocator,
-        base_message,
-        NULL /*excluded_header_array*/,
-        0 /*excluded_header_array_size*/,
-        false /*exclude_x_amz_meta*/);
-    if (!message) {
-        goto clean_up;
-    }
-
-    /* Create body-stream that reads from file */
-    filepath_str = aws_string_new_from_cursor(allocator, &filepath);
-    body_stream = aws_input_stream_new_from_file(allocator, aws_string_c_str(filepath_str));
-    if (!body_stream) {
-        goto clean_up;
-    }
-    aws_http_message_set_body_stream(message, body_stream);
-
-    success = true;
-
-clean_up:
-    aws_string_destroy(filepath_str);
-    aws_input_stream_release(body_stream);
-    if (success) {
-        return message;
-    } else {
-        aws_http_message_release(message);
-        return NULL;
-    }
 }
 
 void aws_s3_message_util_copy_headers(

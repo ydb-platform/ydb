@@ -10,7 +10,8 @@ class TestYtCtas:
             CREATE TABLE from_yt (
                 PRIMARY KEY (key)
             ) WITH (
-                STORE = COLUMN
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             )
             AS SELECT UNWRAP(key) AS key, subkey, value FROM plato.input
         """)
@@ -22,5 +23,5 @@ class TestYtCtas:
             ORDER BY subkey
         """)
 
-        result = kqp_run.yql_exec(verbose=True)
+        result = kqp_run.yql_exec(verbose=True, user='root@system')
         validate_sample_result(result.results)

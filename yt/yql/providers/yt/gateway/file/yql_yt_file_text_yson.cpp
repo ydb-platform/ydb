@@ -10,16 +10,18 @@ namespace NYql::NFile {
 
 class TTextYsonInput: public NYT::TRawTableReader {
 public:
-    TTextYsonInput(const TString& file, const TColumnsInfo& columnsInfo) {
+    TTextYsonInput(const TString& file, const TColumnsInfo& columnsInfo, bool addRowIndex) {
         TIFStream in(file);
 
         TBinaryYsonWriter writer(&Input_, ::NYson::EYsonType::ListFragment);
-        writer.OnBeginAttributes();
-        writer.OnKeyedItem("row_index");
-        writer.OnInt64Scalar(0);
-        writer.OnEndAttributes();
-        writer.OnEntity();
-        writer.OnListItem();
+        if (addRowIndex) {
+            writer.OnBeginAttributes();
+            writer.OnKeyedItem("row_index");
+            writer.OnInt64Scalar(0);
+            writer.OnEndAttributes();
+            writer.OnEntity();
+            writer.OnListItem();
+        }
         NYT::NYson::IYsonConsumer* consumer = &writer;
         THolder<TColumnFilteringConsumer> filter;
         if (columnsInfo.Columns || columnsInfo.RenameColumns) {
@@ -59,14 +61,14 @@ private:
     TBufferStream Input_;
 };
 
-TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files) {
+TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files, bool addRowIndex) {
     TVector<NYT::TRawTableReaderPtr> rawReaders;
     for (auto& file: files) {
         if (!NFs::Exists(file.first)) {
             rawReaders.emplace_back(nullptr);
             continue;
         }
-        rawReaders.emplace_back(MakeIntrusive<TTextYsonInput>(file.first, file.second));
+        rawReaders.emplace_back(MakeIntrusive<TTextYsonInput>(file.first, file.second, addRowIndex));
     }
     return rawReaders;
 }

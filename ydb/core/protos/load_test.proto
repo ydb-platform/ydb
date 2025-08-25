@@ -1,4 +1,3 @@
-import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/datashard_load.proto";

@@ -200,6 +200,7 @@ protected:
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
             );
 
         return WrapFuture(future, [](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

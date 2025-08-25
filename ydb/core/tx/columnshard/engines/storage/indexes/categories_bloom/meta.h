@@ -21,15 +21,15 @@ private:
     }
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
-        if (!subColumnName) {
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
+        if (!op.GetCaseSensitive()) {
             return false;
         }
-        if (op != EOperation::Equals) {
+        if (op.GetOperation() != EOperation::Equals) {
             return false;
         }
         return true;
@@ -47,7 +47,8 @@ protected:
         AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;

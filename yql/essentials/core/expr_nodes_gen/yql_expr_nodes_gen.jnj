@@ -203,7 +203,7 @@ public:
         {%- endfor %}
 
         {%- if node.Builder.Kind == "FreeArg" %}
-        TBase::FreeArgsHolder.assign(item.FreeArgs().begin(), item.FreeArgs().end());
+        TBase::FreeArgsHolder_.assign(item.FreeArgs().begin(), item.FreeArgs().end());
         {%- endif %}
 
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
@@ -215,7 +215,7 @@ public:
     {% endif %}
 
     {%- for child in node.aux.allChildren %}
-    TBuilder<TParent, TDerived>& {{child.Name}}(const TStringBuf& argName) { {{child.aux.holderName}} = {{child.Type}}(this->GetArgFunc(argName)); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
+    TBuilder<TParent, TDerived>& {{child.Name}}(const TStringBuf& argName) { {{child.aux.holderName}} = {{child.Type}}(this->GetArgFunc_(argName)); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
         {% if child.Optional %}
     TBuilder<TParent, TDerived>& {{child.Name}}(const TMaybe<{{child.Type}}>& node) { {{child.aux.holderName}} = node; return *static_cast<TBuilder<TParent, TDerived>*>(this); }
         {% endif %}
@@ -224,8 +224,8 @@ public:
     TBuilder<TParent, TDerived>& {{child.Name}}(const TExprNode::TPtr& node) { {{child.aux.holderName}} = {{child.Type}}(node); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
 
     TBuilder<TParent, TDerived>& {{child.Name}}(std::function<void(TExprNodeBuilder&)> fluentFunc) {
-        TExprNodeBuilder fluentBuilder(this->Pos, this->Ctx, [this] (const TStringBuf& argName) {
-            return this->GetArgFunc(argName).Ptr();
+        TExprNodeBuilder fluentBuilder(this->Pos_, this->Ctx_, [this] (const TStringBuf& argName) {
+            return this->GetArgFunc_(argName).Ptr();
         });
 
         fluentFunc(fluentBuilder);
@@ -234,20 +234,20 @@ public:
     }
 
     TBuilder<TBuilder<TParent, TDerived>, {{child.Type}}> {{child.Name}}() {
-        return TBuilder<TBuilder<TParent, TDerived>, {{child.Type}}>(this->Ctx, this->Pos,
+        return TBuilder<TBuilder<TParent, TDerived>, {{child.Type}}>(this->Ctx_, this->Pos_,
             [this] (const {{child.Type}}& node) mutable -> TBuilder<TParent, TDerived>& {
                 {{child.aux.holderName}} = node;
                 return *static_cast<TBuilder<TParent, TDerived>*>(this);
-            }, this->GetArgFunc);
+            }, this->GetArgFunc_);
     }
 
     template<typename TNode>
     TBuilder<TBuilder<TParent, TDerived>, TNode> {{child.Name}}() {
-        return TBuilder<TBuilder<TParent, TDerived>, TNode>(this->Ctx, this->Pos,
+        return TBuilder<TBuilder<TParent, TDerived>, TNode>(this->Ctx_, this->Pos_,
             [this] (const TNode& node) mutable -> TBuilder<TParent, TDerived>&{
                 {{child.aux.holderName}} = node;
                 return *static_cast<TBuilder<TParent, TDerived>*>(this);
-            }, this->GetArgFunc);
+            }, this->GetArgFunc_);
     }
     {%- endfor %}
 };
@@ -344,7 +344,7 @@ class UnknownBuilder {
         {%- if node.Match and (node.Match.Type == "Callable" or node.Match.Type == "CallableBase") %}
         TExprNode::TListType argsList;
             {%- if node.Builder.Kind == "List" %}
-        for (auto child : this->Items) {
+        for (auto child : this->Items_) {
             argsList.push_back(child.Ptr());
         }
             {%- else %}
@@ -357,15 +357,15 @@ class UnknownBuilder {
                 {% if node.Builder.Kind == "FreeArg" %}
         size_t fixedChildCount = {{ node.aux.allChildren | length }};
         YQL_ENSURE(argsList.size() == fixedChildCount);
-        for (size_t i = 0; i < this->FreeArgsHolder.size(); ++i) {
-            argsList.push_back(this->FreeArgsHolder[i].Ptr());
+        for (size_t i = 0; i < this->FreeArgsHolder_.size(); ++i) {
+            argsList.push_back(this->FreeArgsHolder_[i].Ptr());
         }
                 {% endif %}
             {%- endif %}
             {%- if node.Match.Type == "CallableBase" %}
-        auto node = this->Ctx.NewCallable(this->Pos, this->CallableNameHolder, std::move(argsList));
+        auto node = this->Ctx_.NewCallable(this->Pos_, this->CallableNameHolder, std::move(argsList));
             {%- else %}
-        auto node = this->Ctx.NewCallable(this->Pos, "{{ node.Match.Name }}", std::move(argsList));
+        auto node = this->Ctx_.NewCallable(this->Pos_, "{{ node.Match.Name }}", std::move(argsList));
             {%- endif %}
         return {{ node.aux.qName }}(node);
         {%- elif node.Match and node.Match.Type == "Tuple"%}
@@ -376,14 +376,14 @@ class UnknownBuilder {
             tupleItems.push_back(this->{{ child.aux.holderName }}.Cast().Ptr());
         }
             {%- endfor %}
-        auto node = this->Ctx.NewList(this->Pos, std::move(tupleItems));
+        auto node = this->Ctx_.NewList(this->Pos_, std::move(tupleItems));
         return {{ node.aux.qName }}(node);
         {%- elif node.ListBase and node.Builder.Kind == "List"%}
         TExprNode::TListType nodeChildren;
-        for (auto child : this->Items) {
+        for (auto child : this->Items_) {
             nodeChildren.push_back(child.Ptr());
         }
-        auto node = this->Ctx.NewList(this->Pos, std::move(nodeChildren));
+        auto node = this->Ctx_.NewList(this->Pos_, std::move(nodeChildren));
         return {{ node.aux.qName }}(node);
         {%- else %}
         static_assert(false, "Don't know how to build {{ node.Name }}.");

@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -18,15 +19,14 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        PrintOperation(operation, format);
+        if (!operation.Ready()) {
+            return EXIT_SUCCESS;
+        }
         switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
-            PrintOperation(operation, format);
             return EXIT_SUCCESS;
-        case EStatus::CANCELLED:
-            PrintOperation(operation, format);
-            return EXIT_FAILURE;
         default:
-            ThrowOnError(operation);
             return EXIT_FAILURE;
         }
     }
@@ -103,6 +103,10 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
     case TOperationId::SCRIPT_EXECUTION:
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
+    case TOperationId::INCREMENTAL_BACKUP:
+        return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
+    case TOperationId::RESTORE:
+        return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -138,6 +142,8 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
+        {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
+        {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated

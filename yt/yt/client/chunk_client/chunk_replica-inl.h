@@ -76,6 +76,11 @@ Y_FORCE_INLINE void ToProto(ui64* protoReplica, TChunkReplicaWithMedium replica)
     *protoReplica = replica.Value_;
 }
 
+Y_FORCE_INLINE void ToProto(ui32* protoReplica, TChunkReplicaWithMedium replica)
+{
+    *protoReplica = replica.Value_ & ((1ULL << 29) - 1);
+}
+
 Y_FORCE_INLINE void FromProto(TChunkReplicaWithMedium* replica, ui64 protoReplica)
 {
     replica->Value_ = protoReplica;
@@ -148,6 +153,11 @@ Y_FORCE_INLINE void ToProto(ui32* value, TChunkReplica replica)
 Y_FORCE_INLINE void FromProto(TChunkReplica* replica, ui32 value)
 {
     replica->Value_ = value;
+}
+
+Y_FORCE_INLINE void FromProto(TChunkReplica* replica, ui64 value)
+{
+    replica->Value_ = value & ((1ULL << 29) - 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

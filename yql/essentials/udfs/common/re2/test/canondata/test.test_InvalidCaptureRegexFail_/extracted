@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:8:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	select $invalidCaptureRegexp("abc");
+	^
+        <tmp_path>/program.sql:<main>:8:8: Error: At function: Apply
+        	select $invalidCaptureRegexp("abc");
+	       ^
+            <tmp_path>/program.sql:<main>:4:30: Error: At function: Udf, At Re2.Capture
+            	$invalidCaptureRegexp = Re2::Capture("[");
+	                             ^
+                <tmp_path>/program.sql:<main>:4:30: Error: Failed to find UDF function: Re2.Capture, reason: Error: Module: Re2, function: Capture, error: Regexp compilation failed. Regexp: "[". Original error is: "missing ]: ["
+                	$invalidCaptureRegexp = Re2::Capture("[");
+	                             ^

@@ -4,9 +4,9 @@
 
 namespace NEtcd {
 
-std::string GetCreateTablesSQL();
+std::string GetCreateTablesSQL(const std::string& prefix);
 
-std::string GetLastRevisionSQL();
+std::string GetInitializeTablesSQL(const std::string& prefix);
 
 }
 

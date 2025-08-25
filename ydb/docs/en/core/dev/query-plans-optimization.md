@@ -20,7 +20,7 @@ Let's build a plan for this query. You can do this via either UI or {{ ydb-short
 
 - {{ ydb-short-name }} CLI
 
-  You can build a query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) using the following command:
+  You can build a query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/commands/explain-plan.md) using the following command:
 
   ```bash
   ydb -p <profile_name> table query explain \
@@ -63,7 +63,7 @@ ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
 
-Please note that this example uses [synchronous secondary index](../concepts/_includes/secondary_indexes.md#sync). Building an index in {{ ydb-short-name }} is an asynchronous operation. Even if the index creation query is successful, it is advisable to wait for some time because the index may not be ready for use immediately. You can manage asynchronous operations through the [CLI](../reference/ydb-cli/commands/_includes/secondary_index.md#add).
+Please note that this example uses [synchronous secondary index](../concepts/secondary_indexes.md#sync). Building an index in {{ ydb-short-name }} is an asynchronous operation. Even if the index creation query is successful, it is advisable to wait for some time because the index may not be ready for use immediately. You can manage asynchronous operations through the [CLI](../reference/ydb-cli/commands/secondary_index.md#add).
 
 Let's build the query plan using the secondary index `title_index`. Secondary indexes to be used need to be explicitly specified in the `VIEW` clause.
 

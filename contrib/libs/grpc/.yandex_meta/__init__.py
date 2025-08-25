@@ -9,9 +9,12 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_build(self):
+    def _ignore_paths(p):
+        return 'impl/status.h' not in p
+
     # Change std::string to TString
-    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString")
-    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString")
+    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString", test=_ignore_paths)
+    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString", test=_ignore_paths)
     re_sub_dir(
         self.dstdir,
         "#include <string>",
@@ -19,6 +22,7 @@ def post_build(self):
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 """.strip(),
+        test=_ignore_paths,
     )
     # Change absl to y_absl
     re_sub_dir(self.dstdir, r"\babsl\b", "y_absl")
@@ -44,18 +48,6 @@ def post_install(self):
             m.SRCS.add("src/core/lib/security/security_connector/add_arcadia_root_certs.cpp")
             m.PEERDIR |= {"certs", "library/cpp/resource"}
 
-    # in the name of selective checkout
-    # https://st.yandex-team.ru/DTCC-615
-    def fix_selective_checkout():
-        self.yamakes["."].PEERDIR |= {
-            "contrib/restricted/abseil-cpp-tstring/y_absl/algorithm",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/functional",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/memory",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/meta",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/hash",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/utility",
-        }
-
     for name, m in self.yamakes.items():
         with m:
             fix_protos(m)
@@ -78,7 +70,6 @@ def post_install(self):
                 m.NO_UTIL = False
 
     fix_ssl_certificates()
-    fix_selective_checkout()
 
     # remove unnecessary folder with protos duplicates
     shutil.rmtree(f"{self.dstdir}/protos")

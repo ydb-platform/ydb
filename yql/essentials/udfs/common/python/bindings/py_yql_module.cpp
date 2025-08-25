@@ -94,21 +94,21 @@ static PyModuleDef ModuleDefinitionTyping = {
         INIT_MEMBER(m_free, nullptr),
 };
 
-PyMODINIT_FUNC PyInit_YQL(void)
+PyMODINIT_FUNC PyInit_YQL(void) // NOLINT(readability-identifier-naming)
 {
     auto mod = PyModule_Create(&ModuleDefinition);
     PyModule_AddObject(mod, "__path__", Py_BuildValue("()"));
     return mod;
 }
 
-void go_throw();
+void GoThrow();
 
-PyMODINIT_FUNC PyInit_YQLTyping(void)
+PyMODINIT_FUNC PyInit_YQLTyping(void) // NOLINT(readability-identifier-naming)
 {
     return PyModule_Create(&ModuleDefinitionTyping);
 }
 #else
-PyMODINIT_FUNC PyInit_YQL(void)
+PyMODINIT_FUNC PyInit_YQL(void) // NOLINT(readability-identifier-naming)
 {
     Py_InitModule3(MODULE_NAME, ModuleMethods, ModuleDoc);
 }

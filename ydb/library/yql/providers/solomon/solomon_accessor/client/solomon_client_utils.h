@@ -17,11 +17,8 @@ template <typename T>
 class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
-    explicit TSolomonClientResponse(const TString& error);
+    explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
     explicit TSolomonClientResponse(T&& result);
-
-    TSolomonClientResponse(const TSolomonClientResponse&) = default;
-    TSolomonClientResponse(TSolomonClientResponse&&) = default;
 
 public:
     EStatus Status;
@@ -48,11 +45,12 @@ using TGetLabelsResponse = TSolomonClientResponse<TGetLabelsResult>;
 struct TListMetricsResult {
     std::vector<TMetric> Metrics;
     ui64 PagesCount;
+    ui64 TotalCount;
 };
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
 
 struct TGetPointsCountResult {
-    std::vector<ui64> PointsCount;
+    ui64 PointsCount;
 };
 using TGetPointsCountResponse = TSolomonClientResponse<TGetPointsCountResult>;
 

@@ -1202,6 +1202,7 @@ void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui
 
 class TDataShard::TReadScan
     : public TActor<TReadScan>
+    , public IActorExceptionHandler
     , public NTable::IScan
 {
 public:
@@ -1325,31 +1326,42 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
         if (!Aborted) {
-            switch (abort) {
-                case EAbort::None:
+            switch (status) {
+                case EStatus::Done:
                     SendResult({}, /* last */ true);
                     break;
-                case EAbort::Host:
-                    SendError(Ydb::StatusIds::UNAVAILABLE,
-                        TStringBuilder() << "Shard " << TabletId << " failed during a table scan");
+                case EStatus::Exception:
+                case EStatus::StorageError: {
+                    TStringBuilder errorMessage;
+                    errorMessage << "Shard " << TabletId << " failed during a table scan with status " << status;
+                    SendError(Ydb::StatusIds::UNAVAILABLE, errorMessage);
                     break;
-                case EAbort::Term:
+                }
+                case EStatus::Term:
                     // scan was cancelled, either reply not needed or was sent already
                     break;
-                case EAbort::Lost:
+                case EStatus::Lost:
                     // tablet terminated, no reply necessary
                     break;
             }
         }
 
-        if (abort != EAbort::Lost) {
+        if (status != EStatus::Lost) {
             Send(OwnerId, new TEvDataShard::TEvReadScanFinished(LocalReadId));
         }
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
 private:
@@ -1888,6 +1900,20 @@ public:
 
             // We remember acquired lock for faster checking
             state.Lock = guardLocks.Lock;
+
+            // We may need to wait until previous lock changes are committed
+            if (state.Lock && state.Lock->IsPersisting()) {
+                hadWrites = true;
+            }
+
+            if (!state.Lock) {
+                // We may fail to acquire an existing write lock
+                // This means our read result is potentially inconsistent
+                auto lock = Self->SysLocksTable().GetRawLock(state.LockId);
+                if (lock && lock->IsWriteLock()) {
+                    state.LockInconsistent = true;
+                }
+            }
         }
 
         if (!Self->IsFollower()) {
@@ -2079,7 +2105,7 @@ public:
             return;
         }
 
-        if (!Result->Record.HasStatus() && Reader && Reader->HadInconsistentResult()) {
+        if (!Result->Record.HasStatus() && ((Reader && Reader->HadInconsistentResult()) || state.LockInconsistent)) {
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, TStringBuilder()
                 << "Read conflict with concurrent transaction"
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
@@ -3409,6 +3435,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
         state.Request->ReadSpan.EndError("Cancelled");
     }
     DeleteReadIterator(it);
+
+    LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Cancelled read: " << readId);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadScanStarted::TPtr& ev) {

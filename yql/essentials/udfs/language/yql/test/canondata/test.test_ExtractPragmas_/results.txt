@@ -1,0 +1,87 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "q";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "pragma dq.Foo";
+                        [
+                            [
+                                [
+                                    "PRAGMA";
+                                    "dq.Foo";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "pragma warningmsg('foo')";
+                        [
+                            [
+                                [
+                                    "PRAGMA";
+                                    "warningmsg";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "pragma yt.Bar";
+                        [
+                            [
+                                [
+                                    "PRAGMA";
+                                    "yt.Bar";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

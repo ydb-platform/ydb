@@ -323,12 +323,12 @@ void SkipYson(TYsonBuffer& buf) {
     case BeginListSymbol: {
         buf.Next();
         for (;;) {
+            if (buf.Current() == EndListSymbol) {
+                break;
+            }
             SkipYson(buf);
             if (buf.Current() == ListItemSeparatorSymbol) {
                 buf.Next();
-            }
-            if (buf.Current() == EndListSymbol) {
-                break;
             }
         }
         buf.Next();
@@ -339,15 +339,15 @@ void SkipYson(TYsonBuffer& buf) {
         auto originalEnd = buf.Current()  == BeginMapSymbol ? EndMapSymbol : EndAttributesSymbol;
         buf.Next();
         for (;;) {
+            if (buf.Current() == originalEnd) {
+                break;
+            }
             SkipYson(buf);
             YQL_ENSURE(buf.Current() == KeyValueSeparatorSymbol);
             buf.Next();
             SkipYson(buf);
             if (buf.Current() == KeyedItemSeparatorSymbol) {
                 buf.Next();
-            }
-            if (buf.Current() == originalEnd) {
-                break;
             }
         }
         buf.Next();

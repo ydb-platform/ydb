@@ -32,8 +32,6 @@ SRCS(
     bus/tcp/client.cpp
     bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
-    bus/tcp/ssl_context.cpp
-    bus/tcp/ssl_helpers.cpp
 
     compression/brotli.cpp
     compression/bzip2.cpp
@@ -137,6 +135,7 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
@@ -153,8 +152,8 @@ SRCS(
     misc/ref_counted_tracker_profiler.cpp
     GLOBAL misc/ref_tracked.cpp
     misc/serialize.cpp
+    misc/serialize_dump.cpp
     misc/shutdown.cpp
-    misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistic_path.cpp
     misc/statistics.cpp
@@ -162,6 +161,7 @@ SRCS(
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
     misc/configurable_singleton_def.cpp
+    misc/memory_usage_tracker.cpp
 
     net/address.cpp
     net/connection.cpp
@@ -201,9 +201,11 @@ SRCS(
     rpc/helpers.cpp
     rpc/local_channel.cpp
     rpc/local_server.cpp
-    rpc/message.cpp
     rpc/message_format.cpp
+    rpc/message.cpp
     rpc/null_channel.cpp
+    rpc/overload_controller.cpp
+    rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
@@ -214,8 +216,8 @@ SRCS(
     rpc/roaming_channel.cpp
     rpc/serialized_channel.cpp
     rpc/server_detail.cpp
-    rpc/service.cpp
     rpc/service_detail.cpp
+    rpc/service.cpp
     rpc/static_channel_factory.cpp
     rpc/stream.cpp
     rpc/throttling_channel.cpp
@@ -251,6 +253,7 @@ SRCS(
     yson/null_consumer.cpp
     yson/parser.cpp
     yson/producer.cpp
+    yson/protobuf_helpers.cpp
     yson/protobuf_interop.cpp
     yson/protobuf_interop_options.cpp
     yson/protobuf_interop_unknown_fields.cpp
@@ -332,7 +335,7 @@ PEERDIR(
     contrib/libs/libbz2
     contrib/libs/c-ares
     contrib/libs/farmhash
-    contrib/libs/yajl
+    contrib/deprecated/yajl
     contrib/libs/lz4
     contrib/libs/openssl
 
@@ -359,6 +362,7 @@ PEERDIR(
 
     yt/yt_proto/yt/core
 
+    library/cpp/containers/concurrent_hash
     library/cpp/yt/assert
     library/cpp/yt/backtrace
     library/cpp/yt/coding
@@ -370,6 +374,8 @@ PEERDIR(
     yt/yt/library/syncmap
     yt/yt/library/undumpable
     yt/yt/library/ytprof/api
+
+    yt/yt/library/signals
 
     # TODO(prime@): remove this, once yt/core is split into separate libraries.
     yt/yt/library/profiling
@@ -400,6 +406,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         benchmarks
         bus/benchmarks
         yson/benchmark
+        ytree/benchmarks
     )
 ENDIF()
 

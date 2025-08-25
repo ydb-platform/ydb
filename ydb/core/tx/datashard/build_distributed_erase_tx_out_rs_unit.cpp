@@ -104,9 +104,9 @@ public:
 
         const auto tags = MakeTags(condition->Tags(), eraseTx->GetIndexColumnIds());
         auto now = TAppData::TimeProvider->Now();
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
+        auto mvccVersion = DataShard.GetMvccVersion(tx);
         NMiniKQL::TEngineHostCounters engineHostCounters;
-        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, now);
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, now);
         bool pageFault = false;
 
         TDynBitMap confirmedRows;

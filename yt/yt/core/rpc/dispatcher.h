@@ -44,6 +44,12 @@ public:
     //! Returns true if tracing baggage must be sent.
     bool ShouldSendTracingBaggage();
 
+    //! Returns default request timeout.
+    TDuration GetDefaultRequestTimeout();
+
+    //! Returns true if alert must be issued when rpc timeout is unset.
+    bool ShouldAlertOnUnsetRequestTimeout();
+
     NServiceDiscovery::IServiceDiscoveryPtr GetServiceDiscovery();
     void SetServiceDiscovery(NServiceDiscovery::IServiceDiscoveryPtr serviceDiscovery);
 

@@ -3,6 +3,8 @@
 #include "graph_optimization.h"
 #include "visitor.h"
 
+#include <yql/essentials/minikql/mkql_terminator.h>
+
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
 class TResourceUsageInfo {
@@ -102,7 +104,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
-                } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+                } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
                     AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
                     ResultRoot = i.second;
                 } else {
@@ -122,6 +124,9 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         for (; it->IsValid(); it->Next()) {
             it->MutableCurrentNode().SetSequentialIdx(currentIndex);
             for (auto&& i : it->GetProcessorVerified()->GetInput()) {
+                if (!i.GetColumnId()) {
+                    continue;
+                }
                 if (resolver.HasColumn(i.GetColumnId())) {
                     if (IsFilterRoot(it->GetCurrentGraphNode()->GetIdentifier())) {
                         FilterColumns.emplace(i.GetColumnId());
@@ -131,6 +136,9 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 usage[i.GetColumnId()].InUsage(currentIndex);
             }
             for (auto&& i : it->GetProcessorVerified()->GetOutput()) {
+                if (!i.GetColumnId()) {
+                    continue;
+                }
                 usage[i.GetColumnId()].Constructed(currentIndex);
             }
             sortedNodes.emplace_back(&it->MutableCurrentNode());
@@ -155,10 +163,11 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
 //    Cerr << DebugDOT() << Endl;
 }
 
-TConclusionStatus TCompiledGraph::Apply(
-    const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    TProcessorContext context(source, resources, std::nullopt, false);
-    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(context);
+TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
+    const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
+    TProcessorContext context(source, std::move(resources), std::nullopt, false);
+    NMiniKQL::TThrowingBindTerminator bind;
+    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
     for (auto it = BuildIterator(visitor); it->IsValid();) {
         {
             auto conclusion = visitor->Execute();
@@ -168,9 +177,9 @@ TConclusionStatus TCompiledGraph::Apply(
                 AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
             }
         }
-        if (resources->IsEmptyFiltered()) {
-            resources->Clear();
-            return TConclusionStatus::Success();
+        if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {
+            visitor->MutableContext().MutableResources().Clear();
+            return visitor->MutableContext().ExtractResources();
         }
         {
             auto conclusion = it->Next();
@@ -179,7 +188,7 @@ TConclusionStatus TCompiledGraph::Apply(
             }
         }
     }
-    return TConclusionStatus::Success();
+    return visitor->MutableContext().ExtractResources();
 }
 
 NJson::TJsonValue TCompiledGraph::DebugJson() const {
@@ -259,7 +268,7 @@ std::shared_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(const s
     auto result = std::make_shared<TIterator>(visitor);
     auto rootNodes = FilterRoot;
     rootNodes.emplace_back(ResultRoot);
-    result->Reset(rootNodes).DetachResult();
+    result->Reset(std::move(rootNodes)).DetachResult();
     return result;
 }
 
@@ -353,8 +362,8 @@ TConclusion<bool> TCompiledGraph::TIterator::GlobalInitialize() {
     return IsValid();
 }
 
-TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared_ptr<TCompiledGraph::TNode>>& graphNodes) {
-    GraphNodes = graphNodes;
+TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes) {
+    GraphNodes = std::move(graphNodes);
     GraphNodes.erase(std::remove_if(GraphNodes.begin(), GraphNodes.end(),
                          [](const std::shared_ptr<TCompiledGraph::TNode>& item) {
                              return !item;

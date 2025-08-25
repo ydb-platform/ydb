@@ -1,7 +1,6 @@
 import os
 
 from abc import ABCMeta, abstractmethod
-from six import add_metaclass
 
 
 class LockfilePackageMetaInvalidError(RuntimeError):
@@ -53,8 +52,7 @@ class LockfilePackageMeta(object):
         return pkg_uri
 
 
-@add_metaclass(ABCMeta)
-class BaseLockfile(object):
+class BaseLockfile(object, metaclass=ABCMeta):
     @classmethod
     def load(cls, path):
         """

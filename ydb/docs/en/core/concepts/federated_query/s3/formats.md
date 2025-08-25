@@ -1,8 +1,8 @@
-# Data formats and compression algorithms
+# Data Formats and Compression Algorithms
 
 This section describes the data formats supported in {{ ydb-full-name }} for storage in S3 and the supported compression algorithms.
 
-## Supported data formats {#formats}
+## Supported Data Formats {#formats}
 
 The table below lists the data formats supported in {{ ydb-short-name }}.
 
@@ -161,7 +161,7 @@ This format is based on the [JSON representation](https://en.wikipedia.org/wiki/
 
 Each file must contain:
 
-- a JSON object on each line, or
+- A JSON object on each line, or
 - JSON objects combined into an array.
 
 Example of valid data (data presented as a list of JSON objects):
@@ -271,7 +271,7 @@ Year,Manufacturer,Model,Price
 
 {% endcut %}
 
-## Supported compression algorithms {#compression}
+## Supported Compression Algorithms {#compression}
 
 The use of compression algorithms depends on the file formats. For all file formats except Parquet, the following compression algorithms can be used:
 
@@ -286,7 +286,7 @@ The use of compression algorithms depends on the file formats. For all file form
 
 For Parquet file format, the following internal compression algorithms are supported:
 
-|Compression format|Name in {{ ydb-full-name }}|Read|Write|
+|Compression Format|Name in {{ ydb-full-name }}|Read|Write|
 |--|--|----|-----|
 |[Raw](https://en.wikipedia.org/wiki/Gzip)|raw|✓||
 |[Snappy](https://en.wikipedia.org/wiki/Snappy_(compression))|snappy|✓|✓|

@@ -38,4 +38,8 @@ NProto::TGetFmrTableInfoResponse GetFmrTableInfoResponseToProto(const TGetFmrTab
 
 TGetFmrTableInfoResponse GetFmrTableInfoResponseFromProto(const NProto::TGetFmrTableInfoResponse& protoGetFmrTableInfoResponse);
 
+NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionRequest& request);
+
+TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest);
+
 } // namespace NYql::NFmr

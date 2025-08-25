@@ -165,7 +165,7 @@ static PyMethodDef TPyLazyListMethods[] = {
 };
 
 #if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER 0
+#define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)
 #endif
 
 PyTypeObject PyLazyListType = {
@@ -736,7 +736,7 @@ static PyMethodDef TPyThinListMethods[] = {
 };
 
 #if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER 0
+#define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)
 #endif
 
 PyTypeObject PyThinListType = {

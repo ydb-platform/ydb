@@ -201,6 +201,17 @@ bool TKqpQueryState::TryGetFromCache(
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender)
 {
+    if (QueryPhysicalGraph) {
+        YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>(QueryPhysicalGraph->GetPreparedQuery());
+        const auto compileResult = TKqpCompileResult::Make("", Ydb::StatusIds::SUCCESS, {}, ExtractMostHeavyReadType(preparedQuery->GetPhysicalQuery().GetQueryPlan()));
+        compileResult->PreparedQuery = std::make_shared<TPreparedQueryHolder>(preparedQuery.release(), AppData()->FunctionRegistry);
+        YQL_ENSURE(SaveAndCheckCompileResult(compileResult));
+
+        return true;
+    }
+
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -316,6 +327,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
     YQL_ENSURE(CompileResult);
+    YQL_ENSURE(!QueryPhysicalGraph);
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -373,6 +385,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:
@@ -392,10 +405,18 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         statementAst = Statements[CurrentStatementId];
     }
 
+    if (GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+        // Splitted Expr can be used only for CTAS statement.
+        // CTAS consists of 3 exprs: CREATE TABLE, REPLACE, ALTER TABLE RENAME.
+        // For explain we need only REPLACE, because explain doesn't support for DDL statements.
+        AFL_ENSURE(SplittedExprs.size() == 3);
+        NextSplittedExpr = 1;
+    }
+
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx, SplittedExprs.at(NextSplittedExpr));
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {
@@ -426,10 +447,10 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
-void TKqpQueryState::AddOffsetsToTransaction() {
-    YQL_ENSURE(HasTopicOperations());
+void TKqpQueryState::FillTopicOperations() {
+    YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 
-    const auto& operations = GetTopicOperations();
+    const auto& operations = GetTopicOperationsFromRequest();
 
     TMaybe<TString> consumer;
     if (operations.HasConsumer()) {
@@ -442,7 +463,6 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     }
 
     TopicOperations = NTopic::TTopicOperations();
-
     for (auto& topic : operations.GetTopics()) {
         auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), topic.path()));
 
@@ -452,11 +472,18 @@ void TKqpQueryState::AddOffsetsToTransaction() {
             } else {
                 for (auto& range : partition.partition_offsets()) {
                     YQL_ENSURE(consumer.Defined());
-
-                    TopicOperations.AddOperation(path, partition.partition_id(), *consumer, range);
+                    TopicOperations.AddOperation(path, partition.partition_id(), *consumer, range, partition.force_commit(), partition.kill_read_session(), partition.only_check_commited_to_finish(), partition.read_session_id());
                 }
             }
         }
+    }
+
+    const auto& kafkaOperations = GetKafkaApiOperationsFromRequest();
+    for (auto& partitionInTx : kafkaOperations.GetPartitionsInTxn()) {
+        TopicOperations.AddKafkaApiWriteOperation(partitionInTx.GetTopicPath(), partitionInTx.GetPartitionId(), {kafkaOperations.GetProducerId(), kafkaOperations.GetProducerEpoch()});
+    }
+    for (auto& offsetInTxn : kafkaOperations.GetOffsetsInTxn()) {
+        TopicOperations.AddKafkaApiReadOperation(offsetInTxn.GetTopicPath(), offsetInTxn.GetPartitionId(), offsetInTxn.GetConsumerName(), offsetInTxn.GetOffset());
     }
 }
 
@@ -474,7 +501,7 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = CanonizePath(GetDatabase());
 
-    const auto& operations = GetTopicOperations();
+    const auto& operations = GetTopicOperationsFromRequest();
     TMaybe<TString> consumer;
     if (operations.HasConsumer())
         consumer = operations.GetConsumer();

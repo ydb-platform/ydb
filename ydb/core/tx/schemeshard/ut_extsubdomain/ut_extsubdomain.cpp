@@ -1,8 +1,11 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/public/lib/value/value.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
 
 Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
     Y_UNIT_TEST(Fake) {
@@ -51,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         AsyncMkDir(runtime, ++txId, "MyRoot", "dir");
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
@@ -121,7 +124,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterWithoutEnablingTx, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "dir");
@@ -607,30 +614,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         env.TestWaitNotification(runtime, firstAlterTxId);
     }
 
-    Y_UNIT_TEST(CreateWithOnlyDotsNotAllowed) {
+    Y_UNIT_TEST_FLAG(CreateWithOnlyDotsNotAllowed, SystemNamesProtection) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(SystemNamesProtection));
         ui64 txId = 100;
 
-        TestMkDir(runtime, ++txId, "/MyRoot", ".", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "..", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "...", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "................", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA");
-        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.");
-        TestMkDir(runtime, ++txId, "/MyRoot", "a.............");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".............a");
+        TVector<TExpectedResult> expectedSuccess = {{NKikimrScheme::StatusAccepted}};
+        TVector<TExpectedResult> expectedDotPrefixError = {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}};
+        TVector<TExpectedResult> expectedAllDotsError = {{NKikimrScheme::StatusSchemeError, "is not allowed path part contains only dots"}};
+        auto expectedA = (SystemNamesProtection ? expectedDotPrefixError : expectedAllDotsError);
+        auto expectedB = (SystemNamesProtection ? expectedDotPrefixError : expectedSuccess);
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", ".", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "..", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "...", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "................", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", "a.............", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".............a", expectedB);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", expectedA);
     }
 
     Y_UNIT_TEST_FLAG(CreateWithExtraPathSymbolsAllowed, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -1369,7 +1386,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(Drop, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
 
@@ -1460,9 +1481,152 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
-    Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAG(DropWithDeadTenantHive, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        // EnableAlterDatabaseCreateHiveFirst = false puts extsubdomain's system tablets into the root hive control.
+        // EnableAlterDatabaseCreateHiveFirst = true puts extsubdomain's tenant hive into the root hive control
+        // and other system tablets into the tenant hive control.
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "USER_0"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "pool-1"
+                Kind: "hdd"
+            }
+
+            ExternalHive: true
+        )");
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        ui64 tenantHiveId = 0;
+        TPathId subdomainPathId;
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/USER_0");
+            TestDescribeResult(describe, {
+                NLs::PathExist,
+                NLs::IsExternalSubDomain("USER_0"),
+                NLs::ExtractDomainHive(&tenantHiveId),
+            });
+            TSubDomainKey subdomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
+            subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
+        }
+
+        // check that there is a new path in the root schemeshard
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId.LocalPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId.LocalPathId));
+
+        // check what extsubdomain's system tablets controls root hive
+        const auto expectedTabletsInRootHive = [&]() {
+            if (AlterDatabaseCreateHiveFirst) {
+                return std::vector<ETabletType::EType>({
+                    ETabletType::Hive,
+                });
+            } else {
+                return std::vector<ETabletType::EType>{{
+                    ETabletType::Hive,
+                    ETabletType::SchemeShard,
+                    ETabletType::Coordinator,
+                    ETabletType::Mediator
+                }};
+            }
+        }();
+        {
+            const auto& expectedTypes = expectedTabletsInRootHive;
+            const auto tablets = HiveGetSubdomainTablets(runtime, TTestTxConfig::Hive, subdomainPathId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablets.size(), expectedTypes.size(), "-- unexpected tablet count in root hive for the tenant");
+            for (const auto& tablet : tablets) {
+                Cerr << "root hive, tablets for subdomain " << subdomainPathId << ", tablet type " << tablet.GetTabletType() << Endl;
+                auto found = std::find(expectedTypes.begin(), expectedTypes.end(), tablet.GetTabletType());
+                UNIT_ASSERT_C(found != expectedTypes.end(), "-- root hive holds tablet of unexpected type " << tablet.GetTabletType());
+            }
+        }
+
+        // check what extsubdomain's system tablets controls tenant hive
+        const auto expectedTabletsInTenantHive = [&]() {
+            if (AlterDatabaseCreateHiveFirst) {
+                return std::vector<ETabletType::EType>{{
+                    ETabletType::SchemeShard,
+                    ETabletType::Coordinator,
+                    ETabletType::Mediator
+                }};
+            } else {
+                return std::vector<ETabletType::EType>{};
+            }
+        }();
+        {
+            const auto& expectedTypes = expectedTabletsInTenantHive;
+            const auto tablets = HiveGetSubdomainTablets(runtime, tenantHiveId, subdomainPathId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablets.size(), expectedTypes.size(), "-- unexpected tablet count in tenant hive");
+            for (const auto& tablet : tablets) {
+                Cerr << "tenant hive, tablets for subdomain " << subdomainPathId << ", tablet type " << tablet.GetTabletType() << Endl;
+                auto found = std::find(expectedTypes.begin(), expectedTypes.end(), tablet.GetTabletType());
+                UNIT_ASSERT_C(found != expectedTypes.end(), "-- root hive holds tablet of unexpected type " << tablet.GetTabletType());
+            }
+        }
+
+        // extsubdomain drop should be independent of tenant hive's state.
+        // It must correctly remove database whether tenant nodes and tablets are alive or not.
+        //
+        // Make tenant hive inaccessible by stopping its tablet.
+        // In real life that could be, for example, due to absence of tenant nodes.
+        //
+        // Tenant hive is controlled by the root hive (running at node 0).
+        HiveStopTablet(runtime, TTestTxConfig::Hive, tenantHiveId, 0);
+
+        // drop extsubdomain
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathExist,
+            NLs::PathsInsideDomain(0),
+            NLs::ShardsInsideDomain(0)
+        });
+
+        // check that extsubdomain's system tablets are deleted from the root hive
+        // and not-working state of the tenant hive is unable to hinder that
+        {
+            const auto tablets = HiveGetSubdomainTablets(runtime, TTestTxConfig::Hive, subdomainPathId);
+            UNIT_ASSERT_C(tablets.size() == 0, TStringBuilder()
+                << "-- existing subdomain's system tablets in the root hive: expected 0, got " << tablets.size()
+            );
+        }
+
+        // check that extsubdomain's path is really erased from the root schemeshard
+
+        {
+            const auto result = ReadLocalTableRecords(runtime, TTestTxConfig::SchemeShard, "SystemShardsToDelete", "ShardIdx");
+            const auto records = NKikimr::NClient::TValue::Create(result)[0]["List"];
+            //DEBUG:  Cerr << "TEST: SystemShardsToDelete: " << records.GetValueText<NKikimr::NClient::TFormatJSON>() << Endl;
+            //DEBUG:  Cerr << "TEST: " << records.DumpToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(records.Size(), 0);
+        }
+
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId.LocalPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId.LocalPathId));
+    }
+
+    Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -1502,7 +1666,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",

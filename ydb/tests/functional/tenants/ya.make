@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -22,7 +22,6 @@ SPLIT_FACTOR(20)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

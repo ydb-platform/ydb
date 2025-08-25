@@ -47,7 +47,6 @@ struct IFairShareHierarchicalSlotQueueResource
     virtual void ReleaseResource() = 0;
 };
 
-DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 DEFINE_REFCOUNTED_TYPE(IFairShareHierarchicalSlotQueueResource)
 
 ////////////////////////////////////////////////////////////////////////////////

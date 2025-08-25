@@ -35,9 +35,9 @@ class TMiniKQLNodeCast: public TTestBase
 
         TCallableType* ctype = TCallableType::Create(
                     "callable", dataNode.GetStaticType(),
-                    0, nullptr, nullptr, Env);
+                    0, nullptr, nullptr, Env_);
 
-        TCallable* callable = TCallable::Create(dataNode, ctype, Env);
+        TCallable* callable = TCallable::Create(dataNode, ctype, Env_);
 
         TRuntimeNode node(callable, false);
         node.Freeze();
@@ -53,18 +53,18 @@ class TMiniKQLNodeCast: public TTestBase
     }
 
     TMiniKQLNodeCast()
-        : Alloc(__LOCATION__)
-        , Env(Alloc)
+        : Alloc_(__LOCATION__)
+        , Env_(Alloc_)
     {}
 
 private:
     TRuntimeNode Uint32AsNode(ui32 value) {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env_), true);
     }
 
 private:
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
+    TScopedAlloc Alloc_;
+    TTypeEnvironment Env_;
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLNodeCast);

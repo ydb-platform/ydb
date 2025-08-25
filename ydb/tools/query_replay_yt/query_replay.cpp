@@ -23,6 +23,7 @@ void TQueryReplayConfig::ParseConfig(int argc, const char** argv) {
     opts.AddLongOption("query", "Single query to replay").StoreResult(&QueryFile);
     opts.AddLongOption("log-level", "Yql log level").StoreResult(&YqlLogLevel);
     opts.AddLongOption("antlr4-parser", "Use Antlr4 parser").NoArgument().SetFlag(&EnableAntlr4Parser);
+    opts.AddLongOption("oltp-sink-side-by-side-compare", "Olpt sink side by side comparing").NoArgument().SetFlag(&EnableOltpSinkSideBySinkCompare);
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
 }

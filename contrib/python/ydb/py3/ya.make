@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.19.3)
+VERSION(3.21.7)
 
 LICENSE(Apache-2.0)
 
@@ -24,6 +24,7 @@ PY_SRCS(
     TOP_LEVEL
     ydb/__init__.py
     ydb/_apis.py
+    ydb/_constants.py
     ydb/_errors.py
     ydb/_grpc/__init__.py
     ydb/_grpc/common/__init__.py
@@ -40,6 +41,7 @@ PY_SRCS(
     ydb/_topic_common/common.py
     ydb/_topic_reader/__init__.py
     ydb/_topic_reader/datatypes.py
+    ydb/_topic_reader/events.py
     ydb/_topic_reader/topic_reader.py
     ydb/_topic_reader/topic_reader_asyncio.py
     ydb/_topic_reader/topic_reader_sync.py

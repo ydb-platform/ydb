@@ -12,6 +12,14 @@ public:
     virtual TCheckResponse Run(const TChecksRequest& request) = 0;
 };
 
+class TCheckRunnerBase : public ICheckRunner {
+public:
+    virtual TCheckResponse Run(const TChecksRequest& request) final;
+
+protected:
+    virtual TCheckResponse DoRun(const TChecksRequest& request) = 0;
+};
+
 class ICheckRunnerFactory {
 public:
     virtual ~ICheckRunnerFactory() = default;

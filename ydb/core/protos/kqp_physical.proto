@@ -8,8 +8,10 @@ import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/sys_view_types.proto";
 
 message TKqpPhyExternalBinding {
 }
@@ -109,6 +111,7 @@ message TKqpPhyTable {
     EKqpPhyTableKind Kind = 2;
     map<uint32, TKqpPhyColumn> Columns = 3;
     repeated TKqpPhyColumnId KeyColumns = 4;
+    optional NKikimrSysView.TSysViewDescription SysViewInfo = 5;
 }
 
 message TKqpPhyParamValue {
@@ -175,10 +178,6 @@ message TKqpPhyOpDeleteRows {
     TKqpPhyValue RowsValue = 1;
 }
 
-message TKqpPhyOpLookup {
-    TKqpPhyValue KeysValue = 1;
-}
-
 message TKqpPhyOpReadOlapRanges {
     enum EReadType {
         ROWS = 0;
@@ -235,7 +234,6 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadRange ReadRange = 3;
         TKqpPhyOpUpsertRows UpsertRows = 4;
         TKqpPhyOpDeleteRows DeleteRows = 5;
-        TKqpPhyOpLookup Lookup = 6;
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }
@@ -244,10 +242,16 @@ message TKqpPhyTableOperation {
 message TKqpPhyCnUnionAll {
 }
 
+message TKqpPhyCnParallelUnionAll {
+}
+
 message TKqpPhyCnMap {
 }
 
 message THashV1 {
+}
+
+message THashV2 {
 }
 
 message TColumnShardHashV1 {
@@ -259,8 +263,11 @@ message TKqpPhyCnHashShuffle {
 
     oneof HashKind {
         THashV1 HashV1 = 2;
+        THashV2 HashV2 = 5;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
+
+    bool UseSpilling = 4;
 }
 
 message TKqpPhyCnBroadcast {
@@ -304,6 +311,19 @@ message TKqpPhyCnStreamLookup {
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
+    bool IsTableImmutable = 10;
+}
+
+message TKqpPhyCnVectorResolve {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;
+    TKqpPhyTableId LevelTable = 3;
+    repeated string Columns = 4;
+    uint32 VectorColumnIndex = 5;
+    repeated uint32 CopyColumnIndexes = 6;
+    bytes InputType = 7;
+    bytes OutputType = 8;
+    uint32 ClusterColumnOutPos = 9;
 }
 
 message TKqpPhyCnSequencer {
@@ -331,6 +351,8 @@ message TKqpPhyConnection {
         TKqpPhyCnMerge Merge = 11;
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
+        TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
+        TKqpPhyCnVectorResolve VectorResolve = 16;
     };
 }
 
@@ -348,6 +370,7 @@ message TKqpReadRangesSource {
 
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpExternalSource {
@@ -503,6 +526,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
+        NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
     }
 }
 
@@ -575,4 +599,10 @@ message TKqpPhyQuery {
     string QueryDiagnostics = 10;
 
     repeated TKqpTableInfo ViewInfos = 11;
+
+    optional bool EnableOltpSink = 12;
+    optional bool EnableOlapSink = 13;
+    optional bool EnableHtapTx = 14;
+    optional bool ForceImmediateEffectsExecution = 15;
+    uint32 LangVer = 16;
 }

@@ -6,6 +6,7 @@ SRCS(
     blob_cache.cpp
     columnshard__init.cpp
     columnshard__notify_tx_completion.cpp
+    columnshard__overload.cpp
     columnshard__plan_step.cpp
     columnshard__progress_tx.cpp
     columnshard__propose_cancel.cpp
@@ -42,6 +43,7 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/blobs_action/storages_manager
     ydb/core/tx/columnshard/blobs_reader
+    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/data_accessor
@@ -54,15 +56,19 @@ PEERDIR(
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/loading
     ydb/core/tx/columnshard/normalizer
+    ydb/core/tx/columnshard/overload
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/subscriber
     ydb/core/tx/columnshard/tablet
+    ydb/core/tx/columnshard/tracing
     ydb/core/tx/columnshard/transactions
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/tx_reader
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/general_cache/usage
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/priorities/service
     ydb/core/tx/tiering
@@ -88,6 +94,7 @@ END()
 RECURSE(
     engines
     splitter
+    tools/visualize_portions
 )
 
 RECURSE_FOR_TESTS(

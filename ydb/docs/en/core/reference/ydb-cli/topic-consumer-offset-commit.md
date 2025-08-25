@@ -22,11 +22,11 @@ Viewing the command description:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--consumer <value>` | Consumer name. |
-| `--partition <value>` | Partition number. |
-| `--offset <value>` | Offset value that you want to set. |
+| Name                  | Description                        |
+|-----------------------|------------------------------------|
+| `--consumer <value>`  | Consumer name.                     |
+| `--partition <value>` | Partition number.                  |
+| `--offset <value>`    | Offset value that you want to set. |
 
 ## Examples {#examples}
 

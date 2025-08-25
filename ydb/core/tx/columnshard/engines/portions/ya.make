@@ -14,6 +14,8 @@ SRCS(
     common.cpp
     index_chunk.cpp
     data_accessor.cpp
+    compacted.cpp
+    written.cpp
 )
 
 PEERDIR(

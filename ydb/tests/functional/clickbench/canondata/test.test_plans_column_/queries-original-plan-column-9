@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "RegionID"
                                                         ],
@@ -85,7 +86,7 @@
                                                                 "PlanNodeId": 6,
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "UnionAll",
+                                                                        "Node Type": "DqCnParallelUnionAll",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -97,17 +98,14 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
-                                                                                            "AdvEngineID",
-                                                                                            "RegionID",
-                                                                                            "ResolutionWidth",
-                                                                                            "UserID"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
                                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                                            "AdvEngineID",
+                                                                                            "RegionID",
+                                                                                            "ResolutionWidth"
                                                                                         ],
                                                                                         "Scan": "Parallel",
                                                                                         "SsaProgram": {
@@ -130,8 +128,7 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -146,7 +143,7 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "Node Type": "UnionAll",
+                                                                        "Node Type": "DqCnParallelUnionAll",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -178,6 +175,7 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "TableFullScan_9",
+                                                                                        "HashFunc": "HashV2",
                                                                                         "KeyColumns": [
                                                                                             "RegionID",
                                                                                             "UserID"

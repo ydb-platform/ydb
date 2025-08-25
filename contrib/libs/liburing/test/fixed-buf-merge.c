@@ -45,9 +45,9 @@ int main(int argc, char *argv[])
 		goto err_unlink;
 	}
 
-	to_free = buffer = aligned_alloc(4096, 128 * 4096);
+	to_free = buffer = t_aligned_alloc(4096, 128 * 4096);
 	if (!buffer) {
-		perror("aligned_alloc");
+		perror("t_aligned_alloc");
 		goto err_unlink;
 	}
 

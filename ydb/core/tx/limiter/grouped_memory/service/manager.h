@@ -20,12 +20,46 @@ private:
     const std::shared_ptr<TCounters> Signals;
     const NActors::TActorId OwnerActorId;
     THashMap<ui64, TProcessMemory> Processes;
+    std::map<TProcessMemoryUsage, TProcessMemory*> ProcessesOrdered;
     std::shared_ptr<TStageFeatures> DefaultStage;
     TIdsControl ProcessIds;
 
     void TryAllocateWaiting();
     void RefreshSignals() const {
         Signals->ProcessesCount->Set(Processes.size());
+    }
+
+    class TOrderedProcessesGuard {
+    private:
+        bool Released = false;
+        TProcessMemory& Process;
+        std::map<TProcessMemoryUsage, TProcessMemory*>* Processes;
+        TProcessMemoryUsage Start;
+
+    public:
+        TOrderedProcessesGuard(TProcessMemory& process, std::map<TProcessMemoryUsage, TProcessMemory*>& processes)
+            : Process(process)
+            , Processes(&processes)
+            , Start(Process.BuildUsageAddress()) {
+            AFL_VERIFY(Processes->contains(Start));
+        }
+
+        ~TOrderedProcessesGuard() {
+            if (Released) {
+                return;
+            }
+            AFL_VERIFY(Processes->erase(Start))("start", Start.DebugString());
+            AFL_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
+        }
+
+        void Release() {
+            AFL_VERIFY(!Released);
+            Released = true;
+        }
+    };
+
+    TOrderedProcessesGuard BuildProcessOrderGuard(TProcessMemory& process) {
+        return TOrderedProcessesGuard(process, ProcessesOrdered);
     }
 
     TProcessMemory& GetProcessMemoryVerified(const ui64 internalProcessId) {
@@ -52,8 +86,7 @@ public:
         , Name(name)
         , Signals(signals)
         , OwnerActorId(ownerActorId)
-        , DefaultStage(defaultStage)
-    {
+        , DefaultStage(defaultStage) {
     }
 
     void RegisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId);
@@ -66,10 +99,12 @@ public:
     void UnregisterProcess(const ui64 externalProcessId);
 
     void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
-        const std::shared_ptr<IAllocation>& task,
-        const std::optional<ui32>& stageIdx);
+        const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx);
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
-    void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
+    void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
+
+    void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
+    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);
 
     bool IsEmpty() const {
         return Processes.empty();

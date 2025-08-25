@@ -345,17 +345,17 @@ public:
         TFairThrottlerConfigPtr config)
         : Logger(logger)
         , SharedBucket_(sharedBucket)
-        , Value_(profiler.Counter("/value"))
-        , Released_(profiler.Counter("/released"))
-        , WaitTime_(profiler.Timer("/wait_time"))
-        , Quota_(config->BucketAccumulationTicks, profiler.Gauge("/quota"))
-        , DistributionPeriod_(config->DistributionPeriod)
+        , Profiler_(profiler)
+        , Value_(Profiler_.Counter("/value"))
+        , Released_(Profiler_.Counter("/released"))
+        , WaitTime_(Profiler_.Timer("/wait_time"))
+        , Quota_(config->BucketAccumulationTicks, Profiler_.Gauge("/quota"))
     {
-        profiler.AddFuncGauge("/queue_size", MakeStrong(this), [this] {
+        Profiler_.AddFuncGauge("/queue_size", MakeStrong(this), [this] {
             return GetQueueTotalAmount();
         });
 
-        profiler.AddFuncGauge("/throttled", MakeStrong(this), [this] {
+        Profiler_.AddFuncGauge("/throttled", MakeStrong(this), [this] {
             return IsOverdraft();
         });
     }
@@ -568,14 +568,30 @@ public:
         }
     }
 
-    void SetDistributionPeriod(TDuration distributionPeriod)
+    void Update(
+        const TFairThrottlerConfigPtr& config,
+        const TFairThrottlerBucketConfigPtr& bucketConfig)
     {
-        DistributionPeriod_.store(distributionPeriod);
-    }
+        Limited_ = bucketConfig->Limit || bucketConfig->RelativeLimit;
+        DistributionPeriod_.store(config->DistributionPeriod);
 
-    void SetLimited(bool limited)
-    {
-        Limited_ = limited;
+        if (const auto& limit = bucketConfig->GetLimit(config->TotalLimit)) {
+            if (!Limit_) {
+                Limit_ = Profiler_.Gauge("/limit");
+            }
+            Limit_->Update(limit.value());
+        } else {
+            Limit_ = std::nullopt;
+        }
+
+        if (const auto& guarantee = bucketConfig->GetGuarantee(config->TotalLimit)) {
+            if (!Guarantee_) {
+                Guarantee_ = Profiler_.Gauge("/guarantee");
+            }
+            Guarantee_->Update(guarantee.value());
+        } else {
+            Guarantee_ = std::nullopt;
+        }
     }
 
     bool IsLimited() const
@@ -588,18 +604,21 @@ private:
 
     TSharedBucketPtr SharedBucket_;
 
+    NProfiling::TProfiler Profiler_;
     NProfiling::TCounter Value_;
     NProfiling::TCounter Released_;
     NProfiling::TEventTimer WaitTime_;
+    std::optional<NProfiling::TGauge> Limit_ = std::nullopt;
+    std::optional<NProfiling::TGauge> Guarantee_ = std::nullopt;
 
     TLeakyCounter Quota_;
     std::atomic<i64> EstimatedLimit_ = 0;
     std::atomic<i64> QueueSize_ = 0;
     std::atomic<i64> Usage_ = 0;
 
-    std::atomic<bool> Limited_ = {false};
+    std::atomic<bool> Limited_ = false;
 
-    std::atomic<TDuration> DistributionPeriod_;
+    std::atomic<TDuration> DistributionPeriod_{};
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     std::deque<TBucketThrottleRequestPtr> Queue_;
@@ -655,10 +674,10 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
 
     auto guard = Guard(Lock_);
     if (auto it = Buckets_.find(name); it != Buckets_.end()) {
-        it->second.Throttler->SetLimited(config->Limit || config->RelativeLimit);
+        it->second.Throttler->Update(Config_, config);
 
         it->second.Config = std::move(config);
-        it->second.Throttler->SetDistributionPeriod(Config_->DistributionPeriod);
+
         return it->second.Throttler;
     }
 
@@ -668,7 +687,7 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
         SharedBucket_,
         Config_);
 
-    throttler->SetLimited(config->Limit || config->RelativeLimit);
+    throttler->Update(Config_, config);
 
     IIpcBucketPtr state;
     if (Ipc_) {

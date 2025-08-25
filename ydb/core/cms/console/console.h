@@ -57,6 +57,8 @@ namespace TEvConsole {
         EvGetNodeLabelsRequest,
         EvIsYamlReadOnlyRequest,
         EvFetchStartupConfigRequest,
+        EvGetConfigurationVersionRequest,
+        EvGetNodeConfigurationVersionRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -103,6 +105,8 @@ namespace TEvConsole {
 
         EvIsYamlReadOnlyResponse,
         EvFetchStartupConfigResponse,
+        EvGetConfigurationVersionResponse,
+        EvGetNodeConfigurationVersionResponse,
 
         EvEnd
     };
@@ -229,6 +233,14 @@ namespace TEvConsole {
     struct TEvFetchStartupConfigRequest : public TEventShortDebugPB<TEvFetchStartupConfigRequest, NKikimrConsole::TFetchStartupConfigRequest, EvFetchStartupConfigRequest> {};
 
     struct TEvFetchStartupConfigResponse : public TEventShortDebugPB<TEvFetchStartupConfigResponse, NKikimrConsole::TFetchStartupConfigResponse, EvFetchStartupConfigResponse> {};
+
+    struct TEvGetConfigurationVersionRequest : public TEventShortDebugPB<TEvGetConfigurationVersionRequest, NKikimrConsole::TGetConfigurationVersionRequest, EvGetConfigurationVersionRequest> {};
+
+    struct TEvGetConfigurationVersionResponse : public TEventShortDebugPB<TEvGetConfigurationVersionResponse, NKikimrConsole::TGetConfigurationVersionResponse, EvGetConfigurationVersionResponse> {};
+
+    struct TEvGetNodeConfigurationVersionRequest : public TEventShortDebugPB<TEvGetNodeConfigurationVersionRequest, NKikimrConsole::TGetNodeConfigurationVersionRequest, EvGetNodeConfigurationVersionRequest> {};
+
+    struct TEvGetNodeConfigurationVersionResponse : public TEventShortDebugPB<TEvGetNodeConfigurationVersionResponse, NKikimrConsole::TGetNodeConfigurationVersionResponse, EvGetNodeConfigurationVersionResponse> {};
 
     struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
 

@@ -10,25 +10,27 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/tablet_flat/shared_cache_pages.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/protos/stream.pb.h>
-#include <ydb/core/protos/netclassifier.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
-#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/library/actors/interconnect/poller_tcp.h>
@@ -44,6 +46,7 @@ struct TAppData::TImpl {
     NKikimrStream::TStreamingConfig StreamingConfig;
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
@@ -56,7 +59,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TColumnShardConfig ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
-    NKikimrConfig::TAuditConfig AuditConfig;
+    NKikimr::NAudit::TAuditConfig AuditConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
@@ -69,8 +72,12 @@ struct TAppData::TImpl {
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
-    NKikimrConfig::TDataErasureConfig DataErasureConfig;
+    NKikimrConfig::TDataErasureConfig ShredConfig;
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
+    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    NKikimrConfig::TBridgeConfig BridgeConfig;
+    NKikimrConfig::TStatisticsConfig StatisticsConfig;
 };
 
 TAppData::TAppData(
@@ -102,6 +109,7 @@ TAppData::TAppData(
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
+    , KafkaProxyConfig(Impl->KafkaProxyConfig)
     , NetClassifierConfig(Impl->NetClassifierConfig)
     , NetClassifierDistributableConfig(Impl->NetClassifierDistributableConfig)
     , SqsConfig(Impl->SqsConfig)
@@ -127,8 +135,12 @@ TAppData::TAppData(
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
-    , DataErasureConfig(Impl->DataErasureConfig)
+    , ShredConfig(Impl->ShredConfig)
     , HealthCheckConfig(Impl->HealthCheckConfig)
+    , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
+    , QueryServiceConfig(Impl->QueryServiceConfig)
+    , BridgeConfig(Impl->BridgeConfig)
+    , StatisticsConfig(Impl->StatisticsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

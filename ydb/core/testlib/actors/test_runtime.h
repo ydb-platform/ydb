@@ -13,6 +13,8 @@
 
 #include <ydb/core/protos/key.pb.h>
 
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
+
 namespace NKikimr {
     struct TAppData;
 }
@@ -71,6 +73,7 @@ namespace NActors {
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
 
         ~TTestActorRuntime();
 
@@ -80,8 +83,6 @@ namespace NActors {
         void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
-
-        void SimulateSleep(TDuration duration);
 
         template<class TResult>
         inline TResult WaitFuture(NThreading::TFuture<TResult> f, TDuration simTimeout = TDuration::Max()) {
@@ -105,24 +106,6 @@ namespace NActors {
             }
         }
 
-        template<class TCondition>
-        inline void WaitFor(const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
-            if (!condition()) {
-                TDispatchOptions options;
-                options.CustomFinalCondition = [&]() {
-                    return condition();
-                };
-                // Quirk: non-empty FinalEvents enables full simulation
-                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
-
-                Cerr << "... waiting for " << description << Endl;
-                this->DispatchEvents(options, simTimeout);
-
-                Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
-                Cerr << "... waiting for " << description << " (done)" << Endl;
-            }
-        }
-
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
             const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
@@ -138,6 +121,11 @@ namespace NActors {
         }
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
+
+    public:
+        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
+    protected:
+        void AddAuditLogStuff();
 
     private:
         void Initialize() override;
@@ -158,7 +146,6 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
-        TActorId SleepEdgeActor;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
         std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;

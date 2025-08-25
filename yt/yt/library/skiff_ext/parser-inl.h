@@ -39,7 +39,7 @@ public:
                 const auto& denseFieldDescription = genericTableDescription.DenseFieldDescriptionList[fieldIndex];
                 parserTableDescription.DenseFields.emplace_back(
                     denseFieldDescription.Name(),
-                    denseFieldDescription.ValidatedSimplify(),
+                    denseFieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ true),
                     tablesColumnIds[tableIndex].DenseFieldColumnIds[fieldIndex],
                     denseFieldDescription.IsRequired());
             }
@@ -53,7 +53,7 @@ public:
                 const auto& fieldDescription = genericTableDescriptions[tableIndex].SparseFieldDescriptionList[fieldIndex];
                 parserTableDescription.SparseFields.emplace_back(
                     fieldDescription.Name(),
-                    fieldDescription.ValidatedSimplify(),
+                    fieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ true),
                     tablesColumnIds[tableIndex].SparseFieldColumnIds[fieldIndex],
                     true);
             }

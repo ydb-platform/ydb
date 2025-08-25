@@ -12,11 +12,13 @@ namespace NKikimr {
             : ChunkSize(chunkSize)
             , CompWorthReadSize(compWorthReadSize)
             , GroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4)
+            , VCfg(TVDiskConfig::TBaseInfo::SampleForTests())
             , VCtx(new TVDiskContext(TActorId(), GroupInfo.PickTopology(), new ::NMonitoring::TDynamicCounters(),
                         TVDiskID(), nullptr, NPDisk::DEVICE_TYPE_UNKNOWN))
             , HullCtx(
                     new THullCtx(
                         VCtx,
+                        MakeIntrusive<TVDiskConfig>(VCfg),
                         ChunkSize,
                         CompWorthReadSize,
                         true,
@@ -26,14 +28,12 @@ namespace NKikimr {
                         1,      // HullSstSizeInChunksFresh
                         1,      // HullSstSizeInChunksLevel
                         2.0,
-                        10,     // FreshCompMaxInFlightWrites
-                        10,     // FreshCompMaxInFlightReads
-                        10,     // HullCompMaxInFlightWrites
-                        20,     // HullCompMaxInFlightReads
                         0.5,
                         TDuration::Minutes(5),
                         TDuration::Seconds(1),
-                        true))  // AddHeader
+                        true,
+                        8u,
+                        8u)) // AddHeader
             , LevelIndexSettings(
                 HullCtx,
                 8u,                         // Level0MaxSstsAtOnce
@@ -61,6 +61,7 @@ namespace NKikimr {
         const ui32 ChunkSize;
         const ui64 CompWorthReadSize;
         TBlobStorageGroupInfo GroupInfo;
+        TVDiskConfig VCfg;
         TVDiskContextPtr VCtx;
         THullCtxPtr HullCtx;
         TLevelIndexSettings LevelIndexSettings;
@@ -157,4 +158,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

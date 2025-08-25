@@ -32,7 +32,7 @@
 KEEP     COPYRIGHT_SERVICE_LABEL 013a24bcf69d213aa5b670e96cefb293
 BELONGS ya.make
     License text:
-        // Copyright (c) 2016-2023 Antony Polukhin
+        // Copyright (c) 2016-2025 Antony Polukhin
         // Copyright (c) 2022 Denis Mikhailov
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -49,7 +49,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 20208a12a24113d213ef2620af9718e0
 BELONGS ya.make
     License text:
         // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
-        // Copyright (c) 2019-2023 Antony Polukhin.
+        // Copyright (c) 2019-2025 Antony Polukhin.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -57,10 +57,10 @@ BELONGS ya.make
     Files with this license:
         include/pfr/detail/core14_loophole.hpp [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 49b55ffa50d2d0bf215b217c881c2a59
+KEEP     COPYRIGHT_SERVICE_LABEL 5322ab3ae537102796ad52e9d226f36f
 BELONGS ya.make
     License text:
-        // Copyright (c) 2016-2023 Antony Polukhin
+        // Copyright (c) 2016-2025 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -69,7 +69,6 @@ BELONGS ya.make
         include/pfr.hpp [1:1]
         include/pfr/config.hpp [1:2]
         include/pfr/core.hpp [1:1]
-        include/pfr/detail/cast_to_layout_compatible.hpp [1:1]
         include/pfr/detail/config.hpp [1:2]
         include/pfr/detail/core.hpp [1:1]
         include/pfr/detail/core14_classic.hpp [1:1]
@@ -77,6 +76,7 @@ BELONGS ya.make
         include/pfr/detail/core17_generated.hpp [1:2]
         include/pfr/detail/detectors.hpp [1:1]
         include/pfr/detail/fields_count.hpp [1:1]
+        include/pfr/detail/for_each_field.hpp [1:1]
         include/pfr/detail/for_each_field_impl.hpp [1:1]
         include/pfr/detail/functional.hpp [1:1]
         include/pfr/detail/io.hpp [1:1]
@@ -107,13 +107,13 @@ BELONGS ya.make
         include/pfr/detail/core_name.hpp [1:1]
         include/pfr/detail/core_name14_disabled.hpp [1:1]
         include/pfr/detail/core_name20_static.hpp [1:1]
-        include/pfr/detail/fake_object.hpp [1:1]
+        include/pfr/detail/fake_object.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 716f9f766f4e0604fa46f4898e32926f
 BELONGS ya.make
     License text:
         // Copyright (c) 2018 Adam Butcher, Antony Polukhin
-        // Copyright (c) 2019-2023 Antony Polukhin
+        // Copyright (c) 2019-2025 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -121,11 +121,47 @@ BELONGS ya.make
     Files with this license:
         include/pfr/detail/tie_from_structure_tuple.hpp [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 8fe3f5af6c8f891a7f4de986affc64da
+KEEP     COPYRIGHT_SERVICE_LABEL a67e7cb38d73abfa31951d9ff2a5e8a6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2018 Sergei Fedorov
+        // Copyright (c) 2019-2025 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/make_integer_sequence.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb9db8bc019e51311bcd1d10948b27b6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2023 Bela Schaum, X-Ryl669, Denis Mikhailov.
+        // Copyright (c) 2024-2025 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/fake_object.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4789aa7348ae6274f4c886ad65933c1
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017-2018 Chris Beck
+        // Copyright (c) 2019-2025 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pfr/detail/offset_based_getter.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e44b2e48bc30892ab60e7b46402d8e2a
 BELONGS ya.make
     License text:
         // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
-        // Copyright (c) 2019-2023 Antony Polukhin.
+        // Copyright (c) 2019-2025 Antony Polukhin.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -137,34 +173,10 @@ BELONGS ya.make
         include/pfr/detail/tie_from_structure_tuple.hpp [1:2]
         include/pfr/detail/unsafe_declval.hpp [1:1]
 
-KEEP     COPYRIGHT_SERVICE_LABEL a67e7cb38d73abfa31951d9ff2a5e8a6
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2018 Sergei Fedorov
-        // Copyright (c) 2019-2023 Antony Polukhin
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/pfr/detail/make_integer_sequence.hpp [1:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d4789aa7348ae6274f4c886ad65933c1
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2017-2018 Chris Beck
-        // Copyright (c) 2019-2023 Antony Polukhin
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/pfr/detail/offset_based_getter.hpp [1:2]
-
 KEEP     COPYRIGHT_SERVICE_LABEL f4e5cb6186c2395de18518cf73771274
 BELONGS ya.make
     License text:
-        // Copyright (c) 2016-2023 Antony Polukhin
+        // Copyright (c) 2016-2025 Antony Polukhin
         // Copyright (c) 2023 Denis Mikhailov
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL

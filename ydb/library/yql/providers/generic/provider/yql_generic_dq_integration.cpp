@@ -2,17 +2,17 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -38,6 +38,16 @@ namespace NYql {
                     return "OracleGeneric";
                 case NYql::EGenericDataSourceKind::LOGGING:
                     return "LoggingGeneric";
+                case NYql::EGenericDataSourceKind::ICEBERG:
+                    return "IcebergGeneric";
+                case NYql::EGenericDataSourceKind::REDIS:
+                    return "RedisGeneric";
+                case NYql::EGenericDataSourceKind::PROMETHEUS:
+                    return "PrometheusGeneric";
+                case NYql::EGenericDataSourceKind::MONGO_DB:
+                    return "MongoDBGeneric";
+                case NYql::EGenericDataSourceKind::OPENSEARCH:
+                    return "OpenSearchGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -62,9 +72,15 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
+
+                    if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                        ctx.AddError(TIssue(ctx.GetPosition(genReadTable.Pos()), "Cannot use watermarks"));
+                        return {};
+                    }
+
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
@@ -142,7 +158,7 @@ namespace NYql {
                 if (totalSplits <= partitionSettings.MaxPartitions) {
                     // If there are not too many splits, simply make a single-split partitions.
                     for (size_t i = 0; i < totalSplits; i++) {
-                        NGeneric::TPartition partition;
+                        Generic::TPartition partition;
                         *partition.add_splits() = tableMeta->Splits[i];
                         TString partitionStr;
                         YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
@@ -154,7 +170,7 @@ namespace NYql {
                     size_t splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions - 1) + 1;
 
                     for (size_t i = 0; i < totalSplits; i += splitsPerPartition) {
-                        NGeneric::TPartition partition;
+                        Generic::TPartition partition;
                         for (size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
                             *partition.add_splits() = tableMeta->Splits[j];
                         }
@@ -169,7 +185,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t, TExprContext&) override {
+                                    TString& sourceType, size_t, TExprContext& ctx) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -178,7 +194,7 @@ namespace NYql {
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    NGeneric::TSource source;
+                    Generic::TSource source;
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
@@ -212,15 +228,15 @@ namespace NYql {
 
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
-                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
+                        if (!SerializeFilterPredicate(ctx, predicate, select->mutable_where()->mutable_filter_typed(), err)) {
                             throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }
 
-                    // Managed YDB (including YDB underlying Logging) supports access via IAM token.
+                    // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
+                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -276,6 +292,21 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::LOGGING:
                             properties["SourceType"] = "Logging";
+                            break;
+                        case NYql::EGenericDataSourceKind::ICEBERG:
+                            properties["SourceType"] = "Iceberg";
+                            break;
+                        case NYql::EGenericDataSourceKind::MONGO_DB:
+                            properties["SourceType"] = "MongoDB";
+                            break;
+                        case NYql::EGenericDataSourceKind::REDIS:
+                            properties["SourceType"] = "Redis";
+                            break;
+                        case NYql::EGenericDataSourceKind::PROMETHEUS:
+                            properties["SourceType"] = "Prometheus";
+                            break;
+                        case NYql::EGenericDataSourceKind::OPENSEARCH:
+                            properties["SourceType"] = "OpenSearch";
                             break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
@@ -337,7 +368,7 @@ namespace NYql {
                     throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                NGeneric::TLookupSource source;
+                Generic::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 

@@ -56,7 +56,7 @@ TTransaction::TTransaction(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , StickyProxyAddress_(stickyParameters ? std::move(stickyParameters->ProxyAddress) : TString())
+    , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
     , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
         Id_,
@@ -165,7 +165,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
         transaction->GetConnection()->GetLoggingTag());
 }
 
-TFuture<void> TTransaction::Ping(const NApi::TTransactionPingOptions& /*options*/)
+TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
 {
     return SendPing();
 }
@@ -320,6 +320,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_transaction_id(), GetId());
                 ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
                 ToProto(req->mutable_prerequisite_options(), options);
+                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
                 return req->Invoke();
             }))
         .Apply(
@@ -489,7 +490,7 @@ void TTransaction::ModifyRows(
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
-                    YT_UNUSED_FUTURE(Abort());
+                    YT_UNUSED_FUTURE(ITransaction::Abort());
                 }
             }));
 
@@ -935,6 +936,16 @@ TFuture<TDistributedWriteSessionWithCookies> TTransaction::StartDistributedWrite
         PatchTransactionId(options));
 }
 
+TFuture<void> TTransaction::PingDistributedWriteSession(
+    TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    ValidateActive();
+    return Client_->PingDistributedWriteSession(
+        std::move(session),
+        options);
+}
+
 TFuture<void> TTransaction::FinishDistributedWriteSession(
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
@@ -1119,7 +1130,8 @@ void TTransaction::DoValidateActive()
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
             "Transaction %v is not active",
-            GetId());
+            GetId())
+            << TErrorAttribute("state", State_);
     }
 }
 
@@ -1167,7 +1179,7 @@ TTransactionStartOptions TTransaction::PatchTransactionId(const TTransactionStar
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTransaction::GetStickyProxyAddress() const
+const std::optional<std::string>& TTransaction::GetStickyProxyAddress() const
 {
     return StickyProxyAddress_;
 }

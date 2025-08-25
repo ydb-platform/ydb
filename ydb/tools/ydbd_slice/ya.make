@@ -8,6 +8,7 @@ PY_SRCS(
     __init__.py
     cluster_description.py
     yaml_configurator.py
+    config_client.py
     kube/__init__.py
     kube/api.py
     kube/cms.py

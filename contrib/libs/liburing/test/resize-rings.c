@@ -289,6 +289,9 @@ static int test_reads(struct io_uring *ring, int fd, int async)
 		}
 	}
 
+	for (i = 0; i < NVECS; i++)
+		free(vecs[i].iov_base);
+
 	return 0;
 }
 
@@ -309,8 +312,12 @@ static int test_basic(struct io_uring *ring, int async)
 	p.sq_entries = 32;
 	p.cq_entries = 64;
 	ret = io_uring_resize_rings(ring, &p);
-	if (ret == -EINVAL)
+	if (ret == -EINVAL || ret == -ENOMEM) {
 		return T_EXIT_SKIP;
+	} else if (ret < 0) {
+		fprintf(stderr, "resize=%d\n", ret);
+		return T_EXIT_FAIL;
+	}
 
 	sqe = io_uring_get_sqe(ring);
 	io_uring_prep_nop(sqe);
@@ -557,6 +564,8 @@ static int test(int flags, int fd, int async)
 		return T_EXIT_SKIP;
 
 	ret = io_uring_queue_init_params(8, &ring, &p);
+	if (ret == -EINVAL)
+		return T_EXIT_SKIP;
 	if (ret < 0) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;

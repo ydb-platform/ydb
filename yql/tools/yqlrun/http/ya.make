@@ -4,6 +4,7 @@ SRCS(
     assets_servlet.cpp
     server.cpp
     servlet.cpp
+    sql_tokens_servlet.cpp
     yql_functions_servlet.cpp
     yql_servlet.cpp
     yql_server.cpp
@@ -71,6 +72,11 @@ FILES(
     www/js/mode-sql.js
     www/js/mode-yql.js
     www/js/theme-tomorrow.min.js
+)
+
+RESOURCE(
+    yql/essentials/data/language/types.json types.json
+    yql/essentials/data/language/sql_functions.json sql_functions.json
 )
 
 YQL_LAST_ABI_VERSION()

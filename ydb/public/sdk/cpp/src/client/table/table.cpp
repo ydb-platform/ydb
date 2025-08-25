@@ -102,6 +102,14 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
+    if (GetProto().has_external_data_channels_count()) {
+        return GetProto().external_data_channels_count();
+    } else {
+        return { };
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnFamilyDescription::TImpl {
@@ -359,23 +367,7 @@ class TTableDescription::TImpl {
         }
 
         // read replicas settings
-        if (proto.has_read_replicas_settings()) {
-            const auto settings = proto.read_replicas_settings();
-            switch (settings.settings_case()) {
-            case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
-                ReadReplicasSettings_ = TReadReplicasSettings(
-                    TReadReplicasSettings::EMode::PerAz,
-                    settings.per_az_read_replicas_count());
-                break;
-            case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
-                ReadReplicasSettings_ = TReadReplicasSettings(
-                    TReadReplicasSettings::EMode::AnyAz,
-                    settings.any_az_read_replicas_count());
-                break;
-            default:
-                break;
-            }
-        }
+        ReadReplicasSettings_ = TReadReplicasSettings::FromProto(proto.read_replicas_settings());
     }
 
 public:
@@ -973,16 +965,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
     }
 
     if (const auto& settings = Impl_->GetReadReplicasSettings()) {
-        switch (settings->GetMode()) {
-        case TReadReplicasSettings::EMode::PerAz:
-            request.mutable_read_replicas_settings()->set_per_az_read_replicas_count(settings->GetReadReplicasCount());
-            break;
-        case TReadReplicasSettings::EMode::AnyAz:
-            request.mutable_read_replicas_settings()->set_any_az_read_replicas_count(settings->GetReadReplicasCount());
-            break;
-        default:
-            break;
-        }
+        settings->SerializeTo(*request.mutable_read_replicas_settings());
     }
 }
 
@@ -1017,6 +1000,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternal(const std::string&
 TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool enabled) {
     Impl_->Proto.set_store_external_blobs(
         enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
     return *this;
 }
 
@@ -1485,7 +1473,7 @@ NThreading::TFuture<void> TTableClient::Stop() {
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, std::move(rows), settings);
+    return Impl_->BulkUpsert(table, std::move(rows), settings, rows.Impl_.use_count() == 1);
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataFormat format,
@@ -1745,18 +1733,7 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 
     if (settings.SetReadReplicasSettings_.has_value()) {
         const auto& replSettings = settings.SetReadReplicasSettings_.value();
-        switch (replSettings.GetMode()) {
-        case TReadReplicasSettings::EMode::PerAz:
-            request.mutable_set_read_replicas_settings()->set_per_az_read_replicas_count(
-                replSettings.GetReadReplicasCount());
-            break;
-        case TReadReplicasSettings::EMode::AnyAz:
-            request.mutable_set_read_replicas_settings()->set_any_az_read_replicas_count(
-                replSettings.GetReadReplicasCount());
-            break;
-        default:
-            break;
-        }
+        replSettings.SerializeTo(*request.mutable_set_read_replicas_settings());
     }
 
     return request;
@@ -1836,6 +1813,12 @@ TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(cons
 
 TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
     return Client_->DescribeExternalTable(path, settings);
+}
+
+TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
+        const TDescribeSystemViewSettings& settings)
+{
+    return Client_->DescribeSystemView(path, settings);
 }
 
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
@@ -1983,12 +1966,10 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : TransactionImpl_(new TTransaction::TImpl(session, txId))
-{}
-
-const std::string& TTransaction::GetId() const
+    : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {
-    return TransactionImpl_->GetId();
+    SessionId_ = &TransactionImpl_->Session_.GetId();
+    TxId_ = &TransactionImpl_->TxId_;
 }
 
 bool TTransaction::IsActive() const
@@ -2001,11 +1982,18 @@ TAsyncStatus TTransaction::Precommit() const
     return TransactionImpl_->Precommit();
 }
 
-TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
+NThreading::TFuture<void> TTransaction::ProcessFailure() const
+{
+    return TransactionImpl_->ProcessFailure();
+}
+
+TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings)
+{
     return TransactionImpl_->Commit(settings);
 }
 
-TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
+TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings)
+{
     return TransactionImpl_->Rollback(settings);
 }
 
@@ -2017,6 +2005,10 @@ TSession TTransaction::GetSession() const
 void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
 {
     TransactionImpl_->AddPrecommitCallback(std::move(cb));
+}
+
+void TTransaction::AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+    TransactionImpl_->AddOnFailureCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2364,6 +2356,34 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
+std::optional<TReadReplicasSettings> TReadReplicasSettings::FromProto(const Ydb::Table::ReadReplicasSettings& proto) {
+    switch (proto.settings_case()) {
+    case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
+        return TReadReplicasSettings(
+            TReadReplicasSettings::EMode::PerAz,
+            proto.per_az_read_replicas_count());
+    case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
+        return TReadReplicasSettings(
+            TReadReplicasSettings::EMode::AnyAz,
+            proto.any_az_read_replicas_count());
+    default:
+        return { };
+    }
+}
+
+void TReadReplicasSettings::SerializeTo(Ydb::Table::ReadReplicasSettings& proto) const {
+    switch (GetMode()) {
+    case TReadReplicasSettings::EMode::PerAz:
+        proto.set_per_az_read_replicas_count(GetReadReplicasCount());
+        break;
+    case TReadReplicasSettings::EMode::AnyAz:
+        proto.set_any_az_read_replicas_count(GetReadReplicasCount());
+        break;
+    default:
+        break;
+    }
+}
+
 TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
     auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
@@ -2378,7 +2398,8 @@ TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalInd
 
     return {
         .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
-        .Partitions = partitionsFromProto(proto)
+        .Partitions = partitionsFromProto(proto),
+        .ReadReplicasSettings = TReadReplicasSettings::FromProto(proto.read_replicas_settings())
     };
 }
 
@@ -2394,6 +2415,10 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
         }
     };
     std::visit(std::move(variantVisitor), Partitions);
+
+    if (ReadReplicasSettings) {
+        ReadReplicasSettings->SerializeTo(*settings.mutable_read_replicas_settings());
+    }
 }
 
 TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorIndexSettings& proto) {
@@ -2502,7 +2527,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings;
+    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2525,6 +2550,10 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
+        const bool prefixVectorIndex = indexColumns.size() > 1;
+        if (prefixVectorIndex) {
+            globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings()));
+        }
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
@@ -2677,6 +2706,11 @@ TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithSchemaChanges() {
+    SchemaChanges_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::WithResolvedTimestamps(const TDuration& value) {
     ResolvedTimestamps_ = value;
     return *this;
@@ -2730,6 +2764,10 @@ EChangefeedState TChangefeedDescription::GetState() const {
 
 bool TChangefeedDescription::GetVirtualTimestamps() const {
     return VirtualTimestamps_;
+}
+
+bool TChangefeedDescription::GetSchemaChanges() const {
+    return SchemaChanges_;
 }
 
 const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() const {
@@ -2796,6 +2834,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
     }
+    if (proto.schema_changes()) {
+        ret.WithSchemaChanges();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
@@ -2839,6 +2880,7 @@ template <typename TProto>
 void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_name(TStringType{Name_});
     proto.set_virtual_timestamps(VirtualTimestamps_);
+    proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
 
     switch (Mode_) {
@@ -2922,7 +2964,8 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
     o << "{ name: \"" << Name_ << "\""
       << ", mode: " << Mode_ << ""
       << ", format: " << Format_ << ""
-      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << "";
+      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
+      << ", schema_changes: " << (SchemaChanges_ ? "on": "off") << "";
 
     if (ResolvedTimestamps_) {
         o << ", resolved_timestamps: " << *ResolvedTimestamps_;
@@ -2948,6 +2991,7 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
         && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }
@@ -3390,6 +3434,124 @@ TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb
 TExternalTableDescription TDescribeExternalTableResult::GetExternalTableDescription() const {
     CheckStatusOk("TDescribeExternalTableResult::GetExternalTableDescription");
     return ExternalTableDescription_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSystemViewDescription::TImpl {
+
+    TImpl(const Ydb::Table::DescribeSystemViewResult& proto)
+    {
+        // system view id
+        SysViewId_ = proto.sys_view_id();
+        SysViewName_ = proto.sys_view_name();
+
+        // primary key
+        for (const auto& pk : proto.primary_key()) {
+            PrimaryKey_.push_back(pk);
+        }
+
+        // columns
+        for (const auto& col : proto.columns()) {
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+
+            Columns_.emplace_back(col.name(), col.type(), "", not_null);
+        }
+
+        // attributes
+        for (auto [key, value] : proto.attributes()) {
+            Attributes_[key] = value;
+        }
+    }
+
+public:
+    TImpl() = default;
+
+    TImpl(Ydb::Table::DescribeSystemViewResult&& desc)
+        : TImpl(desc)
+    {
+        Proto_ = std::move(desc);
+    }
+
+    const Ydb::Table::DescribeSystemViewResult& GetProto() const {
+        return Proto_;
+    }
+
+    uint64_t GetSysViewId() const {
+        return SysViewId_;
+    }
+
+    const std::string& GetSysViewName() const {
+        return SysViewName_;
+    }
+
+    const std::vector<std::string>& GetPrimaryKeyColumns() const {
+        return PrimaryKey_;
+    }
+
+    const std::vector<TTableColumn>& GetColumns() const {
+        return Columns_;
+    }
+
+    const std::unordered_map<std::string, std::string>& GetAttributes() const {
+        return Attributes_;
+    }
+
+private:
+    Ydb::Table::DescribeSystemViewResult Proto_;
+
+    uint64_t SysViewId_;
+    std::string SysViewName_;
+    std::vector<std::string> PrimaryKey_;
+    std::vector<TTableColumn> Columns_;
+    std::unordered_map<std::string, std::string> Attributes_;
+};
+
+TSystemViewDescription::TSystemViewDescription()
+    : Impl_(new TImpl)
+{
+}
+
+TSystemViewDescription::TSystemViewDescription(Ydb::Table::DescribeSystemViewResult&& desc)
+    : Impl_(new TImpl(std::move(desc)))
+{
+}
+
+uint64_t TSystemViewDescription::GetSysViewId() const {
+    return Impl_->GetSysViewId();
+}
+
+const std::string& TSystemViewDescription::GetSysViewName() const {
+    return Impl_->GetSysViewName();
+}
+
+const std::vector<std::string>& TSystemViewDescription::GetPrimaryKeyColumns() const {
+    return Impl_->GetPrimaryKeyColumns();
+}
+
+std::vector<TTableColumn> TSystemViewDescription::GetTableColumns() const {
+    return Impl_->GetColumns();
+}
+
+const std::unordered_map<std::string, std::string>& TSystemViewDescription::GetAttributes() const {
+    return Impl_->GetAttributes();
+}
+
+const Ydb::Table::DescribeSystemViewResult& TSystemViewDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeSystemViewResult::TDescribeSystemViewResult(TStatus&& status, Ydb::Table::DescribeSystemViewResult&& desc)
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , SystemViewDescription_(std::move(desc))
+{}
+
+TSystemViewDescription TDescribeSystemViewResult::GetSystemViewDescription() const {
+    CheckStatusOk("TDescribeSystemViewResult::GetSystemViewDescription");
+    return SystemViewDescription_;
 }
 
 } // namespace NTable

@@ -141,7 +141,6 @@ def post_install(self):
             "-DPy_BUILD_CORE",
             "-DPy_BUILD_CORE_BUILTIN",
             "-DUSE_ZLIB_CRC32",
-            '-DABIFLAGS=""',
             '-DPREFIX="/var/empty"',
             '-DEXEC_PREFIX="/var/empty"',
             f'-DVERSION="{self.version[:4]}"',
@@ -152,6 +151,16 @@ def post_install(self):
         NO_COMPILER_WARNINGS=True,
         NO_UTIL=True,
         SUPPRESSIONS=["tsan.supp"],
+    )
+
+    self.yamakes["."].after(
+        "CFLAGS",
+        Switch(
+            {
+                'BUILD_TYPE == "RELEASE"': Linkable(CFLAGS=['-DABIFLAGS=""']),
+                "default": Linkable(CFLAGS=['-DABIFLAGS="d"']),
+            }
+        ),
     )
 
     self.yamakes["."].after(

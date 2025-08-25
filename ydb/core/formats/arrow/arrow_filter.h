@@ -86,7 +86,7 @@ public:
         bool Next();
     };
 
-    TColumnFilter Cut(const ui32 filteredRecordsCount, const ui32 limit, const bool reverse) const;
+    TColumnFilter Cut(const ui32 totalRecordsCount, const ui32 limit, const bool reverse) const;
 
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
         return TSlicesIterator(*this, startIndex, count);
@@ -150,7 +150,7 @@ public:
     public:
         TString DebugString() const;
 
-        TIterator(const bool reverse, const std::vector<ui32>& filter, const bool startValue)
+        TIterator(const bool reverse, const std::vector<ui32>& filter, const bool startValue, const ui64 startOffset)
             : FilterPointer(&filter)
             , CurrentValue(startValue)
             , FinishPosition(reverse ? -1 : FilterPointer->size())
@@ -163,9 +163,12 @@ public:
                 }
                 CurrentRemainVolume = (*FilterPointer)[Position];
             }
+            if (startOffset) {
+                Next(startOffset);
+            }
         }
 
-        TIterator(const bool reverse, const ui32 size, const bool startValue)
+        TIterator(const bool reverse, const ui32 size, const bool startValue, const ui64 startOffset)
             : CurrentValue(startValue)
             , FinishPosition(reverse ? -1 : 1)
             , DeltaPosition(reverse ? -1 : 1) {
@@ -176,6 +179,9 @@ public:
                     Position = 0;
                 }
                 CurrentRemainVolume = size;
+            }
+            if (startOffset) {
+                Next(startOffset);
             }
         }
 
@@ -194,7 +200,8 @@ public:
 
     TString DebugString() const;
 
-    TIterator GetIterator(const bool reverse, const ui32 expectedSize) const;
+    TIterator GetBegin(const bool reverse, const ui32 expectedSize) const;
+    TIterator GetIterator(const bool reverse, const ui32 expectedSize, const ui64 startOffset) const;
 
     bool CheckSlice(const ui32 offset, const ui32 count) const;
 
@@ -263,11 +270,9 @@ public:
         return TColumnFilter(false);
     }
 
-    TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
-    TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
-
-    // It makes a filter using composite predicate
-    static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
+    [[nodiscard]] TColumnFilter And(const TColumnFilter& extFilter) const;
+    [[nodiscard]] TColumnFilter Or(const TColumnFilter& extFilter) const;
+    [[nodiscard]] TColumnFilter ApplyFilterFrom(const TColumnFilter& filter) const;
 
     class TApplyContext {
     private:
@@ -289,9 +294,9 @@ public:
         TApplyContext& Slice(const ui32 start, const ui32 count);
     };
 
-    [[nodiscard]] bool Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    [[nodiscard]] bool Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    [[nodiscard]] bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    void Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    void Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
     [[nodiscard]] std::shared_ptr<NAccessor::IChunkedArray> Apply(
         const std::shared_ptr<NAccessor::IChunkedArray>& source, const TApplyContext& context = Default<TApplyContext>()) const;

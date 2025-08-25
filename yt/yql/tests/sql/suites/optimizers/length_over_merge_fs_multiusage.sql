@@ -1,6 +1,4 @@
 /* postgres can not */
-pragma config.flags("OptimizerFlags", "FieldSubsetEnableMultiusage");
-
 use plato;
 
 $input = (select key, key || subkey as subkey, value from Input);

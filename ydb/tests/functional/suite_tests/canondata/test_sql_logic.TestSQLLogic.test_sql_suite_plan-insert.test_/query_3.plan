@@ -51,16 +51,11 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_insert.test_plan/a2",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b",
-                                                            "c"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Sequential",
                                                         "Table": "sqllogictest_insert.test_plan/a2"

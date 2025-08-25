@@ -100,11 +100,12 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
-    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier) {
+    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool issueKeepFlag,
+            bool *writtenBeyondBarrier) {
         if (Fields->BarrierValidation) {
             // ensure that the new blob would not fall under GC
             TString explanation;
-            if (!BarrierCache.Keep(id, false, &explanation)) {
+            if (!BarrierCache.Keep(id, issueKeepFlag, &explanation)) {
                 LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s",
@@ -173,6 +174,7 @@ namespace NKikimr {
             const TActorContext &ctx,
             const TLogoBlobID &id,
             bool ignoreBlock,
+            bool issueKeepFlag,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
             bool *writtenBeyondBarrier)
     {
@@ -202,7 +204,7 @@ namespace NKikimr {
         }
 
         if (writtenBeyondBarrier) {
-            ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+            ValidateWriteQuery(ctx, id, issueKeepFlag, writtenBeyondBarrier);
         }
         return {NKikimrProto::OK, "", false};
     }
@@ -216,8 +218,6 @@ namespace NKikimr {
             ui64 lsn)
     {
         ReplayAddLogoBlobCmd(ctx, id, partId, ingress, std::move(buffer), lsn, THullDbRecovery::NORMAL);
-
-        // run compaction if required
     }
 
     void THull::AddHugeLogoBlob(
@@ -230,6 +230,7 @@ namespace NKikimr {
         ReplayAddHugeLogoBlobCmd(ctx, id, ingress, diskAddr, lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -243,6 +244,7 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, ingress, seg.Point(), THullDbRecovery::NORMAL);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -288,6 +290,7 @@ namespace NKikimr {
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -430,14 +433,16 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 
-        auto blockStatus = THullDbRecovery::IsBlocked(record);
-        switch (blockStatus.Status) {
-            case TBlocksCache::EStatus::OK:
-                break;
-            case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::BLOCKED, "blocked", 0, false};
-            case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+        if (!record.GetIgnoreBlock()) {
+            auto blockStatus = THullDbRecovery::IsBlocked(record);
+            switch (blockStatus.Status) {
+                case TBlocksCache::EStatus::OK:
+                    break;
+                case TBlocksCache::EStatus::BLOCKED_PERS:
+                    return {NKikimrProto::BLOCKED, "blocked", 0, false};
+                case TBlocksCache::EStatus::BLOCKED_INFLIGH:
+                    return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+            }
         }
 
         // check per generation counter
@@ -484,7 +489,9 @@ namespace NKikimr {
         ReplayAddGCCmd(ctx, record, ingress, seg.Last);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }
@@ -624,9 +631,12 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         // run compaction if required
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }

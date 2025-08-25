@@ -95,7 +95,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -130,7 +130,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -158,7 +158,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -204,7 +204,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -247,7 +247,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -259,7 +259,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -277,7 +277,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -298,7 +298,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -343,7 +343,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -357,7 +357,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -391,7 +391,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -409,7 +409,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -466,7 +466,7 @@ public:
             {"123", {{"to", "1"}, {"strict", "2"}}, "$to + $strict", {"3"}},
         };
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunVariablesTestCase(testCase.Json, testCase.Variables, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -479,7 +479,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -505,7 +505,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -549,7 +549,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -658,7 +658,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -726,7 +726,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -738,7 +738,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -753,7 +753,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -767,7 +767,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -788,7 +788,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -801,7 +801,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -824,7 +824,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -847,7 +847,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -872,7 +872,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -885,7 +885,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -899,7 +899,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -912,7 +912,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -928,7 +928,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -943,7 +943,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -962,7 +962,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : ALL_MODES) {
+            for (const auto mode : AllModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }

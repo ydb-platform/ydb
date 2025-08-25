@@ -108,9 +108,9 @@ public:
                     if (pending) {
                         const TStringBuf command = n.Child(2)->Content();
                         if (command == "AddFileByUrl") {
-                            PendingFileAliases.insert(n.Child(3)->Content());
+                            PendingFileAliases_.insert(n.Child(3)->Content());
                         } else if (command == "AddFolderByUrl") {
-                            PendingFolderPrefixes.insert(n.Child(3)->Content());
+                            PendingFolderPrefixes_.insert(n.Child(3)->Content());
                         }
                     }
                 }
@@ -122,7 +122,7 @@ public:
 
 private:
     void ScanImpl(const TExprNode& node) {
-        if (!Visited.emplace(&node).second) {
+        if (!Visited_.emplace(&node).second) {
             return;
         }
 
@@ -139,11 +139,11 @@ private:
         static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
         if (node.IsCallable(FILE_CALLABLES)) {
             const auto alias = node.Head().Content();
-            if (PendingFileAliases.contains(alias) || AnyOf(PendingFolderPrefixes, [alias](const TStringBuf prefix) {
+            if (PendingFileAliases_.contains(alias) || AnyOf(PendingFolderPrefixes_, [alias](const TStringBuf prefix) {
                 auto withSlash = TString(prefix) + "/";
                 return alias.StartsWith(withSlash);
                 })) {
-                for (auto& curr: CurrentEvalNodes) {
+                for (auto& curr: CurrentEvalNodes_) {
                     Reachable.erase(curr);
                 }
                 HasConfigPending = true;
@@ -158,14 +158,14 @@ private:
         bool pop = false;
         if (node.IsCallable(EvaluationFuncs) || node.IsCallable(SubqueryExpandFuncs)) {
             Reachable.insert(&node);
-            CurrentEvalNodes.insert(&node);
+            CurrentEvalNodes_.insert(&node);
             pop = true;
         }
 
         if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!", "EvaluateParallelFor!" })) {
             // scan predicate/list only
             if (node.ChildrenSize() > 1) {
-                CurrentEvalNodes.insert(&node);
+                CurrentEvalNodes_.insert(&node);
                 pop = true;
                 ScanImpl(*node.Child(1));
             }
@@ -177,7 +177,7 @@ private:
             }
             if (node.ChildrenSize() > index) {
                 if (node.Child(index)->IsCallable(EvaluationFuncs)) {
-                    CurrentEvalNodes.insert(&node);
+                    CurrentEvalNodes_.insert(&node);
                     pop = true;
                     ScanImpl(*node.Child(index));
                 } else {
@@ -192,15 +192,15 @@ private:
             }
         }
         if (pop) {
-            CurrentEvalNodes.erase(&node);
+            CurrentEvalNodes_.erase(&node);
         }
     }
 
 private:
-    TNodeSet Visited;
-    THashSet<TStringBuf> PendingFileAliases;
-    THashSet<TStringBuf> PendingFolderPrefixes;
-    TNodeSet CurrentEvalNodes;
+    TNodeSet Visited_;
+    THashSet<TStringBuf> PendingFileAliases_;
+    THashSet<TStringBuf> PendingFolderPrefixes_;
+    TNodeSet CurrentEvalNodes_;
 };
 
 struct TEvalScope {
@@ -376,7 +376,8 @@ TExprNode::TPtr QuoteCode(const TExprNode::TPtr& node, TExprContext& ctx, TNodeO
 }
 
 IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry, IGraphTransformer* calcTransfomer) {
+    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransfomer, TTypeAnnCallableFactory typeAnnCallableFactory) {
     output = input;
     if (ctx.Step.IsDone(TExprStep::ExprEval))
         return IGraphTransformer::TStatus::Ok;
@@ -391,7 +392,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
     bool isCodePipeline = false;
-    TTransformationPipeline pipeline(&types);
+    TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(functionRegistry);
@@ -526,11 +527,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     IGraphTransformer::TStatus hasPendingEvaluations = IGraphTransformer::TStatus::Ok;
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
+    settings.TrackFrames = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
-        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
-        });
-
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;

@@ -16,6 +16,8 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <yt/yt/library/formats/format.h>
+
 #include <util/stream/buffer.h>
 
 #include <util/generic/buffer.h>
@@ -27,9 +29,10 @@
 
 namespace NYT::NHttp {
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 using namespace NJson;
+using namespace NFormats;
 using namespace NYson;
 using namespace NYTree;
 using namespace NConcurrency;
@@ -37,57 +40,87 @@ using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillYTError(const THeadersPtr& headers, const TError& error)
+std::unique_ptr<NYson::IFlushableYsonConsumer> TJsonFactory::CreateConsumer(IZeroCopyOutput* output)
 {
-    TString errorJson;
-    TStringOutput errorJsonOutput(errorJson);
-    auto jsonWriter = CreateJsonConsumer(&errorJsonOutput);
-    Serialize(error, jsonWriter.get());
-    jsonWriter->Flush();
+    return CreateJsonConsumer(output);
+}
 
-    headers->Add(XYTErrorHeaderName, errorJson);
+NYson::TYsonProducer TJsonFactory::CreateProducer(IInputStream* input)
+{
+    return BIND([=] (IYsonConsumer* consumer) {
+        ParseJson(input, consumer);
+    });
+}
+
+void FillYTError(
+    const THeadersPtr& headers,
+    const TError& error,
+    IFormatFactoryPtr errorFormatFactory)
+{
+    TString errorString;
+    TStringOutput errorStringOutput(errorString);
+
+    auto consumer = errorFormatFactory->CreateConsumer(&errorStringOutput);
+
+    Serialize(error, consumer.get());
+    consumer->Flush();
+
+    headers->Add(XYTErrorHeaderName, errorString);
     headers->Add(XYTResponseCodeHeaderName, ToString(static_cast<int>(error.GetCode())));
     headers->Add(XYTResponseMessageHeaderName, EscapeHeaderValue(error.GetMessage()));
 }
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error,
+    IFormatFactoryPtr errorFormatFactory)
 {
-    FillYTError(rsp->GetHeaders(), error);
+    FillYTError(rsp->GetHeaders(), error, errorFormatFactory);
 }
 
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error)
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error,
+    IFormatFactoryPtr errorFormatFactory)
 {
-    FillYTError(rsp->GetTrailers(), error);
+    FillYTError(rsp->GetTrailers(), error, errorFormatFactory);
 }
 
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers,
+    IFormatFactoryPtr errorFormatFactory)
 {
-    TString source;
-    const TString* errorHeader;
+    std::string source;
+    const std::string* errorHeader;
     if (fromTrailers) {
-        static const TString TrailerSource("trailer");
+        static const std::string TrailerSource("trailer");
         source = TrailerSource;
         errorHeader = rsp->GetTrailers()->Find(XYTErrorHeaderName);
     } else {
-        static const TString HeaderSource("header");
+        static const std::string HeaderSource("header");
         source = HeaderSource;
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    TString errorJson;
+    TString errorString;
     if (errorHeader) {
-        errorJson = *errorHeader;
+        errorString = *errorHeader;
     } else {
-        static const TString BodySource("body");
+        static const std::string BodySource("body");
         source = BodySource;
-        errorJson = ToString(rsp->ReadAll());
+        errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorJsonInput(errorJson);
+    TStringInput errorStringInput(errorString);
+
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
+
+    auto producer = errorFormatFactory->CreateProducer(&errorStringInput);
+
     try {
-        ParseJson(&errorJsonInput, buildingConsumer.get());
+        producer.Run(buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
             << TErrorAttribute("source", source)
@@ -133,7 +166,7 @@ IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
 
-static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
+static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "Authorization",
     "Origin",
     "Content-Type",
@@ -153,6 +186,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
     "X-YT-Output-Format",
     "X-YT-Output-Format0",
     "X-YT-Output-Format-0",
+    "X-YT-Error-Format",
     "X-YT-Header-Format",
     "X-YT-Suppress-Redirect",
     "X-YT-Omit-Trailers",
@@ -166,7 +200,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<TString>{
     "X-YT-User-Tag",
 });
 
-static const std::vector<TString> KnownHeaders = {
+static const std::vector<std::string> KnownHeaders = {
     AcceptHeaderName,
     AccessControlAllowCredentialsHeaderName,
     AccessControlAllowHeadersHeaderName,
@@ -212,8 +246,7 @@ bool MaybeHandleCors(
     const IResponseWriterPtr& rsp,
     const TCorsConfigPtr& config)
 {
-    auto origin = req->GetHeaders()->Find("Origin");
-    if (origin) {
+    if (auto origin = req->GetHeaders()->Find("Origin")) {
         auto url = ParseUrl(*origin);
 
         bool allow = false;
@@ -254,14 +287,14 @@ bool MaybeHandleCors(
     return false;
 }
 
-THashMap<TString, TString> ParseCookies(TStringBuf cookies)
+THashMap<std::string, std::string> ParseCookies(TStringBuf cookies)
 {
-    THashMap<TString, TString> map;
+    THashMap<std::string, std::string> map;
     size_t index = 0;
     while (index < cookies.size()) {
         auto nameStartIndex = index;
         auto nameEndIndex = cookies.find('=', index);
-        if (nameEndIndex == TString::npos) {
+        if (nameEndIndex == std::string::npos) {
             THROW_ERROR_EXCEPTION("Malformed cookies");
         }
         auto name = StripString(cookies.substr(nameStartIndex, nameEndIndex - nameStartIndex));
@@ -292,18 +325,18 @@ void ProtectCsrfToken(const IResponseWriterPtr& rsp)
     headers->Set(XDnsPrefetchControlHeaderName, "off");
 }
 
-std::optional<TString> FindHeader(const IRequestPtr& req, const TString& headerName)
+std::optional<std::string> FindHeader(const IRequestPtr& req, TStringBuf headerName)
 {
     auto header = req->GetHeaders()->Find(headerName);
     return header ? std::make_optional(*header) : std::nullopt;
 }
 
-std::optional<TString> FindBalancerRequestId(const IRequestPtr& req)
+std::optional<std::string> FindBalancerRequestId(const IRequestPtr& req)
 {
     return FindHeader(req, "X-Req-Id");
 }
 
-std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
+std::optional<std::string> FindBalancerRealIP(const IRequestPtr& req)
 {
     const auto& headers = req->GetHeaders();
 
@@ -318,12 +351,12 @@ std::optional<TString> FindBalancerRealIP(const IRequestPtr& req)
     return {};
 }
 
-std::optional<TString> FindUserAgent(const IRequestPtr& req)
+std::optional<std::string> FindUserAgent(const IRequestPtr& req)
 {
     return FindHeader(req, "User-Agent");
 }
 
-void SetUserAgent(const THeadersPtr& headers, const TString& value)
+void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 {
     headers->Set("User-Agent", value);
 }
@@ -392,11 +425,11 @@ NTracing::TSpanId GetSpanId(const IRequestPtr& req)
     return IntFromString<NTracing::TSpanId, 16>(*id);
 }
 
-bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spanContext)
+bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanContext)
 {
     // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106
 
-    auto parts = StringSplitter(traceParent).Split('-').ToList<TString>();
+    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
     if (parts.size() < 3 || parts.size() > 4) {
         return false;
     }
@@ -464,8 +497,8 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
         return {};
     }
 
-    const TString bytesPrefix = "bytes=";
-    if (!range->StartsWith(bytesPrefix)) {
+    const std::string bytesPrefix = "bytes=";
+    if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
             << TErrorAttribute("range", *range);
     }
@@ -481,18 +514,18 @@ void SetBytesRange(const THeadersPtr& headers, std::pair<i64, i64> range)
     headers->Set(ContentRangeHeaderName, Format("bytes %v-%v/*", range.first, range.second));
 }
 
-TString SanitizeUrl(const TString& url)
+std::string SanitizeUrl(TStringBuf url)
 {
     // Do not expose URL parameters in error attributes.
     auto urlRef = ParseUrl(url);
     if (urlRef.PortStr.empty()) {
-        return TString(urlRef.Host) + urlRef.Path;
+        return Format("%v%v", urlRef.Host, urlRef.Path);
     } else {
         return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
     }
 }
 
-std::vector<std::pair<TString, TString>> DumpUnknownHeaders(const THeadersPtr& headers)
+std::vector<std::pair<std::string, std::string>> DumpUnknownHeaders(const THeadersPtr& headers)
 {
     static const THeaders::THeaderNames known(KnownHeaders.begin(), KnownHeaders.end());
     return headers->Dump(&known);

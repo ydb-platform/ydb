@@ -6,7 +6,6 @@ import copy
 import json
 import os
 import re
-import six
 import subprocess
 
 try:
@@ -58,6 +57,7 @@ YTEST_FIELDS_BASE = (
 
 YTEST_FIELDS_EXTRA = (
     df.Blob.value,
+    df.ParallelTestsInSingleNode.value,
     df.ForkMode.from_macro_and_unit,
     df.Size.from_macro_args_and_unit,
     df.Tag.from_macro_args_and_unit,
@@ -309,7 +309,7 @@ def validate_test(unit, kw):
             errors.append("Error when parsing test timeout: [[bad]]{}[[rst]]".format(e))
 
         requirements_list = []
-        for req_name, req_value in six.iteritems(requirements):
+        for req_name, req_value in requirements.items():
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
@@ -415,8 +415,8 @@ def dump_test(unit, kw):
     if valid_kw is None:
         return None
     string_handler = StringIO()
-    for k, v in six.iteritems(valid_kw):
-        print(k + ': ' + six.ensure_str(v), file=string_handler)
+    for k, v in valid_kw.items():
+        print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
     print(BLOCK_SEPARATOR, file=string_handler)
     data = string_handler.getvalue()
     string_handler.close()
@@ -576,9 +576,16 @@ def check_resource(fields, unit, *args):
         df.KtlintBinary.value,
         df.UseKtlintOld.value,
         df.KtlintBaselineFile.value,
+        df.KtlintRuleset.value,
     )
 )
 def ktlint(fields, unit, *args):
+    ruleset_dict = df.KtlintRuleset.value(unit, [], [])
+    if ruleset_dict:
+        ruleset = ruleset_dict[df.KtlintRuleset.KEY]
+        unit.ondepends(ruleset)
+        args = (*args, "DEPENDS", ruleset)
+
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,
@@ -876,6 +883,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestEnv.value,
         df.TestData.java_test,
         df.ForkMode.test_fork_mode,
+        df.TestExperimentalFork.value,
         df.SplitFactor.from_unit,
         df.CustomDependencies.test_depends_only,
         df.Tag.from_macro_args_and_unit,
@@ -991,7 +999,7 @@ def onsetup_exectest(fields, unit, *args):
     command = command.replace("$EXECTEST_COMMAND_VALUE", "")
     if "PYTHON_BIN" in command:
         unit.ondepends('contrib/tools/python')
-    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
+    unit.set(["TEST_BLOB_DATA", base64.b64encode(command.encode('utf-8'))])
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
@@ -1018,6 +1026,7 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
+        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1033,6 +1042,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     keywords = {
         "NAME": 1,
         "LINTER": 1,
+        "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,
@@ -1082,9 +1092,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
-        "CUSTOM_CONFIG": 1,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

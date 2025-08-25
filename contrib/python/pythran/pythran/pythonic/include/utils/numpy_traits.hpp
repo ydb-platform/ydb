@@ -185,6 +185,25 @@ namespace types
     static T get(...);
     using type = decltype(get<E>(nullptr));
   };
+
+  template <class T>
+  struct has_buffer {
+    static constexpr bool value = false;
+  };
+
+  template <class T, class pS>
+  struct has_buffer<ndarray<T, pS>> {
+    static constexpr bool value = true;
+  };
+
+  template <class A>
+  struct has_buffer<numpy_iexpr<A>> : has_buffer<A>{
+  };
+
+  template <class A, class... S>
+  struct has_buffer<numpy_gexpr<A, S...>> : has_buffer<A> {
+  };
+
 } // namespace types
 PYTHONIC_NS_END
 

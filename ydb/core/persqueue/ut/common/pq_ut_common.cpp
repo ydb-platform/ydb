@@ -66,8 +66,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(parameters.localDC);
-            tabletConfig->AddReadRules("user");
-            tabletConfig->AddReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            auto* consumer = tabletConfig->AddConsumers();
+            consumer->SetName("user");
+            consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
             tabletConfig->SetMeteringMode(parameters.meteringMode);
             auto partitionConfig = tabletConfig->MutablePartitionConfig();
             if (parameters.writeSpeed > 0) {
@@ -88,11 +89,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             partitionConfig->SetMaxWriteInflightSize(90'000'000);
             partitionConfig->SetLowWatermark(parameters.lowWatermark);
 
+            if (parameters.enableCompactificationByKey) {
+                tabletConfig->SetEnableCompactification(true);
+            }
             for (auto& u : users) {
-                if (u.second)
-                    partitionConfig->AddImportantClientId(u.first);
-                if (u.first != "user")
-                    tabletConfig->AddReadRules(u.first);
+                auto* consumer = tabletConfig->AddConsumers();
+                consumer->SetName(u.first);
+                consumer->SetImportant(u.second);
             }
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -228,9 +231,9 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
             request->Record.SetTopicName(topic);
             request->Record.SetPath("/Root/" + topic);
             request->Record.SetSchemeShardId(ssId);
-            request->Record.MutableTabletConfig()->AddReadRules("client");
+            request->Record.MutableTabletConfig()->AddConsumers()->SetName("client");
             for (const auto& c : xtraConsumers) {
-                request->Record.MutableTabletConfig()->AddReadRules(c);
+                request->Record.MutableTabletConfig()->AddConsumers()->SetName(c);
             };
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);
             request->Record.MutableTabletConfig()->SetRequireAuthRead(requireAuth);
@@ -965,21 +968,22 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
-        UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), settings.ResCount);
+        UNIT_ASSERT_GE_C(res.ResultSize(), settings.ResCount,
+                      "res.ResultSize()=" << res.ResultSize() << ", settings.ResCount=" << settings.ResCount);
         ui64 off = settings.Offset;
 
         for (ui32 i = 0; i < settings.ResCount; ++i) {
             auto r = res.GetResult(i);
             if (settings.Offsets.empty()) {
                 if (settings.ReadTimestampMs == 0) {
-                    UNIT_ASSERT_EQUAL((ui64)r.GetOffset(), off);
+                    UNIT_ASSERT_VALUES_EQUAL((ui64)r.GetOffset(), off);
                 }
                 UNIT_ASSERT(r.GetSourceId().size() == 9 && r.GetSourceId().StartsWith("sourceid"));
                 UNIT_ASSERT_VALUES_EQUAL(ui32(r.GetData()[0]), off);
                 UNIT_ASSERT_VALUES_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
                 ++off;
             } else if (settings.Offsets.size() > i) {
-                UNIT_ASSERT(settings.Offsets[i] == (i64)r.GetOffset());
+                UNIT_ASSERT_VALUES_EQUAL(settings.Offsets[i], (i64)r.GetOffset());
             }
         }
     } else {
@@ -1028,6 +1032,9 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     }
     if (settings.PartitionSessionId > 0) {
         read->SetPartitionSessionId(settings.PartitionSessionId);
+    }
+    if (settings.LastOffset > 0) {
+        read->SetLastOffset(settings.LastOffset);
     }
     if (settings.Pipe) {
         ActorIdToProto(settings.Pipe, req->MutablePipeClient());

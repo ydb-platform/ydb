@@ -14,10 +14,10 @@ DATA_PATH = yatest.common.source_path('ydb/tests/fq/streaming_optimize')
 @pytest.fixture
 def fq_run(request) -> FqRun:
     result = FqRun(
-        config_file=os.path.join('ydb/tests/fq/streaming_optimize/cfg', 'fq_config.conf'),
+        config_file=os.path.join('ydb/tests/fq/streaming_optimize/cfg', 'app_config.conf'),
         path_prefix=f"{request.function.__name__}_"
     )
-    result.replace_config(lambda config: config.replace("${SOLOMON_ENDPOINT}", os.getenv("SOLOMON_ENDPOINT")))
+    result.replace_config(lambda config: config.replace("${SOLOMON_ENDPOINT}", os.getenv("SOLOMON_HTTP_ENDPOINT")))
     result.add_topic("test_topic_input", [])
     result.add_topic("test_topic_input2", [])
     result.add_topic("test_topic_output", [])

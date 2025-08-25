@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
 #include <ydb/core/formats/arrow/program/graph_optimization.h>
+#include <ydb/core/formats/arrow/program/kernel_logic.h>
 
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
@@ -37,8 +38,9 @@ private:
     TColumnInfo GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const;
 
     std::string GenerateName(const NKikimrSSA::TProgram::TColumn& column) const;
-    [[nodiscard]] TConclusion<std::shared_ptr<IStepFunction>> MakeFunction(
-        const TColumnInfo& name, const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::vector<TColumnChainInfo>& arguments) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<IStepFunction>> MakeFunction(const TColumnInfo& name,
+        const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<IKernelLogic>& kernelLogic,
+        std::vector<TColumnChainInfo>& arguments) const;
     [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MakeConstant(
         const TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant) const;
     [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MaterializeParameter(const TColumnInfo& name,

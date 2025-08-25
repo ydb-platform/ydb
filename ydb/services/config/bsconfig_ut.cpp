@@ -21,6 +21,8 @@
 
 #include <util/string/builder.h>
 
+#include <functional>
+
 #define UNIT_ASSERT_CHECK_STATUS(got, exp) \
     UNIT_ASSERT_C(got.status() == exp, "exp# " << Ydb::StatusIds::StatusCode_Name(exp) \
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
@@ -170,7 +172,8 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             std::optional<TString> mainConfig,
             std::optional<TString> storageConfig,
             std::optional<bool> switchDedicatedStorageSection,
-            bool dedicatedConfigMode) {
+            bool dedicatedConfigMode,
+            const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker) {
 
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
@@ -206,14 +209,12 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         }
 
         Ydb::Config::ReplaceConfigResponse response;
-        Ydb::Config::ReplaceConfigResult result;
 
         grpc::ClientContext replaceConfigCtx;
         AdjustCtxForDB(replaceConfigCtx);
         stub->ReplaceConfig(&replaceConfigCtx, request, &response);
-        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
-        Cerr << "response: " << response.operation().result().DebugString() << Endl;
-        response.operation().result().UnpackTo(&result);
+        Cerr << "response: " << response.operation().DebugString() << Endl;
+        checker(response);
     }
 
     void FetchConfig(
@@ -297,7 +298,10 @@ config:
     port: 12001
     host_config_id: 2
 )";
-        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
         FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(yamlConfigFetched);
@@ -305,6 +309,35 @@ config:
         UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
     }
 
+    Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
+        TKikimrWithGrpcAndRootSchema server;
+        TString yamlConfig = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)";
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
+                TString opDebugString = resp.operation().DebugString();
+                UNIT_ASSERT_C(opDebugString.Contains("duplicate path"), opDebugString);
+            });
+    }
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;

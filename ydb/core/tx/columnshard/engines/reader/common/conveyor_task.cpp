@@ -4,20 +4,20 @@
 
 namespace NKikimr::NOlap::NReader {
 
-NKikimr::TConclusionStatus IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) {
+void IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) {
     auto result = DoExecuteImpl();
     if (result.IsFail()) {
-        NActors::TActivationContext::AsActorContext().Send(OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(result));
-    } else {
         NActors::TActivationContext::AsActorContext().Send(
-            OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr)));
+            OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(result, std::move(Guard)));
+    } else if (*result) {
+        NActors::TActivationContext::AsActorContext().Send(OwnerId,
+            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard)));
     }
-    return result;
 }
 
 void IDataTasksProcessor::ITask::DoOnCannotExecute(const TString& reason) {
     NActors::TActivationContext::AsActorContext().Send(
-        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail(reason)));
+        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail(reason), std::move(Guard)));
 }
 
 }

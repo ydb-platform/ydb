@@ -18,7 +18,7 @@
 
 namespace NYT::NHttps {
 
-static constexpr auto& Logger = NHttp::HttpLogger;
+constinit const auto Logger = NHttp::HttpLogger;
 
 using namespace NNet;
 using namespace NHttp;
@@ -92,28 +92,14 @@ private:
 
 static void ApplySslConfig(const TSslContextPtr&  sslContext, const TServerCredentialsConfigPtr& sslConfig)
 {
-    if (sslConfig->CertChain->FileName) {
-        sslContext->AddCertificateChainFromFile(*sslConfig->CertChain->FileName);
-    } else if (sslConfig->CertChain->Value) {
-        sslContext->AddCertificateChain(*sslConfig->CertChain->Value);
-    } else {
-        YT_ABORT();
-    }
-    if (sslConfig->PrivateKey->FileName) {
-        sslContext->AddPrivateKeyFromFile(*sslConfig->PrivateKey->FileName);
-    } else if (sslConfig->PrivateKey->Value) {
-        sslContext->AddPrivateKey(*sslConfig->PrivateKey->Value);
-    } else {
-        YT_ABORT();
-    }
+    sslContext->ApplyConfig(sslConfig);
 }
 
 IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
     const IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker,
-    const IMemoryUsageTrackerPtr& memoryTracker)
+    const IInvokerPtr& controlInvoker)
 {
     auto sslContext =  New<TSslContext>();
     ApplySslConfig(sslContext, config->Credentials);
@@ -122,7 +108,7 @@ IServerPtr CreateServer(
     auto sslConfig = config->Credentials;
     TPeriodicExecutorPtr certificateUpdater;
     if (sslConfig->UpdatePeriod &&
-        sslConfig->CertChain->FileName &&
+        sslConfig->CertificateChain->FileName &&
         sslConfig->PrivateKey->FileName)
     {
         YT_VERIFY(controlInvoker);
@@ -131,7 +117,7 @@ IServerPtr CreateServer(
             BIND([=] {
                 try {
                     auto modificationTime = Max(
-                        NFS::GetPathStatistics(*sslConfig->CertChain->FileName).ModificationTime,
+                        NFS::GetPathStatistics(*sslConfig->CertificateChain->FileName).ModificationTime,
                         NFS::GetPathStatistics(*sslConfig->PrivateKey->FileName).ModificationTime);
 
                     // Detect fresh and stable updates.
@@ -165,8 +151,7 @@ IServerPtr CreateServer(
         configCopy,
         tlsListener,
         poller,
-        acceptor,
-        memoryTracker);
+        acceptor);
 
     return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
 }

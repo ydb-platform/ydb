@@ -1,5 +1,5 @@
 /* nfkc.c --- Unicode normalization utilities.
-   Copyright (C) 2002-2024 Simon Josefsson
+   Copyright (C) 2002-2025 Simon Josefsson
 
    This file is part of GNU Libidn.
 
@@ -69,11 +69,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
  * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 02111-1307, USA.
  */
 
 #ifndef	FALSE
@@ -104,11 +99,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with the Gnome Library; see the file COPYING.LIB.  If not,
- * write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- *   Boston, MA 02111-1307, USA.
  */
 
 typedef enum
@@ -142,11 +132,6 @@ GNormalizeMode;
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
  * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 02111-1307, USA.
  */
 
 #define UTF8_COMPUTE(Char, Mask, Len)		\
@@ -517,11 +502,6 @@ err_out:
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with the Gnome Library; see the file COPYING.LIB.  If not,
- * write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- *   Boston, MA 02111-1307, USA.
  */
 
 #include "gunidecomp.h"

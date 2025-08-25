@@ -157,7 +157,7 @@
 #elif defined(__CYGWIN__)
 #   define U_PLATFORM U_PF_CYGWIN
     /* Cygwin uchar.h doesn't exist until Cygwin 3.5. */
-#   include <cygwin/version.h>
+#   error #include <cygwin/version.h>
 #elif defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #   define U_PLATFORM U_PF_WINDOWS
 #elif defined(__ANDROID__)

@@ -47,7 +47,7 @@ where
 
 select
     l_orderkey,
-    sum(l_extendedprice * ($z1_12 - l_discount)) as revenue,
+    $round(sum(l_extendedprice * ($z1_12 - l_discount)), -3) as revenue,
     o_orderdate,
     o_shippriority
 from
@@ -58,5 +58,6 @@ group by
     o_shippriority
 order by
     revenue desc,
-    o_orderdate
+    o_orderdate,
+    l_orderkey
 limit 10;

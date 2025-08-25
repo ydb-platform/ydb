@@ -18,13 +18,17 @@ template <std::ranges::range... TRanges>
 auto ZipMutable(TRanges&&... ranges);
 
 //! Converts the provided range to the specified container.
-//! This is a simplified equivalent of std::ranges::to from range-v3.
+//! This is a simplified equivalent of std::ranges::to from ranges-v3.
 template <class TContainer, std::ranges::input_range TRange>
 auto RangeTo(TRange&& range);
 
 //! Shortcut for `RangeTo(std::ranges::views::transform)`.
 template <class TContainer, std::ranges::input_range TRange, class TTransformFunction>
 auto TransformRangeTo(TRange&& range, TTransformFunction&& function);
+
+//! An equivalent of std::ranges::fold_left from ranges-v3.
+template <std::ranges::range TRange, class TOperation, class TProjection = std::identity>
+auto FoldRange(TRange&& range, TOperation operation, TProjection projection = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

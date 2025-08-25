@@ -30,6 +30,8 @@ namespace NYdb {
             bool UseTopicCommit = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
+            TDuration RestartInterval = TDuration::Max();
+            bool ReadWithoutCommit = false;
             bool ReadWithoutConsumer = false;
             size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
@@ -39,20 +41,20 @@ namespace NYdb {
 
         class TTopicWorkloadReader {
         public:
-            static void RetryableReaderLoop(TTopicWorkloadReaderParams& params);
+            static void RetryableReaderLoop(const TTopicWorkloadReaderParams& params);
 
         private:
-            static void ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime);
+            static void ReaderLoop(const TTopicWorkloadReaderParams& params, TInstant endTime);
 
             static std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(NYdb::NTopic::IReadSession& readSession,
-                                                                                  TTopicWorkloadReaderParams& params,
+                                                                                  const TTopicWorkloadReaderParams& params,
                                                                                   std::optional<TTransactionSupport>& txSupport);
 
-            static void TryCommitTx(TTopicWorkloadReaderParams& params,
+            static void TryCommitTx(const TTopicWorkloadReaderParams& params,
                                     std::optional<TTransactionSupport>& txSupport,
                                     TInstant& commitTime,
                                     TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents);
-            static void TryCommitTableChanges(TTopicWorkloadReaderParams& params,
+            static void TryCommitTableChanges(const TTopicWorkloadReaderParams& params,
                                               std::optional<TTransactionSupport>& txSupport);
             static void GracefullShutdown(TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents);
         };

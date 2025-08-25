@@ -30,7 +30,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return static_cast<const NUdf::TUnboxedValuePod&>(state);
+            return state;
         }
 
         if (state.IsInvalid()) {
@@ -299,7 +299,7 @@ public:
         , Stream(stream)
         , State(item, state, outSwitch, initState, updateState, inSave, outSave, inLoad, outLoad, stateType)
     {
-        this->Stateless = false;
+        this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {

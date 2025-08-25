@@ -443,18 +443,18 @@ private:
                 }
             }
         }
-        TokenIsRefreshing = false;
+        TokenIsRefreshing.store(false);
     }
 
     void TryRefreshToken() const { // Is run under lock
-        if (TokenIsRefreshing) {
+        if (TokenIsRefreshing.load()) {
             return;
         }
         if (RefreshTokenThread.joinable()) {
             RefreshTokenThread.join();
         }
 
-        TokenIsRefreshing = true;
+        TokenIsRefreshing.store(true);
         RefreshTokenThread = std::thread(
             [w = weak_from_this()]() {
                 if (auto p = w.lock()) {
@@ -468,7 +468,7 @@ private:
     TPrivateOauth2TokenExchangeParams Params;
 
     TAdaptiveLock Lock;
-    mutable bool TokenIsRefreshing = false;
+    mutable std::atomic<bool> TokenIsRefreshing = false;
     mutable std::thread RefreshTokenThread;
     mutable std::string Token;
     mutable TInstant TokenDeadline;

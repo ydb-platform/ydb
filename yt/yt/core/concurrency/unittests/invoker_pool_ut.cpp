@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>

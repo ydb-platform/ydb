@@ -25,21 +25,11 @@ public:
         const TMaybe<NBackup::TEncryptionIV> IV;
 
         static TEncryptionSettings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
-            if (task.HasEncryptionSettings()) {
-                return TEncryptionSettings{
-                    .EncryptedBackup = true,
-                    .EncryptionAlgorithm = task.GetEncryptionSettings().GetEncryptionAlgorithm(),
-                    .Key = NBackup::TEncryptionKey(task.GetEncryptionSettings().GetSymmetricKey().key()),
-                    .IV = NBackup::TEncryptionIV::FromBinaryString(task.GetEncryptionSettings().GetIV()),
-                };
-            } else {
-                return TEncryptionSettings{
-                    .EncryptedBackup = false,
-                    .EncryptionAlgorithm = {},
-                    .Key = Nothing(),
-                    .IV = Nothing(),
-                };
-            }
+            return FromProto(task);
+        }
+
+        static TEncryptionSettings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
+            return FromProto(task);
         }
 
         TMaybe<NBackup::TEncryptionIV> GetMetadataIV() const {
@@ -54,21 +44,44 @@ public:
             return GetIV(NBackup::EBackupFileType::Permissions);
         }
 
-        TMaybe<NBackup::TEncryptionIV> GetTopicIV() const {
-            return GetIV(NBackup::EBackupFileType::TableTopic);
+        TMaybe<NBackup::TEncryptionIV> GetChangefeedTopicIV(ui32 changefeedIndex) const {
+            return GetIV(NBackup::EBackupFileType::TableTopic, changefeedIndex);
         }
 
-        TMaybe<NBackup::TEncryptionIV> GetChangefeedIV() const {
-            return GetIV(NBackup::EBackupFileType::TableChangefeed);
+        TMaybe<NBackup::TEncryptionIV> GetChangefeedIV(ui32 changefeedIndex) const {
+            return GetIV(NBackup::EBackupFileType::TableChangefeed, changefeedIndex);
         }
 
     private:
-        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType) const {
+        TMaybe<NBackup::TEncryptionIV> GetIV(NBackup::EBackupFileType fileType, ui32 shardNumber = 0) const {
             TMaybe<NBackup::TEncryptionIV> iv;
             if (IV) {
-                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber is already mixed in */, 0);
+                iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber is already mixed in */, shardNumber);
             }
             return iv;
+        }
+
+        template <class TProto>
+        static TEncryptionSettings FromProto(const TProto& task) {
+            if (task.HasEncryptionSettings()) {
+                TString algorithm;
+                if constexpr (std::is_same_v<TProto, NKikimrSchemeOp::TBackupTask>) {
+                    algorithm = task.GetEncryptionSettings().GetEncryptionAlgorithm();
+                }
+                return TEncryptionSettings{
+                    .EncryptedBackup = true,
+                    .EncryptionAlgorithm = algorithm,
+                    .Key = NBackup::TEncryptionKey(task.GetEncryptionSettings().GetSymmetricKey().key()),
+                    .IV = NBackup::TEncryptionIV::FromBinaryString(task.GetEncryptionSettings().GetIV()),
+                };
+            } else {
+                return TEncryptionSettings{
+                    .EncryptedBackup = false,
+                    .EncryptionAlgorithm = {},
+                    .Key = Nothing(),
+                    .IV = Nothing(),
+                };
+            }
         }
     };
 public:
@@ -93,7 +106,7 @@ public:
     }
 
     static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
-        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings{});
+        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
     }
 
     inline const TString& GetBucket() const { return Bucket; }
@@ -105,12 +118,12 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-    inline TString GetTopicKey(const TString& changefeedName) const {
-        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedName << '/' << NBackupRestoreTraits::TopicKeySuffix(EncryptionSettings.EncryptedBackup);
+    inline TString GetTopicKey(const TString& changefeedPrefix) const {
+        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedPrefix << '/' << NBackupRestoreTraits::TopicKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-     inline TString GetChangefeedKey(const TString& changefeedName) const {
-        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedName << '/' << NBackupRestoreTraits::ChangefeedKeySuffix(EncryptionSettings.EncryptedBackup);
+    inline TString GetChangefeedKey(const TString& changefeedPrefix) const {
+        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedPrefix << '/' << NBackupRestoreTraits::ChangefeedKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
     inline TString GetMetadataKey() const {

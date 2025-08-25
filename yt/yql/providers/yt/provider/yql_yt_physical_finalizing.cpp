@@ -188,6 +188,13 @@ public:
             }
         }
 
+        if (!State_->Configuration->DontForceTransformForInputTables.Get().GetOrElse(false)) {
+            status = MergeWithTransform(input, output, opDeps, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+        }
+
         if (!disableOptimizers.contains("AlignPublishTypes")) {
             status = AlignPublishTypes(input, output, opDeps, ctx);
             if (status.Level != TStatus::Ok) {
@@ -674,7 +681,10 @@ private:
 
     TStatus OptimizeFieldSubsetForMultiUsage(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         TVector<std::pair<const TOpDeps::value_type*, THashSet<TString>>> matchedOps;
+
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         for (auto& x: opDeps) {
             auto writer = x.first;
 
@@ -845,7 +855,7 @@ private:
                             if (sorted = sorted->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); })) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
-                                builder.FillRowSpecSort(*mapOut.RowSpec);
+                                builder.FillRowSpecSort(*mapOut.RowSpec, useNativeYtDefaultColumnOrder);
 
                                 if (builder.NeedMap()) {
                                     mapper = ctx.Builder(map.Mapper().Pos())
@@ -865,7 +875,7 @@ private:
                         }
                     }
                 } else {
-                    mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(outTable.RowSpec()));
+                    mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(outTable.RowSpec()), useNativeYtDefaultColumnOrder);
                 }
                 mapOut.SetUnique(distinct, map.Mapper().Pos(), ctx);
                 mapOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
@@ -882,12 +892,12 @@ private:
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
                 TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
-                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
 
                 if (auto nativeType = prevRowSpec.GetNativeYtType()) {
-                    mergeOut.RowSpec->CopyTypeOrders(*nativeType);
+                    mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
                 }
 
                 TSet<TStringBuf> columnSet;
@@ -1709,6 +1719,88 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus MergeWithTransform(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, TExprContext& ctx) {
+        TNodeOnNodeOwnedMap replaces;
+        for (auto& x: opDeps) {
+            if (TYtMerge::Match(x.first)) {
+                auto merge = TYtTransientOpBase(x.first);
+                if (IsBeingExecuted(merge.Ref())) {
+                    continue;
+                }
+
+                TVector<TString> transforms;
+                if (AnyOf(x.second, [](const auto& item) { return TYtPublish::Match(std::get<0>(item)); })) {
+                    const auto cluster = merge.DataSink().Cluster().StringValue();
+                    bool diffGroup = false;
+                    bool storage = false;
+                    TStringBuf outGroup;
+                    TMaybe<TString> expandedOutGroup;
+                    if (auto setting = NYql::GetSetting(merge.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                        outGroup = setting->Tail().Content();
+                    }
+
+                    for (const auto& path: merge.Input().Item(0).Paths()) {
+                        if (auto table = path.Table().Maybe<TYtTable>()) {
+                            storage = true;
+                            if (!diffGroup) {
+                                if (auto tableDesc = State_->TablesData->FindTable(cluster, TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                                    diffGroup = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                                    if (diffGroup && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
+                                        if (!expandedOutGroup) {
+                                            expandedOutGroup.ConstructInPlace();
+                                            ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*merge.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), *expandedOutGroup);
+                                        }
+                                        diffGroup = !*expandedOutGroup || !tableDesc->ColumnGroupSpecAlts.contains(*expandedOutGroup);
+                                    }
+                                }
+                            }
+                        } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+                            if (!diffGroup) {
+                                TStringBuf inGroup;
+                                if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                                    inGroup = setting->Tail().Content();
+                                }
+                                diffGroup = outGroup != inGroup;
+                            }
+                        }
+                    }
+                    if (diffGroup) {
+                        transforms.emplace_back("column_groups");
+                    }
+                    if (storage) {
+                        transforms.emplace_back("storage");
+                    }
+                }
+
+                if (transforms.empty()) {
+                    if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform)) {
+                        replaces[merge.Raw()] = ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::RemoveSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform, ctx));
+                    }
+                } else {
+                    std::sort(transforms.begin(), transforms.end());
+                    if (!NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform)) {
+                        replaces[merge.Raw()] = ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSettingAsColumnList(merge.Settings().Ref(), EYtSettingType::SoftTransform, transforms, ctx));
+                    } else {
+                        auto values = NYql::GetSettingAsColumnList(merge.Settings().Ref(), EYtSettingType::SoftTransform);
+                        if (values.size() != transforms.size() || AnyOf(values, [&transforms](const auto& v) { return Find(transforms, v) == transforms.end(); })) {
+                            replaces[merge.Raw()] = ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings,
+                                NYql::AddSettingAsColumnList(
+                                    *NYql::RemoveSettings(merge.Settings().Ref(), EYtSettingType::SoftTransform, ctx),
+                                    EYtSettingType::SoftTransform, transforms, ctx
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if (!replaces.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-MergeWithTransform";
+            return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(State_->Types));
+        }
+        return TStatus::Ok;
+    }
+
     TStatus OptimizeUnusedOuts(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         TNodeOnNodeOwnedMap replaces;
         TNodeOnNodeOwnedMap newOps;
@@ -2150,6 +2242,12 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
+                        || HasNonEmptyKeyFilter(TYtSection(section))))
+                    {
+                        exclusiveOuts.insert(outIndex);
+                    }
+
                     // Section may be used multiple times in different operations
                     // So, check only unique pair of operation + section
                     if (!duplicateCheck[outIndex].insert(std::make_pair(op, section)).second) {
@@ -3007,7 +3105,7 @@ private:
                                 if (!groups.empty()) {
                                     groupSpec = NYT::TNode::CreateMap();
                                     // If we keep all groups then use the group with max size as default
-                                    if (allGroups && maxGrpIt != groups.end()) {
+                                    if (allGroups && maxGrpIt != groups.end() && (groups.size() > 1 || usage.FullUsage[i])) {
                                         groupSpec["default"] = NYT::TNode::CreateEntity();
                                         groups.erase(maxGrpIt);
                                     }

@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
         <tmp_path>/program.sql:<main>:5:5: Warning: At function: SqlAccess

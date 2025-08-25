@@ -29,11 +29,13 @@ namespace NNative {
 
 struct TSession;
 
-struct TNativeYtLambdaBuilder: public TLambdaBuilder {
+struct TNativeYtLambdaBuilder: public TGatewayLambdaBuilder {
     TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TSession& session, const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider = nullptr);
+        const TSession& session, const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
+        TLangVersion langver);
 
-    TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session);
+    TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session,
+        TLangVersion langver);
 
     TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
 };

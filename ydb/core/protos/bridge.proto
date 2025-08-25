@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package NKikimrBridge;
+
+message TClusterState {
+    // each realm state in relation to primary one
+    enum EPileState {
+        DISCONNECTED = 0; // disconnected from the cluster (no other node connects to this realm)
+        NOT_SYNCHRONIZED_1 = 1; // not synchonized with primary, can't be promoted, doesn't take part in any quorum
+        NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
+        SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
+    }
+    repeated EPileState PerPileState = 1; // a state for every realm, including primary
+    uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
+    uint32 PromotedPile = 3; // realm we are going to promote (must also be SYNCHRONIZED), or primary one
+    uint64 Generation = 4; // cluster state generation (which must be increasing strictly by one)
+    fixed64 Guid = 5; // guid of this state change
+}
+
+message TClusterStateDetails {
+    message TUnsyncedHistory {
+        TClusterState ClusterState = 1;
+        repeated uint32 UnsyncedPiles = 2; // a list of pile ids that did not refer to this entry; trimmed when empty
+    }
+    repeated TUnsyncedHistory UnsyncedHistory = 1; // entries stored in order of ascending Generation
+
+    message TPileSyncState {
+        uint32 BridgePileId = 1;
+        uint64 BecameUnsyncedGeneration = 2; // when did it become unsynced?
+        bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
+    }
+    repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
+}
+
+message TGroupState {
+    enum EStage {
+        BLOCKS = 0;
+        WRITE_KEEP = 1;
+        WRITE_KEEP_BARRIER_DONOTKEEP = 2;
+        WRITE_KEEP_BARRIER_DONOTKEEP_DATA = 3;
+        SYNCED = 4;
+    }
+
+    message TPile {
+        uint32 GroupId = 1;
+        uint32 GroupGeneration = 2; // for race-checking in syncer and proxy proxy
+        EStage Stage = 3; // synchronization stage
+        uint64 BecameUnsyncedGeneration = 4; // cluster state generation from TPileSyncState.BecameUnsyncedGeneration
+    }
+
+    repeated TPile Pile = 1; // for every pile, synced or unsynced
+}

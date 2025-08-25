@@ -5,6 +5,7 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 def post_install(self):
     with self.yamakes["."] as m:
         m.SRCS.remove("src/tbb/itt_notify.cpp")
+        m.CFLAGS.append("-D__TBB_DYNAMIC_LOAD_ENABLED=0")
         m.CFLAGS.remove("-D__TBB_USE_ITT_NOTIFY")
         m.after(
             "SRCS",
@@ -56,9 +57,9 @@ tbb = CMakeNinjaNixProject(
     disable_includes=[
         # if defined(__OpenBSD__) || __TBB_has_include(<sys/futex.h>)
         "sys/futex.h",
-        # if __TBB_CPP17_MEMORY_RESOURCE_PRESENT
-        "memory_resource",
         "tbb_misc.h",
+        "Softpub.h",
+        "wintrust.h",
     ],
     post_install=post_install,
 )

@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,8 +9,10 @@
 
 #include <pfr/detail/config.hpp>
 
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 #include <pfr/ops_fields.hpp>
 #include <pfr/io_fields.hpp>
+#endif
 
 /// \file pfr/functions_for.hpp
 /// Contains PFR_FUNCTIONS_FOR macro that defined comparison and stream operators for T along with hash_value function.

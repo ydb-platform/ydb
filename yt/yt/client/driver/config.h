@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/api/public.h>
 
+#include <yt/yt/client/api/rpc_proxy/public.h>
+
 #include <yt/yt/client/table_client/public.h>
 
 #include <yt/yt/client/chunk_client/public.h>
@@ -38,7 +40,12 @@ struct TDriverConfig
 
     std::optional<TString> Token;
 
+    //! Target cluster for multiproxy mode.
+    std::optional<std::string> MultiproxyTargetCluster;
+
     TAsyncExpiringCacheConfigPtr ProxyDiscoveryCache;
+
+    NApi::NRpcProxy::EAddressType DefaultRpcProxyAddressType;
 
     bool EnableInternalCommands;
 
@@ -57,4 +64,3 @@ DEFINE_REFCOUNTED_TYPE(TDriverConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

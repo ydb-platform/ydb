@@ -1,0 +1,15 @@
+--- contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc	(114b291e56d003d1352ef14ad0c6858dd8cee56f)
++++ contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc	(working tree)
+@@ -811,7 +811,12 @@ class AresDNSResolver : public DNSResolver {
+ };
+ 
+ bool ShouldUseAres(y_absl::string_view resolver_env) {
++#ifdef _win_
++  // ARC-6747: Disable on Windows due to assert and resolving problems.
++  return !resolver_env.empty() && y_absl::EqualsIgnoreCase(resolver_env, "ares");
++#else
+   return resolver_env.empty() || y_absl::EqualsIgnoreCase(resolver_env, "ares");
++#endif
+ }
+ 
+ bool UseAresDnsResolver() {

@@ -1,5 +1,6 @@
 #include "ut_common.h"
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/wrappers/fake_storage.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -46,6 +47,14 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableResourcePools(true);
     featureFlags.SetEnableFollowerStats(true);
     featureFlags.SetEnableVectorIndex(true);
+    featureFlags.SetEnableTieringInColumnShard(true);
+    featureFlags.SetEnableExternalDataSources(true);
+    featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
+    featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    if (settings.EnableRealSystemViewPaths) {
+        featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
+    }
+
     Settings->SetFeatureFlags(featureFlags);
 
     Settings->SetEnablePersistentQueryStats(settings.EnableSVP);
@@ -56,6 +65,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
+    appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+    appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
+    appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {
@@ -97,6 +109,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 }
 
 TTestEnv::~TTestEnv() {

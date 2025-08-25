@@ -1,7 +1,7 @@
 #include "../config-host.h"
 /* SPDX-License-Identifier: MIT */
 /*
- * Description: basic read/write tests with buffered, O_DIRECT, and SQPOLL
+ * Description: do SQPOLL IO with concurrent fdinfo reading
  */
 #include <errno.h>
 #include <stdio.h>

@@ -585,7 +585,7 @@ public:
         if (protocolVersion <= 1) {
             return std::numeric_limits<i64>::max();
         }
-        
+
         if (protocolVersion < 6) {
             NDqProto::TCommandHeader header;
             header.SetVersion(2);
@@ -614,7 +614,7 @@ public:
         header.SetChannelId(ChannelId);
         header.Save(&Output);
 
-        i64 written = 0; 
+        i64 written = 0;
         TCountingOutput countingOutput(&Output);
         data.Proto.Save(&countingOutput);
         if (data.IsOOB()) {
@@ -772,7 +772,7 @@ private:
 
 class TDqSource: public IDqAsyncInputBuffer {
 public:
-    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner)
+    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner, NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
@@ -780,6 +780,7 @@ public:
         , InputType(inputType)
         , BufferSize(channelBufferSize)
         , FreeSpace(channelBufferSize)
+        , PackerVersion(packerVersion)
     {
         PushStats.InputIndex = inputIndex;
     }
@@ -859,7 +860,7 @@ public:
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
         auto inputType = GetInputType();
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, PackerVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
         Push(std::move(serialized), space);
     }
@@ -923,6 +924,7 @@ private:
     TDqInputStats PopStats;
     i64 BufferSize;
     i64 FreeSpace;
+    NKikimr::NMiniKQL::EValuePackerVersion PackerVersion;
 };
 
 /*______________________________________________________________________________________________*/
@@ -1012,10 +1014,17 @@ public:
     }
 
     // <| producer methods
-    [[nodiscard]]
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
         ythrow yexception() << "unimplemented";
     };
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+        Y_ABORT("Unimplemented");
+    }
 
     // can throw TDqChannelStorageException
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -1175,7 +1184,7 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
@@ -1249,7 +1258,15 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsFull() const override {
+    EDqFillLevel GetFillLevel() const override {
+        Y_ABORT("Unimplemented");
+    }
+
+    EDqFillLevel UpdateFillLevel() override {
+        Y_ABORT("Unimplemented");
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
         Y_ABORT("Unimplemented");
     }
 
@@ -1386,15 +1403,17 @@ public:
 
         auto state = TFailureInjector::GetCurrentState();
         for (auto& [k, v]: state) {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(1);
-            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
-            header.Save(&Output);
-            NYql::NDqProto::TConfigureFailureInjectorRequest request;
-            request.SetName(k);
-            request.SetSkip(v.Skip);
-            request.SetFail(v.CountOfFails);
-            request.Save(&Output);
+            if (v.CountOfFails) {
+                NDqProto::TCommandHeader header;
+                header.SetVersion(1);
+                header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+                header.Save(&Output);
+                NYql::NDqProto::TConfigureFailureInjectorRequest request;
+                request.SetName(k);
+                request.SetSkip(v.Skip);
+                request.SetFail(v.CountOfFails);
+                request.Save(&Output);
+            }
         }
 
         return ret;
@@ -1542,7 +1561,7 @@ private:
 
         {
             auto guard = BindAllocator({});
-            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv()); 
+            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv());
         }
 
         auto& programStruct = static_cast<TStructLiteral&>(*ProgramNode.GetNode());
@@ -1600,7 +1619,7 @@ private:
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             auto& inputDesc = Task.GetInputs(i);
             if (inputDesc.HasSource()) {
-                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this);
+                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this, NDq::FromProto(Task.GetValuePackerVersion()));
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
@@ -1671,6 +1690,10 @@ public:
     }
 
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    }
+
+    TString GetOutputDebugString() override {
+        return "";
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
@@ -1980,7 +2003,7 @@ private:
     void ProcessJobs(const TString& exePath, const TPortoSettings& portoSettings) {
         NThreading::TPromise<void> promise = NThreading::NewPromise();
 
-        promise.GetFuture().Apply([=](const NThreading::TFuture<void>&) mutable {
+        promise.GetFuture().Apply([=, this](const NThreading::TFuture<void>&) mutable {
             Start(exePath, portoSettings);
         });
 

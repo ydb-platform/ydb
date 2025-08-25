@@ -12,3 +12,8 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
+- name: AI
+  href: vector-search/index.md
+  include:
+    mode: link
+    path: vector-search/toc_p.yaml

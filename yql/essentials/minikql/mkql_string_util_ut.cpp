@@ -9,10 +9,10 @@ using namespace NKikimr::NMiniKQL;
 Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
     Y_UNIT_TEST(SubstringWithLargeOffset) {
         TScopedAlloc alloc(__LOCATION__);
-        const auto big = MakeStringNotFilled(NUdf::TUnboxedValuePod::OffsetLimit << 1U);
-        const auto sub0 = SubString(big, 1U, 42U);
-        const auto sub1 = SubString(big, NUdf::TUnboxedValuePod::OffsetLimit - 1U, 42U);
-        const auto sub2 = SubString(big, NUdf::TUnboxedValuePod::OffsetLimit, 42U);
+        const auto big = MakeStringNotFilled(/*size=*/NUdf::TUnboxedValuePod::OffsetLimit << 1U);
+        const auto sub0 = NUdf::TUnboxedValue(SubString(big, 1U, 42U));
+        const auto sub1 = NUdf::TUnboxedValue(SubString(big, NUdf::TUnboxedValuePod::OffsetLimit - 1U, 42U));
+        const auto sub2 = NUdf::TUnboxedValue(SubString(big, NUdf::TUnboxedValuePod::OffsetLimit, 42U));
 
         UNIT_ASSERT(sub0.AsStringValue().Data() == sub1.AsStringValue().Data());
         UNIT_ASSERT(sub1.AsStringValue().Data() != sub2.AsStringValue().Data());
@@ -35,6 +35,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
         }
     }
 
+// Disable test since it produces too much memory for msan.
+#if !defined(_msan_enabled_)
     Y_UNIT_TEST(MakeLargeString) {
         TScopedAlloc alloc(__LOCATION__);
 
@@ -65,7 +67,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0xFFFFFFF0ULL);
         }
     }
+#endif
 
+// Disable test since it produces too much memory for msan.
+#if !defined(_msan_enabled_)
     Y_UNIT_TEST(ConcatLargeString) {
         TScopedAlloc alloc(__LOCATION__);
 
@@ -85,5 +90,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_FAIL("No exception!");
         } catch (const yexception&) {}
     }
+#endif
+
 }
 

@@ -60,10 +60,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterTestingOptions
+struct TChunkWriterTestingOptions
     : public NYTree::TYsonStruct
 {
-public:
     //! If true, unsupported chunk feature is added to chunk meta.
     bool AddUnsupportedFeature;
 
@@ -157,6 +156,9 @@ struct TChunkWriterConfig
     TSlimVersionedWriterConfigPtr Slim;
 
     TVersionedRowDigestConfigPtr VersionedRowDigest;
+
+    // Being overwritten by mount config, not registered in TChunkWriterConfig.
+    TMinHashDigestConfigPtr MinHashDigest;
 
     TChunkWriterTestingOptionsPtr TestingOptions;
 
@@ -372,16 +374,16 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkReaderOptions
+struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableTableIndex;
     bool EnableRangeIndex;
     bool EnableRowIndex;
     bool DynamicTable;
     bool EnableTabletIndex;
     bool EnableKeyWidening;
+    bool EnableAnyUnpacking;
 
     static TChunkReaderOptionsPtr GetDefault();
 
@@ -394,10 +396,9 @@ DEFINE_REFCOUNTED_TYPE(TChunkReaderOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkWriterOptions
+struct TChunkWriterOptions
     : public virtual NChunkClient::TEncodingWriterOptions
 {
-public:
     bool ValidateSorted;
     bool ValidateRowWeight;
     bool ValidateKeyWeight;
@@ -456,6 +457,21 @@ struct TVersionedRowDigestConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMinHashDigestConfig
+    : public NYTree::TYsonStruct
+{
+    int WriteCount;
+    int DeleteTombstoneCount;
+
+    REGISTER_YSON_STRUCT(TMinHashDigestConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMinHashDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

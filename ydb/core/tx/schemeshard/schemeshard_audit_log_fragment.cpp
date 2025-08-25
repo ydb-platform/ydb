@@ -5,6 +5,7 @@
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>
@@ -188,6 +189,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         return "ALTER TABLE DROP CHANGEFEED";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        return "ALTER TABLE ROTATE CHANGEFEED";
     // sequence
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return "CREATE SEQUENCE";
@@ -234,6 +239,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return "ALTER TABLE ADD COLUMN DEFAULT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return "ALTER TABLE ADD COLUMN CANCEL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         return "CREATE VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
@@ -269,9 +276,22 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
+    // long incremental restore
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return "RESTORE INCREMENTAL";
+    // system view
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        return "CREATE SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        return "DROP SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return "RESTORE INCREMENTAL FINALIZE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -482,13 +502,30 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), tx.GetDropCdcStream().GetStreamName()}));
+        {
+            const auto& tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()});
+            // Add entry for each stream being dropped
+            for (const auto& streamName : tx.GetDropCdcStream().GetStreamName()) {
+                result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), streamName}));
+            }
+        }
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetOldStreamName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetOldStreamName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
         result.emplace_back(tx.GetMoveTable().GetSrcPath());
@@ -555,6 +592,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        result.emplace_back(tx.GetDropColumnBuild().GetSettings().GetTable());
+        break;
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateView().GetName()}));
@@ -606,8 +646,28 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        // For long incremental restore operations, extract the backup collection name
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSysView().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        // For incremental restore finalization, we don't have a specific path in the message
+        // since it operates on paths determined at runtime
         break;
     }
 
@@ -678,40 +738,74 @@ struct TChangeLogin {
     TString LoginUser;
     TString LoginGroup;
     TString LoginMember;
+    TVector<TString> LoginUserChange;
 };
 
 TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
     if (tx.HasAlterLogin()) {
+        const auto& alter = tx.GetAlterLogin();
+
         TChangeLogin result;
         switch (tx.GetAlterLogin().GetAlterCase()) {
-            case NKikimrSchemeOp::TAlterLogin::kCreateUser:
-                result.LoginUser = tx.GetAlterLogin().GetCreateUser().GetUser();
+            case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
+                result.LoginUser = alter.GetCreateUser().GetUser();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kModifyUser:
-                result.LoginUser = tx.GetAlterLogin().GetModifyUser().GetUser();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
+                const auto& modify = alter.GetModifyUser();
+                result.LoginUser = modify.GetUser();
+
+                if (modify.HasPassword()) { // there is no difference beetwen password and password's hash
+                    result.LoginUserChange.push_back("password");
+                }
+
+                if (modify.HasCanLogin() && modify.GetCanLogin()) {
+                    result.LoginUserChange.push_back("unblocking");
+                }
+
+                if (modify.HasCanLogin() && !modify.GetCanLogin()) {
+                    result.LoginUserChange.push_back("blocking");
+                }
+
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kRemoveUser:
-                result.LoginUser = tx.GetAlterLogin().GetRemoveUser().GetUser();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
+                result.LoginUser = alter.GetRemoveUser().GetUser();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kCreateGroup:
-                result.LoginGroup = tx.GetAlterLogin().GetCreateGroup().GetGroup();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kCreateGroup: {
+                result.LoginGroup = alter.GetCreateGroup().GetGroup();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
-                result.LoginGroup = tx.GetAlterLogin().GetAddGroupMembership().GetGroup();
-                result.LoginMember = tx.GetAlterLogin().GetAddGroupMembership().GetMember();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership: {
+                result.LoginGroup = alter.GetAddGroupMembership().GetGroup();
+                result.LoginMember = alter.GetAddGroupMembership().GetMember();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
-                result.LoginGroup = tx.GetAlterLogin().GetRemoveGroupMembership().GetGroup();
-                result.LoginMember = tx.GetAlterLogin().GetRemoveGroupMembership().GetMember();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership: {
+                result.LoginGroup = alter.GetRemoveGroupMembership().GetGroup();
+                result.LoginMember = alter.GetRemoveGroupMembership().GetMember();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
-                result.LoginGroup = tx.GetAlterLogin().GetRenameGroup().GetGroup();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kRenameGroup: {
+                result.LoginGroup = alter.GetRenameGroup().GetGroup();
                 break;
-            case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
-                result.LoginGroup = tx.GetAlterLogin().GetRemoveGroup().GetGroup();
+            }
+
+            case NKikimrSchemeOp::TAlterLogin::kRemoveGroup: {
+                result.LoginGroup = alter.GetRemoveGroup().GetGroup();
                 break;
-            default:
+            }
+
+            default: {
                 Y_ABORT("switch should cover all operation types");
+            }
         }
         return result;
     }
@@ -725,7 +819,7 @@ namespace NKikimr::NSchemeShard {
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx) {
     auto [aclAdd, aclRemove] = ExtractACLChange(tx);
     auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
-    auto [loginUser, loginGroup, loginMember] = ExtractLoginChange(tx);
+    auto [loginUser, loginGroup, loginMember, loginUserChange] = ExtractLoginChange(tx);
 
     return {
         .Operation = DefineUserOperationName(tx),
@@ -738,6 +832,7 @@ TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
         .LoginUser = loginUser,
         .LoginGroup = loginGroup,
         .LoginMember = loginMember,
+        .LoginUserChange = loginUserChange
     };
 }
 

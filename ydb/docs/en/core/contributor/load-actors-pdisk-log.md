@@ -14,18 +14,18 @@ This ad-hoc actor is used for testing specific functionality. This is not a load
 
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
 
-| Parameter | Description |
---- | ---
-| `PDiskId` | ID of the Pdisk being loaded on the node. |
-| `PDiskGuid` | Globally unique ID of the PDisk being loaded. |
-| `VDiskId` | Parameters of the VDisk used to generate load.<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |
-| `MaxInFlight` | Number of simultaneously processed requests. |
-| `SizeIntervalMin` | Minimum size of log record in bytes. |
-| `SizeIntervalMax` | Maximum size of log record in bytes. |
-| `BurstInterval` | Interval between logging sessions in bytes. |
-| `BurstSize` | Total amount of data to log per session, in bytes. |
-| `StorageDuration` | Virtual time in bytes. Indicates how long the VDisk should store its data in the log. |
-| `IsWardenlessTest` | Set it to `False` in case the PDiskReadLoad actor is run on the cluster; otherwise, e.g. when it is run during unit tests, set it to `True`. |
+| Parameter          | Description                                                                                                                                                                                                                                                     |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `PDiskId`          | ID of the Pdisk being loaded on the node.                                                                                                                                                                                                                       |
+| `PDiskGuid`        | Globally unique ID of the PDisk being loaded.                                                                                                                                                                                                                   |
+| `VDiskId`          | Parameters of the VDisk used to generate load.<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |
+| `MaxInFlight`      | Number of simultaneously processed requests.                                                                                                                                                                                                                    |
+| `SizeIntervalMin`  | Minimum size of log record in bytes.                                                                                                                                                                                                                            |
+| `SizeIntervalMax`  | Maximum size of log record in bytes.                                                                                                                                                                                                                            |
+| `BurstInterval`    | Interval between logging sessions in bytes.                                                                                                                                                                                                                     |
+| `BurstSize`        | Total amount of data to log per session, in bytes.                                                                                                                                                                                                              |
+| `StorageDuration`  | Virtual time in bytes. Indicates how long the VDisk should store its data in the log.                                                                                                                                                                           |
+| `IsWardenlessTest` | Set it to `False` in case the PDiskReadLoad actor is run on the cluster; otherwise, e.g. when it is run during unit tests, set it to `True`.                                                                                                                    |
 
 ## Examples {#example}
 

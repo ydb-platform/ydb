@@ -10,6 +10,8 @@
 
 #include <aws/auth/signing_config.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_ecc_key_pair;
 struct aws_signable;
 struct aws_signing_result;
@@ -131,5 +133,6 @@ AWS_AUTH_API
 struct aws_byte_cursor aws_trim_padded_sigv4a_signature(struct aws_byte_cursor signature);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_SIGNER_H */

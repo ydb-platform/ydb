@@ -161,6 +161,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , ChannelPool_(TcpKeepAliveSettings_, SocketIdleTimeout_)
 #endif
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
+    , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
     , Log(params->GetLog())
 {

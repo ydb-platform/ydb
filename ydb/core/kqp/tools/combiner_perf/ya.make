@@ -21,6 +21,10 @@ PEERDIR(
 
     library/cpp/testing/unittest
 
+    ydb/core/kqp/runtime
+
+    ydb/library/yql/dq/comp_nodes
+
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
     contrib/libs/llvm16/lib/Linker
@@ -41,12 +45,16 @@ CFLAGS(
 ENDIF()
 
 SRCS(
-    factories.cpp
     converters.cpp
+    dq_combine_vs.cpp
+    factories.cpp
+    printout.cpp
     simple.cpp
-    simple_last.cpp
-    tpch_last.cpp
     simple_block.cpp
+    simple_last.cpp
+    subprocess.cpp
+    streams.cpp
+    tpch_last.cpp
 )
 
 END()

@@ -219,12 +219,19 @@ public:
     template <CErrorNestable TValue>
     TError operator << (const std::optional<TValue>& rhs) const &;
 
-    // The |enricher| is called during TError construction and before TErrorOr<> construction. Meant
-    // to enrich the error, e.g. by setting generic attributes. The |RegisterEnricher| method is not
+    // The |enricher| is called during TError initial construction and before TErrorOr<> construction. Meant
+    // to enrich the error, e.g. by setting generic attributes. Copying TError from another TError or TErrorException
+    // doesn't call enrichers. The |RegisterEnricher| method is not
     // threadsafe and is meant to be called from single-threaded bootstrapping code. Multiple
     // enrichers are supported and will be called in order of registration.
-    using TEnricher = std::function<void(TError&)>;
+    using TEnricher = std::function<void(TError*)>;
     static void RegisterEnricher(TEnricher enricher);
+
+    // The |enricher| is called during TError every construction from std::exception (including TErrorException).
+    // The |RegisterFromExceptionEnricher| method is not threadsafe and is meant to be called from single-threaded
+    // bootstrapping code. Multiple enrichers are supported and will be called in order of registration.
+    using TFromExceptionEnricher = std::function<void(TError*, const std::exception&)>;
+    static void RegisterFromExceptionEnricher(TFromExceptionEnricher enricher);
 
 private:
     class TImpl;
@@ -234,10 +241,12 @@ private:
 
     void MakeMutable();
     void Enrich();
+    void EnrichFromException(const std::exception& exception);
 
     friend class TErrorAttributes;
 
     static TEnricher Enricher_;
+    static TFromExceptionEnricher FromExceptionEnricher_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -351,7 +360,7 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error);
 // NB: When given an error and a string as arguments, this macro automatically wraps
 // new error around the initial one.
 #define THROW_ERROR_EXCEPTION_IF_FAILED(error, ...) \
-    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__); \
+    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__) \
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \
     if ((condition)) {\

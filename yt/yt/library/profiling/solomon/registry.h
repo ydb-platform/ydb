@@ -5,6 +5,11 @@
 #include "producer.h"
 #include "tag_registry.h"
 
+#include <yt/yt/library/profiling/sensor.h>
+#include <yt/yt/library/profiling/impl.h>
+
+#include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
+
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -12,11 +17,6 @@
 #include <yt/yt/core/profiling/public.h>
 
 #include <yt/yt/core/ytree/fluent.h>
-
-#include <yt/yt/library/profiling/sensor.h>
-#include <yt/yt/library/profiling/impl.h>
-
-#include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -144,7 +144,7 @@ public:
 
     std::vector<TSensorInfo> ListSensors() const;
 
-    const TTagRegistry& GetTags() const;
+    const TTagRegistry& GetTagRegistry() const;
 
     i64 GetNextIteration() const;
     int GetWindowSize() const;
@@ -172,7 +172,7 @@ private:
     template <class TFn>
     void DoRegister(TFn fn);
 
-    TTagRegistry Tags_;
+    TTagRegistry TagRegistry_;
     TProducerSet Producers_;
 
     THashMap<std::string, TSensorSet> Sensors_;
@@ -180,8 +180,11 @@ private:
     TSensorSet* FindSet(const std::string& name, const TSensorOptions& options);
 
     TCounter RegistrationCount_;
-    TEventTimer SensorCollectDuration_, ReadDuration_;
-    TGauge SensorCount_, ProjectionCount_, TagCount_;
+    TEventTimer SensorCollectDuration_;
+    TEventTimer ReadDuration_;
+    TGauge SensorCount_;
+    TGauge ProjectionCount_;
+    TGauge TagCount_;
 
     friend class TRemoteRegistry;
 };

@@ -11,32 +11,32 @@ namespace {
 template <typename THash, typename TEquals>
 class TSetBase {
 private:
-    std::unordered_set<TUnboxedValue, THash, TEquals, TUnboxedValue::TAllocator> Set;
-    ui32 MaxSize = 0;
-    bool WasChanged = false;
+    std::unordered_set<TUnboxedValue, THash, TEquals, TUnboxedValue::TAllocator> Set_;
+    ui32 MaxSize_ = 0;
+    bool WasChanged_ = false;
 
 protected:
     TSetBase(THash hash, TEquals equals)
-        : Set(1, hash, equals)
+        : Set_(1, hash, equals)
     {}
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
-        MaxSize = maxSize ? maxSize : std::numeric_limits<ui32>::max();
+        MaxSize_ = maxSize ? maxSize : std::numeric_limits<ui32>::max();
         AddValue(value);
     }
 
     void Merge(const TSetBase& left, const TSetBase& right) {
-        MaxSize = std::max(left.MaxSize, right.MaxSize);
-        for (const auto& item : left.Set) {
+        MaxSize_ = std::max(left.MaxSize_, right.MaxSize_);
+        for (const auto& item : left.Set_) {
             AddValue(item);
         }
-        for (const auto& item : right.Set) {
+        for (const auto& item : right.Set_) {
             AddValue(item);
         }
     }
 
     void Deserialize(const TUnboxedValuePod& serialized) {
-        MaxSize = serialized.GetElement(0).Get<ui32>();
+        MaxSize_ = serialized.GetElement(0).Get<ui32>();
         auto list = serialized.GetElement(1);
 
         const auto listIter = list.GetListIterator();
@@ -47,24 +47,24 @@ protected:
 
 public:
     void ResetChanged() {
-        WasChanged = false;
+        WasChanged_ = false;
     }
 
     bool Changed() const {
-        return WasChanged;
+        return WasChanged_;
     }
 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Set.size(), values);
+        auto list = builder->NewArray(Set_.size(), values);
 
-        for (const auto& item : Set) {
+        for (const auto& item : Set_) {
             *values++ = item;
         }
 
         TUnboxedValue* items = nullptr;
         auto result = builder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod(MaxSize);
+        items[0] = TUnboxedValuePod(MaxSize_);
         items[1] = list;
 
         return result;
@@ -72,17 +72,17 @@ public:
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto result = builder->NewArray(Set.size(), values);
+        auto result = builder->NewArray(Set_.size(), values);
 
-        for (const auto& item : Set) {
+        for (const auto& item : Set_) {
             *values++ = item;
         }
         return result;
     }
 
     void AddValue(const TUnboxedValuePod& value) {
-        if (Set.size() < MaxSize) {
-            WasChanged = Set.insert(TUnboxedValuePod(value)).second;
+        if (Set_.size() < MaxSize_) {
+            WasChanged_ = Set_.insert(TUnboxedValuePod(value)).second;
         }
     }
 };

@@ -67,6 +67,12 @@ bool IsTableReplicaType(EObjectType type);
 //! Checks if the given type is a chaos replica.
 bool IsChaosTableReplicaType(EObjectType type);
 
+//! Checks if the given type is a replication card.
+bool IsReplicationCardType(EObjectType type);
+
+//! Checks if the given type is a chaos lease.
+bool IsChaosLeaseType(EObjectType type);
+
 //! Checks if the given type is a collocation.
 bool IsCollocationType(EObjectType type);
 

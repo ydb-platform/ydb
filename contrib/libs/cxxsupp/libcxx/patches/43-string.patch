@@ -1,5 +1,5 @@
 diff --git a/include/string b/include/string
-index 9a52ab6..da86723 100644
+index fdb1890..e8ac1d4 100644
 --- a/include/string
 +++ b/include/string
 @@ -83,6 +83,7 @@ template <> struct char_traits<char32_t>;
@@ -10,7 +10,7 @@ index 9a52ab6..da86723 100644
  public:
  // types:
      typedef traits traits_type;
-@@ -997,9 +998,10 @@ public:
+@@ -1077,15 +1078,18 @@ public:
      __init(__s, traits_type::length(__s));
    }
  
@@ -20,9 +20,8 @@ index 9a52ab6..da86723 100644
  #endif
 +  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(nullptr_t, size_t) = delete;
  
-   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n)
-       : __r_(__default_init_tag(), __default_init_tag()) {
-@@ -1007,6 +1009,8 @@ public:
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n) {
+     _LIBCPP_ASSERT_NON_NULL(__n == 0 || __s != nullptr, "basic_string(const char*, n) detected nullptr");
      __init(__s, __n);
    }
  
@@ -30,8 +29,8 @@ index 9a52ab6..da86723 100644
 +
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
    basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
-       : __r_(__default_init_tag(), __a) {
-@@ -1171,7 +1175,7 @@ public:
+       : __alloc_(__a) {
+@@ -1245,7 +1249,7 @@ public:
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(const value_type* __s) {
      return assign(__s);
    }
@@ -40,7 +39,7 @@ index 9a52ab6..da86723 100644
    basic_string& operator=(nullptr_t) = delete;
  #endif
    _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
-@@ -1228,6 +1232,10 @@ public:
+@@ -1302,6 +1306,10 @@ public:
      return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
    }
  
@@ -51,12 +50,12 @@ index 9a52ab6..da86723 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
  
-@@ -1775,7 +1783,7 @@ public:
+@@ -1849,7 +1857,7 @@ public:
    }
  #endif
  
 -#if _LIBCPP_STD_VER >= 23
 +#if _LIBCPP_STD_VER >= 20
    constexpr _LIBCPP_HIDE_FROM_ABI bool contains(__self_view __sv) const noexcept {
-     return __self_view(data(), size()).contains(__sv);
+     return __self_view(typename __self_view::__assume_valid(), data(), size()).contains(__sv);
    }

@@ -25,40 +25,40 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, ui64 count)
             : TBase(memInfo)
-            , Count(count)
+            , Count_(count)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index == Count) {
+            if (Index_ == Count_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            result = NUdf::TUnboxedValuePod(g_TestStreamData[Index++]);
+            result = NUdf::TUnboxedValuePod(g_TestStreamData[Index_++]);
             return NUdf::EFetchStatus::Ok;
         }
 
     private:
-        ui64 Index = 0;
-        const ui64 Count;
+        ui64 Index_ = 0;
+        const ui64 Count_;
     };
 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
-        , Count(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
+        , Count_(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(Count);
+        return ctx.HolderFactory.Create<TStreamValue>(Count_);
     }
 
 private:
     void RegisterDependencies() const final {}
 
 private:
-    const ui64 Count;
+    const ui64 Count_;
 };
 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
@@ -70,32 +70,32 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo)
-            , CompCtx(compCtx) {}
+            , CompCtx_(compCtx) {}
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index == Y_ARRAY_SIZE(g_TestYieldStreamData)) {
+            if (Index_ == Y_ARRAY_SIZE(g_TestYieldStreamData)) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            const auto value = g_TestYieldStreamData[Index];
+            const auto value = g_TestYieldStreamData[Index_];
             if (value == g_Yield) {
-                ++Index;
+                ++Index_;
                 return NUdf::EFetchStatus::Yield;
             }
 
             NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(value);
-            items[1] = MakeString(ToString(Index));
+            items[1] = MakeString(ToString(Index_));
 
-            ++Index;
+            ++Index_;
             return NUdf::EFetchStatus::Ok;
         }
 
     private:
-        TComputationContext& CompCtx;
-        ui64 Index = 0;
+        TComputationContext& CompCtx_;
+        ui64 Index_ = 0;
     };
 
     TTestYieldStreamWrapper(TComputationMutables& mutables)

@@ -6,10 +6,11 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <yql/essentials/types/binary_json/read.h>
-#include <yql/essentials/types/uuid/uuid.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -30,6 +31,12 @@ class TBaseSerializer: public IChangeRecordSerializer {
     }
 
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
+        auto data = MakeDataChunk();
+        FillDataChunk(data, record);
+        cmd.SetData(data.SerializeAsString());
+    }
+
+    void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
         cmd.SetData(data.SerializeAsString());
@@ -59,6 +66,8 @@ public:
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
             return SerializeDataChange(cmd, record);
+        case TChangeRecord::EKind::CdcSchemaChange:
+            return SerializeSchemaChange(cmd, record);
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
@@ -299,24 +308,15 @@ protected:
 
 class TYdbJsonSerializer: public TJsonSerializer {
 protected:
-    void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
-        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
-            return SerializeVirtualTimestamp(json["resolved"], {record.GetStep(), record.GetTxId()});
-        }
-
+    void SerializeDataChange(NJson::TJsonValue& json, const TChangeRecord& record) {
         Y_ENSURE(record.GetSchema());
         const auto body = ParseBody(record.GetBody());
 
-        switch (record.GetKind()) {
-        case TChangeRecord::EKind::AsyncIndex:
+        if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
+            SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
+        } else if (record.GetKind() == TChangeRecord::EKind::AsyncIndex) {
             Y_ENSURE(Opts.Debug);
             SerializeJsonValue(record.GetSchema(), json["key"], body.GetKey());
-            break;
-        case TChangeRecord::EKind::CdcDataChange:
-            SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
-            break;
-        default:
-            Y_ENSURE(false, "Unexpected record");
         }
 
         if (body.HasOldImage()) {
@@ -350,6 +350,45 @@ protected:
 
         if (Opts.VirtualTimestamps) {
             SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});
+        }
+    }
+
+    void SerializeSchemaChange(NJson::TJsonValue& json, const TChangeRecord& record) {
+        auto& tableChange = json["tableChanges"].AppendValue({});
+        auto& table = tableChange["table"];
+        table["schemaVersion"] = record.GetSchemaVersion();
+
+        Y_ENSURE(record.GetSchema());
+        auto schema = record.GetSchema();
+
+        for (const auto tag : schema->KeyColumnIds) {
+            auto it = schema->Columns.find(tag);
+            Y_ENSURE(it != schema->Columns.end());
+            table["primaryKeyColumnNames"] = it->second.Name;
+        }
+
+        for (const auto& [tag, column] : schema->Columns) {
+            table["columns"][column.Name] = NScheme::TypeName(column.Type, column.TypeMod);
+        }
+
+        SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});
+    }
+
+    void SerializeHeartbeat(NJson::TJsonValue& json, const TChangeRecord& record) {
+        SerializeVirtualTimestamp(json["resolved"], {record.GetStep(), record.GetTxId()});
+    }
+
+    void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
+        switch (record.GetKind()) {
+        case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::CdcDataChange:
+            return SerializeDataChange(json, record);
+        case TChangeRecord::EKind::CdcSchemaChange:
+            return SerializeSchemaChange(json, record);
+        case TChangeRecord::EKind::CdcHeartbeat:
+            return SerializeHeartbeat(json, record);
+        case TChangeRecord::EKind::IncrementalRestore:
+            Y_ENSURE(false, "Unexpected");
         }
     }
 

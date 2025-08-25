@@ -16,11 +16,11 @@ cmake <options> <repo_root>
 
 You may want to use some additional options for configuration:
 
-| Option                    | Purpose                   | Description                                                                        |
-| ------                    |------                     | ------                                                                             |
-| `-G <generator>`          | Specify project generator | For more information, run cmake `–help`.                                           |
-|`-DCMAKE_BUILD_TYPE=Debug` | Specify for Debug build   | Not applicable for multi-configuration generators such as Visual Studio generator. |
-
+| Option                                      | Purpose                                                                       | Description                                                                                                                                                                                                                  |
+|---------------------------------------------|-------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `-G <generator>`                            | Specify project generator                                                     | For more information, run cmake `–help`.                                                                                                                                                                                     |
+| `-DCMAKE_BUILD_TYPE=Debug`                  | Specify for Debug build                                                       | Not applicable for multi-configuration generators such as Visual Studio generator.                                                                                                                                           |
+| `-DTBB_VERIFY_DEPENDENCY_SIGNATURE=ON\|OFF` | Controls signature verification of dynamic dependencies loaded during runtime | If set to ON, only the signed dynamic dependencies are loaded. This is the recommended behavior. By default, the value is unspecified. Therefore, the warning is printed. To suppress the warning, set the value explicitly. |
 
 ## Build oneTBB
  
@@ -61,7 +61,7 @@ You can use the ``install`` components for partial installation.
 The following install components are supported:
 - `runtime` - oneTBB runtime package (core shared libraries and `.dll` files on Windows* OS).
 - `devel` - oneTBB development package (header files, CMake integration files, library symbolic links, and `.lib` files on Windows* OS).
-- `tbb4py` - [oneTBB Module for Python](https://github.com/oneapi-src/oneTBB/blob/master/python/README.md).
+- `tbb4py` - [oneTBB Module for Python](https://github.com/uxlfoundation/oneTBB/blob/master/python/README.md).
 
 If you want to install specific components after configuration and build, run:
 
@@ -99,7 +99,7 @@ The following example demonstrates how to install oneTBB for single-configuratio
 # Do our experiments in /tmp
 cd /tmp
 # Clone oneTBB repository
-git clone https://github.com/oneapi-src/oneTBB.git
+git clone https://github.com/uxlfoundation/oneTBB.git
 cd oneTBB
 # Create binary directory for out-of-source build
 mkdir build && cd build
@@ -121,7 +121,7 @@ Choose the configuration during the build and install steps:
 REM Do our experiments in %TMP%
 cd %TMP%
 REM Clone oneTBB repository
-git clone https://github.com/oneapi-src/oneTBB.git
+git clone https://github.com/uxlfoundation/oneTBB.git
 cd oneTBB
 REM Create binary directory for out-of-source build
 mkdir build && cd build

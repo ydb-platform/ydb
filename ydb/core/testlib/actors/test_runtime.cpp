@@ -8,6 +8,7 @@
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
@@ -16,11 +17,12 @@
 
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
-#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -74,6 +76,14 @@ namespace NActors {
         Initialize();
     }
 
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends)
+        : TPortManager(false)
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        , AuditLogBackends(std::move(auditLogBackends))
+    {
+        Initialize();
+    }
+
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount)
         : TPortManager(false)
         , TTestActorRuntimeBase{nodeCount, dataCenterCount}
@@ -111,7 +121,25 @@ namespace NActors {
         AppDataInit_.push_back(std::move(callback));
     }
 
+    void TTestActorRuntime::AddAuditLogStuff() {
+        for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+            AddLocalService(
+                NKikimr::NAudit::MakeAuditServiceID(),
+                TActorSetupCmd(
+                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                    TMailboxType::HTSwap,
+                    0
+                ),
+                nodeIndex
+            );
+        }
+    }
+
     void TTestActorRuntime::Initialize(TEgg egg) {
+        if (AuditLogBackends) {
+            AddAuditLogStuff();
+        }
+
         IsInitialized = true;
 
         Opaque = std::move(egg.Opaque);
@@ -182,6 +210,9 @@ namespace NActors {
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
+            nodeAppData->WorkloadManagerConfig = app0->WorkloadManagerConfig;
+            nodeAppData->QueryServiceConfig = app0->QueryServiceConfig;
+            nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
                 nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
@@ -212,7 +243,8 @@ namespace NActors {
                 MonPorts.push_back(port);
             }
 
-            node->ActorSystem->Start();
+            StartActorSystem(nodeIndex, node);
+
             if (nodeAppData->Mon) {
                 nodeAppData->Mon->Start(node->ActorSystem.Get());
             }
@@ -286,14 +318,6 @@ namespace NActors {
         }
 
         return true;
-    }
-
-    void TTestActorRuntime::SimulateSleep(TDuration duration) {
-        if (!SleepEdgeActor) {
-            SleepEdgeActor = AllocateEdgeActor();
-        }
-        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
-        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
     void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {

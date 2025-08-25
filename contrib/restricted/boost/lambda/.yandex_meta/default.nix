@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_lambda = stdenv.mkDerivation rec {
     pname = "boost_lambda";
-    version = "1.87.0";
+    version = "1.88.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "lambda";
       rev = "boost-${version}";
-      hash = "sha256-IQkSGsQuyCPGSye6QdRms8LXN3H5whkxjVVjCyQUx3Y=";
+      hash = "sha256-5revBfxl90zjfbwipY7Se4J/h/RBWsoGICc66WVSsmY=";
     };
   };
 }

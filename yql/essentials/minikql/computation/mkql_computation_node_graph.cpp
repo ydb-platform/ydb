@@ -55,8 +55,8 @@ const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true);
 
 class TDependencyScanVisitor : public TEmptyNodeVisitor {
 public:
-    void Walk(TNode* root, const TTypeEnvironment& env) {
-        Stack = &env.GetNodeStack();
+    void Walk(TNode* root, std::vector<TNode*>& nodeStack) {
+        Stack = &nodeStack;
         Stack->clear();
         Stack->push_back(root);
         while (!Stack->empty()) {
@@ -239,6 +239,7 @@ public:
         , CountersProvider(opts.CountersProvider)
         , SecureParamsProvider(opts.SecureParamsProvider)
         , LogProvider(opts.LogProvider)
+        , LangVer(opts.LangVer)
         , Factory(opts.Factory)
         , FunctionRegistry(*opts.FunctionRegistry)
         , ValidateMode(opts.ValidateMode)
@@ -465,6 +466,7 @@ private:
                 CountersProvider,
                 SecureParamsProvider,
                 LogProvider,
+                LangVer,
                 *NodeFactory,
                 *PatternNodes->HolderFactory,
                 PatternNodes->ValueBuilder.Get(),
@@ -562,6 +564,7 @@ private:
     NUdf::ICountersProvider* CountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
+    const NYql::TLangVersion LangVer;
     const TComputationNodeFactory Factory;
     const IFunctionRegistry& FunctionRegistry;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;
@@ -998,7 +1001,7 @@ private:
 TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNodeVisitor& explorer, const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints, const TComputationPatternOpts& opts) {
     TDependencyScanVisitor depScanner;
-    depScanner.Walk(root.GetNode(), opts.Env);
+    depScanner.Walk(root.GetNode(), opts.Env.GetNodeStack());
 
     auto builder = MakeHolder<TComputationGraphBuildingVisitor>(opts);
     const TBindTerminator bind(&builder->GetPatternNodes()->GetTerminator());

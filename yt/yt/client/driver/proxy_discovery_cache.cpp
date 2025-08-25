@@ -92,7 +92,7 @@ private:
         }
 
         TGetNodeOptions options;
-        options.ReadFrom = EMasterChannelKind::LocalCache;
+        options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.Attributes = {BalancersAttributeName};
 
         TYPath path;
@@ -123,7 +123,7 @@ private:
     TFuture<TProxyDiscoveryResponse> GetResponseByAddresses(const TProxyDiscoveryRequest& request)
     {
         TGetNodeOptions options;
-        options.ReadFrom = EMasterChannelKind::LocalCache;
+        options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.SuppressUpstreamSync = true;
         options.SuppressTransactionCoordinatorSync = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
@@ -157,7 +157,7 @@ private:
                 if (address) {
                     response.Addresses.push_back(*address);
                 } else {
-                    // COMPAT(verytable): Drop it after all rpc proxies migrate to 22.3.
+                    // COMPAT(nadya73): Drop it after all http proxies migrate to 25.2.
                     if (!proxyNode->Attributes().Contains(AddressesAttributeName)) {
                         response.Addresses.push_back(proxyAddress);
                     }
@@ -175,6 +175,8 @@ private:
                 return RpcProxiesPath;
             case EProxyKind::Grpc:
                 return GrpcProxiesPath;
+            case EProxyKind::Http:
+                return HttpProxiesPath;
             default:
                 THROW_ERROR_EXCEPTION("Proxy type %Qlv is not supported",
                     type);

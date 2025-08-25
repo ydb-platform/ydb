@@ -21,22 +21,16 @@
                       ]
                   },
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"supplier"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"nation"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"nation"
                         }
                       ]
                   }
@@ -59,22 +53,16 @@
                 ]
             },
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (MapJoin)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"supplier"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"nation"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"nation"
                   }
                 ]
             }

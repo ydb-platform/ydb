@@ -32,13 +32,13 @@ namespace {
 class TTokenProcessor {
 public:
     TTokenProcessor(const TString& queryFile, TSQLHints& hints, bool utf8Aware)
-        : QueryFile(queryFile)
-        , Hints(hints)
-        , Utf8Aware(utf8Aware)
+        : QueryFile_(queryFile)
+        , Hints_(hints)
+        , Utf8Aware_(utf8Aware)
     {}
 
     TPosition ExtractPosition(const TParsedToken& token) const {
-        return TPosition(token.LinePos + 1, token.Line, QueryFile);
+        return TPosition(token.LinePos + 1, token.Line, QueryFile_);
     }
 
     void ProcessToken(TParsedToken&& token) {
@@ -46,32 +46,32 @@ public:
             return;
         }
         auto pos = ExtractPosition(token);
-        YQL_ENSURE(!PrevNonCommentPos.Defined() || *PrevNonCommentPos < pos, "Tokens positions should increase monotonically");
+        YQL_ENSURE(!PrevNonCommentPos_.Defined() || *PrevNonCommentPos_ < pos, "Tokens positions should increase monotonically");
         if (token.Name == "WS") {
             return;
         }
         if (token.Name != "COMMENT") {
-            PrevNonCommentPos = pos;
+            PrevNonCommentPos_ = pos;
             return;
         }
-        if (!PrevNonCommentPos) {
+        if (!PrevNonCommentPos_) {
             // skip leading comments
             return;
         }
-        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(pos, token.Content, Utf8Aware);
+        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(pos, token.Content, Utf8Aware_);
         if (currentHints.empty()) {
             // no hints here
             return;
         }
-        auto& target = Hints[*PrevNonCommentPos];
+        auto& target = Hints_[*PrevNonCommentPos_];
         target.insert(target.end(), currentHints.begin(), currentHints.end());
     }
 
 private:
-    TMaybe<TPosition> PrevNonCommentPos;
-    const TString QueryFile;
-    TSQLHints& Hints;
-    const bool Utf8Aware;
+    TMaybe<TPosition> PrevNonCommentPos_;
+    const TString QueryFile_;
+    TSQLHints& Hints_;
+    const bool Utf8Aware_;
 };
 
 }

@@ -12,10 +12,7 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrSettings AppSettings(TStringStream& logStream) {
-    NKikimrConfig::TAppConfig appCfg;
-
     TKikimrSettings serverSettings;
-    serverSettings.SetAppConfig(appCfg);
     serverSettings.LogStream = &logStream;
 
     return serverSettings;
@@ -31,13 +28,15 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
     }
 }
 
-void RunTestForQuery(const std::string& query, const std::string& expectedLog) {
+void RunTestForQuery(const std::string& query, const std::string& expectedLog, bool enabledLogs) {
     TStringStream logsStream;
 
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     TKikimrRunner kikimr(AppSettings(logsStream));
 
-    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
+    if (enabledLogs) {
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
+    }
 
     auto db = kikimr.GetQueryClient();
 
@@ -64,25 +63,23 @@ void RunTestForQuery(const std::string& query, const std::string& expectedLog) {
             break;
         }
     }
-    // TODO: Uncomment after: https://github.com/ydb-platform/ydb/issues/15597
-    Y_UNUSED(hasExpectedLog);
-    // UNIT_ASSERT(hasExpectedLog);
+    UNIT_ASSERT(hasExpectedLog == enabledLogs);
 }
 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScanLogs) {
 
-Y_UNIT_TEST(WideCombine) {
+Y_UNIT_TEST_TWIN(WideCombine, EnabledLogs) {
     auto query = R"(
         --!syntax_v1
         select count(t.Key) from `/Root/KeyValue` as t group by t.Value
     )";
 
-    RunTestForQuery(query, "[WideCombine]");
+    RunTestForQuery(query, "[WideCombine]", EnabledLogs);
 }
 
-Y_UNIT_TEST(GraceJoin) {
+Y_UNIT_TEST_TWIN(GraceJoin, EnabledLogs) {
     auto query = R"(
         --!syntax_v1
         PRAGMA ydb.CostBasedOptimizationLevel='0';
@@ -92,7 +89,7 @@ Y_UNIT_TEST(GraceJoin) {
         order by t1.Value
     )";
 
-    RunTestForQuery(query, "[GraceJoin]");
+    RunTestForQuery(query, "[GraceJoin]", EnabledLogs);
 }
 
 

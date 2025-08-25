@@ -32,7 +32,7 @@ SELECT *
       WHERE views >= someValue
   ```
 
-* [`JOIN`](../join.md) the `series` and `users` row-oriented tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
+* [`JOIN`](join.md) the `series` and `users` row-oriented tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
 
   ```yql
   SELECT t1.series_id, t1.title

@@ -17,6 +17,7 @@
 #include <yt/yt/core/yson/null_consumer.h>
 #include <yt/yt/core/yson/ypath_designated_consumer.h>
 #include <yt/yt/core/yson/writer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -28,6 +29,8 @@
 #include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NYTree {
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -158,7 +161,7 @@ private:
 
         context->SetRequestInfo();
         auto yson = BuildStringFromProducer();
-        response->set_value(yson.ToString());
+        response->set_value(ToProto(yson));
         context->Reply();
     }
 
@@ -286,7 +289,7 @@ private:
 
         context->SetRequestInfo();
         auto yson = BuildStringFromProducer(options);
-        response->set_value(yson.ToString());
+        response->set_value(ToProto(yson));
         context->Reply();
     }
 
@@ -371,7 +374,7 @@ private:
 
         context->SetRequestInfo();
         auto yson = BuildStringFromProducer();
-        response->set_value(yson.ToString());
+        response->set_value(ToProto(yson));
         context->Reply();
     }
 

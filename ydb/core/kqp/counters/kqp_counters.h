@@ -332,6 +332,7 @@ public:
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
+    void ReportCompileQueueWaitTime(const TDuration& duration);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
@@ -365,6 +366,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
+    ::NMonitoring::THistogramPtr CompileQueueWaitTime;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
@@ -419,6 +421,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
@@ -456,6 +461,7 @@ public:
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForcedImmediateEffectsExecution;
 
     // Locality metrics for request
     NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
@@ -479,6 +485,12 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemConvertBytes;
 
+    // Statistics batch operations
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 
 struct TKqpRequestCounters : public TThrRefBase {

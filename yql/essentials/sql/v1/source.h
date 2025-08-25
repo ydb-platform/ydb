@@ -128,29 +128,29 @@ namespace NSQLTranslationV1 {
 
         TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
 
-        THashSet<TString> ExprAliases;
-        THashSet<TString> FlattenByAliases;
-        THashMap<TString, TString> GroupByColumnAliases;
-        TVector<TNodePtr> Filters;
-        bool CompactGroupBy = false;
-        TString GroupBySuffix;
-        TSet<TString> GroupKeys;
-        TVector<TString> OrderedGroupKeys;
-        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs;
-        TVector<TAggregationPtr> Aggregations;
-        TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow;
-        TMap<TString, TVector<TNodePtr>> FuncOverWindow;
-        TWinSpecs WinSpecs;
-        TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
-        TNodePtr SessionWindow;
-        TNodePtr HoppingWindow;
-        TVector<TSourcePtr> UsedSources;
-        TString FlattenMode;
-        bool FlattenColumns = false;
-        THashMap<TString, ui32> GenIndexes;
-        TVector<TString> TmpWindowColumns;
-        TNodePtr SamplingRate;
-        TMatchRecognizeBuilderPtr MatchRecognizeBuilder;
+        THashSet<TString> ExprAliases_;
+        THashSet<TString> FlattenByAliases_;
+        THashMap<TString, TString> GroupByColumnAliases_;
+        TVector<TNodePtr> Filters_;
+        bool CompactGroupBy_ = false;
+        TString GroupBySuffix_;
+        TSet<TString> GroupKeys_;
+        TVector<TString> OrderedGroupKeys_;
+        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs_;
+        TVector<TAggregationPtr> Aggregations_;
+        TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow_;
+        TMap<TString, TVector<TNodePtr>> FuncOverWindow_;
+        TWinSpecs WinSpecs_;
+        TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec_;
+        TNodePtr SessionWindow_;
+        TNodePtr HoppingWindow_;
+        TVector<TSourcePtr> UsedSources_;
+        TString FlattenMode_;
+        bool FlattenColumns_ = false;
+        THashMap<TString, ui32> GenIndexes_;
+        TVector<TString> TmpWindowColumns_;
+        TNodePtr SamplingRate_;
+        TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
     };
 
     template<>
@@ -202,20 +202,19 @@ namespace NSQLTranslationV1 {
         TNodePtr DoClone() const override;
         TString GetOpName() const override;
 
-        TVector<TNodePtr> Args;
-        TSourcePtr FakeSource;
-        TNodePtr Node;
-        bool Valid;
+        TVector<TNodePtr> Args_;
+        TSourcePtr FakeSource_;
+        TNodePtr Node_;
+        bool Valid_;
     };
 
     class THoppingWindow final : public INode {
     public:
-        THoppingWindow(TPosition pos, const TVector<TNodePtr>& args);
-        void MarkValid();
+        THoppingWindow(TPosition pos, TVector<TNodePtr> args);
         TNodePtr BuildTraits(const TString& label) const;
-    public:
-        TNodePtr Hop;
-        TNodePtr Interval;
+        TNodePtr GetInterval() const;
+        void MarkValid();
+
     private:
         bool DoInit(TContext& ctx, ISource* src) override;
         TAstNode* Translate(TContext&) const override;
@@ -224,10 +223,15 @@ namespace NSQLTranslationV1 {
         TString GetOpName() const override;
         TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-        TVector<TNodePtr> Args;
-        TSourcePtr FakeSource;
-        TNodePtr Node;
-        bool Valid;
+    private:
+        TVector<TNodePtr> Args_;
+        TSourcePtr FakeSource_;
+        TNodePtr TimeExtractor_;
+        TNodePtr Hop_;
+        TNodePtr Interval_;
+        const TNodePtr Delay_ = Y("Interval", Q("0"));
+        const TString DataWatermarks_ = "true";
+        bool Valid_;
     };
 
 
@@ -246,7 +250,7 @@ namespace NSQLTranslationV1 {
     TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString());
     TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label = TString());
     TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
-    TSourcePtr BuildUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings);
+    TSourcePtr BuildSelectOp(TPosition pos, TVector<TSourcePtr>&& sources, const TString& op, bool quantifierAll, const TWriteSettings& settings);
     TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource);
 
     TNodePtr BuildOrderBy(TPosition pos, const TVector<TNodePtr>& keys, const TVector<bool>& order);
@@ -276,6 +280,7 @@ namespace NSQLTranslationV1 {
         TColumnsSets&& distinctSets
     );
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
+    TSourcePtr BuildAnyColumnSource(TPosition pos);
 
 
     enum class ReduceMode {
@@ -286,13 +291,13 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
     TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
-        bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
+        bool processStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);
 
     // Implemented in insert.cpp
-    TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values);
-    TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, TSourcePtr source);
+    TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values);
+    TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source);
     TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values);
 
     EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode);
@@ -318,7 +323,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped);
-    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
+    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped);
     TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped);
     TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});

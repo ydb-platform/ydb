@@ -339,7 +339,7 @@ namespace NKikimr {
 
             if (!data.empty()) {
                 const TVDiskID vdisk(VDiskIDFromVDiskID(record.GetVDiskID()));
-                // While working on full recovery we put OldSyncState to the revery log,
+                // While working on full recovery we put OldSyncState to the recovery log,
                 // while keeping in memory correct SyncState obtained from remote vdisk;
                 // the correct SyncState is written by committer only once. We required
                 // to work this way because records we get from remote node are not ordered

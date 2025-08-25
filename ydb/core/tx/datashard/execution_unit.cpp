@@ -142,6 +142,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateAlterCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropCdcStream:
         return CreateDropCdcStreamUnit(dataShard, pipeline);
+    case EExecutionUnitKind::RotateCdcStream:
+        return CreateRotateCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveIndex:
         return CreateMoveIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckRead:

@@ -13,10 +13,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
-        if (!CurrentThreshold)
-            CurrentThreshold = ctx.GcConfig.Settings.NodeCountThreshold;
+        if (!CurrentThreshold_)
+            CurrentThreshold_ = ctx.GcConfig.Settings.NodeCountThreshold;
 
-        if (ctx.NodeAllocationCounter < LastGcCount + CurrentThreshold) {
+        if (ctx.NodeAllocationCounter < LastGcCount_ + CurrentThreshold_) {
             return TStatus::Ok;
         }
 
@@ -46,9 +46,9 @@ public:
         ++ctx.GcConfig.Statistics.CollectCount;
         ctx.GcConfig.Statistics.TotalCollectedNodes += oldSize - liveSize;
 
-        LastGcCount = ctx.NodeAllocationCounter;
+        LastGcCount_ = ctx.NodeAllocationCounter;
         // adjust next treshold
-        CurrentThreshold = Max(ctx.GcConfig.Settings.NodeCountThreshold, liveSize);
+        CurrentThreshold_ = Max(ctx.GcConfig.Settings.NodeCountThreshold, liveSize);
 
         if (liveSize > ctx.NodesAllocationLimit) {
             ctx.AddError(YqlIssue(TPosition(), TIssuesIds::CORE_GC_NODES_LIMIT_EXCEEDED, TStringBuilder()
@@ -68,13 +68,13 @@ public:
     }
 
     void Rewind() final {
-        LastGcCount = 0;
-        CurrentThreshold = 0;
+        LastGcCount_ = 0;
+        CurrentThreshold_ = 0;
     }
 
 private:
-    ui64 LastGcCount = 0;
-    ui64 CurrentThreshold = 0;
+    ui64 LastGcCount_ = 0;
+    ui64 CurrentThreshold_ = 0;
 };
 
 }

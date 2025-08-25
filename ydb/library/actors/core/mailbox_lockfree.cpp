@@ -266,6 +266,11 @@ namespace NActors {
         return std::nullopt;
     }
 
+    void TMailbox::CleanupActor(IActor* actor) noexcept {
+        actor->DestroyActorTasks();
+        delete actor;
+    }
+
     bool TMailbox::CleanupActors() noexcept {
         bool done = true;
 
@@ -280,7 +285,7 @@ namespace NActors {
                     IActor* actor = ActorsInfo.Simple.Actor;
                     ActorsInfo.Empty = {};
                     ActorPack = EActorPack::Empty;
-                    delete actor;
+                    CleanupActor(actor);
                     done = false;
                     continue;
                 }
@@ -291,7 +296,7 @@ namespace NActors {
                     ActorsInfo.Empty = {};
                     ActorPack = EActorPack::Empty;
                     for (size_t i = 0; i < count; ++i) {
-                        delete a->Actors[i].Actor;
+                        CleanupActor(a->Actors[i].Actor);
                     }
                     delete a;
                     done = false;
@@ -303,7 +308,7 @@ namespace NActors {
                     ActorsInfo.Empty = {};
                     ActorPack = EActorPack::Empty;
                     for (auto& pr : *m) {
-                        delete pr.second;
+                        CleanupActor(pr.second);
                     }
                     delete m;
                     done = false;
@@ -361,7 +366,7 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(GetNextPtr(tail) == nullptr);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         // Mark events as enqueued when usage stats are enabled
-        if (ActorLibCollectUsageStats) {
+         if constexpr (ActorLibCollectUsageStats) {
             for (IEventHandle* ev = head; ev; ev = GetNextPtr(ev)) {
                 if (IActor* actor = FindActor(ev->GetRecipientRewrite().LocalId())) {
                     actor->OnEnqueueEvent(ev->SendTime);

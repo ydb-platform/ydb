@@ -4,20 +4,55 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage) {
-        if (!Self->StorageConfig) {
-            FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-        } else if (!Self->MainConfigYaml) {
-            FinishWithError(TResult::ERROR, "no stored YAML for storage config");
-        } else {
-            auto ev = PrepareResult(TResult::OK, std::nullopt);
-            auto *record = &ev->Record;
+    namespace {
+        YAML::Node Json2Yaml(const NJson::TJsonValue& json) {
+            YAML::Node res;
+
+            switch (json.GetType()) {
+                case NJson::JSON_UNDEFINED: return YAML::Node();
+                case NJson::JSON_NULL:      return YAML::Node(YAML::NodeType::Null);
+                case NJson::JSON_BOOLEAN:   return YAML::Node(json.GetBoolean());
+                case NJson::JSON_INTEGER:   return YAML::Node(json.GetInteger());
+                case NJson::JSON_DOUBLE:    return YAML::Node(json.GetDouble());
+                case NJson::JSON_STRING:    return YAML::Node(json.GetString());
+                case NJson::JSON_UINTEGER:  return YAML::Node(json.GetUInteger());
+
+                case NJson::JSON_MAP:
+                    res = YAML::Node(YAML::NodeType::Map);
+                    for (const auto& [key, value] : json.GetMap()) {
+                        res.force_insert(key, Json2Yaml(value));
+                    }
+                    return res;
+
+                case NJson::JSON_ARRAY:
+                    res = YAML::Node(YAML::NodeType::Sequence);
+                    for (const auto& item : json.GetArray()) {
+                        res.push_back(Json2Yaml(item));
+                    }
+                    return res;
+            }
+
+            Y_ABORT();
+        }
+    }
+
+    void TInvokeRequestHandlerActor::FetchStorageConfig(bool fetchMain, bool fetchStorage, bool addExplicitMgmtSections,
+            bool addV1) {
+        RunCommonChecks();
+
+        if (!Self->MainConfigYaml) {
+            throw TExError() << "No stored YAML for storage config";
+        }
+
+        Finish(TResult::OK, std::nullopt, [&](TResult *record) {
             auto *res = record->MutableFetchStorageConfig();
             if (fetchMain) {
                 res->SetYAML(Self->MainConfigYaml);
@@ -26,19 +61,99 @@ namespace NKikimr::NStorage {
                 res->SetStorageYAML(*Self->StorageConfigYaml);
             }
 
-            if (manual) {
-                // add BlobStorageConfig, NameserviceConfig, DomainsConfig into main/storage config
+            if (addExplicitMgmtSections && addV1) {
+                throw TExError() << "Can't provide both explicit sections and config suitable for downgrade to v1";
+            } else if (Self->StorageConfigYaml && addV1) {
+                throw TExError() << "Can't downgrade to v1 when dedicated storage section is enabled";
+            } else if (addExplicitMgmtSections && Self->StorageConfigYaml && !fetchStorage) {
+                throw TExError() << "Can't add explicit sections to storage config as it is not fetched";
             }
 
-            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-        }
+            auto enrich = [&](auto&& protobuf, auto&& callback) {
+                TString *yaml = nullptr;
+
+                if (res->HasStorageYAML()) {
+                    yaml = res->MutableStorageYAML();
+                } else if (res->HasYAML()) {
+                    yaml = res->MutableYAML();
+                } else {
+                    throw TExError() << "Can't add explicit sections to main config as it is not fetched";
+                }
+
+                auto doc = NFyaml::TDocument::Parse(*yaml);
+
+                NJson::TJsonValue json;
+                NProtobufJson::Proto2Json(protobuf, json, NYamlConfig::GetProto2JsonConfig());
+                auto inserted = NFyaml::TDocument::Parse(YAML::Dump(Json2Yaml(json)));
+                callback(doc.Root(), inserted.Root().Copy(doc), doc);
+                *yaml = TString(doc.EmitToCharArray().get());
+            };
+
+            auto replace = [&](const char *section) {
+                return [section](auto rootNode, auto protoNode, auto& doc) {
+                    auto m = rootNode.Map().at("config").Map();
+                    if (auto ref = m.pair_at_opt(section)) {
+                        m.Remove(ref);
+                    }
+                    m.Append(doc.CreateScalar(section), protoNode);
+                };
+            };
+
+            if (addExplicitMgmtSections || addV1) { // add BlobStorageConfig (or replace existing one)
+                auto bsConfig = Self->StorageConfig->GetBlobStorageConfig();
+                bsConfig.ClearDefineHostConfig();
+                bsConfig.ClearDefineBox();
+                enrich(bsConfig, replace("blob_storage_config"));
+            }
+            if (addExplicitMgmtSections) {
+                auto callback = [&](const char *name) {
+                    return [name](auto rootNode, auto protoNode, auto& doc) {
+                        auto m = rootNode.Map().at("config").Map();
+                        if (!m.Has("domains_config")) {
+                            m.Append(doc.CreateScalar("domains_config"), doc.CreateMapping());
+                        }
+
+                        m = m["domains_config"].Map();
+                        if (auto ref = m.pair_at_opt(name)) {
+                            m.Remove(ref);
+                        }
+                        m.Append(doc.CreateScalar(name), protoNode);
+                    };
+                };
+                enrich(Self->StorageConfig->GetStateStorageConfig(), callback("explicit_state_storage_config"));
+                enrich(Self->StorageConfig->GetStateStorageBoardConfig(), callback("explicit_state_storage_board_config"));
+                enrich(Self->StorageConfig->GetSchemeBoardConfig(), callback("explicit_scheme_board_config"));
+            }
+            if (addV1) {
+                auto equals = google::protobuf::util::MessageDifferencer::Equals;
+                auto& sc = Self->StorageConfig;
+                auto& ssConfig = sc->GetStateStorageConfig();
+                auto& ssbConfig = sc->GetStateStorageBoardConfig();
+                auto& sbConfig = sc->GetSchemeBoardConfig();
+                if (equals(ssConfig, ssbConfig) && equals(ssConfig, sbConfig)) {
+                    NKikimrConfig::TDomainsConfig domains;
+                    domains.CopyFrom(AppData()->DomainsConfig);
+                    domains.ClearStateStorage();
+                    domains.AddStateStorage()->CopyFrom(ssConfig);
+                    for (int i = 0, count = domains.DomainSize(); i < count; ++i) {
+                        auto *dom = domains.MutableDomain(i);
+                        dom->ClearExplicitCoordinators();
+                        dom->ClearExplicitAllocators();
+                        dom->ClearExplicitMediators();
+                    }
+                    enrich(domains, replace("domains_config"));
+                } else {
+                    throw TExError() << "State storage, state storage board and scheme board configs are not equal";
+                }
+            }
+        });
     }
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
-        if (!RunCommonChecks()) {
-            return;
-        } else if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
-            return FinishWithError(TResult::ERROR, "previous config has not been committed to Console yet");
+        RunCommonChecks();
+
+        if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
+            throw TExRace() << "Previous config has not been committed to Console yet";
         }
 
         // extract YAML files provided by the user
@@ -54,10 +169,9 @@ namespace NKikimr::NStorage {
         }
         if (!NewYaml && !NewStorageYaml) {
             if (request.HasSwitchDedicatedStorageSection()) {
-                return FinishWithError(TResult::ERROR, "switching dedicated storage section mode without providing any new config");
-            } else {
-                // finish this request prematurely: no configs are actually changed
-                return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+                throw TExError() << "Switching dedicated storage section mode without providing any new config";
+            } else { // finish this request prematurely: no configs are actually changed
+                return Finish(TResult::OK, std::nullopt);
             }
         }
 
@@ -119,16 +233,16 @@ namespace NKikimr::NStorage {
                 NYaml::Parse(*effective, NYaml::GetJsonToProtoConfig(), appConfig, true);
 
                 if (TString errorReason; !DeriveStorageConfig(appConfig, &config, &errorReason)) {
-                    return FinishWithError(TResult::ERROR, TStringBuilder()
-                        << "error while deriving StorageConfig: " << errorReason);
+                    throw TExError() << "Error while deriving StorageConfig: " << errorReason;
                 }
             }
+        } catch (const TExError& ex) {
+            throw ex;
         } catch (const std::exception& ex) {
-             return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while " << state
-                << ": " << ex.what());
+            throw TExError() << "Exception while " << state << ": " << ex.what();
         }
 
-        // advance the config generation
+        // advance the config generation (may be necessary for validation purposes)
         config.SetGeneration(config.GetGeneration() + 1);
 
         // make it proposed one
@@ -150,7 +264,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
             ui64 expectedStorageYamlVersion, bool enablingDistconf) {
-        const auto& request = Event->Get()->Record.GetReplaceStorageConfig();
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& request = op->Command.GetReplaceStorageConfig();
 
         auto switchDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
             ? std::make_optional(request.GetSwitchDedicatedStorageSection())
@@ -161,50 +277,44 @@ namespace NKikimr::NStorage {
         if (switchDedicatedStorageSection) {
             // check that configs are explicitly defined when we are switching dual-config mode
             if (!NewYaml) {
-                return FinishWithError(TResult::ERROR, "main config must be specified when switching dedicated"
-                    " storage section mode");
+                throw TExError() << "Main config must be specified when switching dedicated storage section mode";
             } else if (*switchDedicatedStorageSection && !NewStorageYaml) {
-                return FinishWithError(TResult::ERROR, "storage config must be specified when turning on dedicated"
-                    " storage section mode");
+                throw TExError() << "Storage config must be specified when turning on dedicated storage section mode";
             }
         }
 
         if (request.GetDedicatedStorageSectionConfigMode() != targetDedicatedStorageSection) {
-            return FinishWithError(TResult::ERROR, "DedicatedStorageSectionConfigMode does not match target state");
+            throw TExError() << "DedicatedStorageSectionConfigMode does not match target state";
         } else if (NewStorageYaml && !targetDedicatedStorageSection) {
             // we are going to end up in single-config mode, but explicit storage yaml is provided
-            return FinishWithError(TResult::ERROR, "unexpected dedicated storage config section in request");
+            throw TExError() << "Unexpected dedicated storage config section in request";
         } else if (switchDedicatedStorageSection && *switchDedicatedStorageSection == storageConfigYaml.has_value()) {
             // this enable/disable command does not change the state
-            return FinishWithError(TResult::ERROR, "dedicated storage config section is already in requested state");
+            throw TExError() << "Dedicated storage config section is already in requested state";
         }
 
         if (StorageYamlVersion && *StorageYamlVersion != expectedStorageYamlVersion) {
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "storage config version must be increasing by one"
+            throw TExError() << "Storage config version must be increasing by one"
                 << " new version# " << *StorageYamlVersion
-                << " expected version# " << expectedStorageYamlVersion);
+                << " expected version# " << expectedStorageYamlVersion;
         }
 
         if (MainYamlVersion && *MainYamlVersion != expectedMainYamlVersion) {
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "main config version must be increasing by one"
+            throw TExError() << "Main config version must be increasing by one"
                 << " new version# " << *MainYamlVersion
-                << " expected version# " << expectedMainYamlVersion);
+                << " expected version# " << expectedMainYamlVersion;
         }
 
         if (auto error = ValidateConfig(*Self->StorageConfig)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "ReplaceStorageConfig current config validation failed: " << *error);
+            throw TExError() << "ReplaceStorageConfig current config validation failed: " << *error;
         } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "ReplaceStorageConfig config validation failed: " << *error);
+            throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
 
         // update main config yaml in the StorageConfig
         if (NewYaml) {
             if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, std::nullopt)) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                throw TExError() << "Failed to update config yaml: " << *error;
             }
         }
 
@@ -223,53 +333,32 @@ namespace NKikimr::NStorage {
         if (request.GetSkipConsoleValidation() || !NewYaml) {
             StartProposition(&ProposedStorageConfig);
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
-            FinishWithError(TResult::ERROR, "console pipe is not available");
+            throw TExRace() << "Console pipe is not available";
         }
     }
 
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
-        const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
-        Y_ABORT_UNLESS(prevState == ERootState::RELAX);
-
         TEvScatter task;
         task.MutableCollectConfigs();
-        IssueScatterTask(std::move(task), [this](TEvGather *res) -> std::optional<TString> {
+        IssueScatterTask(std::move(task), [this](TEvGather *res) {
             Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-
-            const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-            Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+            Y_ABORT_UNLESS(!Self->CurrentProposition);
 
             if (!res->HasCollectConfigs()) {
-                return "incorrect CollectConfigs response";
-            } else if (Self->CurrentProposedStorageConfig) {
-                FinishWithError(TResult::RACE, "config proposition request in flight");
-            } else if (Scepter.expired()) {
-                return "scepter lost during query execution";
+                throw TExError() << "Incorrect CollectConfigs response";
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+                throw TExError() << *r.ErrorReason;
+            } else if (r.ConfigToPropose) {
+                throw TExError() << "Unexpected config proposition";
+            } else if (r.IsDistconfDisabledQuorum) {
+                // distconf is disabled on the majority of nodes; we have just to replace configs
+                // and then to restart these nodes in order to enable it in future
+                Finish(TResult::CONTINUE_BSC, "proceed with BSC", [&](TResult *record) {
+                    record->MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
+                });
             } else {
-                auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);
-                return std::visit<std::optional<TString>>(TOverloaded{
-                    [&](std::monostate&) -> std::optional<TString> {
-                        if (r.IsDistconfDisabledQuorum) {
-                            // distconf is disabled on the majority of nodes; we have just to replace configs
-                            // and then to restart these nodes in order to enable it in future
-                            auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
-                            ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
-                            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-                        } else {
-                            ConnectToController();
-                        }
-                        return std::nullopt;
-                    },
-                    [&](TString& error) {
-                        return std::move(error);
-                    },
-                    [&](NKikimrBlobStorage::TStorageConfig& /*proposedConfig*/) {
-                        return "unexpected config proposition";
-                    }
-                }, r.Outcome);
+                ConnectToController();
             }
-
-            return std::nullopt; // no error or it is already processed
         });
     }
 
@@ -288,7 +377,7 @@ namespace NKikimr::NStorage {
 
         if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to connect to BSC with " << msg.Status);
+            throw TExError() << "Failed to connect to BSC with " << msg.Status;
         }
     }
 
@@ -298,7 +387,7 @@ namespace NKikimr::NStorage {
             (ClientId, msg.ClientId), (ServerId, msg.ServerId));
 
         ControllerPipeId = {};
-        FinishWithError(TResult::ERROR, "pipe to BSC disconnected");
+        throw TExError() << "Pipe to BSC disconnected";
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
@@ -306,12 +395,14 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC80, "received TEvControllerConfigResponse", (SelfId, SelfId()),
             (Response, response));
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
-            return FinishWithError(TResult::ERROR, "BSC controller is way too old to process this query");
+            throw TExError() << "BS_CONTROLLER is way too old to process this query";
         }
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
-        const auto& replaceStorageConfig = Event->Get()->Record.GetReplaceStorageConfig();
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& replaceStorageConfig = op->Command.GetReplaceStorageConfig();
 
         // provide the full main config to the recipient (in case when user changes it, or when we are managing it)
         if (NewYaml) {
@@ -339,6 +430,8 @@ namespace NKikimr::NStorage {
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
                     record.SetExpectedStorageConfigVersion(ProposedStorageConfig.GetExpectedStorageYamlVersion());
+                    record.SetPeerName(replaceStorageConfig.GetPeerName());
+                    record.SetUserToken(replaceStorageConfig.GetUserToken());
                 }
                 break;
 
@@ -380,9 +473,9 @@ namespace NKikimr::NStorage {
             (Record, getRecord()));
 
         if (const auto& status = record.GetStatus(); status != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to interact with BSC to update configuration"
+            throw TExError() << "Failed to interact with BSC to update configuration"
                 << " Status# " << NKikimrBlobStorage::TEvControllerDistconfResponse::EStatus_Name(status)
-                << " ErrorReason# " << record.GetErrorReason());
+                << " ErrorReason# " << record.GetErrorReason();
         }
 
         if (ControllerOp == EControllerOp::ENABLE_DISTCONF && !NewYaml) {
@@ -420,73 +513,57 @@ namespace NKikimr::NStorage {
             (InternalError, ev->Get()->InternalError), (Status, record.GetStatus()));
 
         if (ev->Get()->InternalError) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to validate config through console: "
-                << *ev->Get()->InternalError);
+            throw TExError() << "Failed to validate config through console: " << *ev->Get()->InternalError;
         }
 
         switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::IdPipeServerMismatch:
                 Self->DisconnectFromConsole();
                 Self->ConnectToConsole();
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "console connection race detected: " << record.GetErrorReason());
+                throw TExError() << "Console connection race detected: " << record.GetErrorReason();
 
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid:
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "console config validation failed: "
-                    << record.GetErrorReason());
+                throw TExError() << "Console config validation failed: " << record.GetErrorReason();
 
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid:
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                    throw TExError() << "Failed to update config yaml: " << *error;
                 }
                 return StartProposition(&ProposedStorageConfig);
         }
     }
 
     void TInvokeRequestHandlerActor::BootstrapCluster(const TString& selfAssemblyUUID) {
-        if (!RunCommonChecks()) {
-            return;
-        } else if (Self->StorageConfig->GetGeneration()) {
+        RunCommonChecks();
+
+        if (Self->StorageConfig->GetGeneration()) {
             if (Self->StorageConfig->GetSelfAssemblyUUID() == selfAssemblyUUID) { // repeated command, it's ok
-                return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+                return Finish(TResult::OK, std::nullopt);
             } else {
-                return FinishWithError(TResult::ERROR, "bootstrap on already bootstrapped cluster");
+                throw TExError() << "Bootstrap on already bootstrapped cluster";
             }
         } else if (!selfAssemblyUUID) {
-            return FinishWithError(TResult::ERROR, "SelfAssemblyUUID can't be empty");
+            throw TExError() << "SelfAssemblyUUID can't be empty";
         }
 
-        const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
-        Y_ABORT_UNLESS(prevState == ERootState::RELAX);
-
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
-        auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) -> std::optional<TString> {
-            Y_ABORT_UNLESS(res->HasCollectConfigs());
-            Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-            if (Self->CurrentProposedStorageConfig) {
-                FinishWithError(TResult::RACE, "config proposition request in flight");
-                return std::nullopt;
-            } else if (Self->StorageConfig->GetGeneration()) {
-                FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
-                return std::nullopt;
+        auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) {
+            if (!res->HasCollectConfigs()) {
+                throw TExError() << "Incorrect response to CollectConfigs";
             }
-            auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID);
-            return std::visit<std::optional<TString>>(TOverloaded{
-                [&](std::monostate&) {
-                    const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                    Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
-                    Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
-                    return std::nullopt;
-                },
-                [&](TString& error) {
-                    const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                    Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
-                    return error;
-                },
-                [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) {
-                    StartProposition(&proposedConfig, false);
-                    return std::nullopt;
-                }
-            }, r.Outcome);
+
+            Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
+            Y_ABORT_UNLESS(!Self->CurrentProposition); // nobody couldn't possibly start proposing anything while we were busy
+
+            if (Self->StorageConfig->GetGeneration()) {
+                throw TExRace() << "Storage config generation regenerated while collecting configs";
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
+                throw TExError() << *r.ErrorReason;
+            } else if (r.ConfigToPropose) {
+                StartProposition(&r.ConfigToPropose.value());
+            } else { // no new proposition has been made
+                Finish(TResult::OK, std::nullopt);
+            }
         };
 
         TEvScatter task;

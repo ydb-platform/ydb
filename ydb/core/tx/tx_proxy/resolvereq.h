@@ -20,7 +20,7 @@ namespace NTxProxy {
         TSerializedCellVec ToValues;
         THolder<TKeyDesc> KeyDescription;
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
-        bool IsColumnTable = false;
+        NSchemeCache::TSchemeCacheNavigate::EKind Kind;
     };
 
     using TResolveTableResponses = TVector<TResolveTableResponse>;

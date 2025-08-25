@@ -23,7 +23,7 @@ namespace NYdb {
             const std::vector<TString>& GeneratedMessages;
             TString Database;
             TString TopicName;
-            size_t BytesPerSec;
+            double BytesPerSec;
             size_t MessageSize;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;
@@ -38,17 +38,20 @@ namespace NYdb {
             size_t CommitIntervalMs = 15'000;
             size_t CommitMessages = 1'000'000;
             bool UseCpuTimestamp = false;
+            TMaybe<TString> KeyPrefix;
+            ui32 KeyCount = 0;
+            ui32 KeySeed = 0;
         };
 
         class TTopicWorkloadWriterProducer;
         class TTopicWorkloadWriterWorker {
         public:
             static const size_t GENERATED_MESSAGES_COUNT = 32;
-            static void RetryableWriterLoop(TTopicWorkloadWriterParams& params);
-            static void WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime);
+            static void RetryableWriterLoop(const TTopicWorkloadWriterParams& params);
+            static void WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime);
             static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
-            TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);
+            TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params);
             ~TTopicWorkloadWriterWorker();
 
             void Close();

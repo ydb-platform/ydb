@@ -123,7 +123,7 @@ public:
 
     void Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, std::unique_ptr<TKernel>&& kernel);
 private:
-    TKernelMap KernelMap;
+    TKernelMap KernelMap_;
 };
 
 class IBuiltinFunctionRegistry: public TThrRefBase, private TNonCopyable

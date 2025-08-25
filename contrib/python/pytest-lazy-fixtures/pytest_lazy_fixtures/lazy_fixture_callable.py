@@ -1,17 +1,20 @@
-from inspect import isfunction
-from typing import Callable, Optional, Union
+from __future__ import annotations
 
-import pytest
+from inspect import isfunction
+from typing import TYPE_CHECKING, Callable
 
 from .lazy_fixture import LazyFixtureWrapper
 
+if TYPE_CHECKING:
+    import pytest
+
 
 class LazyFixtureCallableWrapper(LazyFixtureWrapper):
-    _func: Optional[Callable]
+    _func: Callable | None
     args: tuple
     kwargs: dict
 
-    def __init__(self, callable_or_name: Union[Callable, str], *args, **kwargs):
+    def __init__(self, callable_or_name: Callable | str, *args, **kwargs):
         if callable(callable_or_name):
             self._func = callable_or_name
             self.name = (
@@ -27,10 +30,12 @@ class LazyFixtureCallableWrapper(LazyFixtureWrapper):
         func = self._func
         if func is None:
             func = self.load_fixture(request)
-            assert callable(func)
+            if not callable(func):
+                msg = "Passed fixture is not callable"
+                raise TypeError(msg)
         return func
 
 
-def lfc(name: Union[Callable, str], *args, **kwargs) -> LazyFixtureCallableWrapper:
+def lfc(name: Callable | str, *args, **kwargs) -> LazyFixtureCallableWrapper:
     """lfc is a lazy fixture callable."""
     return LazyFixtureCallableWrapper(name, *args, **kwargs)

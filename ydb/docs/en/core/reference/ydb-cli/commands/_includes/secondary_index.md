@@ -8,7 +8,7 @@ By using the `table index` command, you can create and delete [secondary indexes
 
 {% include [conn_options_ref.md](conn_options_ref.md) %}
 
-You can also add or delete a secondary index with the [ADD INDEX and DROP INDEX](../../../../yql/reference/syntax/alter_table/secondary_index.md) directives of YQL ALTER TABLE.
+You can also add or delete a secondary index with the [ADD INDEX and DROP INDEX](../../../../yql/reference/syntax/alter_table/indexes.md) directives of YQL ALTER TABLE.
 
 To learn about secondary indexes and their use in application development, see [Secondary indexes](../../../../dev/secondary-indexes.md) under "Recommendations".
 
@@ -89,9 +89,9 @@ Deleting the index-building details (use the actual operation id):
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
-## Deleting a secondary index {#drop}
+## Deleting a index {#drop}
 
-Secondary indexes are deleted by the `table index drop` command:
+Indexes are deleted by the `table index drop` command:
 
 ```bash
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR

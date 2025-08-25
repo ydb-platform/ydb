@@ -107,6 +107,39 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         });        
     }
 
+    Y_UNIT_TEST(CopyTableShouldNotFailOnDisabledFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Decimal(35,6)" }
+            Columns { Name: "value" Type: "Decimal(35,6)" }
+            KeyColumnNames: ["key"]
+        )_");
+        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+            NLs::PathExist,
+            NLs::Finished,
+            NLs::CheckColumnType(0, "Decimal(35,6)")
+        });
+
+        runtime.GetAppData().FeatureFlags.SetEnableParameterizedDecimal(false);
+
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "Copy1", "/MyRoot/Table1");
+        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy1"), {
+            NLs::PathExist,
+            NLs::Finished,
+            NLs::CheckColumnType(0, "Decimal(35,6)")
+        });        
+    }    
+
     Y_UNIT_TEST(CreateWithWrongParameters) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));

@@ -17,6 +17,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common
@@ -30,6 +31,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    blob_ut.cpp
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp

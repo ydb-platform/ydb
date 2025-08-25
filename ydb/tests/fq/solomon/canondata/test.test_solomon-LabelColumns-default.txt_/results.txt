@@ -37,7 +37,11 @@ columns {
 columns {
   name: "value"
   type {
-    type_id: DOUBLE
+    optional_type {
+      item {
+        type_id: DOUBLE
+      }
+    }
   }
 }
 rows {
@@ -54,7 +58,7 @@ rows {
     bytes_value: "my_project"
   }
   items {
-    uint32_value: 0
+    uint32_value: 10
   }
   items {
     bytes_value: "RATE"
@@ -77,7 +81,7 @@ rows {
     bytes_value: "my_project"
   }
   items {
-    uint32_value: 0
+    uint32_value: 20
   }
   items {
     bytes_value: "RATE"
@@ -100,7 +104,7 @@ rows {
     bytes_value: "my_project"
   }
   items {
-    uint32_value: 0
+    uint32_value: 30
   }
   items {
     bytes_value: "RATE"

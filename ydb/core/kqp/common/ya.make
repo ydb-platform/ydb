@@ -2,12 +2,14 @@ LIBRARY()
 
 SRCS(
     control.cpp
+    kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
     kqp_lwtrace_probes.h
     kqp_resolve.cpp
     kqp_resolve.h
+    kqp_row_builder.cpp
     kqp_ru_calc.cpp
     kqp_script_executions.cpp
     kqp_timeouts.cpp
@@ -27,6 +29,8 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/protos
+    ydb/core/scheme
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/simple
     ydb/core/kqp/common/compilation
@@ -54,6 +58,7 @@ YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
+GENERATE_ENUM_SERIALIZATION(kqp_resolve.h)
 
 END()
 

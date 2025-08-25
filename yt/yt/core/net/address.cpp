@@ -53,7 +53,7 @@ using namespace NDns;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = NetLogger;
+constinit const auto Logger = NetLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 // These are implemented in local_address.cpp.
@@ -68,7 +68,7 @@ void UpdateLoopbackAddress(const TAddressResolverConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString BuildServiceAddress(TStringBuf hostName, int port)
+std::string BuildServiceAddress(TStringBuf hostName, int port)
 {
     return Format("%v:%v", hostName, port);
 }
@@ -264,7 +264,7 @@ socklen_t* TNetworkAddress::GetLengthPtr()
 
 TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
 {
-    TString ipAddress(address);
+    std::string ipAddress(address);
     std::optional<int> port;
 
     auto closingBracketIndex = address.find(']');
@@ -284,14 +284,14 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
             }
         }
 
-        ipAddress = TString(address.substr(1, closingBracketIndex - 1));
+        ipAddress = address.substr(1, closingBracketIndex - 1);
     } else {
         if (address.find('.') != TString::npos) {
             auto colonIndex = address.find(':', closingBracketIndex + 1);
             if (colonIndex != TString::npos) {
                 try {
                     port = FromString<int>(address.substr(colonIndex + 1));
-                    ipAddress = TString(address.substr(0, colonIndex));
+                    ipAddress = address.substr(0, colonIndex);
                 } catch (const std::exception) {
                     return TError("Port number in address %Qv is malformed",
                         address);

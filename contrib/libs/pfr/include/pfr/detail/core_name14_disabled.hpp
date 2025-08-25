@@ -37,6 +37,15 @@ constexpr auto tie_as_names_tuple() noexcept {
     return detail::sequence_tuple::make_sequence_tuple();
 }
 
+
+template <class T, class F>
+constexpr void for_each_field_with_name(T&& /* value */, F&& /* func */) {
+    static_assert(
+        sizeof(T) && false,
+        "====================> Boost.PFR: Field's names extracting functionality requires C++20."
+    );
+}
+
 }} // namespace pfr::detail
 
 #endif // PFR_DETAIL_CORE_NAME14_DISABLED_HPP

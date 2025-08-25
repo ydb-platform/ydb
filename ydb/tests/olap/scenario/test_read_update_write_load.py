@@ -84,9 +84,9 @@ class TestReadUpdateWriteLoad(BaseTestSet):
 
     def scenario_read_update_write_load(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
-        table_size_mib = int(get_external_param("table_size_mib", "64"))
+        table_size_mib = int(get_external_param("table_size_mib", "1"))
 
-        assert table_size_mib >= 64, "invalid table_size_mib parameter"
+        assert table_size_mib >= 1, "invalid table_size_mib parameter"
 
         sth.execute_scheme_query(CreateTable(self.big_table_name).with_schema(self.big_table_schema))
 
@@ -96,8 +96,6 @@ class TestReadUpdateWriteLoad(BaseTestSet):
         progress_tracker_threads.start_all()
 
         print("Step 1. only write", file=sys.stderr)
-
-        math.ceil(table_size_mib * 1024 / 10 / 64)
 
         upsert_only_threads: TestThreads = TestThreads()
         for i in range(64):

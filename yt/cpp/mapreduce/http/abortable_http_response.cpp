@@ -49,6 +49,7 @@ public:
 
     int AbortAll(const TString& urlPattern)
     {
+        auto g = Guard(Lock_);
         int result = 0;
         for (auto& response : ResponseList_) {
             if (!response.IsAborted() && response.GetUrl().find(urlPattern) != TString::npos) {

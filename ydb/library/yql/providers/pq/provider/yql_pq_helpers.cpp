@@ -19,7 +19,30 @@ void Add(TVector<TCoNameValueTuple>& settings, TStringBuf name, TStringBuf value
 TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPositionHandle pos, TExprContext& ctx) {
     TVector<TCoNameValueTuple> props;
 
-    Add(props, PartitionsCountProp, ToString(meta.Description->PartitionsCount), pos, ctx);
+    ui32 maxPartitionsCount = 0;
+    if (meta.FederatedTopic) {
+        const auto& federatedTopics = *meta.FederatedTopic;
+        if (federatedTopics.size() == 1 && federatedTopics[0].Info.Name.empty()) {
+            // non-federated fallback, omit FederatedClusters
+            maxPartitionsCount = federatedTopics[0].PartitionsCount;
+        } else {
+            TVector<TDqPqFederatedCluster> clusters(Reserve(federatedTopics.size()));
+            for (const auto& topic: federatedTopics) {
+                clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
+                    .Name().Build(topic.Info.Name)
+                    .Endpoint().Build(topic.Info.Endpoint)
+                    .Database().Build(topic.Info.Path)
+                    .PartitionsCount().Build(ToString(topic.PartitionsCount))
+                    .Done());
+                maxPartitionsCount = std::max(maxPartitionsCount, topic.PartitionsCount);
+            }
+            props.push_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(FederatedClustersProp)
+                    .Value<TDqPqFederatedClusterList>().Add(clusters).Build().Done());
+        }
+    }
+    Add(props, PartitionsCountProp, ToString(maxPartitionsCount), pos, ctx);
 
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(props)

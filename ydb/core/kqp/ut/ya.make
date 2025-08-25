@@ -1,8 +1,10 @@
 RECURSE_FOR_TESTS(
     arrow
+    batch_operations
     cost
     data
     data_integrity
+    discovery
     effects
     federated_query
     indexes
@@ -12,6 +14,7 @@ RECURSE_FOR_TESTS(
     opt
     perf
     pg
+    rbo
     query
     scan
     scheme

@@ -11,6 +11,7 @@ namespace NKikimr::NPQ {
 ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config);
 ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 
+bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);
@@ -22,6 +23,8 @@ TString SourceIdHash(const TString& sourceId);
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
+const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
+NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
@@ -44,11 +47,13 @@ public:
         TString To;
 
         // Direct parents of this node
-        std::vector<Node*> Parents;
+        std::vector<Node*> DirectParents;
         // Direct children of this node
-        std::vector<Node*> Children;
+        std::vector<Node*> DirectChildren;
         // All parents include parents of parents and so on
-        std::set<Node*> HierarhicalParents;
+        std::set<Node*> AllParents;
+        // All children include children of children and so on
+        std::set<Node*> AllChildren;
 
         bool IsRoot() const;
         bool IsParent(ui32 partitionId) const;

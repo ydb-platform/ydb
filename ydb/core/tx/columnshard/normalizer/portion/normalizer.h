@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 class TTablesManager;
@@ -36,7 +37,7 @@ protected:
         NormContext.SetResourcesGuard(resourcesGuard);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+        NConveyorComposite::TNormalizerServiceOperator::SendTaskToExecute(task);
     }
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
@@ -83,6 +84,7 @@ public:
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
 private:
     using TBase = TNormalizationController::INormalizerComponent;
+
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
         : TBase(info)

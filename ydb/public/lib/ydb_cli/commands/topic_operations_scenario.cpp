@@ -44,6 +44,12 @@ void TTopicOperationsScenario::EnsureWarmupSecIsValid() const
     }
 }
 
+void TTopicOperationsScenario::EnsureRatesIsValid() const
+{
+    Y_ENSURE_EX(MessagesPerSec >= 0, TMisuseException() << "--messages-per-sec should be non negative.");
+    Y_ENSURE_EX(BytesPerSec >= 0, TMisuseException() << "--bytes-per-sec should be non negative.");
+}
+
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";
@@ -54,7 +60,12 @@ TString TTopicOperationsScenario::GetWriteOnlyTableName() const
     return TableName;
 }
 
-THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosityLevel level)
+ui32 TTopicOperationsScenario::GetTopicMaxPartitionCount() const
+{
+    return TopicMaxPartitionCount >= TopicPartitionCount ? TopicMaxPartitionCount : (TopicPartitionCount << 3);
+}
+
+THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(ui32 level)
 {
     return CreateLogBackend("cerr",
                             TConfig::VerbosityLevelToELogPriority(level));
@@ -96,13 +107,14 @@ void TTopicOperationsScenario::CreateTopic(const TString& database,
                                            ui32 maxPartitionCount,
                                            ui32 stabilizationWindowSeconds,
                                            ui32 upUtilizationPercent,
-                                           ui32 downUtilizationPercent)
+                                           ui32 downUtilizationPercent,
+                                           bool cleanupPopicyCompact)
 {
     auto topicPath =
         TCommandWorkloadTopicDescribe::GenerateFullTopicName(database, topic);
 
     EnsureTopicNotExist(topicPath);
-    CreateTopic(topicPath, partitionCount, consumerCount, autoscaling, maxPartitionCount, stabilizationWindowSeconds, upUtilizationPercent, downUtilizationPercent);
+    CreateTopic(topicPath, partitionCount, consumerCount, autoscaling, maxPartitionCount, stabilizationWindowSeconds, upUtilizationPercent, downUtilizationPercent, cleanupPopicyCompact);
 }
 
 void TTopicOperationsScenario::DropTopic(const TString& database,
@@ -165,7 +177,8 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
                                            ui32 maxPartitionCount,
                                            ui32 stabilizationWindowSeconds,
                                            ui32 upUtilizationPercent,
-                                           ui32 downUtilizationPercent)
+                                           ui32 downUtilizationPercent,
+                                           bool cleanupPolicyCompact)
 {
     Y_ABORT_UNLESS(Driver);
 
@@ -185,6 +198,9 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
             .EndConfigurePartitioningSettings();
     } else {
         settings.PartitioningSettings(partitionCount, partitionCount);
+    }
+    if (cleanupPolicyCompact) {
+        settings.AddAttribute("_cleanup_policy", "compact");
     }
 
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {
@@ -229,12 +245,14 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .UseTopicCommit = OnlyTopicInTx,
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
+                .RestartInterval = RestartInterval,
+                .ReadWithoutCommit = ReadWithoutCommit,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
                 .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages
             };
 
-            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
+            threads.push_back(std::async([readerParams = std::move(readerParams)]() { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
         }
     }
 
@@ -244,8 +262,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
 }
 
 /*!
- * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create 
- * WriteSession for every partition in the topic and will write in partitions in round robin manner. 
+ * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create
+ * WriteSession for every partition in the topic and will write in partitions in round robin manner.
  * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
@@ -281,10 +299,13 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .UseAutoPartitioning = useAutoPartitioning,
             .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
             .CommitMessages = CommitMessages,
-            .UseCpuTimestamp = UseCpuTimestamp
+            .UseCpuTimestamp = UseCpuTimestamp,
+            .KeyPrefix = KeyPrefix,
+            .KeyCount = KeyCount,
+            .KeySeed = writerIdx,
         };
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
+        threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));
     }
 
     while (*count != ProducerThreadCount) {

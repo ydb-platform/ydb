@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/public/udf/udf_value.h>
 
 #if defined(_msan_enabled_) && defined(__linux__)
@@ -151,14 +153,23 @@ inline uintptr_t GetMethodPtr() {
 }
 #else  // SHOULD_WRAP_ALL_UNBOXED_VALUES_FOR_CODEGEN
 
+namespace NInternal {
+template <typename Method>
+inline uintptr_t GetMethodPtr(Method method) {
+    uintptr_t ptr;
+    std::memcpy(&ptr, &method, sizeof(uintptr_t));
+    return ptr;
+}
+} // namespace NInternal
+
 template <MethodPointer auto func>
 inline uintptr_t GetMethodPtr() {
-    return GetMethodPtr(func);
+    return NInternal::GetMethodPtr(func);
 }
 
 template <FunctionPointer auto func>
 inline uintptr_t GetMethodPtr() {
-    return GetMethodPtr(func);
+    return NInternal::GetMethodPtr(func);
 }
 #endif // SHOULD_WRAP_ALL_UNBOXED_VALUES_FOR_CODEGEN
 

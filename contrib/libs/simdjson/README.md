@@ -63,6 +63,7 @@ Real-world usage
 - [fastgron](https://github.com/adamritter/fastgron)
 - [WasmEdge](https://wasmedge.org)
 - [RonDB](https://github.com/logicalclocks/rondb)
+- [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
@@ -173,7 +174,8 @@ We distinguish between "bindings" (which just wrap the C++ code) and a port to a
 - [simdjsone](https://github.com/saleyn/simdjsone): erlang bindings.
 - [lua-simdjson](https://github.com/FourierTransformer/lua-simdjson): lua bindings.
 - [hermes-json](https://hackage.haskell.org/package/hermes-json): haskell bindings.
-- [simdjzon](https://github.com/travisstaloch/simdjzon): zig port.
+- [zimdjson](https://github.com/EzequielRamis/zimdjson): Zig port.
+- [simdjzon](https://github.com/travisstaloch/simdjzon): Zig port.
 - [JSON-Simd](https://github.com/rawleyfowler/JSON-simd): Raku bindings.
 - [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
 - [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.

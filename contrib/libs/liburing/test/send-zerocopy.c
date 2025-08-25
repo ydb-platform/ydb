@@ -70,9 +70,11 @@ static size_t page_sz;
 static char *tx_buffer, *rx_buffer;
 static struct iovec buffers_iov[__BUF_NR];
 
+static bool has_regvec;
 static bool has_sendzc;
 static bool has_sendmsg;
 static bool hit_enomem;
+static bool try_hugepages = 1;
 
 static int probe_zc_support(void)
 {
@@ -96,6 +98,7 @@ static int probe_zc_support(void)
 
 	has_sendzc = p->ops_len > IORING_OP_SEND_ZC;
 	has_sendmsg = p->ops_len > IORING_OP_SENDMSG_ZC;
+	has_regvec = p->ops_len > IORING_OP_READV_FIXED;
 	io_uring_queue_exit(&ring);
 	free(p);
 	return 0;
@@ -256,117 +259,6 @@ static int test_send_faults(int sock_tx, int sock_rx)
 	return T_EXIT_PASS;
 }
 
-static int create_socketpair_ip(struct sockaddr_storage *addr,
-				int *sock_client, int *sock_server,
-				bool ipv6, bool client_connect,
-				bool msg_zc, bool tcp)
-{
-	socklen_t addr_size;
-	int family, sock, listen_sock = -1;
-	int ret;
-
-	memset(addr, 0, sizeof(*addr));
-	if (ipv6) {
-		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
-
-		family = AF_INET6;
-		saddr->sin6_family = family;
-		saddr->sin6_port = htons(0);
-		addr_size = sizeof(*saddr);
-	} else {
-		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-
-		family = AF_INET;
-		saddr->sin_family = family;
-		saddr->sin_port = htons(0);
-		saddr->sin_addr.s_addr = htonl(INADDR_ANY);
-		addr_size = sizeof(*saddr);
-	}
-
-	/* server sock setup */
-	if (tcp) {
-		sock = listen_sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
-	} else {
-		sock = *sock_server = socket(family, SOCK_DGRAM, 0);
-	}
-	if (sock < 0) {
-		perror("socket");
-		return 1;
-	}
-
-	ret = bind(sock, (struct sockaddr *)addr, addr_size);
-	if (ret < 0) {
-		perror("bind");
-		return 1;
-	}
-
-	ret = getsockname(sock, (struct sockaddr *)addr, &addr_size);
-	if (ret < 0) {
-		fprintf(stderr, "getsockname failed %i\n", errno);
-		return 1;
-	}
-
-	if (tcp) {
-		ret = listen(sock, 128);
-		assert(ret != -1);
-	}
-
-	if (ipv6) {
-		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
-
-		inet_pton(AF_INET6, HOSTV6, &(saddr->sin6_addr));
-	} else {
-		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-
-		inet_pton(AF_INET, HOST, &saddr->sin_addr);
-	}
-
-	/* client sock setup */
-	if (tcp) {
-		*sock_client = socket(family, SOCK_STREAM, IPPROTO_TCP);
-		assert(client_connect);
-	} else {
-		*sock_client = socket(family, SOCK_DGRAM, 0);
-	}
-	if (*sock_client < 0) {
-		perror("socket");
-		return 1;
-	}
-	if (client_connect) {
-		ret = connect(*sock_client, (struct sockaddr *)addr, addr_size);
-		if (ret < 0) {
-			perror("connect");
-			return 1;
-		}
-	}
-	if (msg_zc) {
-#ifdef SO_ZEROCOPY
-		int val = 1;
-
-		/*
-		 * NOTE: apps must not set SO_ZEROCOPY when using io_uring zc.
-		 * It's only here to test interactions with MSG_ZEROCOPY.
-		 */
-		if (setsockopt(*sock_client, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val))) {
-			perror("setsockopt zc");
-			return 1;
-		}
-#else
-		fprintf(stderr, "no SO_ZEROCOPY\n");
-		return 1;
-#endif
-	}
-	if (tcp) {
-		*sock_server = accept(listen_sock, NULL, NULL);
-		if (!*sock_server) {
-			fprintf(stderr, "can't accept\n");
-			return 1;
-		}
-		close(listen_sock);
-	}
-	return 0;
-}
-
 struct send_conf {
 	bool fixed_buf;
 	bool mix_register;
@@ -447,6 +339,11 @@ static int do_test_inet_send(struct io_uring *ring, int sock_client, int sock_se
 				io_uring_prep_sendmsg_zc(sqe, sock_client, &msghdr[i], msg_flags);
 			else
 				io_uring_prep_sendmsg(sqe, sock_client, &msghdr[i], msg_flags);
+
+			if (real_fixed_buf) {
+				sqe->ioprio |= IORING_RECVSEND_FIXED_BUF;
+				sqe->buf_index = conf->buf_index;
+			}
 
 			if (!conf->iovec) {
 				io = &iov[i];
@@ -567,6 +464,16 @@ static int do_test_inet_send(struct io_uring *ring, int sock_client, int sock_se
 	return 0;
 }
 
+static int create_socketpair_ip(struct sockaddr_storage *addr,
+				int *sock_client, int *sock_server,
+				bool ipv6, bool client_connect,
+				bool msg_zc, bool tcp)
+{
+	return t_create_socketpair_ip(addr, sock_client, sock_server, ipv6,
+					client_connect, msg_zc, tcp,
+					ipv6 ? HOSTV6 : HOST);
+}
+
 static int test_inet_send(struct io_uring *ring)
 {
 	struct send_conf conf;
@@ -591,7 +498,7 @@ static int test_inet_send(struct io_uring *ring)
 			continue;
 #endif
 		ret = create_socketpair_ip(&addr, &sock_client, &sock_server, ipv6,
-				 client_connect, msg_zc_set, tcp);
+					client_connect, msg_zc_set, tcp);
 		if (ret) {
 			fprintf(stderr, "sock prep failed %d\n", ret);
 			return 1;
@@ -619,7 +526,11 @@ static int test_inet_send(struct io_uring *ring)
 			conf.tcp = tcp;
 			regbuf = conf.mix_register || conf.fixed_buf;
 
-			if (conf.iovec && (!conf.use_sendmsg || regbuf || conf.cork))
+			if (!tcp && conf.long_iovec)
+				continue;
+			if (conf.use_sendmsg && regbuf && !has_regvec)
+				continue;
+			if (conf.iovec && (!conf.use_sendmsg || conf.cork))
 				continue;
 			if (!conf.zc) {
 				if (regbuf)
@@ -637,7 +548,7 @@ static int test_inet_send(struct io_uring *ring)
 				continue;
 			if (!client_connect && conf.addr == NULL)
 				continue;
-			if (conf.use_sendmsg && (regbuf || !has_sendmsg))
+			if (conf.use_sendmsg && !has_sendmsg)
 				continue;
 			if (msg_zc_set && !conf.zc)
 				continue;
@@ -901,6 +812,15 @@ static int run_basic_tests(void)
 	return 0;
 }
 
+static void free_buffers(void)
+{
+	if (tx_buffer)
+		free(tx_buffer);
+	if (rx_buffer)
+		free(rx_buffer);
+	tx_buffer = rx_buffer = NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	size_t len;
@@ -921,27 +841,29 @@ int main(int argc, char *argv[])
 
 	page_sz = sysconf(_SC_PAGESIZE);
 
-	len = LARGE_BUF_SIZE;
-	tx_buffer = aligned_alloc(page_sz, len);
-	rx_buffer = aligned_alloc(page_sz, len);
-	if (tx_buffer && rx_buffer) {
-		buffers_iov[BUF_T_LARGE].iov_base = tx_buffer;
-		buffers_iov[BUF_T_LARGE].iov_len = len;
-	} else {
-		if (tx_buffer)
-			free(tx_buffer);
-		if (rx_buffer)
-			free(rx_buffer);
+	if (try_hugepages) {
+		len = LARGE_BUF_SIZE;
+		tx_buffer = t_aligned_alloc(page_sz, len);
+		rx_buffer = t_aligned_alloc(page_sz, len);
 
-		printf("skip large buffer tests, can't alloc\n");
-
-		len = 2 * page_sz;
-		tx_buffer = aligned_alloc(page_sz, len);
-		rx_buffer = aligned_alloc(page_sz, len);
+		if (tx_buffer && rx_buffer) {
+			buffers_iov[BUF_T_LARGE].iov_base = tx_buffer;
+			buffers_iov[BUF_T_LARGE].iov_len = len;
+		} else {
+			printf("skip large buffer tests, can't alloc\n");
+			free_buffers();
+		}
 	}
-	if (!tx_buffer || !rx_buffer) {
-		fprintf(stderr, "can't allocate buffers\n");
-		return T_EXIT_FAIL;
+
+	if (!tx_buffer) {
+		len = 2 * page_sz;
+		tx_buffer = t_aligned_alloc(page_sz, len);
+		rx_buffer = t_aligned_alloc(page_sz, len);
+
+		if (!tx_buffer || !rx_buffer) {
+			fprintf(stderr, "can't allocate buffers\n");
+			return T_EXIT_FAIL;
+		}
 	}
 
 	srand((unsigned)time(NULL));

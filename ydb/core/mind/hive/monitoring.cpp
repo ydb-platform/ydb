@@ -245,7 +245,7 @@ public:
         }
         if (WaitingOnly) {
             tabletIdIndex.reserve(Self->BootQueue.WaitQueue.size());
-            for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue) {
+            for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue.Container()) {
                 TTabletInfo* tablet = Self->FindTablet(rec.TabletId, rec.FollowerId);
                 if (tablet != nullptr) {
                     tabletIdIndex.push_back({tabletIndexFunction(*tablet), tablet});
@@ -590,6 +590,7 @@ public:
         out << "<th>Storage</th>";
         out << "<th>Read</th>";
         out << "<th>Write</th>";
+        out << "<th>Usage impact</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -602,6 +603,7 @@ public:
             out << "<tr title='" << tablet.GetResourceValues().DebugString() << "'>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
+            out << "<td>" << tablet.UsageImpact << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -849,6 +851,7 @@ public:
         UpdateConfig(db, "TargetTrackingCPUMargin", configUpdates);
         UpdateConfig(db, "DryRunTargetTrackingCPU", configUpdates);
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
+        UpdateConfig(db, "BalanceCountersRefreshFrequency", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -913,6 +916,7 @@ public:
         if (ChangeRequest) {
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
+            Self->ProcessWaitQueue();
         }
         if (params.contains("allowedMetrics")) {
             auto& jsonAllowedMetrics = jsonOperation["AllowedMetricsUpdate"];
@@ -1203,6 +1207,7 @@ public:
         ShowConfig(out, "TargetTrackingCPUMargin");
         ShowConfig(out, "DryRunTargetTrackingCPU");
         ShowConfig(out, "NodeRestartsForPenalty");
+        ShowConfig(out, "BalanceCountersRefreshFrequency");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -1397,6 +1402,7 @@ public:
         if (ChangeRequest) {
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
+            Self->ProcessWaitQueue();
             WriteOperation(db, jsonOperation);
         }
         return true;
@@ -3117,6 +3123,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Self->AreWeRootHive()) {
             Error = "Cannot migrate to root hive";
+            return true;
         }
         TActorId waitActorId;
         TInitMigrationWaitActor* waitActor = nullptr;
@@ -3125,8 +3132,21 @@ public:
             waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
-        // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
+        auto ev = std::make_unique<TEvHive::TEvInitMigration>();
+        if (Event->ExtendedQuery && Event->ExtendedQuery->HasPostContent()) {
+            NJson::TJsonValue params;
+            if (!NJson::ReadJsonTree(Event->ExtendedQuery->GetPostContent(), &params)) {
+                Error = "Invalid json in body";
+                return true;
+            }
+            try {
+                NProtobufJson::Json2Proto(params, ev->Record);
+            } catch (yexception e) {
+                Error = "Bad request";
+                return true;
+            }
+        }
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, ev.release()));
         return true;
     }
 
@@ -3795,6 +3815,7 @@ public:
         result["ResourceMetricsAggregates"] = MakeFrom(tablet.ResourceMetricsAggregates);
         result["ActorsToNotify"] = MakeFrom(tablet.ActorsToNotify);
         result["ActorsToNotifyOnRestart"] = MakeFrom(tablet.ActorsToNotifyOnRestart);
+        result["UsageImpact"] = tablet.UsageImpact;
         return result;
     }
 
@@ -3979,6 +4000,78 @@ public:
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             Y_ABORT("unexpected state");
+        }
+    }
+};
+
+
+class TTxMonEvent_SetDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
+public:
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    TTabletId TabletId = 0;
+    TTabletId SchemeShard = 0;
+    TObjectId PathId = 0;
+    TTabletId OldSchemeShard = 0;
+    TObjectId OldPathId = 0;
+    bool Success = false;
+
+    TTxMonEvent_SetDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
+        SchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("schemeshard"), SchemeShard);
+        PathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("pathid"), PathId);
+        OldSchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("oldSchemeshard"), OldSchemeShard);
+        OldPathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("oldPathid"), OldPathId);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        TSubDomainKey newDomain(SchemeShard, PathId);
+        TSubDomainKey clientOldDomain(OldSchemeShard, OldPathId);
+        if (tablet != nullptr) {
+            NIceDb::TNiceDb db(txc.DB);
+            auto rowset = db.Table<Schema::Tablet>().Key(TabletId).Select<Schema::Tablet::ObjectDomain>();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
+            if (clientOldDomain && oldDomain != clientOldDomain) {
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
+                return true;
+            }
+            if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
+                if (oldDomain == newDomain) {
+                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
+                    return true;
+                } else if (!clientOldDomain) {
+                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
+                    return true;
+                }
+            }
+            tablet->AssignDomains(newDomain, tablet->NodeFilter.AllowedDomains);
+            tablet->TabletStorageInfo->TenantPathId = tablet->GetTenant();
+            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
+            WriteOperation(db, jsonOperation);
+            Success = true;
+        } else {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Success) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"OK\"}"));
         }
     }
 };
@@ -4680,6 +4773,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "OperationsLog") {
         return Execute(new TTxMonEvent_OperationsLog(ev->Sender, ev, this), ctx);
+    }
+    if (page == "SetDomain") {
+        return Execute(new TTxMonEvent_SetDomain(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

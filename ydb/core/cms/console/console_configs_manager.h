@@ -19,6 +19,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::ITransaction;
@@ -194,6 +196,7 @@ private:
     void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
@@ -268,6 +271,7 @@ private:
             HFunc(TEvConsole::TEvGetNodeLabelsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetAllMetadataRequest, HandleWithRights);
             HFunc(TEvConsole::TEvFetchStartupConfigRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvGetConfigurationVersionRequest, HandleWithRights);
             HFunc(TEvConsole::TEvAddVolatileConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
@@ -295,14 +299,14 @@ private:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            Y_ABORT("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->ToString().data());
+            break; 
         }
     }
 
 public:
-    TConfigsManager(TConsole &self)
+    TConfigsManager(TConsole &self, ::NMonitoring::TDynamicCounterPtr counters)
         : Self(self)
+        , Counters(counters)
     {
     }
 
@@ -321,6 +325,7 @@ public:
 
 private:
     TConsole &Self;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TConfigsConfig Config;
     TString DomainName;
     // All config items by id.

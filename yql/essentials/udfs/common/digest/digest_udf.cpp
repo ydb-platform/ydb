@@ -1,5 +1,6 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
@@ -380,6 +381,16 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
     }
 
+    SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3));) {
+        const auto& inputRef = args[0].AsStringRef();
+        SHA512_CTX sha;
+        SHA512_Init(&sha);
+        SHA512_Update(&sha, inputRef.Data(), inputRef.Size());
+        unsigned char hash[SHA512_DIGEST_LENGTH];
+        SHA512_Final(hash, &sha);
+        return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
+    }
+
     SIMPLE_STRICT_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 x = args[0].Get<ui64>();
@@ -399,7 +410,7 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    class TXXH3_128: public TBoxedValue {
+    class TXXH3_128: public TBoxedValue { // NOLINT(readability-identifier-naming)
     public:
         static TStringRef Name() {
             static auto name = TStringRef::Of("XXH3_128");
@@ -460,6 +471,7 @@ namespace {
                   TSuperFastHash,
                   TSha1,
                   TSha256,
+                  TSha512,
                   TIntHash64,
                   TXXH3,
                   TXXH3_128

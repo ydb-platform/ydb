@@ -1,10 +1,15 @@
 #pragma once
 
+#include "invoker.h"
 #include "public.h"
 
-#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/actions/bind.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+// Forward declaration
+IInvoker* GetCurrentInvoker();
 
 ////////////////////////////////////////////////////////////////////////////////
 

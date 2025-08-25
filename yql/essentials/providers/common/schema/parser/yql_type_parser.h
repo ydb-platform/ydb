@@ -17,8 +17,8 @@ public:
     typedef NYson::TYsonConsumerBase TConsumer;
 
     TYqlTypeYsonSaverBase(TConsumer& writer, bool extendedForm)
-        : Writer(writer)
-        , ExtendedForm(extendedForm)
+        : Writer_(writer)
+        , ExtendedForm_(extendedForm)
     {
     }
 
@@ -37,8 +37,8 @@ protected:
     void SaveResourceType(const TStringBuf& tag);
 
 protected:
-    NYson::TYsonConsumerBase& Writer;
-    const bool ExtendedForm;
+    NYson::TYsonConsumerBase& Writer_;
+    const bool ExtendedForm_;
 };
 
 
@@ -61,143 +61,143 @@ protected:
     template <typename TTaggedType>
     void SaveTaggedType(const TTaggedType& taggedType) {
         SaveTypeHeader("TaggedType");
-        Writer.OnListItem();
-        Writer.OnStringScalar(taggedType.GetTag());
-        Writer.OnListItem();
-        TSelf baseType(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        Writer_.OnStringScalar(taggedType.GetTag());
+        Writer_.OnListItem();
+        TSelf baseType(Writer_, ExtendedForm_);
         baseType.Save(taggedType.GetBaseType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TStructType>
     void SaveStructType(const TStructType& structType) {
         SaveTypeHeader("StructType");
-        Writer.OnListItem();
-        Writer.OnBeginList();
+        Writer_.OnListItem();
+        Writer_.OnBeginList();
         for (ui32 i = 0, e = structType.GetMembersCount(); i < e; ++i) {
-            Writer.OnListItem();
-            Writer.OnBeginList();
-            Writer.OnListItem();
-            Writer.OnStringScalar(structType.GetMemberName(i));
-            Writer.OnListItem();
-            TSelf value(Writer, ExtendedForm);
+            Writer_.OnListItem();
+            Writer_.OnBeginList();
+            Writer_.OnListItem();
+            Writer_.OnStringScalar(structType.GetMemberName(i));
+            Writer_.OnListItem();
+            TSelf value(Writer_, ExtendedForm_);
             value.Save(structType.GetMemberType(i));
-            Writer.OnEndList();
+            Writer_.OnEndList();
         }
-        Writer.OnEndList();
-        Writer.OnEndList();
+        Writer_.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TListType>
     void SaveListType(const TListType& listType) {
         SaveTypeHeader("ListType");
-        Writer.OnListItem();
-        TSelf item(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
         item.Save(listType.GetItemType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TStreamType>
     void SaveStreamType(const TStreamType& streamType) {
         SaveTypeHeader("StreamType");
-        Writer.OnListItem();
-        TSelf item(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
         item.Save(streamType.GetItemType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TOptionalType>
     void SaveOptionalType(const TOptionalType& optionalType) {
         SaveTypeHeader("OptionalType");
-        Writer.OnListItem();
-        TSelf item(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
         item.Save(optionalType.GetItemType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TDictType>
     void SaveDictType(const TDictType& dictType) {
         SaveTypeHeader("DictType");
-        Writer.OnListItem();
-        TSelf key(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf key(Writer_, ExtendedForm_);
         key.Save(dictType.GetKeyType());
-        Writer.OnListItem();
-        TSelf val(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf val(Writer_, ExtendedForm_);
         val.Save(dictType.GetPayloadType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TTupleType>
     void SaveTupleType(const TTupleType& tupleType) {
         SaveTypeHeader("TupleType");
-        Writer.OnListItem();
-        Writer.OnBeginList();
+        Writer_.OnListItem();
+        Writer_.OnBeginList();
         for (ui32 i = 0, e = tupleType.GetElementsCount(); i < e; ++i) {
-            Writer.OnListItem();
-            TSelf element(Writer, ExtendedForm);
+            Writer_.OnListItem();
+            TSelf element(Writer_, ExtendedForm_);
             element.Save(tupleType.GetElementType(i));
         }
-        Writer.OnEndList();
-        Writer.OnEndList();
+        Writer_.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TCallableType>
     void SaveCallableType(const TCallableType& callableType) {
         SaveTypeHeader("CallableType");
-        Writer.OnListItem();
+        Writer_.OnListItem();
         // main settings
-        Writer.OnBeginList();
+        Writer_.OnBeginList();
         if (callableType.GetOptionalArgsCount() > 0 || !callableType.GetPayload().empty()) {
-            Writer.OnListItem();
-            Writer.OnUint64Scalar(callableType.GetOptionalArgsCount());
+            Writer_.OnListItem();
+            Writer_.OnUint64Scalar(callableType.GetOptionalArgsCount());
         }
 
         if (!callableType.GetPayload().empty()) {
-            Writer.OnListItem();
-            Writer.OnStringScalar(callableType.GetPayload());
+            Writer_.OnListItem();
+            Writer_.OnStringScalar(callableType.GetPayload());
         }
 
-        Writer.OnEndList();
+        Writer_.OnEndList();
         // ret
-        Writer.OnListItem();
-        Writer.OnBeginList();
-        Writer.OnListItem();
-        TSelf ret(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        Writer_.OnBeginList();
+        Writer_.OnListItem();
+        TSelf ret(Writer_, ExtendedForm_);
         ret.Save(callableType.GetReturnType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
         // args
-        Writer.OnListItem();
-        Writer.OnBeginList();
+        Writer_.OnListItem();
+        Writer_.OnBeginList();
         for (ui32 i = 0, e = callableType.GetArgumentsCount(); i < e; ++i) {
-            Writer.OnListItem();
-            Writer.OnBeginList();
-            Writer.OnListItem();
-            TSelf arg(Writer, ExtendedForm);
+            Writer_.OnListItem();
+            Writer_.OnBeginList();
+            Writer_.OnListItem();
+            TSelf arg(Writer_, ExtendedForm_);
             arg.Save(callableType.GetArgumentType(i));
             if (!callableType.GetArgumentName(i).empty()) {
-                Writer.OnListItem();
-                Writer.OnStringScalar(callableType.GetArgumentName(i));
+                Writer_.OnListItem();
+                Writer_.OnStringScalar(callableType.GetArgumentName(i));
             }
 
             if (callableType.GetArgumentFlags(i) != 0) {
-                Writer.OnListItem();
-                Writer.OnUint64Scalar(callableType.GetArgumentFlags(i));
+                Writer_.OnListItem();
+                Writer_.OnUint64Scalar(callableType.GetArgumentFlags(i));
             }
 
-            Writer.OnEndList();
+            Writer_.OnEndList();
         }
 
-        Writer.OnEndList();
-        Writer.OnEndList();
+        Writer_.OnEndList();
+        Writer_.OnEndList();
     }
 
     template <typename TVariantType>
     void SaveVariantType(const TVariantType& variantType) {
         SaveTypeHeader("VariantType");
-        Writer.OnListItem();
-        TSelf item(Writer, ExtendedForm);
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
         item.Save(variantType.GetUnderlyingType());
-        Writer.OnEndList();
+        Writer_.OnEndList();
     }
 };
 

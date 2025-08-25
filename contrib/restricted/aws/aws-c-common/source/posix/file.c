@@ -18,7 +18,7 @@ FILE *aws_fopen_safe(const struct aws_string *file_path, const struct aws_string
     FILE *f = fopen(aws_string_c_str(file_path), aws_string_c_str(mode));
     if (!f) {
         int errno_cpy = errno; /* Always cache errno before potential side-effect */
-        aws_translate_and_raise_io_error(errno_cpy);
+        aws_translate_and_raise_io_error_or(errno_cpy, AWS_ERROR_FILE_OPEN_FAILURE);
         AWS_LOGF_ERROR(
             AWS_LS_COMMON_IO,
             "static: Failed to open file. path:'%s' mode:'%s' errno:%d aws-error:%d(%s)",
@@ -285,7 +285,7 @@ int aws_fseek(FILE *file, int64_t offset, int whence) {
     int errno_value = errno; /* Always cache errno before potential side-effect */
 
     if (result != 0) {
-        return aws_translate_and_raise_io_error(errno_value);
+        return aws_translate_and_raise_io_error_or(errno_value, AWS_ERROR_STREAM_UNSEEKABLE);
     }
 
     return AWS_OP_SUCCESS;

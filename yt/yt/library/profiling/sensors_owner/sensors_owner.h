@@ -64,6 +64,8 @@ public:
 
     const TSensorsOwner& WithGlobal() const;
 
+    const TSensorsOwner& WithHot(bool value = true) const;
+
     const TProfiler& GetProfiler() const;
 
     /*!

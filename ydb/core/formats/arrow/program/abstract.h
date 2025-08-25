@@ -13,6 +13,88 @@ class TAccessorsCollection;
 
 namespace NKikimr::NArrow::NSSA {
 
+class IDataSource;
+
+class IMemoryCalculationPolicy {
+public:
+    enum class EStage {
+        Accessors = 0 /* "ACCESSORS" */,
+        Filter = 1 /* "FILTER" */,
+        Fetching = 2 /* "FETCHING" */,
+        Merge = 3 /* "MERGE" */
+    };
+
+    virtual ~IMemoryCalculationPolicy() = default;
+
+    virtual EStage GetStage() const = 0;
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const = 0;
+};
+
+class TFilterCalculationPolicy: public IMemoryCalculationPolicy {
+public:
+    virtual EStage GetStage() const override {
+        return EStage::Filter;
+    }
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 /*rawSize*/, const std::optional<ui32> /*limit*/, const ui32 /*recordsCount*/) const override {
+        return blobsSize;
+    }
+};
+
+class TFetchingCalculationPolicy: public IMemoryCalculationPolicy {
+public:
+    virtual EStage GetStage() const override {
+        return EStage::Fetching;
+    }
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
+        if (limit) {
+            return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
+        } else {
+            return std::max<ui64>(blobsSize, rawSize);
+        }
+    }
+};
+
+class TIndexCheckOperation {
+public:
+    enum class EOperation : ui32 {
+        Equals,
+        StartsWith,
+        EndsWith,
+        Contains
+    };
+
+private:
+    const EOperation Operation;
+    YDB_READONLY(bool, CaseSensitive, true);
+
+public:
+    TString GetSignalId() const {
+        return TStringBuilder() << Operation << "::" << (CaseSensitive ? 1 : 0);
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "{" << Operation << "," << CaseSensitive << "}";
+    }
+
+    EOperation GetOperation() const {
+        return Operation;
+    }
+
+    TIndexCheckOperation(const EOperation op, const bool caseSensitive)
+        : Operation(op)
+        , CaseSensitive(caseSensitive) {
+    }
+
+    explicit operator size_t() const {
+        return (size_t)Operation;
+    }
+
+    bool operator==(const TIndexCheckOperation& op) const = default;
+};
+
 using IChunkedArray = NAccessor::IChunkedArray;
 using TAccessorsCollection = NAccessor::TAccessorsCollection;
 
@@ -176,7 +258,8 @@ enum class EProcessorType {
     AssembleOriginalData,
     CheckIndexData,
     CheckHeaderData,
-    StreamLogic
+    StreamLogic,
+    ReserveMemory
 };
 
 class TFetchingInfo {
@@ -200,6 +283,41 @@ public:
 };
 
 class TProcessorContext;
+
+class IResourcesAggregator {
+private:
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const = 0;
+
+public:
+    virtual ~IResourcesAggregator() = default;
+
+    [[nodiscard]] TConclusionStatus Execute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const {
+        return DoExecute(std::move(sources), collectionResult);
+    }
+};
+
+class TCompositeResourcesAggregator: public IResourcesAggregator {
+private:
+    std::vector<std::shared_ptr<IResourcesAggregator>> Aggregators;
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
+        for (auto&& i : Aggregators) {
+            auto conclusion = i->Execute(sources, collectionResult);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        return TConclusionStatus::Success();
+    }
+
+public:
+    TCompositeResourcesAggregator(const std::vector<std::shared_ptr<IResourcesAggregator>>& aggregators)
+        : Aggregators(aggregators) {
+        AFL_VERIFY(Aggregators.size());
+    }
+};
 
 class IResourceProcessor {
 public:
@@ -227,6 +345,10 @@ private:
     }
 
 public:
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const {
+        return nullptr;
+    }
+
     TString GetSignalCategoryName() const {
         return DoGetSignalCategoryName();
     }
@@ -263,6 +385,13 @@ public:
             AFL_VERIFY(i.GetColumnId() != resourceId);
         }
         Input.emplace_back(TColumnChainInfo(resourceId));
+    }
+
+    void AddOutput(const ui32 resourceId) {
+        for (auto&& i : Output) {
+            AFL_VERIFY(i.GetColumnId() != resourceId);
+        }
+        Output.emplace_back(TColumnChainInfo(resourceId));
     }
 
     void RemoveInput(const ui32 resourceId) {

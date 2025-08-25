@@ -1,9 +1,11 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -35,6 +37,10 @@ struct TEvKqpExecuter {
         ui64 ResultRowsBytes = 0;
 
         THashSet<ui32> ParticipantNodes;
+
+        // For BATCH operations only
+        TVector<TSerializedCellVec> BatchOperationMaxKeys;
+        TVector<ui32> BatchOperationKeyIds;
 
         enum class EExecutionType {
             Data,
@@ -105,17 +111,51 @@ struct TEvKqpExecuter {
         NYql::TIssues Issues;
         TDuration CpuTime;
     };
+
+    struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
+        TKqpExecuterEvents::EvDelayedExecution>
+    {
+        TEvTxDelayedExecution(size_t partitionIdx)
+            : PartitionIdx(partitionIdx)
+        {}
+
+        size_t PartitionIdx;
+    };
 };
 
 struct TKqpFederatedQuerySetup;
 
+struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
+    std::atomic<bool> EnableRowsDuplicationCheck = false;
+    std::atomic<bool> EnableParallelPointReadConsolidation = false;
+    std::atomic<bool> VerboseMemoryLimitException = false;
+
+    void ApplyFromTableServiceConfig(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
+        EnableRowsDuplicationCheck.store(tableServiceConfig.GetEnableRowsDuplicationCheck());
+        EnableParallelPointReadConsolidation.store(tableServiceConfig.GetEnableParallelPointReadConsolidation());
+        VerboseMemoryLimitException.store(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException());
+    }
+};
+
+struct TExecuterConfig : TNonCopyable {
+    TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
+    const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
+
+    TExecuterConfig( TIntrusivePtr<TExecuterMutableConfig> mutableConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig)
+        : MutableConfig(mutableConfig)
+        , TableServiceConfig(tableServiceConfig)
+    {}
+};
+
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig tableServiceConfig,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
+    TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
+    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

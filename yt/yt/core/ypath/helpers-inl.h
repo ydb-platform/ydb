@@ -33,7 +33,7 @@ void YPathJoinImpl(TStringBuilder* builder, TFirstArg&& firstLiteral, TArgs&&...
 } // namespace NDetail
 
 template <typename ...TArgs>
-TYPath YPathJoin(const TYPath& path, TArgs&&... literals)
+TYPath YPathJoin(TYPathBuf path, TArgs&&... literals)
 {
     TStringBuilder builder;
 

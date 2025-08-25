@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option cc_enable_arenas = true;
+
+package NYql.Mock;
+
+message TLookupSource {
+    string table = 2;
+    int32 MinValue = 3;
+    int32 MaxValue = 4;
+}

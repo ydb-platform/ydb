@@ -17,6 +17,10 @@ TString TTpchWorkloadGenerator::GetTablesYaml() const {
     return NResource::Find("tpch_schema.yaml");
 }
 
+std::pair<TString, TString> TTpchWorkloadGenerator::GetTableAndColumnForDetectFloatMode() const {
+    return std::make_pair("lineitem", "l_tax");
+}
+
 TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
     switch (Params.GetFloatMode()) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
@@ -27,6 +31,10 @@ TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialData
         return {{"float_type", "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
                      + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")"}};
     }
+}
+
+ui32 TTpchWorkloadGenerator::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return Params.GetScale() <= 10 ? 64 : 256;
 }
 
 

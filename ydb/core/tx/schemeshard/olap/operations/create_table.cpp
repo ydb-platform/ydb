@@ -1,3 +1,5 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -495,7 +497,7 @@ public:
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             TPathId pathId = txState->TargetPathId;
-            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(pathId);
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
@@ -607,6 +609,13 @@ public:
             return result;
         }
 
+        if (createDescription.HasSchema()) {
+            if (auto checkResult = NOlap::CheckColumns(createDescription.GetSchema().GetColumns(), AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                return result;
+            }
+        }
+
         TOlapStoreInfo::TPtr storeInfo;
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
@@ -665,7 +674,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .ShardsLimit(storeInfo ? 0 : shardsCount)

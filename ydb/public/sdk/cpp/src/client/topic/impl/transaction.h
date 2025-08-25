@@ -1,12 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
-
-namespace NYdb::inline Dev::NTable {
-
-class TTransaction;
-
-}
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -27,7 +21,7 @@ bool operator!=(const TTransactionId& lhs, const TTransactionId& rhs)
     return !(lhs == rhs);
 }
 
-TTransactionId MakeTransactionId(const NTable::TTransaction& tx);
+TTransactionId MakeTransactionId(const TTransactionBase& tx);
 
 TStatus MakeSessionExpiredError();
 TStatus MakeCommitTransactionSuccess();

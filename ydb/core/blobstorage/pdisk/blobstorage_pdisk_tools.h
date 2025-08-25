@@ -37,7 +37,7 @@ struct TPDiskInfo {
     TVector<TSectorInfo> SectorInfo;
 };
 
-// Throws TFileError in case of errors
+// Throws yexception in case of errors
 void ObliterateDisk(TString path);
 
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
@@ -45,7 +45,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     const NPDisk::TKey &sysLogKey, const NPDisk::TKey &mainKey, TString textMessage,
     const bool isErasureEncodeUserLog = false, const bool trimEntireDevice = false,
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr, bool enableSmallDiskOptimization = true,
-    std::optional<TRcBuf> metadata = std::nullopt);
+    std::optional<TRcBuf> metadata = std::nullopt, bool plainDataChunks = false);
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);

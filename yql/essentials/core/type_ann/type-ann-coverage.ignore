@@ -2,3 +2,4 @@ GraceJoinCoreWrapper
 GraceSelfJoinCoreWrapper
 SqlExternalFunctionWrapper
 UnsafeTimestampCastWrapper
+TakeWrapper

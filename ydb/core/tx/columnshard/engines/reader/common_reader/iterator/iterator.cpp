@@ -9,10 +9,9 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
     , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadMetadata>())
     , ReadyResults(context->GetCounters()) {
     IndexedData = ReadMetadata->BuildReader(Context);
-    Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 }
 
-TConclusion<std::shared_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
+TConclusion<std::unique_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
@@ -25,8 +24,8 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 
-void TColumnShardScanIterator::DoOnSentDataFromInterval(const ui32 intervalIdx) const {
-    return IndexedData->OnSentDataFromInterval(intervalIdx);
+void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddress& address) {
+    return IndexedData->OnSentDataFromInterval(address);
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {

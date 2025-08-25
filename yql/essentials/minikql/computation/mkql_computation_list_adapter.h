@@ -18,57 +18,57 @@ public:
     public:
         TIterator(TMemoryUsageInfo* memInfo, const TVectorType& list, TItemFactory itemFactory, ui64 start, ui64 finish, bool reversed)
             : TTemporaryComputationValue<TIterator>(memInfo)
-            , List(list)
-            , ItemFactory(itemFactory)
-            , Start(start)
-            , Finish(finish)
-            , Reversed(reversed)
+            , List_(list)
+            , ItemFactory_(itemFactory)
+            , Start_(start)
+            , Finish_(finish)
+            , Reversed_(reversed)
         {
-            Index = Reversed ? Finish : (Start - 1);
+            Index_ = Reversed_ ? Finish_ : (Start_ - 1);
         }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) override {
             if (!Skip())
                 return false;
-            value = ItemFactory(List[Index]);
+            value = ItemFactory_(List_[Index_]);
             return true;
         }
 
         bool Skip() override {
-            if (!Reversed) {
-                if (Index + 1 >= Finish)
+            if (!Reversed_) {
+                if (Index_ + 1 >= Finish_)
                     return false;
-                ++Index;
+                ++Index_;
             } else {
-                if (Index < Start + 1)
+                if (Index_ < Start_ + 1)
                     return false;
-                --Index;
+                --Index_;
             }
 
             return true;
         }
 
-        const TVectorType& List;
-        const TItemFactory ItemFactory;
-        const ui64 Start;
-        const ui64 Finish;
-        const bool Reversed;
-        ui64 Index;
+        const TVectorType& List_;
+        const TItemFactory ItemFactory_;
+        const ui64 Start_;
+        const ui64 Finish_;
+        const bool Reversed_;
+        ui64 Index_;
     };
 
     class TDictIterator : public TTemporaryComputationValue<TDictIterator> {
     public:
         TDictIterator(TMemoryUsageInfo* memInfo, THolder<TIterator>&& iter)
             : TTemporaryComputationValue<TDictIterator>(memInfo)
-            , Iter(std::move(iter))
-            , Index(Max<ui64>())
+            , Iter_(std::move(iter))
+            , Index_(Max<ui64>())
         {}
 
     private:
         bool Next(NUdf::TUnboxedValue& key) override {
-            if (NUdf::TBoxedValueAccessor::Skip(*Iter)) {
-                key = NUdf::TUnboxedValuePod(++Index);
+            if (NUdf::TBoxedValueAccessor::Skip(*Iter_)) {
+                key = NUdf::TUnboxedValuePod(++Index_);
                 return true;
             }
 
@@ -76,8 +76,8 @@ public:
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
-            if (NUdf::TBoxedValueAccessor::Next(*Iter, payload)) {
-                key = NUdf::TUnboxedValuePod(++Index);
+            if (NUdf::TBoxedValueAccessor::Next(*Iter_, payload)) {
+                key = NUdf::TUnboxedValuePod(++Index_);
                 return true;
             }
 
@@ -85,16 +85,16 @@ public:
         }
 
         bool Skip() override {
-            if (NUdf::TBoxedValueAccessor::Skip(*Iter)) {
-                ++Index;
+            if (NUdf::TBoxedValueAccessor::Skip(*Iter_)) {
+                ++Index_;
                 return true;
             }
 
             return false;
         }
 
-        THolder<TIterator> Iter;
-        ui64 Index;
+        THolder<TIterator> Iter_;
+        ui64 Index_;
     };
 
     TVectorListAdapter(
@@ -104,13 +104,13 @@ public:
             ui64 start, ui64 finish,
             bool reversed)
         : TBase(memInfo)
-        , List(list)
-        , ItemFactory(itemFactory)
-        , Start(start)
-        , Finish(finish)
-        , Reversed(reversed)
+        , List_(list)
+        , ItemFactory_(itemFactory)
+        , Start_(start)
+        , Finish_(finish)
+        , Reversed_(reversed)
     {
-        Y_ABORT_UNLESS(Start <= Finish && Finish <= List.size());
+        Y_ABORT_UNLESS(Start_ <= Finish_ && Finish_ <= List_.size());
     }
 
 private:
@@ -119,40 +119,40 @@ private:
     }
 
     ui64 GetListLength() const override {
-        return Finish - Start;
+        return Finish_ - Start_;
     }
 
     ui64 GetEstimatedListLength() const override {
-        return Finish - Start;
+        return Finish_ - Start_;
     }
 
     bool HasListItems() const override {
-        return Finish != Start;
+        return Finish_ != Start_;
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
-        return new TSelf(this->GetMemInfo(), List, ItemFactory, Start, Finish, !Reversed);
+        return new TSelf(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, !Reversed_);
     }
 
     NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
-        const ui64 newStart = Min(Start + count, Finish);
-        if (newStart == Start) {
+        const ui64 newStart = Min(Start_ + count, Finish_);
+        if (newStart == Start_) {
             return const_cast<TVectorListAdapter*>(this);
         }
 
-        return new TSelf(this->GetMemInfo(), List, ItemFactory, newStart, Finish, Reversed);
+        return new TSelf(this->GetMemInfo(), List_, ItemFactory_, newStart, Finish_, Reversed_);
     }
 
     NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
-        const ui64 newFinish = Min(Start + count, Finish);
-        if (newFinish == Finish) {
+        const ui64 newFinish = Min(Start_ + count, Finish_);
+        if (newFinish == Finish_) {
             return const_cast<TVectorListAdapter*>(this);
         }
 
-        return new TSelf(this->GetMemInfo(), List, ItemFactory, Start, newFinish, Reversed);
+        return new TSelf(this->GetMemInfo(), List_, ItemFactory_, Start_, newFinish, Reversed_);
     }
 
     NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
@@ -161,7 +161,7 @@ private:
     }
 
     NUdf::TUnboxedValue GetListIterator() const override {
-        return NUdf::TUnboxedValuePod(new TIterator(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed));
+        return NUdf::TUnboxedValuePod(new TIterator(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_));
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override {
@@ -175,16 +175,16 @@ private:
             return NUdf::TUnboxedValuePod();
         }
 
-        const ui64 realIndex = Reversed ? (Finish - 1 - index) : (Start + index);
-        return ItemFactory(List[realIndex]).Release().MakeOptional();
+        const ui64 realIndex = Reversed_ ? (Finish_ - 1 - index) : (Start_ + index);
+        return ItemFactory_(List_[realIndex]).Release().MakeOptional();
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
     }
 
     ui64 GetDictLength() const override {
@@ -192,7 +192,7 @@ private:
     }
 
     bool HasDictItems() const override {
-        return Finish != Start;
+        return Finish_ != Start_;
     }
 
     bool IsSortedDict() const override {
@@ -200,11 +200,11 @@ private:
     }
 
 private:
-    const TVectorType& List;
-    const TItemFactory ItemFactory;
-    const ui64 Start;
-    const ui64 Finish;
-    const bool Reversed;
+    const TVectorType& List_;
+    const TItemFactory ItemFactory_;
+    const ui64 Start_;
+    const ui64 Finish_;
+    const bool Reversed_;
 };
 
 template <typename TVectorType>

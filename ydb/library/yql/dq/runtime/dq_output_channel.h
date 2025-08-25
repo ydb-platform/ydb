@@ -34,9 +34,11 @@ struct TDqOutputChannelSettings {
     ui64 MaxChunkBytes = 2_MB;
     ui64 ChunkSizeLimit = 48_MB;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
+    NDqProto::EValuePackerVersion ValuePackerVersion = NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V0;
     IDqChannelStorage::TPtr ChannelStorage;
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<size_t> BufferPageAllocSize;
     TMutable MutableSettings;
 };
 

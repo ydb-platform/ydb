@@ -112,6 +112,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             commit->SetClientId(Message->GroupId.value());
             commit->SetOffset(partitionRequest.CommittedOffset);
             commit->SetStrict(true);
+            if (partitionRequest.CommittedMetadata.has_value()) {
+                commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
+            }
 
             PendingResponses++;
             KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() <<
@@ -177,7 +180,7 @@ void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 
     auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        NKikimr::AppData(ctx)->PQConfig, ""
+        true, "", ""
     );
 
     auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(

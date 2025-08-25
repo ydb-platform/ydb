@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_2",
-                "PlanNodeId": 27,
+                "PlanNodeId": 21,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,22 +14,22 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 25
+                                        "ExternalPlanNodeId": 19
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 26,
+                        "PlanNodeId": 20,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 25,
+                                "PlanNodeId": 19,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_1_0",
+                                        "CTE Name": "precompute",
                                         "Node Type": "TopSort-LeftJoin (MapJoin)-ConstantExpr",
                                         "Operators": [
                                             {
@@ -49,7 +49,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 23
+                                                        "ExternalPlanNodeId": 17
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -57,82 +57,69 @@
                                             {
                                                 "Inputs": [],
                                                 "Name": "ToFlow",
-                                                "ToFlow": "precompute_1_0"
+                                                "ToFlow": "precompute"
                                             }
                                         ],
-                                        "PlanNodeId": 24,
+                                        "PlanNodeId": 18,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 23,
+                                                "PlanNodeId": 17,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 22,
+                                                        "Node Type": "Filter",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 15
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.x)"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 16,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 21,
+                                                                "Columns": [
+                                                                    "x"
+                                                                ],
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
+                                                                "LookupKeyColumns": [
+                                                                    "x"
+                                                                ],
+                                                                "Node Type": "TableLookup",
+                                                                "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/b",
+                                                                "PlanNodeId": 15,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Filter",
+                                                                        "CTE Name": "precompute",
+                                                                        "Node Type": "ConstantExpr-Aggregate",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 19
+                                                                                        "InternalOperatorId": 1
                                                                                     }
                                                                                 ],
-                                                                                "Name": "Filter",
-                                                                                "Predicate": "Exist(item.x)"
+                                                                                "Iterator": "PartitionByKey",
+                                                                                "Name": "Iterator"
+                                                                            },
+                                                                            {
+                                                                                "Input": "precompute",
+                                                                                "Inputs": [],
+                                                                                "Name": "PartitionByKey"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 20,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Columns": [
-                                                                                    "x"
-                                                                                ],
-                                                                                "E-Cost": "No estimate",
-                                                                                "E-Rows": "No estimate",
-                                                                                "E-Size": "No estimate",
-                                                                                "LookupKeyColumns": [
-                                                                                    "x"
-                                                                                ],
-                                                                                "Node Type": "TableLookup",
-                                                                                "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/b",
-                                                                                "PlanNodeId": 19,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
-                                                                                    {
-                                                                                        "CTE Name": "precompute_1_0",
-                                                                                        "Node Type": "ConstantExpr-Aggregate",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Iterator": "PartitionByKey",
-                                                                                                "Name": "Iterator"
-                                                                                            },
-                                                                                            {
-                                                                                                "Input": "precompute_1_0",
-                                                                                                "Inputs": [],
-                                                                                                "Name": "PartitionByKey"
-                                                                                            }
-                                                                                        ],
-                                                                                        "PlanNodeId": 18
-                                                                                    }
-                                                                                ],
-                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
-                                                                            }
-                                                                        ]
+                                                                        "PlanNodeId": 14
                                                                     }
-                                                                ]
+                                                                ],
+                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
                                                             }
                                                         ]
                                                     }
@@ -152,20 +139,20 @@
             {
                 "Node Type": "Precompute_1",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 16,
+                "PlanNodeId": 12,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 15,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 14,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_0_0",
+                                        "CTE Name": "precompute",
                                         "Node Type": "LeftJoin (MapJoin)-ConstantExpr",
                                         "Operators": [
                                             {
@@ -175,7 +162,7 @@
                                                         "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 12
+                                                        "ExternalPlanNodeId": 8
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -183,82 +170,69 @@
                                             {
                                                 "Inputs": [],
                                                 "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
+                                                "ToFlow": "precompute"
                                             }
                                         ],
-                                        "PlanNodeId": 13,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 12,
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 11,
+                                                        "Node Type": "Filter",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 6
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.x)"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 10,
+                                                                "Columns": [
+                                                                    "x"
+                                                                ],
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
+                                                                "LookupKeyColumns": [
+                                                                    "x"
+                                                                ],
+                                                                "Node Type": "TableLookup",
+                                                                "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/b",
+                                                                "PlanNodeId": 6,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Filter",
+                                                                        "CTE Name": "precompute",
+                                                                        "Node Type": "ConstantExpr-Aggregate",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
-                                                                                        "ExternalPlanNodeId": 8
+                                                                                        "InternalOperatorId": 1
                                                                                     }
                                                                                 ],
-                                                                                "Name": "Filter",
-                                                                                "Predicate": "Exist(item.x)"
+                                                                                "Iterator": "PartitionByKey",
+                                                                                "Name": "Iterator"
+                                                                            },
+                                                                            {
+                                                                                "Input": "precompute",
+                                                                                "Inputs": [],
+                                                                                "Name": "PartitionByKey"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 9,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Columns": [
-                                                                                    "x"
-                                                                                ],
-                                                                                "E-Cost": "No estimate",
-                                                                                "E-Rows": "No estimate",
-                                                                                "E-Size": "No estimate",
-                                                                                "LookupKeyColumns": [
-                                                                                    "x"
-                                                                                ],
-                                                                                "Node Type": "TableLookup",
-                                                                                "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/b",
-                                                                                "PlanNodeId": 8,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
-                                                                                    {
-                                                                                        "CTE Name": "precompute_0_0",
-                                                                                        "Node Type": "ConstantExpr-Aggregate",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Iterator": "PartitionByKey",
-                                                                                                "Name": "Iterator"
-                                                                                            },
-                                                                                            {
-                                                                                                "Input": "precompute_0_0",
-                                                                                                "Inputs": [],
-                                                                                                "Name": "PartitionByKey"
-                                                                                            }
-                                                                                        ],
-                                                                                        "PlanNodeId": 7
-                                                                                    }
-                                                                                ],
-                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
-                                                                            }
-                                                                        ]
+                                                                        "PlanNodeId": 5
                                                                     }
-                                                                ]
+                                                                ],
+                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
                                                             }
                                                         ]
                                                     }
@@ -271,60 +245,43 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE precompute_1_0"
+                "Subplan Name": "CTE precompute"
             },
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 5,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 3,
-                                "PlanNodeType": "Connection",
-                                "Plans": [
+                                "Node Type": "TableFullScan",
+                                "Operators": [
                                     {
-                                        "Node Type": "Collect",
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/a",
-                                                        "ReadColumns": [
-                                                            "x",
-                                                            "y"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "x (-\u221e, +\u221e)",
-                                                            "y (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/a"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "postgres_jointest/coalesce-and-join.test_plan/a"
-                                                ]
-                                            }
-                                        ]
+                                        "Inputs": [],
+                                        "Name": "TableFullScan",
+                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/a",
+                                        "ReadColumns": [
+                                            "x (-\u221e, +\u221e)",
+                                            "y (-\u221e, +\u221e)"
+                                        ],
+                                        "ReadRangesPointPrefixLen": "0",
+                                        "Scan": "Parallel",
+                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/a"
                                     }
+                                ],
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "postgres_jointest/coalesce-and-join.test_plan/a"
                                 ]
                             }
                         ]
                     }
                 ],
-                "Subplan Name": "CTE precompute_0_0"
+                "Subplan Name": "CTE precompute"
             }
         ],
         "Stats": {

@@ -44,6 +44,12 @@ namespace NKikimr {
             return TKeyLogoBlob();
         }
 
+        static TKeyLogoBlob Inf() {
+            TKeyLogoBlob res;
+            std::ranges::fill(res.Raw, Max<ui64>());
+            return res;
+        }
+
         bool IsSameAs(const TKeyLogoBlob& other) const {
             TLogoBlobID x(LogoBlobID());
             TLogoBlobID y(other.LogoBlobID());

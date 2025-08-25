@@ -30,6 +30,17 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/plan.txt"
         }
     ],
+    "test.test[solomon-BasicExtractMembers-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/plan.txt"
+        }
+    ],
     "test.test[solomon-Downsampling-default.txt]": [
         {
             "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"
@@ -66,6 +77,17 @@
     "test.test[solomon-InvalidProject-]": [
         {
             "uri": "file://test.test_solomon-InvalidProject-_/extracted"
+        }
+    ],
+    "test.test[solomon-LabelColumnAliases-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumnAliases-default.txt_/plan.txt"
         }
     ],
     "test.test[solomon-LabelColumns-default.txt]": [

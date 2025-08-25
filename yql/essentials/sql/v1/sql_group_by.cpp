@@ -11,19 +11,19 @@ const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
 bool TGroupByClause::Build(const TRule_group_by_clause& node) {
     // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list (WITH an_id)?;
-    if (Ctx.CompactGroupBy.Defined()) {
-        CompactGroupBy = *Ctx.CompactGroupBy;
+    if (Ctx_.CompactGroupBy.Defined()) {
+        CompactGroupBy_ = *Ctx_.CompactGroupBy;
     } else {
-        CompactGroupBy = node.HasBlock2();
-        if (!CompactGroupBy) {
-            auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(node.GetToken1()));
-            CompactGroupBy = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+        CompactGroupBy_ = node.HasBlock2();
+        if (!CompactGroupBy_) {
+            auto hints = Ctx_.PullHintForToken(Ctx_.TokenPosition(node.GetToken1()));
+            CompactGroupBy_ = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
         }
     }
     TPosition distinctPos;
     if (IsDistinctOptSet(node.GetRule_opt_set_quantifier4(), distinctPos)) {
-        Ctx.Error(distinctPos) << "DISTINCT is not supported in GROUP BY clause yet!";
-        Ctx.IncrementMonCounter("sql_errors", "DistinctInGroupByNotSupported");
+        Ctx_.Error(distinctPos) << "DISTINCT is not supported in GROUP BY clause yet!";
+        Ctx_.IncrementMonCounter("sql_errors", "DistinctInGroupByNotSupported");
         return false;
     }
     if (!ParseList(node.GetRule_grouping_element_list5(), EGroupByFeatures::Ordinary)) {
@@ -32,28 +32,28 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node) {
 
     if (node.HasBlock6()) {
         TString mode = Id(node.GetBlock6().GetRule_an_id2(), *this);
-        TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), mode);
+        TMaybe<TIssue> normalizeError = NormalizeName(Ctx_.Pos(), mode);
         if (!normalizeError.Empty()) {
             Error() << normalizeError->GetMessage();
-            Ctx.IncrementMonCounter("sql_errors", "NormalizeGroupByModeError");
+            Ctx_.IncrementMonCounter("sql_errors", "NormalizeGroupByModeError");
             return false;
         }
 
         if (mode == "combine") {
-            Suffix = "Combine";
+            Suffix_ = "Combine";
         } else if (mode == "combinestate") {
-            Suffix = "CombineState";
+            Suffix_ = "CombineState";
         } else if (mode == "mergestate") {
-            Suffix = "MergeState";
+            Suffix_ = "MergeState";
         } else if (mode == "finalize") {
-            Suffix = "Finalize";
+            Suffix_ = "Finalize";
         } else if (mode == "mergefinalize") {
-            Suffix = "MergeFinalize";
+            Suffix_ = "MergeFinalize";
         } else if (mode == "mergemanyfinalize") {
-            Suffix = "MergeManyFinalize";
+            Suffix_ = "MergeManyFinalize";
         } else {
-            Ctx.Error() << "Unsupported group by mode: " << mode;
-            Ctx.IncrementMonCounter("sql_errors", "GroupByModeUnknown");
+            Ctx_.Error() << "Unsupported group by mode: " << mode;
+            Ctx_.IncrementMonCounter("sql_errors", "GroupByModeUnknown");
             return false;
         }
     }
@@ -77,46 +77,46 @@ bool TGroupByClause::ParseList(const TRule_grouping_element_list& groupingListNo
 }
 
 void TGroupByClause::SetFeatures(const TString& field) const {
-    Ctx.IncrementMonCounter(field, "GroupBy");
+    Ctx_.IncrementMonCounter(field, "GroupBy");
     const auto& features = Features();
     if (features.Test(EGroupByFeatures::Ordinary)) {
-        Ctx.IncrementMonCounter(field, "GroupByOrdinary");
+        Ctx_.IncrementMonCounter(field, "GroupByOrdinary");
     }
     if (features.Test(EGroupByFeatures::Expression)) {
-        Ctx.IncrementMonCounter(field, "GroupByExpression");
+        Ctx_.IncrementMonCounter(field, "GroupByExpression");
     }
     if (features.Test(EGroupByFeatures::Rollup)) {
-        Ctx.IncrementMonCounter(field, "GroupByRollup");
+        Ctx_.IncrementMonCounter(field, "GroupByRollup");
     }
     if (features.Test(EGroupByFeatures::Cube)) {
-        Ctx.IncrementMonCounter(field, "GroupByCube");
+        Ctx_.IncrementMonCounter(field, "GroupByCube");
     }
     if (features.Test(EGroupByFeatures::GroupingSet)) {
-        Ctx.IncrementMonCounter(field, "GroupByGroupingSet");
+        Ctx_.IncrementMonCounter(field, "GroupByGroupingSet");
     }
     if (features.Test(EGroupByFeatures::Empty)) {
-        Ctx.IncrementMonCounter(field, "GroupByEmpty");
+        Ctx_.IncrementMonCounter(field, "GroupByEmpty");
     }
 }
 
 TVector<TNodePtr>& TGroupByClause::Content() {
-    return GroupBySet;
+    return GroupBySet_;
 }
 
 TMap<TString, TNodePtr>& TGroupByClause::Aliases() {
-    return GroupSetContext->NodeAliases;
+    return GroupSetContext_->NodeAliases;
 }
 
 TLegacyHoppingWindowSpecPtr TGroupByClause::GetLegacyHoppingWindow() const {
-    return LegacyHoppingWindowSpec;
+    return LegacyHoppingWindowSpec_;
 }
 
 bool TGroupByClause::IsCompactGroupBy() const {
-    return CompactGroupBy;
+    return CompactGroupBy_;
 }
 
 TString TGroupByClause::GetSuffix() const {
-    return Suffix;
+    return Suffix_;
 }
 
 TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const {
@@ -125,7 +125,7 @@ TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNo
         auto leftPtr = leftNode->ContentListPtr();
         if (!leftPtr) {
             // TODO: shouldn't happen
-            Ctx.Error() << "Unable to multiply grouping sets";
+            Ctx_.Error() << "Unable to multiply grouping sets";
             return {};
         }
         for (const auto& rightNode: rhs) {
@@ -133,34 +133,34 @@ TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNo
             auto rightPtr = rightNode->ContentListPtr();
             if (!rightPtr) {
                 // TODO: shouldn't happen
-                Ctx.Error() << "Unable to multiply grouping sets";
+                Ctx_.Error() << "Unable to multiply grouping sets";
                 return {};
             }
             mulItem.insert(mulItem.end(), rightPtr->begin(), rightPtr->end());
-            content.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(mulItem)));
+            content.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(mulItem)));
         }
     }
     return content;
 }
 
 bool TGroupByClause::ResolveGroupByAndGrouping() {
-    auto listPos = std::find_if(GroupBySet.begin(), GroupBySet.end(), [](const TNodePtr& node) {
+    auto listPos = std::find_if(GroupBySet_.begin(), GroupBySet_.end(), [](const TNodePtr& node) {
         return node->ContentListPtr();
     });
-    if (listPos == GroupBySet.end()) {
+    if (listPos == GroupBySet_.end()) {
         return true;
     }
     auto curContent = *(*listPos)->ContentListPtr();
-    if (listPos != GroupBySet.begin()) {
-        TVector<TNodePtr> emulate(GroupBySet.begin(), listPos);
-        TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate)));
+    if (listPos != GroupBySet_.begin()) {
+        TVector<TNodePtr> emulate(GroupBySet_.begin(), listPos);
+        TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx_.Pos(), std::move(emulate)));
         auto mult = MultiplyGroupingSets(emulateContent, curContent);
         if (!mult) {
             return false;
         }
         curContent = *mult;
     }
-    for (++listPos; listPos != GroupBySet.end(); ++listPos) {
+    for (++listPos; listPos != GroupBySet_.end(); ++listPos) {
         auto newElem = (*listPos)->ContentListPtr();
         if (newElem) {
             auto mult = MultiplyGroupingSets(curContent, *newElem);
@@ -170,7 +170,7 @@ bool TGroupByClause::ResolveGroupByAndGrouping() {
             curContent = *mult;
         } else {
             TVector<TNodePtr> emulate(1, *listPos);
-            TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate)));
+            TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx_.Pos(), std::move(emulate)));
             auto mult = MultiplyGroupingSets(curContent, emulateContent);
             if (!mult) {
                 return false;
@@ -178,8 +178,8 @@ bool TGroupByClause::ResolveGroupByAndGrouping() {
             curContent = *mult;
         }
     }
-    TVector<TNodePtr> result(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(curContent)));
-    std::swap(result, GroupBySet);
+    TVector<TNodePtr> result(1, BuildListOfNamedNodes(Ctx_.Pos(), std::move(curContent)));
+    std::swap(result, GroupBySet_);
     return true;
 }
 
@@ -194,7 +194,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             Features().Set(EGroupByFeatures::Ordinary);
             break;
         case TRule_grouping_element::kAltGroupingElement2: {
-            TGroupByClause subClause(Ctx, Mode, GroupSetContext);
+            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element2().GetRule_rollup_list1().GetRule_ordinary_grouping_set_list3(),
                 EGroupByFeatures::Rollup))
             {
@@ -204,24 +204,24 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             TVector<TNodePtr> collection;
             for (auto limit = content.end(), begin = content.begin(); limit != begin; --limit) {
                 TVector<TNodePtr> grouping(begin, limit);
-                collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(grouping)));
+                collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(grouping)));
             }
-            collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(emptyContent)));
-            GroupBySet.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(collection)));
-            Ctx.IncrementMonCounter("sql_features", TStringBuilder() << "GroupByRollup" << content.size());
+            collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(emptyContent)));
+            GroupBySet_.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(collection)));
+            Ctx_.IncrementMonCounter("sql_features", TStringBuilder() << "GroupByRollup" << content.size());
             Features().Set(EGroupByFeatures::Rollup);
             break;
         }
         case TRule_grouping_element::kAltGroupingElement3: {
-            TGroupByClause subClause(Ctx, Mode, GroupSetContext);
+            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element3().GetRule_cube_list1().GetRule_ordinary_grouping_set_list3(),
                 EGroupByFeatures::Cube))
             {
                 return false;
             }
             auto& content = subClause.Content();
-            if (content.size() > Ctx.PragmaGroupByCubeLimit) {
-                Ctx.Error() << "GROUP BY CUBE is allowed only for " << Ctx.PragmaGroupByCubeLimit << " columns, but you use " << content.size();
+            if (content.size() > Ctx_.PragmaGroupByCubeLimit) {
+                Ctx_.Error() << "GROUP BY CUBE is allowed only for " << Ctx_.PragmaGroupByCubeLimit << " columns, but you use " << content.size();
                 return false;
             }
             TVector<TNodePtr> collection;
@@ -232,17 +232,17 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                         grouping.push_back(content[content.size() - index - 1]);
                     }
                 }
-                collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(grouping)));
+                collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(grouping)));
             }
-            collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(emptyContent)));
-            GroupBySet.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(collection)));
-            Ctx.IncrementMonCounter("sql_features", TStringBuilder() << "GroupByCube" << content.size());
+            collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(emptyContent)));
+            GroupBySet_.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(collection)));
+            Ctx_.IncrementMonCounter("sql_features", TStringBuilder() << "GroupByCube" << content.size());
             Features().Set(EGroupByFeatures::Cube);
             break;
         }
         case TRule_grouping_element::kAltGroupingElement4: {
             auto listNode = node.GetAlt_grouping_element4().GetRule_grouping_sets_specification1().GetRule_grouping_element_list4();
-            TGroupByClause subClause(Ctx, Mode, GroupSetContext);
+            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
             if (!subClause.ParseList(listNode, EGroupByFeatures::GroupingSet)) {
                 return false;
             }
@@ -261,10 +261,10 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                     }
                 } else {
                     TVector<TNodePtr> elemList(1, std::move(elem));
-                    collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(elemList)));
+                    collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(elemList)));
                 }
             }
-            GroupBySet.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(collection)));
+            GroupBySet_.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(collection)));
             Features().Set(EGroupByFeatures::GroupingSet);
             break;
         }
@@ -294,7 +294,7 @@ void TGroupByClause::FeedCollection(const TNodePtr& elem, TVector<TNodePtr>& col
 bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node, EGroupByFeatures featureContext) {
     TNodePtr namedExprNode;
     {
-        TColumnRefScope scope(Ctx, EColumnRefState::Allow);
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         namedExprNode = NamedExpr(node.GetRule_named_expr1(), EExpr::GroupBy);
     }
     if (!namedExprNode) {
@@ -304,8 +304,8 @@ bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node
     auto contentPtr = namedExprNode->ContentListPtr();
     if (contentPtr) {
         if (nodeLabel && (contentPtr->size() != 1 || contentPtr->front()->GetLabel())) {
-            Ctx.Error() << "Unable to use aliases for list of named expressions";
-            Ctx.IncrementMonCounter("sql_errors", "GroupByAliasForListOfExpressions");
+            Ctx_.Error() << "Unable to use aliases for list of named expressions";
+            Ctx_.IncrementMonCounter("sql_errors", "GroupByAliasForListOfExpressions");
             return false;
         }
         for (auto& content: *contentPtr) {
@@ -345,7 +345,7 @@ bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node
             namedExprNode = BuildColumn(namedExprNode->GetPos(), nodeLabel);
         }
     }
-    GroupBySet.emplace_back(std::move(namedExprNode));
+    GroupBySet_.emplace_back(std::move(namedExprNode));
     return true;
 }
 
@@ -362,21 +362,21 @@ bool TGroupByClause::OrdinaryGroupingSetList(const TRule_ordinary_grouping_set_l
 }
 
 bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& node) {
-    if (LegacyHoppingWindowSpec) {
-        Ctx.Error() << "Duplicate hopping window specification.";
+    if (LegacyHoppingWindowSpec_) {
+        Ctx_.Error() << "Duplicate hopping window specification.";
         return false;
     }
-    LegacyHoppingWindowSpec = new TLegacyHoppingWindowSpec;
+    LegacyHoppingWindowSpec_ = new TLegacyHoppingWindowSpec;
     {
-        TColumnRefScope scope(Ctx, EColumnRefState::Allow);
-        TSqlExpression expr(Ctx, Mode);
-        LegacyHoppingWindowSpec->TimeExtractor = expr.Build(node.GetRule_expr3());
-        if (!LegacyHoppingWindowSpec->TimeExtractor) {
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+        TSqlExpression expr(Ctx_, Mode_);
+        LegacyHoppingWindowSpec_->TimeExtractor = expr.Build(node.GetRule_expr3());
+        if (!LegacyHoppingWindowSpec_->TimeExtractor) {
             return false;
         }
     }
     auto processIntervalParam = [&] (const TRule_expr& rule) -> TNodePtr {
-        TSqlExpression expr(Ctx, Mode);
+        TSqlExpression expr(Ctx_, Mode_);
         auto node = expr.Build(rule);
         if (!node) {
             return nullptr;
@@ -384,45 +384,45 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
 
         auto literal = node->GetLiteral("String");
         if (!literal) {
-            return new TAstListNodeImpl(Ctx.Pos(), {
-                new TAstAtomNodeImpl(Ctx.Pos(), "EvaluateExpr", TNodeFlags::Default),
+            return new TAstListNodeImpl(Ctx_.Pos(), {
+                new TAstAtomNodeImpl(Ctx_.Pos(), "EvaluateExpr", TNodeFlags::Default),
                 node
             });
         }
 
         const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal);
         if (!out) {
-            Ctx.Error(node->GetPos()) << "Expected interval in ISO 8601 format";
+            Ctx_.Error(node->GetPos()) << "Expected interval in ISO 8601 format";
             return nullptr;
         }
 
         if ('T' == literal->back()) {
-            Ctx.Error(node->GetPos()) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
+            Ctx_.Error(node->GetPos()) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
             return nullptr;
         }
 
-        return new TAstListNodeImpl(Ctx.Pos(), {
-            new TAstAtomNodeImpl(Ctx.Pos(), "Interval", TNodeFlags::Default),
-            new TAstListNodeImpl(Ctx.Pos(), {
-                new TAstAtomNodeImpl(Ctx.Pos(), "quote", TNodeFlags::Default),
-                new TAstAtomNodeImpl(Ctx.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)
+        return new TAstListNodeImpl(Ctx_.Pos(), {
+            new TAstAtomNodeImpl(Ctx_.Pos(), "Interval", TNodeFlags::Default),
+            new TAstListNodeImpl(Ctx_.Pos(), {
+                new TAstAtomNodeImpl(Ctx_.Pos(), "quote", TNodeFlags::Default),
+                new TAstAtomNodeImpl(Ctx_.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)
             })
         });
     };
 
-    LegacyHoppingWindowSpec->Hop = processIntervalParam(node.GetRule_expr5());
-    if (!LegacyHoppingWindowSpec->Hop) {
+    LegacyHoppingWindowSpec_->Hop = processIntervalParam(node.GetRule_expr5());
+    if (!LegacyHoppingWindowSpec_->Hop) {
         return false;
     }
-    LegacyHoppingWindowSpec->Interval = processIntervalParam(node.GetRule_expr7());
-    if (!LegacyHoppingWindowSpec->Interval) {
+    LegacyHoppingWindowSpec_->Interval = processIntervalParam(node.GetRule_expr7());
+    if (!LegacyHoppingWindowSpec_->Interval) {
         return false;
     }
-    LegacyHoppingWindowSpec->Delay = processIntervalParam(node.GetRule_expr9());
-    if (!LegacyHoppingWindowSpec->Delay) {
+    LegacyHoppingWindowSpec_->Delay = processIntervalParam(node.GetRule_expr9());
+    if (!LegacyHoppingWindowSpec_->Delay) {
         return false;
     }
-    LegacyHoppingWindowSpec->DataWatermarks = Ctx.PragmaDataWatermarks;
+    LegacyHoppingWindowSpec_->DataWatermarks = Ctx_.PragmaDataWatermarks;
 
     return true;
 }
@@ -445,23 +445,23 @@ bool TGroupByClause::AllowUnnamed(TPosition pos, EGroupByFeatures featureContext
             YQL_ENSURE(false, "Unknown feature");
     }
 
-    Ctx.Error(pos) << "Unnamed expressions are not supported in " << feature << ". Please use '<expr> AS <name>'.";
-    Ctx.IncrementMonCounter("sql_errors", "GroupBySetNoAliasOrColumn");
+    Ctx_.Error(pos) << "Unnamed expressions are not supported in " << feature << ". Please use '<expr> AS <name>'.";
+    Ctx_.IncrementMonCounter("sql_errors", "GroupBySetNoAliasOrColumn");
     return false;
 }
 
 TGroupByClause::TGroupingSetFeatures& TGroupByClause::Features() {
-    return GroupSetContext->GroupFeatures;
+    return GroupSetContext_->GroupFeatures;
 }
 
 const TGroupByClause::TGroupingSetFeatures& TGroupByClause::Features() const {
-    return GroupSetContext->GroupFeatures;
+    return GroupSetContext_->GroupFeatures;
 }
 
 bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) {
     if (Aliases().contains(label)) {
-        Ctx.Error() << "Duplicated aliases not allowed";
-        Ctx.IncrementMonCounter("sql_errors", "GroupByDuplicateAliases");
+        Ctx_.Error() << "Duplicated aliases not allowed";
+        Ctx_.IncrementMonCounter("sql_errors", "GroupByDuplicateAliases");
         return false;
     }
     Aliases().emplace(label, node);
@@ -469,7 +469,7 @@ bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) {
 }
 
 TString TGroupByClause::GenerateGroupByExprName() {
-    return TStringBuilder() << AutogenerateNamePrefix << GroupSetContext->UnnamedCount++;
+    return TStringBuilder() << AutogenerateNamePrefix << GroupSetContext_->UnnamedCount++;
 }
 
 } // namespace NSQLTranslationV1

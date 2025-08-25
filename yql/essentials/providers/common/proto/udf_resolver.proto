@@ -5,6 +5,7 @@ message TFunction {
     required string Name = 1;
     required string TypeConfig = 2;
     optional string UserType = 3;
+    optional uint32 LangVer = 4;
 };
 
 message TArgResult {
@@ -30,6 +31,8 @@ message TFunctionResult {
     optional bool SupportsBlocks = 14;
     optional bool IsStrict = 15;
     repeated string Messages = 16;
+    optional uint32 MinLangVer = 17;
+    optional uint32 MaxLangVer = 18;
 };
 
 message TImport {

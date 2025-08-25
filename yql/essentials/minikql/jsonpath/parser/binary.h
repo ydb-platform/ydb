@@ -129,7 +129,7 @@ struct TJsonPathItem {
 class TJsonPathBuilder : public IAstNodeVisitor {
 public:
     TJsonPathBuilder()
-        : Result(new TJsonPath())
+        : Result_(new TJsonPath())
     {
     }
 
@@ -211,12 +211,12 @@ private:
     template <typename T>
     void WritePOD(const T& value) {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        Result->Append(reinterpret_cast<const char*>(&value), sizeof(T));
+        Result_->Append(reinterpret_cast<const char*>(&value), sizeof(T));
     }
 
     TUint CurrentEndPos() const;
 
-    TJsonPathPtr Result;
+    TJsonPathPtr Result_;
 };
 
 class TJsonPathReader {
@@ -261,15 +261,15 @@ private:
     template <typename T>
     T ReadPOD(TUint& pos) {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        T value = ReadUnaligned<T>(Path->Begin() + pos);
+        T value = ReadUnaligned<T>(Path_->Begin() + pos);
         pos += sizeof(T);
         return std::move(value);
     }
 
-    const TJsonPathPtr Path;
-    TUint InitialPos;
-    EJsonPathMode Mode;
-    THashMap<TUint, TJsonPathItem> ItemCache;
+    const TJsonPathPtr Path_;
+    TUint InitialPos_;
+    EJsonPathMode Mode_;
+    THashMap<TUint, TJsonPathItem> ItemCache_;
 };
 
 }

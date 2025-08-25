@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     hive_matchers.py
     test_create_tablets.py
@@ -22,7 +22,6 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

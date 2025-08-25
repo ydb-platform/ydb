@@ -3,7 +3,6 @@ import ymake
 import json
 import os
 import base64
-import six
 
 
 DELIM = '================================'
@@ -115,7 +114,7 @@ def onjava_module(unit, *args):
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
 
-        for i in six.moves.range(len(java_srcs_args)):
+        for i in range(len(java_srcs_args)):
             arg = java_srcs_args[i]
 
             if arg == 'EXTERNAL':
@@ -135,9 +134,9 @@ def onjava_module(unit, *args):
         if external:
             unit.onpeerdir(external)
 
-    data = {k: v for k, v in six.iteritems(data) if v}
+    data = {k: v for k, v in data.items() if v}
 
-    dart = 'JAVA_DART: ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(data)))) + '\n' + DELIM + '\n'
+    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8') + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 
 
@@ -278,7 +277,7 @@ def parse_words(words):
             continue
         props.append('-B')
         if len(p) > 1:
-            props.append(six.ensure_str(base64.b64encode(six.ensure_binary("{}={}".format(p[0], ' '.join(p[1:]))))))
+            props.append(base64.b64encode("{}={}".format(p[0], ' '.join(p[1:])).encode('utf-8')).decode('utf-8'))
         else:
             ymake.report_configure_error('CUSTOM_PROPERTY "{}" value is not specified'.format(p[0]))
     for i, o in enumerate(outputs):
@@ -326,19 +325,28 @@ def _maven_coords_for_project(unit, project_dir):
 
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
-        import xml.etree.ElementTree as et
-
         try:
-            with open(pom_path, 'rb') as f:
-                root = et.fromstring(f.read())
-            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-                artifact = root.find(xpath)
-                if artifact is not None:
-                    artifact = artifact.text
-                    if a != artifact and a.startswith(artifact):
-                        c = a[len(artifact) :].lstrip('-_')
-                        a = artifact
-                    break
+            # TODO(YMAKE-1694): xml is not currenly ready for Python subinterpreters, so we temporarily switch to parser implemented in ymake module
+            if hasattr(ymake, 'get_artifact_id_from_pom_xml'):
+                with open(pom_path, 'rb') as f:
+                    artifact = ymake.get_artifact_id_from_pom_xml(f.read())
+                    if artifact is not None:
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+            else:
+                import xml.etree.ElementTree as et
+
+                with open(pom_path, 'rb') as f:
+                    root = et.fromstring(f.read())
+                for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                    artifact = root.find(xpath)
+                    if artifact is not None:
+                        artifact = artifact.text
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+                        break
         except Exception as e:
             raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 

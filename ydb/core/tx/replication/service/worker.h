@@ -24,6 +24,7 @@ struct TEvWorker {
         EvGone,
         EvStatus,
         EvDataEnd,
+        EvCommit,
 
         EvEnd,
     };
@@ -36,6 +37,13 @@ struct TEvWorker {
         bool SkipCommit;
 
         explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
+
+    struct TEvCommit: public TEventLocal<TEvCommit, EvCommit> {
+        size_t Offset;
+
+        explicit TEvCommit(size_t offset);
         TString ToString() const override;
     };
 
@@ -55,6 +63,7 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
+            OVERLOAD
         };
 
         EStatus Status;
@@ -77,6 +86,7 @@ struct TEvWorker {
         TVector<ui64> ChildPartitionsIds;
 
         TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds);
+        TEvDataEnd(ui64 partitionId, const TVector<ui64>& adjacentPartitionsIds, const TVector<ui64>& childPartitionsIds);
         TString ToString() const override;
     };
 };

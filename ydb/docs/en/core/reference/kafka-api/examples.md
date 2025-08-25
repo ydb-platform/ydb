@@ -28,7 +28,7 @@ Consider the following limitations of using the Kafka API for reading:
 
 Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
 
-- `check.crc=false`
+- `check.crcs=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
@@ -154,7 +154,7 @@ Currently, the only available authentication mechanism with Kafka API in {{ ydb-
 
 To use authentication in a multinode self-deployed database:
 
-1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/yql.md).
+1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/sql.md).
 2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
 
    - YDB is running locally with the environment variable `YDB_KAFKA_PROXY_PORT=9092`, meaning that the Kafka API is available at `localhost:9092`. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).

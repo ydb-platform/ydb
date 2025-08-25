@@ -174,7 +174,7 @@ void ResolveUDFs() {
             }
 
             TFunctionTypeInfo funcInfo;
-            auto status = newRegistry->FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
+            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), env, typeInfoHelper, nullptr,
                 udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
@@ -194,6 +194,8 @@ void ResolveUDFs() {
 
             udfRes->SetSupportsBlocks(funcInfo.SupportsBlocks);
             udfRes->SetIsStrict(funcInfo.IsStrict);
+            udfRes->SetMinLangVer(funcInfo.MinLangVer);
+            udfRes->SetMaxLangVer(funcInfo.MaxLangVer);
         } catch (yexception& e) {
             udfRes->SetError(TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.GetName()

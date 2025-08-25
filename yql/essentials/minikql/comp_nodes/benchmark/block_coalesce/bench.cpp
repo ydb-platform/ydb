@@ -95,3 +95,6 @@ static void CustomArguments(benchmark::internal::Benchmark* b) {
 BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui8>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
 BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui16>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
 BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui32>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
+BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<ui64>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
+BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<float>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);
+BENCHMARK(NKikimr::NMiniKQL::BenchmarkFixedSizeCoalesce<double>)->Unit(benchmark::kMillisecond)->Apply(CustomArguments);

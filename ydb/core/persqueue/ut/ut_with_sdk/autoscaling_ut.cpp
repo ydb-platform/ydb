@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionMerge_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 2, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -421,12 +421,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition_PQv1) {
-        PartitionMerge_PreferedPartition(SdkVersion::Topic, false);
+        PartitionMerge_PreferedPartition(SdkVersion::PQv1, false);
     }
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoPartitioningSupport = autoscaleAwareSDK });
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadNotEmptyPartitions(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .AutoPartitioningSupport = false });
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ManySession(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -620,35 +620,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession1->Close();
         readSession2->Close();
-    }
-
-    Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
-
-        TTopicClient client = setup.MakeClient();
-
-        auto writeSession = CreateWriteSession(client, "producer-1", 0);
-        UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
-        UNIT_ASSERT(writeSession->Write(Msg("message_2", 3)));
-
-        ui64 txId = 1023;
-        SplitPartition(setup, ++txId, 0, "a");
-
-        auto status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer has just started reading the inactive partition and he can commit");
-
-        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages forward.");
-
-        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages back.");
-
-        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit at the end of the inactive partition.");
-
-        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
     }
 
     Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
@@ -889,8 +860,70 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(15));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                .BeginAlterAutoPartitioningSettings()
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(2))
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndAlterAutoPartitioningSettings()
+            .EndAlterTopicPartitioningSettings();
+        client.AlterTopic(TEST_TOPIC, alterSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
@@ -910,8 +943,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -930,9 +963,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
-        auto pathDescr = setup.GetServer().AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
-        auto balancerTabletId = pathDescr.GetBalancerTabletID();
-        Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath, Tests::SchemeRoot, true);
+        auto balancerTabletId = pathDescr.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+        Cerr << ">>>>> TopicPath=" << topicPath << " BalancerTabletID=" << balancerTabletId << " describe=" << pathDescr.DebugString() << Endl;
         UNIT_ASSERT(balancerTabletId);
         return balancerTabletId;
     }
@@ -1157,7 +1190,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TString{TEST_TOPIC}, TEST_CONSUMER, 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -1197,7 +1230,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(TString{TEST_TOPIC}, TEST_CONSUMER, 2, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 

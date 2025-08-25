@@ -37,9 +37,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString StringFromSharedRef(const TSharedRef& sharedRef)
+std::string StringFromRef(TRef ref)
 {
-    return TString(sharedRef.Begin(), sharedRef.Begin() + sharedRef.Size());
+    return std::string(ref.Begin(), ref.Size());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -399,7 +399,7 @@ TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 
 TYPED_TEST(TNotGrpcTest, VeryLaggyStreamingRequest)
 {
-    auto configText = TString(R"({
+    auto configText = std::string(R"({
         services = {
             TestService = {
                 pending_payloads_timeout = 250;
@@ -508,9 +508,9 @@ TYPED_TEST(TAttachmentsTest, RegularAttachments)
 
     const auto& attachments = rsp->Attachments();
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_", StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_", StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_", StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
 }
 
 TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
@@ -540,9 +540,9 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
         EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4197 + 32768 + std::ssize(GetRpcUserAgent()));
     }
     EXPECT_EQ(3u, attachments.size());
-    EXPECT_EQ("Hello_", StringFromSharedRef(attachments[0]));
-    EXPECT_EQ("from_", StringFromSharedRef(attachments[1]));
-    EXPECT_EQ("TTestProxy_", StringFromSharedRef(attachments[2]));
+    EXPECT_EQ("Hello_", StringFromRef(attachments[0]));
+    EXPECT_EQ("from_", StringFromRef(attachments[1]));
+    EXPECT_EQ("TTestProxy_", StringFromRef(attachments[2]));
 }
 
 TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
@@ -572,8 +572,8 @@ TYPED_TEST(TNotGrpcTest, Compression)
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
 
-    TString message("This is a message string.");
-    std::vector<TString> attachmentStrings({
+    std::string message("This is a message string.");
+    std::vector<std::string> attachmentStrings({
         "This is an attachment string.",
         "640K ought to be enough for anybody.",
         "According to all known laws of aviation, there is no way that a bee should be able to fly."
@@ -618,7 +618,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
     EXPECT_TRUE(rsp->GetResponseMessage().Size() == attachments.size() + 2);
     auto* responseCodec = NCompression::GetCodec(responseCodecId);
     for (int i = 0; i < std::ssize(attachments); ++i) {
-        EXPECT_TRUE(StringFromSharedRef(attachments[i]) == attachmentStrings[i]);
+        EXPECT_TRUE(StringFromRef(attachments[i]) == attachmentStrings[i]);
         auto compressedAttachment = responseCodec->Compress(attachments[i]);
         EXPECT_TRUE(TRef::AreBitwiseEqual(rsp->GetResponseMessage()[i + 2], compressedAttachment));
     }
@@ -626,7 +626,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
 
 TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 {
-    auto configText = TString(R"({
+    auto configText = std::string(R"({
         services = {
             TestService = {
                 methods = {
@@ -810,7 +810,7 @@ TYPED_TEST(TNotGrpcTest, RequestMemoryPressureException)
     proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
     auto req = proxy.SomeCall();
     req->set_a(42);
-    req->Attachments().push_back(TSharedRef::FromString(TString(34_MB, 'x')));
+    req->Attachments().push_back(TSharedRef::FromString(std::string(34_MB, 'x')));
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
@@ -903,7 +903,7 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
     proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
     auto req = proxy.SlowCall();
     req->set_request_codec(ToProto(requestCodecId));
-    req->Attachments().push_back(TSharedRef::FromString(TString(6_KB, 'x')));
+    req->Attachments().push_back(TSharedRef::FromString(std::string(6_KB, 'x')));
     WaitFor(req->Invoke()).ThrowOnError();
 
     if (TypeParam::MemoryUsageTrackingEnabled) {
@@ -936,7 +936,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
     for (int i = 0; i < 15; ++i) {
         auto req = proxies[i].SlowCall();
         req->set_request_codec(ToProto(requestCodecId));
-        req->set_message(TString(2_MB, 'x'));
+        req->set_message(std::string(2_MB, 'x'));
         futures.push_back(req->Invoke().AsVoid());
     }
 
@@ -946,7 +946,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
         auto req = proxy.SlowCall();
         req->set_request_codec(ToProto(requestCodecId));
-        req->set_message(TString(1_MB, 'x'));
+        req->set_message(std::string(1_MB, 'x'));
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }
 
@@ -1062,7 +1062,7 @@ TYPED_TEST(TNotGrpcTest, RequiredServerFeatureNotSupported)
     auto rspOrError = req->Invoke().Get();
     EXPECT_EQ(NRpc::EErrorCode::UnsupportedServerFeature, rspOrError.GetCode());
     EXPECT_EQ(static_cast<int>(ETestFeature::Cool), rspOrError.Attributes().Get<int>(FeatureIdAttributeKey));
-    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<TString>(FeatureNameAttributeKey));
+    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<std::string>(FeatureNameAttributeKey));
 }
 
 TYPED_TEST(TNotGrpcTest, RequiredClientFeatureSupported)
@@ -1082,7 +1082,7 @@ TYPED_TEST(TNotGrpcTest, RequiredClientFeatureNotSupported)
     auto rspOrError = req->Invoke().Get();
     EXPECT_EQ(NRpc::EErrorCode::UnsupportedClientFeature, rspOrError.GetCode());
     EXPECT_EQ(static_cast<int>(ETestFeature::Cool), rspOrError.Attributes().Get<int>(FeatureIdAttributeKey));
-    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<TString>(FeatureNameAttributeKey));
+    EXPECT_EQ(ToString(ETestFeature::Cool), rspOrError.Attributes().Get<std::string>(FeatureNameAttributeKey));
 }
 
 TYPED_TEST(TRpcTest, StopWithoutActiveRequests)

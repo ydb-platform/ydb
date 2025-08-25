@@ -216,7 +216,7 @@ TColumnSchema& TColumnSchema::SetGroup(const std::optional<std::string>& value)
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetExpression(const std::optional<TString>& value)
+TColumnSchema& TColumnSchema::SetExpression(const std::optional<std::string>& value)
 {
     Expression_ = value;
     return *this;
@@ -333,14 +333,9 @@ std::string TColumnSchema::GetDiagnosticNameString() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDeletedColumn::TDeletedColumn()
-{
-}
-
 TDeletedColumn::TDeletedColumn(TColumnStableName stableName)
     : StableName_(stableName)
-{
-}
+{ }
 
 TDeletedColumn& TDeletedColumn::SetStableName(TColumnStableName value)
 {
@@ -967,8 +962,8 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     if (!ColumnInfo_) {
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
-            true,  /*strict*/
-            false,  /*uniqueKeys*/
+            /*strict*/ true,
+            /*uniqueKeys*/ false,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1082,6 +1077,24 @@ TTableSchemaPtr TTableSchema::ToWrite() const
         DeletedColumns());
 }
 
+TTableSchemaPtr TTableSchema::ToCreate() const
+{
+    std::vector<TColumnSchema> columns;
+    for (const auto& column : Columns()) {
+        if (column.StableName().Underlying() != TabletIndexColumnName &&
+            column.StableName().Underlying() != RowIndexColumnName)
+        {
+            columns.push_back(column);
+        }
+    }
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::WithTabletIndex() const
 {
     if (IsSorted()) {
@@ -1168,7 +1181,7 @@ TTableSchemaPtr TTableSchema::ToUniqueKeys() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            true,  /*uniqueKeys*/
+            /*uniqueKeys*/ true,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1187,7 +1200,7 @@ TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            false,  /*uniqueKeys*/
+            /*uniqueKeys*/ false,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1211,7 +1224,7 @@ TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            UniqueKeys_,  /*uniqueKeys*/
+            UniqueKeys_,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1235,7 +1248,7 @@ TTableSchemaPtr TTableSchema::ToCanonical() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            UniqueKeys_,  /*uniqueKeys*/
+            UniqueKeys_,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }

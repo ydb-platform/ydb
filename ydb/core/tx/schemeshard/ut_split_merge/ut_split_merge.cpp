@@ -1,8 +1,8 @@
+#include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/protos/counters_schemeshard.pb.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -85,6 +85,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::PartitionKeys({"A", ""})});
 
+    }
+
+    Y_UNIT_TEST(ConcurrentSplitOneToOne) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table"
+                            Columns { Name: "Key"       Type: "Utf8"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["Key", "Value"]
+                            )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({""})});
+
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+                            SourceTabletId: 72075186233409546
+                            AllowOneToOneSplitMerge: true
+                            )");
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+                        SourceTabletId: 72075186233409546
+                        AllowOneToOneSplitMerge: true
+                        )",
+                       {NKikimrScheme::StatusMultipleModifications});
+
+        WaitForSuppressed(runtime, suppressed, 2, prevObserver);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, {txId-1, txId});
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); //delete src
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({""})});
     }
 
     Y_UNIT_TEST(Split10Shards) {

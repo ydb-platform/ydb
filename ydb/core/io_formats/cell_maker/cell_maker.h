@@ -13,6 +13,8 @@ namespace NKikimr::NFormats {
 
 bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err);
 bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err);
+void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NScheme::TTypeId& typeId);
+
 bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo);
 
 }

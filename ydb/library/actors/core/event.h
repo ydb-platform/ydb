@@ -43,6 +43,11 @@ namespace NActors {
     template <typename TEventType>
     class TEventHandle;
 
+    template <typename TEvent>
+    concept TEventWithLoadSupport = requires {
+        TEvent::Load;
+    };
+
     // fat handle
     class IEventHandle : TNonCopyable {
         struct TOnNondelivery {
@@ -53,6 +58,8 @@ namespace NActors {
             {
             }
         };
+
+        static const TEventSerializedData EmptyBuffer;
 
     public:
         typedef TAutoPtr<IEventHandle> TPtr;
@@ -89,11 +96,19 @@ namespace NActors {
         template <typename TEventType>
         TEventType* Get() {
             Y_ENSURE(Type == TEventType::EventType,
-                "Event type " << Type << " doesn't match the expected type " << TEventType::EventType);
+                "Event type " << Type << " doesn't match the expected type " << TEventType::EventType
+                << " class " << TypeName<TEventType>());
 
             if (!Event) {
-                static TEventSerializedData empty;
-                Event.Reset(TEventType::Load(Buffer ? Buffer.Get() : &empty));
+                if constexpr (TEventWithLoadSupport<TEventType>) {
+                    // Note: we require Load to return the correct derived type
+                    // This makes sure static_cast below is always type-safe
+                    TEventType* loaded = TEventType::Load(Buffer ? Buffer.Get() : &EmptyBuffer);
+                    Event.Reset(loaded);
+                    Buffer.Reset();
+                } else {
+                    Y_ENSURE(false, "Event type " << Type << " cannot be loaded by class " << TypeName<TEventType>());
+                }
             }
 
             if (Event) {
@@ -404,9 +419,6 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         Y_ABORT("Local event " #eventType " is not serializable");       \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        Y_ENSURE(false, "Local event " #eventType " has no load method"); \
-    }                                                                   \
     bool IsSerializable() const override {                              \
         return false;                                                   \
     }
@@ -418,7 +430,7 @@ namespace NActors {
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
         return true;                                                    \
     }                                                                   \
-    static IEventBase* Load(NActors::TEventSerializedData*) {           \
+    static eventType* Load(const NActors::TEventSerializedData*) {      \
         return new eventType();                                         \
     }                                                                   \
     bool IsSerializable() const override {                              \

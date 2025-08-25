@@ -67,7 +67,7 @@ public:
         }
 
         // Write user tables with a minimal safe version (avoiding snapshots)
-        return Self->GetLocalReadWriteVersions().WriteVersion;
+        return Self->GetLocalMvccVersion();
     }
 
     TRowVersion GetReadVersion(const TTableId& tableId) const override {
@@ -83,7 +83,7 @@ public:
             return TRowVersion::Max();
         }
 
-        return Self->GetLocalReadWriteVersions().ReadVersion;
+        return TRowVersion::Max();
     }
 
 private:
@@ -1797,13 +1797,31 @@ TUserTable::TPtr TDataShard::AlterTableSwitchCdcStreamState(
     return tableInfo;
 }
 
-TUserTable::TPtr TDataShard::AlterTableDropCdcStream(
+TUserTable::TPtr TDataShard::AlterTableDropCdcStreams(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
-    const TPathId& streamPathId)
+    const TVector<TPathId>& streamPathIds)
 {
     auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
-    tableInfo->DropCdcStream(streamPathId);
+    for (const auto& streamPathId : streamPathIds) {
+        tableInfo->DropCdcStream(streamPathId);
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
+TUserTable::TPtr TDataShard::AlterTableRotateCdcStream(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion,
+    const TPathId& oldStreamPathId,
+    const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->SwitchCdcStreamState(oldStreamPathId, NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled);
+    tableInfo->AddCdcStream(newStreamDesc);
 
     NIceDb::TNiceDb db(txc.DB);
     PersistUserTable(db, pathId.LocalPathId, *tableInfo);
@@ -2327,23 +2345,8 @@ bool TDataShard::AllowCancelROwithReadsets() const {
     return CanCancelROWithReadSets;
 }
 
-TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
-    if (IsFollower())
-        return {TRowVersion::Max(), TRowVersion::Max()};
-
-    TRowVersion edge = Max(
-            SnapshotManager.GetCompleteEdge(),
-            SnapshotManager.GetIncompleteEdge(),
-            SnapshotManager.GetUnprotectedReadEdge());
-
-    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
-        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
-
-    TRowVersion maxEdge(edge.Step, ::Max<ui64>());
-
-    TRowVersion writeVersion = Max(maxEdge, edge.Next(), SnapshotManager.GetImmediateWriteEdge());
-
-    return {TRowVersion::Max(), writeVersion};
+TRowVersion TDataShard::GetLocalMvccVersion() const {
+    return GetMvccVersion();
 }
 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
@@ -2438,17 +2441,17 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
     Y_ENSURE(false, "unreachable");
 }
 
-TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
+TRowVersion TDataShard::GetMvccVersion(TOperation* op) const {
     if (IsFollower()) {
-        return {TRowVersion::Max(), TRowVersion::Max()};
+        return TRowVersion::Max();
     }
 
     if (op) {
-        if (!op->MvccReadWriteVersion) {
-            op->MvccReadWriteVersion = GetMvccTxVersion(op->IsReadOnly() ? EMvccTxMode::ReadOnly : EMvccTxMode::ReadWrite, op);
+        if (!op->CachedMvccVersion) {
+            op->CachedMvccVersion = GetMvccTxVersion(op->IsReadOnly() ? EMvccTxMode::ReadOnly : EMvccTxMode::ReadWrite, op);
         }
 
-        return *op->MvccReadWriteVersion;
+        return *op->CachedMvccVersion;
     }
 
     return GetMvccTxVersion(EMvccTxMode::ReadWrite, nullptr);
@@ -2522,10 +2525,11 @@ ui64 TDataShard::GetMaxObservedStep() const {
 }
 
 void TDataShard::SendImmediateWriteResult(
-        const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie,
+        const TRowVersion& version, const TActorId& target, IEventBase* eventRawPtr, ui64 cookie,
         const TActorId& sessionId,
         NWilson::TTraceId traceId)
 {
+    THolder<IEventBase> event(eventRawPtr);
     NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendImmediateWriteResult", NWilson::EFlags::AUTO_END);
 
     const ui64 step = version.Step;
@@ -2537,9 +2541,9 @@ void TDataShard::SendImmediateWriteResult(
         if (Y_LIKELY(!InMemoryVarsFrozen) || version <= SnapshotManager.GetImmediateWriteEdgeReplied()) {
             SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
             if (!sessionId) {
-                Send(target, event, 0, cookie, span.GetTraceId());
+                Send(target, event.Release(), 0, cookie, span.GetTraceId());
             } else {
-                SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
+                SendViaSession(sessionId, target, SelfId(), event.Release(), 0, cookie, span.GetTraceId());
             }
         } else {
             span.EndError("Dropped");
@@ -2550,7 +2554,7 @@ void TDataShard::SendImmediateWriteResult(
     MediatorDelayedReplies.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(version),
-        std::forward_as_tuple(target, THolder<IEventBase>(event), cookie, sessionId, std::move(span)));
+        std::forward_as_tuple(target, std::move(event), cookie, sessionId, std::move(span)));
 
     // Try to subscribe to the next step, when needed
     if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
@@ -4454,7 +4458,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
     Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EAbort,
+void TDataShard::ScanComplete(NTable::EStatus,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4778,9 +4782,8 @@ TString TEvDataShard::TEvRead::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
-    auto* base = TBase::Load(data);
-    auto* event = static_cast<TEvRead*>(base);
+TEvDataShard::TEvRead* TEvDataShard::TEvRead::Load(const TEventSerializedData* data) {
+    TEvRead* event = TBase::Load(data);
     auto& record = event->Record;
 
     event->Keys.reserve(record.KeysSize());
@@ -4793,7 +4796,7 @@ NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
         event->Ranges.emplace_back(range);
     }
 
-    return base;
+    return event;
 }
 
 // really ugly hacky, because Record is not mutable and calling members are const
@@ -4832,9 +4835,8 @@ TString TEvDataShard::TEvReadResult::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* data) {
-    auto* base = TBase::Load(data);
-    auto* event = static_cast<TEvReadResult*>(base);
+TEvDataShard::TEvReadResult* TEvDataShard::TEvReadResult::Load(const TEventSerializedData* data) {
+    TEvReadResult* event = TBase::Load(data);
     auto& record = event->Record;
 
     if (record.HasArrowBatch()) {
@@ -4851,7 +4853,7 @@ NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* dat
         record.ClearCellVec();
     }
 
-    return base;
+    return event;
 }
 
 void TEvDataShard::TEvReadResult::FillRecord() {

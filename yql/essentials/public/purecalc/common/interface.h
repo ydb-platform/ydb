@@ -10,6 +10,7 @@
 #include <yql/essentials/public/udf/udf_registrator.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <library/cpp/yson/node/node.h>
 
 #include <library/cpp/logger/priority.h>
@@ -209,7 +210,7 @@ namespace NYql {
         struct TLoggingOptions final {
         public:
             /// Logging level for messages generated during compilation.
-            ELogPriority LogLevel_;  // TODO: rename to LogLevel
+            ELogPriority LogLevel;
 
             /// Where to write log messages.
             IOutputStream* LogDestination;
@@ -237,10 +238,10 @@ namespace NYql {
         struct TProgramFactoryOptions final {
         public:
             /// Path to a directory with compiled UDFs. Leave empty to disable loading external UDFs.
-            TString UdfsDir_;  // TODO: rename to UDFDir
+            TString UdfsDir;
 
             /// List of available external resources, e.g. files, UDFs, libraries.
-            TVector<NUserData::TUserData> UserData_;   // TODO: rename to UserData
+            TVector<NUserData::TUserData> UserData;
 
             /// LLVM settings. Assign "OFF" to disable LLVM, empty string for default settings.
             TString LLVMSettings;
@@ -271,10 +272,20 @@ namespace NYql {
             /// Use Antlr4 parser (for migration)
             bool UseAntlr4;
 
+            /// Language version
+            TLangVersion LangVer;
+
         public:
             TProgramFactoryOptions();
 
         public:
+            /**
+             * Set language version for queries
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetLanguageVersion(TLangVersion langver);
+
             /**
              * Set a new path to a directory with UDFs.
              *

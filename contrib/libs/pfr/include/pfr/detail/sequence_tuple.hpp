@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,8 +10,10 @@
 #include <pfr/detail/config.hpp>
 #include <pfr/detail/make_integer_sequence.hpp>
 
+#if !defined(PFR_INTERFACE_UNIT)
 #include <utility>      // metaprogramming stuff
 #include <cstddef>      // std::size_t
+#endif
 
 ///////////////////// Tuple that holds its values in the supplied order
 namespace pfr { namespace detail { namespace sequence_tuple {
@@ -50,68 +52,68 @@ struct tuple_base<std::index_sequence<> > {
 
 template <std::size_t N, class T>
 constexpr T& get_impl(base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <std::size_t N, class T>
 constexpr const T& get_impl(const base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <std::size_t N, class T>
 constexpr volatile T& get_impl(volatile base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <std::size_t N, class T>
 constexpr const volatile T& get_impl(const volatile base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <std::size_t N, class T>
 constexpr T&& get_impl(base_from_member<N, T>&& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return std::forward<T>(t.value);
 }
 
 
 template <class T, std::size_t N>
 constexpr T& get_by_type_impl(base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <class T, std::size_t N>
 constexpr const T& get_by_type_impl(const base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <class T, std::size_t N>
 constexpr volatile T& get_by_type_impl(volatile base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <class T, std::size_t N>
 constexpr const volatile T& get_by_type_impl(const volatile base_from_member<N, T>& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return t.value;
 }
 
 template <class T, std::size_t N>
 constexpr T&& get_by_type_impl(base_from_member<N, T>&& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return std::forward<T>(t.value);
 }
 
 template <class T, std::size_t N>
 constexpr const T&& get_by_type_impl(const base_from_member<N, T>&& t) noexcept {
-    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn)
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn,clang-analyzer-core.CallAndMessage)
     return std::forward<T>(t.value);
 }
 

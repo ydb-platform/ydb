@@ -53,7 +53,7 @@ namespace NActors::NMon {
         return ExtendedQuery ? static_cast<HTTP_METHOD>(ExtendedQuery->GetMethod()) : Method;
     }
 
-    IEventBase* TEvRemoteHttpInfo::Load(TEventSerializedData* bufs) {
+    TEvRemoteHttpInfo* TEvRemoteHttpInfo::Load(const TEventSerializedData* bufs) {
         TString s = bufs->GetString();
         if (s.size() && s[0] == '\0') {
             TRope::TConstIterator iter = bufs->GetBeginIter();

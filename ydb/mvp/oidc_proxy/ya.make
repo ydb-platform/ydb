@@ -5,6 +5,11 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
+    cracked_page.cpp
+    extension.cpp
+    extension_final.cpp
+    extension_manager.cpp
+    extension_whoami.cpp
     mvp.cpp
     context.cpp
     oidc_client.cpp
@@ -25,6 +30,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
+    ydb/public/api/client/nc_private/iam/v1
     ydb/public/api/client/yc_private/oauth
     library/cpp/getopt
 )

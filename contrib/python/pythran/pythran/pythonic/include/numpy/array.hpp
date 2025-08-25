@@ -53,6 +53,13 @@ namespace numpy
                  typename types::array_base<T, N, V>::shape_t>
   array(types::array_base<T, N, V> &&, dtype d = dtype());
 
+  template <class... Ts>
+  auto array(std::tuple<Ts...> t)
+      -> decltype(array(types::to_array<typename __combined<Ts...>::type>(t)))
+  {
+    return array(types::to_array<typename __combined<Ts...>::type>(t));
+  }
+
   DEFINE_FUNCTOR(pythonic::numpy, array);
 } // namespace numpy
 PYTHONIC_NS_END

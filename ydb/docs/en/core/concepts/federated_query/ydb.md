@@ -1,10 +1,10 @@
-# Working with {{ ydb-short-name }} databases
+# Working with {{ ydb-short-name }} Databases
 
 {{ ydb-full-name }} can act as an external data source for another {{ ydb-full-name }} database. This section discusses the organization of collaboration between two independent {{ ydb-short-name }} databases in federated query processing mode.
 
 To connect to an external {{ ydb-short-name }} database from another {{ ydb-short-name }} database acting as the federated query engine, the following steps need to be performed on the latter:
 
-1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method  is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
+1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
 
     ```yql
     CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
@@ -27,7 +27,7 @@ To connect to an external {{ ydb-short-name }} database from another {{ ydb-shor
 3. {% include [!](_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the external data source.
 
-## Query syntax {#query}
+## Query Syntax {#query}
 
 To retrieve data from tables of the external {{ ydb-short-name }} database, the following form of SQL query is used:
 
@@ -69,7 +69,7 @@ There are several limitations when working with external {{ ydb-short-name }} da
     |`String`|
     |`Utf8`|
 
-## Supported data types
+## Supported Data Types
 
 When working with tables located in the external {{ ydb-short-name }} database, users have access to a limited set of data types. All other types, except for those listed below, are not supported. In some cases the type conversion is performed, meaning that the columns of the table from the external {{ ydb-short-name }} database may change their type after being read by the {{ ydb-short-name }} database processing the federated query.
 

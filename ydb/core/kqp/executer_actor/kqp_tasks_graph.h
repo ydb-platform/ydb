@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -77,12 +78,23 @@ struct TStageInfoMeta {
     ETableKind TableKind;
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
+    std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
 
     TVector<bool> SkipNullKeys;
 
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
-    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
+    NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
+
+    struct TIndexMeta {
+        TTableId TableId;
+        TString TablePath;
+        TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
+
+        THolder<TKeyDesc> ShardKey;
+    };
+
+    TVector<TIndexMeta> IndexMetas;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -200,10 +212,11 @@ struct TGraphMeta {
 };
 
 struct TTaskInputMeta {
-    // these message are allocated using the protubuf arena.
+    // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
+    NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
 };
 
 struct TTaskOutputMeta {
@@ -271,6 +284,7 @@ public:
         TString TypeMod;
         TString Name;
         bool NotNull;
+        bool IsPrimary = false;
     };
 
     struct TColumnWrite {
@@ -289,14 +303,13 @@ public:
         std::set<TString> ParameterNames;
     };
 
-    struct TReadInfo {
+    struct TReadInfo: public NYql::TSortingOperator<NYql::ERequestSorting::NONE> {
+    public:
         enum class EReadType {
             Rows,
             Blocks
         };
         ui64 ItemsLimit = 0;
-        bool Reverse = false;
-        bool Sorted = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
@@ -342,6 +355,8 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
 
 NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings);
+void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryPhysicalGraph& result);
+void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling);
@@ -350,6 +365,11 @@ template<typename Proto>
 TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
+
+    THashSet<TString> keyColumns;
+    for (auto column : tableInfo->KeyColumns) {
+        keyColumns.insert(std::move(column));
+    }
 
     for (const auto& column : op.GetColumns()) {
         TTaskMeta::TColumn c;
@@ -360,6 +380,7 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
         c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
         c.NotNull = tableColumn.NotNull;
+        c.IsPrimary = keyColumns.contains(c.Name);
 
         columns.emplace_back(std::move(c));
     }

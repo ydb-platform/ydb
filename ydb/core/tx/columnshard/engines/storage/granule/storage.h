@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/data_accessor/events.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
@@ -16,6 +15,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     bool PackModificationFlag = false;
     THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
+    std::map<ui64, TPositiveControlInteger> SchemaVersionsControl;
 
     static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
 
@@ -36,6 +36,12 @@ private:
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
         : Counters(counters) {
+    }
+
+    bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
+        AFL_VERIFY(fromVersion <= version);
+        auto it = SchemaVersionsControl.lower_bound(fromVersion);
+        return (it != SchemaVersionsControl.end() && it->first <= version);
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
@@ -81,6 +87,11 @@ public:
     }
 
     void OnRemovePortion(const TPortionInfo& portion) {
+        auto it = SchemaVersionsControl.find(portion.GetSchemaVersionVerified());
+        AFL_VERIFY(it != SchemaVersionsControl.end());
+        if (it->second.Dec() == 0) {
+            SchemaVersionsControl.erase(it);
+        }
         MetadataMemoryPortionsSize -= portion.GetMetadataMemorySize();
         AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
         const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemorySize());
@@ -88,6 +99,7 @@ public:
     }
 
     void OnAddPortion(const TPortionInfo& portion) {
+        SchemaVersionsControl[portion.GetSchemaVersionVerified()].Inc();
         MetadataMemoryPortionsSize += portion.GetMetadataMemorySize();
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
@@ -153,7 +165,6 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
-        DataAccessorsManager->UnregisterController(pathId);
         Tables.erase(it);
         return true;
     }
@@ -170,19 +181,6 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
-        std::vector<std::shared_ptr<TGranuleMeta>> result;
-        for (auto&& i : Tables) {
-            if (pathIdFrom && i.first < *pathIdFrom) {
-                continue;
-            }
-            if (pathIdTo && i.first > *pathIdTo) {
-                continue;
-            }
-            result.emplace_back(i.second);
-        }
-        return result;
-    }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);

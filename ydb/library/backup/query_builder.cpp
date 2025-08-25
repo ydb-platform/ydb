@@ -3,6 +3,7 @@
 #include "backup.h"
 
 #include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -131,19 +132,19 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::Date32:
-        Value.Date32(TryParse<i32>(buf));
+        Value.Date32(std::chrono::sys_time<TWideDays>(TWideDays(TryParse<int32_t>(buf))));
         break;
 
     case EPrimitiveType::Datetime64:
-        Value.Datetime64(TryParse<i64>(buf));
-        break;        
+        Value.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(TryParse<int64_t>(buf))));
+        break;
 
     case EPrimitiveType::Timestamp64:
-        Value.Timestamp64(TryParse<i64>(buf));
-        break;        
+        Value.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(TryParse<int64_t>(buf))));
+        break;
 
     case EPrimitiveType::Interval64:
-        Value.Interval64(TryParse<i64>(buf));
+        Value.Interval64(TWideMicroseconds(TryParse<int64_t>(buf)));
         break;
 
     case EPrimitiveType::TzDate:
@@ -184,7 +185,8 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         break;
 
     case EPrimitiveType::Uuid:
-        Y_ENSURE(false, TStringBuilder() << "Unexpected Primitive kind while parsing line: " << type);
+        Y_ENSURE(NKikimr::NUuid::IsValidUuid(buf));
+        Value.Uuid(TUuidValue(std::string(buf.begin(), buf.end())));
         break;
 
     }

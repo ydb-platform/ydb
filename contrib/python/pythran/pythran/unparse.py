@@ -218,6 +218,10 @@ class Unparser:
         self.fill("global ")
         interleave(lambda: self.write(", "), self.write, t.names)
 
+    def _Nonlocal(self, t):
+        self.fill("nonlocal ")
+        interleave(lambda: self.write(", "), self.write, t.names)
+
     def _Yield(self, t):
         self.write("(")
         self.write("yield")

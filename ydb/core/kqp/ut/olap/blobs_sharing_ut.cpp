@@ -111,7 +111,8 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
             std::set<NColumnShard::TInternalPathId> pathIdsSet;
             for (auto&& i : ShardIds) {
-                auto pathIds = Controller->GetPathIds(i);
+                const auto pathIdTranslator = Controller->GetPathIdTranslator(i);
+                auto pathIds = pathIdTranslator->GetInternalPathIds();
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }
             PathIds = std::vector<NColumnShard::TInternalPathId>(pathIdsSet.begin(), pathIdsSet.end());
@@ -353,14 +354,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             CheckCount(230000);
             i64 count = CSController->GetShardingFiltersCount().Val();
             AFL_VERIFY(count >= 16)("count", count);
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-            CSController->WaitIndexation(TDuration::Seconds(3));
             CSController->WaitCompactions(TDuration::Seconds(3));
             WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-            CheckCount(230000);
-            CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-            CSController->WaitIndexation(TDuration::Seconds(5));
             CheckCount(230000);
             CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->WaitCompactions(TDuration::Seconds(5));
@@ -502,17 +498,17 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     //     tester.CheckCount();
     // }
 
-    Y_UNIT_TEST(SplitEmpty) {
-        TAsyncReshardingTest tester;
+    // Y_UNIT_TEST(SplitEmpty) {
+    //     TAsyncReshardingTest tester;
 
-        tester.CheckCount();
+    //     tester.CheckCount();
 
-        tester.StartResharding("SPLIT");
+    //     tester.StartResharding("SPLIT");
 
-        tester.CheckCount();
-        tester.WaitResharding();
-        tester.CheckCount();
-    }
+    //     tester.CheckCount();
+    //     tester.WaitResharding();
+    //     tester.CheckCount();
+    // }
 
     // Y_UNIT_TEST(ChangeSchemaAndSplit) {
     //     TAsyncReshardingTest tester;

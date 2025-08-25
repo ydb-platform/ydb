@@ -99,7 +99,7 @@ public:
         {
             block = slow;
 
-            const auto iterPtr = *Stateless || ctx.AlwaysInline ?
+            const auto iterPtr = *Stateless_ || ctx.AlwaysInline ?
                 new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);

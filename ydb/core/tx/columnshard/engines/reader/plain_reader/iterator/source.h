@@ -6,11 +6,11 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -33,10 +33,10 @@ class IDataSource: public NCommon::IDataSource {
 private:
     using TBase = NCommon::IDataSource;
     YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
+    NArrow::TSimpleRow StartReplaceKey;
+    NArrow::TSimpleRow FinishReplaceKey;
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
-    NArrow::TReplaceKey StartReplaceKey;
-    NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -48,8 +48,8 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual TConclusion<bool> DoStartFetchImpl(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
+    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
         return false;
     }
@@ -94,23 +94,27 @@ protected:
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::PlainPortion;
+    }
+
     virtual bool NeedAccessorsForRead() const = 0;
     virtual bool NeedAccessorsFetching() const = 0;
     virtual ui64 PredictAccessorsMemory() const = 0;
-    bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+    const NArrow::TSimpleRow& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
-    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+    const NArrow::TSimpleRow& GetFinishReplaceKey() const {
         return FinishReplaceKey;
     }
 
@@ -164,15 +168,15 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
-        const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
-        , Start(context->GetReadMetadata()->BuildSortedPosition(start))
-        , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
+        : TBase(type, sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , StartReplaceKey(start)
-        , FinishReplaceKey(finish) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(GetStartReplaceKey(), GetFinishReplaceKey());
+        , FinishReplaceKey(finish)
+        , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey)) {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
@@ -202,23 +206,21 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
-        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
         NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
-        if (GetStageData().HasPortionAccessor()) {
-            auto columns = GetStageData().GetPortionAccessor().GetColumnIds();
+        if (HasPortionAccessor()) {
+            auto columns = GetPortionAccessor().GetColumnIds();
             //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
-            result.InsertValue("in_mem", GetStageData().GetPortionAccessor().GetColumnRawBytes(columns, false));
+            result.InsertValue("in_mem", GetPortionAccessor().GetColumnRawBytes(columns, false));
             result.InsertValue("columns_in_mem", JoinSeq(",", columns));
         }
         result.InsertValue("portion_id", Portion->GetPortionId());
         result.InsertValue("raw", Portion->GetTotalRawBytes());
         result.InsertValue("blob", Portion->GetTotalBlobBytes());
-        result.InsertValue("read_memory", GetColumnRawBytes(GetStageData().GetPortionAccessor().GetColumnIds()));
+        result.InsertValue("read_memory", GetColumnRawBytes(GetPortionAccessor().GetColumnIds()));
         return result;
     }
     virtual void DoAbort() override;
@@ -226,9 +228,13 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::PlainPortion;
+    }
+
     virtual ui64 PredictAccessorsMemory() const override {
         return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) *
                sizeof(TColumnRecord);
@@ -239,51 +245,42 @@ public:
     }
 
     virtual bool NeedAccessorsFetching() const override {
-        return !HasStageData() || !GetStageData().HasPortionAccessor();
+        return !HasStageData() || !HasPortionAccessor();
     }
 
-    virtual bool DoAddTxConflict() override {
-        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
-            return true;
-        }
-        return false;
-    }
+    virtual bool DoAddTxConflict() override;
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Schema->GetIndexInfo().HasIndexes(indexIds);
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        return GetStageData().GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+        return GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
         AFL_VERIFY(columnIds.size());
         switch (type) {
             case EMemType::Raw:
-                return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnIds, false);
+                return GetPortionAccessor().GetColumnRawBytes(columnIds, false);
             case EMemType::Blob:
-                return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
+                return GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
             case EMemType::RawSequential:
-                return GetStageData().GetPortionAccessor().GetMinMemoryForReadColumns(columnIds);
+                return GetPortionAccessor().GetMinMemoryForReadColumns(columnIds);
         }
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
         AFL_VERIFY(columnsIds.size());
-        return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
+        return GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
-        return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnsIds, false);
+        return GetPortionAccessor().GetColumnBlobBytes(columnsIds, false);
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
+        return GetPortionAccessor().GetIndexRawBytes(indexIds, false);
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -295,113 +292,11 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
+        : TBase(EType::PlainPortion, portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
               portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
-    }
-};
-
-class TCommittedDataSource: public IDataSource {
-private:
-    using TBase = IDataSource;
-    TCommittedBlob CommittedBlob;
-    bool ReadStarted = false;
-
-    virtual void DoAbort() override {
-    }
-
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
-    virtual NJson::TJsonValue DoDebugJson() const override {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("type", "commit");
-        result.InsertValue("info", CommittedBlob.DebugString());
-        return result;
-    }
-    virtual TInternalPathId GetPathId() const override {
-        return TInternalPathId{};
-    }
-
-    virtual bool DoAddTxConflict() override {
-        if (CommittedBlob.IsCommitted()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetInsertWriteId())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(CommittedBlob.GetInsertWriteId());
-            return true;
-        }
-        return false;
-    }
-
-public:
-    virtual ui64 PredictAccessorsMemory() const override {
-        return 0;
-    }
-
-    virtual bool NeedAccessorsForRead() const override {
-        return false;
-    }
-
-    virtual bool NeedAccessorsFetching() const override {
-        return false;
-    }
-
-    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        THashMap<TChunkAddress, TString> result;
-        for (auto&& i : blobsOriginal) {
-            for (auto&& b : i.second) {
-                result.emplace(TChunkAddress(1, 1), std::move(b.second));
-            }
-        }
-        return result;
-    }
-
-    virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {
-        return false;
-    }
-
-    virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnIds*/) const override {
-        return CommittedBlob.GetBlobRange().Size;
-    }
-
-    virtual ui64 GetColumnBlobBytes(const std::set<ui32>& /*columnsIds*/) const override {
-        return CommittedBlob.GetBlobRange().Size;
-    }
-
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
-        return false;
-    }
-
-    virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
-        AFL_VERIFY(columnIds.size());
-        switch (type) {
-            case EMemType::Raw:
-                return GetColumnRawBytes(columnIds);
-            case EMemType::Blob:
-                return GetColumnBlobBytes(columnIds);
-            case EMemType::RawSequential:
-                return GetColumnRawBytes(columnIds);
-        }
-    }
-
-    virtual ui64 GetIndexRawBytes(const std::set<ui32>& /*columnIds*/) const override {
-        AFL_VERIFY(false);
-        return 0;
-    }
-
-    const TCommittedBlob& GetCommitted() const {
-        return CommittedBlob;
-    }
-
-    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase((ui64)committed.GetInsertWriteId(), sourceIdx, context, committed.GetFirst(), committed.GetLast(),
-              committed.GetCommittedSnapshotDef(TSnapshot::Zero()), committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
-              committed.GetRecordsCount(), {}, committed.GetIsDelete())
-        , CommittedBlob(committed) {
     }
 };
 

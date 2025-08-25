@@ -14,12 +14,6 @@ namespace NYT::NAuth {
 
 struct TAuthenticationOptions
 {
-    static TAuthenticationOptions FromUser(const std::string& user, const std::optional<std::string>& userTag = {});
-    static TAuthenticationOptions FromAuthenticationIdentity(const NRpc::TAuthenticationIdentity& identity);
-    static TAuthenticationOptions FromToken(const std::string& token);
-    static TAuthenticationOptions FromServiceTicketAuth(const IServiceTicketAuthPtr& ticketAuth);
-    static TAuthenticationOptions FromUserTicket(const std::string& userTicket);
-
     const std::string& GetAuthenticatedUser() const;
     NRpc::TAuthenticationIdentity GetAuthenticationIdentity() const;
 

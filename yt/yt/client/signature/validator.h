@@ -13,7 +13,7 @@ namespace NYT::NSignature {
 struct ISignatureValidator
     : public TRefCounted
 {
-    virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
+    virtual TFuture<bool> Validate(const TSignaturePtr& signature) const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ISignatureValidator)

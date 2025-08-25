@@ -1,4 +1,5 @@
 #include "columnshard__scan.h"
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include "columnshard.h"
 #include "columnshard_impl.h"
 #include "engines/reader/transaction/tx_scan.h"
@@ -30,7 +31,6 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(TInternalPathId::FromRawValue(record.GetLocalPathId()))->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);

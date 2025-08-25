@@ -7,31 +7,22 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TParent>
-class TOneShotFluentLogEventImpl
-    : public NYTree::TFluentYsonBuilder::TFluentFragmentBase<TOneShotFluentLogEventImpl, TParent, NYTree::TFluentMap>
+class TOneShotFluentLogEvent
+    : public NYTree::TFluentYsonBuilder::TFluentMapFragmentBase<NYTree::TFluentYsonVoid, TOneShotFluentLogEvent&&>
 {
 public:
-    using TThis = TOneShotFluentLogEventImpl;
-    using TBase = NYTree::TFluentYsonBuilder::TFluentFragmentBase<NLogging::TOneShotFluentLogEventImpl, TParent, NYTree::TFluentMap>;
+    using TThis = TOneShotFluentLogEvent;
+    using TBase = NYTree::TFluentYsonBuilder::TFluentMapFragmentBase<NYTree::TFluentYsonVoid, TThis&&>;
     using TStatePtr = TIntrusivePtr<NYTree::TFluentYsonWriterState>;
 
-    TOneShotFluentLogEventImpl(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
-    TOneShotFluentLogEventImpl(TOneShotFluentLogEventImpl&& other) = default;
-    TOneShotFluentLogEventImpl(const TOneShotFluentLogEventImpl& other) = delete;
+    TOneShotFluentLogEvent(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
+    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent(const TOneShotFluentLogEvent& other) = delete;
 
-    ~TOneShotFluentLogEventImpl();
+    ~TOneShotFluentLogEvent();
 
-    TOneShotFluentLogEventImpl& operator=(TOneShotFluentLogEventImpl&& other) = default;
-    TOneShotFluentLogEventImpl& operator=(const TOneShotFluentLogEventImpl& other) = delete;
-
-    // TODO(max42): why these two methods must be re-implemented here? Maybe it is enough to replace TFluentYsonVoid with TFluentMap below?
-
-    NYTree::TFluentYsonBuilder::TAny<TThis&&> Item(TStringBuf key);
-    NYTree::TFluentYsonBuilder::TAny<TThis&&> Items(const NYson::TYsonString& attributes);
-
-    template <class T, class... TExtraArgs>
-    TThis& OptionalItem(TStringBuf key, const T& optionalValue, TExtraArgs&&... extraArgs);
+    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent& operator=(const TOneShotFluentLogEvent& other) = delete;
 
 private:
     TStatePtr State_;
@@ -40,8 +31,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-using TOneShotFluentLogEvent = TOneShotFluentLogEventImpl<NYTree::TFluentYsonVoid>;
 
 TOneShotFluentLogEvent LogStructuredEventFluently(const NLogging::TLogger& logger, NLogging::ELogLevel level);
 
@@ -82,7 +71,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging
-
-#define FLUENT_LOG_INL_H_
-#include "fluent_log-inl.h"
-#undef FLUENT_LOG_INL_H_

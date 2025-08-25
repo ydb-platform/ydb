@@ -6,6 +6,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/local/storage.h>
+#include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/wrappers/fake_storage_config.h>
 
@@ -16,6 +17,9 @@
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #endif
 
+namespace {
+static std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> DummyCollector = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
+}
 namespace NKikimr::NArrow::NTest {
 
 NKikimrSchemeOp::TOlapColumnDescription TTestColumn::CreateColumn(const ui32 id) const {
@@ -110,7 +114,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoB
         Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, NActors::TActorId(),
             std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
-            SharedBlobsManager->GetStorageManagerGuarantee(storageId), GetGeneration());
+            SharedBlobsManager->GetStorageManagerGuarantee(storageId), GetGeneration(), DummyCollector);
 #endif
     }
     return nullptr;

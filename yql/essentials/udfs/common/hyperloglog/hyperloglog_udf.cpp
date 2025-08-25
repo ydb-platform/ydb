@@ -16,11 +16,11 @@ namespace {
         using THybridHll = THyperLogLogWithAlloc<TStdAllocatorForUdf<ui8>>;
 
         explicit THybridHyperLogLog(unsigned precision)
-            : Var(THybridSet()), SizeLimit((1u << precision) / 8), Precision(precision)
+            : Var_(THybridSet()), SizeLimit_((1u << precision) / 8), Precision_(precision)
         { }
 
         THybridHll ConvertToHyperLogLog() const {
-            auto res = THybridHll::Create(Precision);
+            auto res = THybridHll::Create(Precision_);
             for (auto& el : GetSetRef()) {
                 res.Update(el);
             }
@@ -28,23 +28,23 @@ namespace {
         }
 
         bool IsSet() const {
-            return Var.index() == 1;
+            return Var_.index() == 1;
         }
 
         const THybridSet& GetSetRef() const {
-            return std::get<1>(Var);
+            return std::get<1>(Var_);
         }
 
         THybridSet& GetMutableSetRef() {
-            return std::get<1>(Var);
+            return std::get<1>(Var_);
         }
 
         const THybridHll& GetHllRef() const {
-            return std::get<0>(Var);
+            return std::get<0>(Var_);
         }
 
         THybridHll& GetMutableHllRef() {
-            return std::get<0>(Var);
+            return std::get<0>(Var_);
         }
 
     public:
@@ -55,8 +55,8 @@ namespace {
         void Update(ui64 hash) {
             if (IsSet()) {
                 GetMutableSetRef().insert(hash);
-                if (GetSetRef().size() >= SizeLimit) {
-                    Var = ConvertToHyperLogLog();
+                if (GetSetRef().size() >= SizeLimit_) {
+                    Var_ = ConvertToHyperLogLog();
                 }
             } else {
                 GetMutableHllRef().Update(hash);
@@ -66,12 +66,12 @@ namespace {
         void Merge(const THybridHyperLogLog& rh) {
             if (IsSet() && rh.IsSet()) {
                 GetMutableSetRef().insert(rh.GetSetRef().begin(), rh.GetSetRef().end());
-                if (GetSetRef().size() >= SizeLimit) {
-                    Var = ConvertToHyperLogLog();
+                if (GetSetRef().size() >= SizeLimit_) {
+                    Var_ = ConvertToHyperLogLog();
                 }
             } else {
                 if (IsSet()) {
-                    Var = ConvertToHyperLogLog();
+                    Var_ = ConvertToHyperLogLog();
                 }
                 if (rh.IsSet()) {
                     GetMutableHllRef().Merge(rh.ConvertToHyperLogLog());
@@ -82,8 +82,8 @@ namespace {
         }
 
         void Save(IOutputStream& out) const {
-            out.Write(static_cast<char>(Var.index()));
-            out.Write(static_cast<char>(Precision));
+            out.Write(static_cast<char>(Var_.index()));
+            out.Write(static_cast<char>(Precision_));
             if (IsSet()) {
                 ::Save(&out, GetSetRef());
             } else {
@@ -112,26 +112,26 @@ namespace {
             if (type) {
                 ::Load(&in, res.GetMutableSetRef());
             } else {
-                res.Var = THybridHll::Load(in);
+                res.Var_ = THybridHll::Load(in);
             }
             return res;
         }
 
     private:
-        std::variant<THybridHll, THybridSet> Var;
+        std::variant<THybridHll, THybridSet> Var_;
 
-        size_t SizeLimit;
+        size_t SizeLimit_;
 
-        unsigned Precision;
+        unsigned Precision_;
     };
 
     extern const char HyperLogLogResourceName[] = "HyperLogLog.State";
 
     using THyperLogLogResource = TBoxedResource<THybridHyperLogLog, HyperLogLogResourceName>;
 
-    class THyperLogLog_Create: public TBoxedValue {
+    class THyperLogLogCreate: public TBoxedValue {
     public:
-        THyperLogLog_Create(TSourcePosition pos)
+        THyperLogLogCreate(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -149,7 +149,7 @@ namespace {
                 hll->Get()->Update(args[0].Get<ui64>());
                 return TUnboxedValuePod(hll.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -163,7 +163,7 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(ui64, ui32)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Create(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogCreate(builder.GetSourcePosition()));
                 }
                 return true;
             } else {
@@ -175,9 +175,9 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_AddValue: public TBoxedValue {
+    class THyperLogLogAddValue: public TBoxedValue {
     public:
-        THyperLogLog_AddValue(TSourcePosition pos)
+        THyperLogLogAddValue(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -196,7 +196,7 @@ namespace {
                 resource->Get()->Update(args[1].Get<ui64>());
                 return TUnboxedValuePod(args[0]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -210,7 +210,7 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, ui64)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_AddValue(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogAddValue(builder.GetSourcePosition()));
                 }
                 builder.IsStrict();
                 return true;
@@ -223,9 +223,9 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Serialize: public TBoxedValue {
+    class THyperLogLogSerialize: public TBoxedValue {
     public:
-        THyperLogLog_Serialize(TSourcePosition pos)
+        THyperLogLogSerialize(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -244,7 +244,7 @@ namespace {
                 static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get()->Save(result);
                 return valueBuilder->NewString(result.Str());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -258,7 +258,7 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<char*(TResource<HyperLogLogResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Serialize(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogSerialize(builder.GetSourcePosition()));
                 }
                 return true;
             } else {
@@ -270,9 +270,9 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Deserialize: public TBoxedValue {
+    class THyperLogLogDeserialize: public TBoxedValue {
     public:
-        THyperLogLog_Deserialize(TSourcePosition pos)
+        THyperLogLogDeserialize(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -292,7 +292,7 @@ namespace {
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Load(input)));
                 return TUnboxedValuePod(hll.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -306,7 +306,7 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(char*)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Deserialize(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogDeserialize(builder.GetSourcePosition()));
                 }
                 return true;
             } else {
@@ -318,9 +318,9 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Merge: public TBoxedValue {
+    class THyperLogLogMerge: public TBoxedValue {
     public:
-        THyperLogLog_Merge(TSourcePosition pos)
+        THyperLogLogMerge(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -339,7 +339,7 @@ namespace {
                 static_cast<THyperLogLogResource*>(args[1].AsBoxed().Get())->Get()->Merge(*left);
                 return TUnboxedValuePod(args[1]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -353,7 +353,7 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, TResource<HyperLogLogResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Merge(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogMerge(builder.GetSourcePosition()));
                 }
                 builder.IsStrict();
                 return true;
@@ -366,9 +366,9 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_GetResult: public TBoxedValue {
+    class THyperLogLogGetResult: public TBoxedValue {
     public:
-        THyperLogLog_GetResult(TSourcePosition pos)
+        THyperLogLogGetResult(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -398,7 +398,7 @@ namespace {
                 builder.Args()->Add(resource).Done().Returns<ui64>();
 
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_GetResult(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLogGetResult(builder.GetSourcePosition()));
                 }
                 builder.IsStrict();
                 return true;
@@ -412,12 +412,12 @@ namespace {
     };
 
     SIMPLE_MODULE(THyperLogLogModule,
-                  THyperLogLog_Create,
-                  THyperLogLog_AddValue,
-                  THyperLogLog_Serialize,
-                  THyperLogLog_Deserialize,
-                  THyperLogLog_Merge,
-                  THyperLogLog_GetResult)
+                  THyperLogLogCreate,
+                  THyperLogLogAddValue,
+                  THyperLogLogSerialize,
+                  THyperLogLogDeserialize,
+                  THyperLogLogMerge,
+                  THyperLogLogGetResult)
 }
 
 REGISTER_MODULES(THyperLogLogModule)

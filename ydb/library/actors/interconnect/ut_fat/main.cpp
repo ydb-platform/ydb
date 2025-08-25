@@ -1,4 +1,3 @@
-
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
@@ -16,9 +15,9 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/set.h>
 
-Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
-    using namespace NActors;
+using namespace NActors;
 
+namespace {
     class TSenderActor: public TSenderBaseActor {
         TDeque<ui64> InFly;
         ui16 SendFlags;
@@ -89,7 +88,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
     };
 
     class TReceiverActor: public TReceiverBaseActor {
-        ui64 ReceivedCount = 0;
+        std::atomic<ui64> ReceivedCount = 0;
         TNode* SenderNode = nullptr;
 
     public:
@@ -99,11 +98,16 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         {
         }
 
+        ui64 GetReceivedCount() const {
+            return ReceivedCount.load(std::memory_order_relaxed);
+        }
+
         void Handle(TEvTest::TPtr& ev, const TActorContext& /*ctx*/) override {
             const NInterconnectTest::TEvTest& m = ev->Get()->Record;
             Y_ABORT_UNLESS(m.HasSequenceNumber());
-            Y_ABORT_UNLESS(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
-                     m.GetSequenceNumber(), ReceivedCount);
+            ui64 cur = GetReceivedCount();
+            Y_ABORT_UNLESS(m.GetSequenceNumber() >= cur, "got #%" PRIu64 " expected at least #%" PRIu64,
+                     m.GetSequenceNumber(), cur);
             if (m.HasPayloadId()) {
                 auto rope = ev->Get()->GetPayload(m.GetPayloadId());
                 auto data = rope.GetContiguousSpan();
@@ -112,15 +116,29 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             } else {
                 Y_ABORT_UNLESS(m.HasPayload());
             }
-            ++ReceivedCount;
+            ReceivedCount.fetch_add(1);
             SenderNode->Send(ev->Sender, new TEvTestResponse(m.GetSequenceNumber()));
         }
 
         ~TReceiverActor() override {
-            Cerr << "Received " << ReceivedCount << " messages\n";
+            Cerr << "Received " << GetReceivedCount() << " messages\n";
         }
     };
 
+    TString GetZcState(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+        auto httpResp = testCluster.GetSessionDbg(me, peer);
+        const TString& resp = httpResp.GetValueSync();
+        const TString pattern = "<tr><td>ZeroCopy state</td><td>";
+        auto pos = resp.find(pattern);
+        UNIT_ASSERT_C(pos != std::string::npos, "zero copy field was not found in http info");
+        pos += pattern.size();
+        size_t end = resp.find('<', pos);
+        UNIT_ASSERT(end != std::string::npos);
+        return resp.substr(pos, end - pos);
+    }
+}
+
+Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
     Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndelivered) {
         ui32 numNodes = 2;
         double bandWidth = 1000000;
@@ -153,6 +171,24 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         NanoSleep(30ULL * 1000 * 1000 * 1000);
     }
 
+    Y_UNIT_TEST(InterconnectTestWithProxyTlsReestablishWithXdc) {
+        ui32 numNodes = 2;
+        double bandWidth = 1000000;
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+        TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
+
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::USE_TLS);
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(30ULL * 1000 * 1000 * 1000);
+
+        UNIT_ASSERT_C(receiverActor->GetReceivedCount() > 0, "no traffic detected!");
+    }
+
     Y_UNIT_TEST(InterconnectTestWithProxy) {
         ui32 numNodes = 2;
         double bandWidth = 1000000;
@@ -167,5 +203,42 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         testCluster.RegisterActor(senderActor, 1);
 
         NanoSleep(30ULL * 1000 * 1000 * 1000);
+    }
+}
+
+Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
+
+    Y_UNIT_TEST(ZcIsDisabledByDefault) {
+        ui32 numNodes = 2;
+        TTestICCluster testCluster(numNodes, TChannelsConfig());
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, false);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(5ULL * 1000 * 1000 * 1000);
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+    }
+
+    Y_UNIT_TEST(ZcDisabledAfterHiddenCopy) {
+        ui32 numNodes = 2;
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), nullptr, nullptr, TTestICCluster::USE_ZC);
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(5ULL * 1000 * 1000 * 1000);
+        // Zero copy send via loopback causes hidden copy inside linux kernel
+#if defined (__linux__)
+        UNIT_ASSERT_VALUES_EQUAL("DisabledHiddenCopy", GetZcState(testCluster, 1, 2));
+#else
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+#endif
     }
 }

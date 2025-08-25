@@ -253,7 +253,7 @@ namespace NProtobufJson {
                                               bool inProtoMap) {
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
 
-        if (!key) {
+        if (!key && !inProtoMap) {
             key = MakeKey(field);
         }
 

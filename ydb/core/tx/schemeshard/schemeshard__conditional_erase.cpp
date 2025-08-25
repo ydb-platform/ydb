@@ -292,8 +292,9 @@ private:
         }
 
         for (const ui32 mainColumnId : mainTable->KeyColumnIds) {
-            Y_ABORT_UNLESS(mainTable->Columns.contains(mainColumnId));
-            const TString& mainKey = mainTable->Columns.at(mainColumnId).Name;
+            auto it = mainTable->Columns.find(mainColumnId);
+            Y_ABORT_UNLESS(it != mainTable->Columns.end());
+            const TString& mainKey = it->second.Name;
 
             if (keys.contains(mainKey)) {
                 continue;
@@ -306,7 +307,7 @@ private:
         return result;
     }
 
-    static THashMap<TString, ui32> MakeColumnNameToId(const THashMap<ui32, TTableInfo::TColumn>& columns) {
+    static THashMap<TString, ui32> MakeColumnNameToId(const TMap<ui32, TTableInfo::TColumn>& columns) {
         THashMap<TString, ui32> result;
 
         for (const auto& [id, column] : columns) {

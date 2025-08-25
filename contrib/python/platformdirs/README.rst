@@ -71,10 +71,14 @@ On macOS:
     >>> appauthor = "Acme"
     >>> user_data_dir(appname, appauthor)
     '/Users/trentm/Library/Application Support/SuperApp'
-    >>> site_data_dir(appname, appauthor)
-    '/Library/Application Support/SuperApp'
+    >>> user_config_dir(appname, appauthor)
+    '/Users/trentm/Library/Application Support/SuperApp'
     >>> user_cache_dir(appname, appauthor)
     '/Users/trentm/Library/Caches/SuperApp'
+    >>> site_data_dir(appname, appauthor)
+    '/Library/Application Support/SuperApp'
+    >>> site_config_dir(appname, appauthor)
+    '/Library/Application Support/SuperApp'
     >>> user_log_dir(appname, appauthor)
     '/Users/trentm/Library/Logs/SuperApp'
     >>> user_documents_dir()
@@ -103,8 +107,14 @@ On Windows:
     'C:\\Users\\trentm\\AppData\\Local\\Acme\\SuperApp'
     >>> user_data_dir(appname, appauthor, roaming=True)
     'C:\\Users\\trentm\\AppData\\Roaming\\Acme\\SuperApp'
+    >>> user_config_dir(appname, appauthor)
+    'C:\\Users\\trentm\\AppData\\Local\\Acme\\SuperApp'
     >>> user_cache_dir(appname, appauthor)
     'C:\\Users\\trentm\\AppData\\Local\\Acme\\SuperApp\\Cache'
+    >>> site_data_dir(appname, appauthor)
+    'C:\\ProgramData\\Acme\\SuperApp'
+    >>> site_config_dir(appname, appauthor)
+    'C:\\ProgramData\\Acme\\SuperApp'
     >>> user_log_dir(appname, appauthor)
     'C:\\Users\\trentm\\AppData\\Local\\Acme\\SuperApp\\Logs'
     >>> user_documents_dir()
@@ -131,16 +141,21 @@ On Linux:
     >>> appauthor = "Acme"
     >>> user_data_dir(appname, appauthor)
     '/home/trentm/.local/share/SuperApp'
+    >>> user_config_dir(appname)
+    '/home/trentm/.config/SuperApp'
+    >>> user_cache_dir(appname, appauthor)
+    '/home/trentm/.cache/SuperApp'
     >>> site_data_dir(appname, appauthor)
     '/usr/local/share/SuperApp'
     >>> site_data_dir(appname, appauthor, multipath=True)
     '/usr/local/share/SuperApp:/usr/share/SuperApp'
-    >>> user_cache_dir(appname, appauthor)
-    '/home/trentm/.cache/SuperApp'
+    >>> site_config_dir(appname)
+    '/etc/xdg/SuperApp'
+    >>> os.environ["XDG_CONFIG_DIRS"] = "/etc:/usr/local/etc"
+    >>> site_config_dir(appname, multipath=True)
+    '/etc/SuperApp:/usr/local/etc/SuperApp'
     >>> user_log_dir(appname, appauthor)
     '/home/trentm/.local/state/SuperApp/log'
-    >>> user_config_dir(appname)
-    '/home/trentm/.config/SuperApp'
     >>> user_documents_dir()
     '/home/trentm/Documents'
     >>> user_downloads_dir()
@@ -155,11 +170,6 @@ On Linux:
     '/home/trentm/Desktop'
     >>> user_runtime_dir(appname, appauthor)
     '/run/user/{os.getuid()}/SuperApp'
-    >>> site_config_dir(appname)
-    '/etc/xdg/SuperApp'
-    >>> os.environ["XDG_CONFIG_DIRS"] = "/etc:/usr/local/etc"
-    >>> site_config_dir(appname, multipath=True)
-    '/etc/SuperApp:/usr/local/etc/SuperApp'
 
 On Android::
 
@@ -168,12 +178,16 @@ On Android::
     >>> appauthor = "Acme"
     >>> user_data_dir(appname, appauthor)
     '/data/data/com.myApp/files/SuperApp'
-    >>> user_cache_dir(appname, appauthor)
-    '/data/data/com.myApp/cache/SuperApp'
-    >>> user_log_dir(appname, appauthor)
-    '/data/data/com.myApp/cache/SuperApp/log'
     >>> user_config_dir(appname)
     '/data/data/com.myApp/shared_prefs/SuperApp'
+    >>> user_cache_dir(appname, appauthor)
+    '/data/data/com.myApp/cache/SuperApp'
+    >>> site_data_dir(appname, appauthor)
+    '/data/data/com.myApp/files/SuperApp'
+    >>> site_config_dir(appname)
+    '/data/data/com.myApp/shared_prefs/SuperApp'
+    >>> user_log_dir(appname, appauthor)
+    '/data/data/com.myApp/cache/SuperApp/log'
     >>> user_documents_dir()
     '/storage/emulated/0/Documents'
     >>> user_downloads_dir()
@@ -205,7 +219,13 @@ apps also support ``XDG_*`` environment variables.
     >>> dirs = PlatformDirs("SuperApp", "Acme")
     >>> dirs.user_data_dir
     '/Users/trentm/Library/Application Support/SuperApp'
+    >>> dirs.user_config_dir
+    '/Users/trentm/Library/Application Support/SuperApp'
+    >>> dirs.user_cache_dir
+    '/Users/trentm/Library/Caches/SuperApp'
     >>> dirs.site_data_dir
+    '/Library/Application Support/SuperApp'
+    >>> dirs.site_config_dir
     '/Library/Application Support/SuperApp'
     >>> dirs.user_cache_dir
     '/Users/trentm/Library/Caches/SuperApp'
@@ -237,10 +257,14 @@ dirs::
     >>> dirs = PlatformDirs("SuperApp", "Acme", version="1.0")
     >>> dirs.user_data_dir
     '/Users/trentm/Library/Application Support/SuperApp/1.0'
-    >>> dirs.site_data_dir
-    '/Library/Application Support/SuperApp/1.0'
+    >>> dirs.user_config_dir
+    '/Users/trentm/Library/Application Support/SuperApp/1.0'
     >>> dirs.user_cache_dir
     '/Users/trentm/Library/Caches/SuperApp/1.0'
+    >>> dirs.site_data_dir
+    '/Library/Application Support/SuperApp/1.0'
+    >>> dirs.site_config_dir
+    '/Library/Application Support/SuperApp/1.0'
     >>> dirs.user_log_dir
     '/Users/trentm/Library/Logs/SuperApp/1.0'
     >>> dirs.user_documents_dir

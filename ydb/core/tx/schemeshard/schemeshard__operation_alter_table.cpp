@@ -1,13 +1,11 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
-#include <ydb/core/base/auth.h>
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/subdomain.h>
 
 namespace {
 
@@ -145,9 +143,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
-        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
-        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+        .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
+        .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),        
     };
 
 
@@ -751,7 +749,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     if (!(IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty())
         && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
-                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups"})
             )
         )
     ) {

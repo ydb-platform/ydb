@@ -163,6 +163,8 @@ struct TEvControlPlaneStorage {
         EvCreateRateLimiterResourceResponse,
         EvDeleteRateLimiterResourceRequest,
         EvDeleteRateLimiterResourceResponse,
+        EvDeleteFolderResourcesRequest,
+        EvDeleteFolderResourcesResponse,
         EvDbRequestResult, // private // internal_events.h
         EvCreateDatabaseRequest,
         EvCreateDatabaseResponse,
@@ -680,31 +682,36 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvCreateDatabaseRequest : NActors::TEventLocal<TEvCreateDatabaseRequest, EvCreateDatabaseRequest> {
+        using TProto = FederatedQuery::Internal::ComputeDatabaseInternal;
+
         TEvCreateDatabaseRequest() = default;
 
         explicit TEvCreateDatabaseRequest(const TString& cloudId, const TString& scope, const FederatedQuery::Internal::ComputeDatabaseInternal& record)
             : CloudId(cloudId)
             , Scope(scope)
-            , Record(record)
+            , Request(record)
         {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
                     + CloudId.size()
                     + Scope.size()
-                    + Record.ByteSizeLong();
+                    + Request.ByteSizeLong();
         }
 
         TString CloudId;
         TString Scope;
-        FederatedQuery::Internal::ComputeDatabaseInternal Record;
+        FederatedQuery::Internal::ComputeDatabaseInternal Request;
     };
 
     struct TEvCreateDatabaseResponse : NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {
+        using TProto = google::protobuf::Empty;
+
         static constexpr bool Auditable = false;
 
-        explicit TEvCreateDatabaseResponse()
-        {}
+        explicit TEvCreateDatabaseResponse(const google::protobuf::Empty& response = {}) {
+            Y_UNUSED(response);
+        }
 
         explicit TEvCreateDatabaseResponse(const NYql::TIssues& issues)
             : Issues(issues)
@@ -721,6 +728,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvDescribeDatabaseRequest : NActors::TEventLocal<TEvDescribeDatabaseRequest, EvDescribeDatabaseRequest> {
+        using TProto = google::protobuf::Empty;
 
         TEvDescribeDatabaseRequest() = default;
 
@@ -743,6 +751,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvDescribeDatabaseResponse : NActors::TEventLocal<TEvDescribeDatabaseResponse, EvDescribeDatabaseResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = FederatedQuery::Internal::ComputeDatabaseInternal;
 
         explicit TEvDescribeDatabaseResponse(const FederatedQuery::Internal::ComputeDatabaseInternal& record)
             : Record(record)
@@ -767,6 +777,8 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvModifyDatabaseRequest : NActors::TEventLocal<TEvModifyDatabaseRequest, EvModifyDatabaseRequest> {
+        using TProto = google::protobuf::Empty;
+
         TEvModifyDatabaseRequest() = default;
 
         explicit TEvModifyDatabaseRequest(const TString& cloudId, const TString& scope)
@@ -776,10 +788,12 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
+                    + Request.ByteSizeLong()
                     + CloudId.size()
                     + Scope.size();
         }
 
+        google::protobuf::Empty Request;
         TString CloudId;
         TString Scope;
         TMaybe<bool> Synchronized;
@@ -788,10 +802,13 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvModifyDatabaseResponse : NActors::TEventLocal<TEvModifyDatabaseResponse, EvModifyDatabaseResponse> {
+        using TProto = google::protobuf::Empty;
+
         static constexpr bool Auditable = false;
 
-        explicit TEvModifyDatabaseResponse()
-        {}
+        explicit TEvModifyDatabaseResponse(const google::protobuf::Empty& response = {}) {
+            Y_UNUSED(response);
+        }
 
         explicit TEvModifyDatabaseResponse(const NYql::TIssues& issues)
             : Issues(issues)
@@ -835,6 +852,73 @@ struct TEvControlPlaneStorage {
         FederatedQuery::QueryContent::QueryType QueryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED;
         NYql::TIssues Issues;
         NYql::TIssues TransientIssues;
+    };
+
+    struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
+        explicit TEvDeleteFolderResourcesRequest(
+            const TString& scope,
+            const TString& user,
+            const TString& token,
+            const TString& cloudId,
+            TPermissions permissions,
+            TMaybe<TQuotaMap> quotas,
+            TTenantInfo::TPtr tenantInfo,
+            const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
+            : Scope(scope)
+            , User(user)
+            , Token(token)
+            , CloudId(cloudId)
+            , Permissions(permissions)
+            , Quotas(std::move(quotas))
+            , TenantInfo(tenantInfo)
+            , ComputeDatabase(computeDatabase) { }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.size()
+                    + User.size()
+                    + Token.size()
+                    + CloudId.size();
+        }
+
+        TString Scope;
+        TString User;
+        TString Token;
+        TString CloudId;
+        TPermissions Permissions;
+        TMaybe<TQuotaMap> Quotas;
+        TTenantInfo::TPtr TenantInfo;
+        FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
+        bool ExtractSensitiveFields = false;
+    };
+
+    struct TEvDeleteFolderResourcesResponse : NActors::TEventLocal<TEvDeleteFolderResourcesResponse, EvDeleteFolderResourcesResponse> {
+        static constexpr bool Auditable = false;
+        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvDeleteFolderResourcesResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result, const NYql::TIssues& issues)
+            : Result(result), Issues(issues)
+        {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        Ydb::Operations::Operation Result;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
     };
 };
 

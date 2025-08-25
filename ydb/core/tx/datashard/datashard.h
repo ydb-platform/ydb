@@ -346,11 +346,21 @@ namespace TEvDataShard {
         EvInMemoryStateRequest,
         EvInMemoryStateResponse,
 
-        EvForceDataCleanup,
-        EvForceDataCleanupResult,
+        EvVacuum,
+        EvVacuumResult,
 
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
+
+        EvRecomputeKMeansRequest,
+        EvRecomputeKMeansResponse,
+
+        // Request/response that is sent to each shard of unique index impl table during its build process.
+        // Validates uniqueness of data in unique index table.
+        EvValidateUniqueIndexRequest,
+        EvValidateUniqueIndexResponse,
+
+        EvIncrementalRestoreResponse,
 
         EvEnd
     };
@@ -619,6 +629,10 @@ namespace TEvDataShard {
         void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
             Record.SetStep(stepOrderId.first);
             Record.SetOrderId(stepOrderId.second);
+            // Note: this method is used by schema operations where stepOrderId == commitVersion
+            auto* commitVersion = Record.MutableCommitVersion();
+            commitVersion->SetStep(stepOrderId.first);
+            commitVersion->SetTxId(stepOrderId.second);
         }
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
@@ -955,7 +969,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvRead* Load(const TEventSerializedData* data);
 
     private:
         void FillRecord();
@@ -1001,7 +1015,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvReadResult* Load(const TEventSerializedData* data);
 
         size_t GetRowsCount() const {
             return Record.GetRowCount();
@@ -1505,6 +1519,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvReshuffleKMeansResponse> {
     };
 
+    struct TEvRecomputeKMeansRequest
+        : public TEventPB<TEvRecomputeKMeansRequest,
+                          NKikimrTxDataShard::TEvRecomputeKMeansRequest,
+                          TEvDataShard::EvRecomputeKMeansRequest> {
+    };
+
+    struct TEvRecomputeKMeansResponse
+        : public TEventPB<TEvRecomputeKMeansResponse,
+                          NKikimrTxDataShard::TEvRecomputeKMeansResponse,
+                          TEvDataShard::EvRecomputeKMeansResponse> {
+    };
+
     struct TEvLocalKMeansRequest
         : public TEventPB<TEvLocalKMeansRequest,
                           NKikimrTxDataShard::TEvLocalKMeansRequest,
@@ -1527,6 +1553,43 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvIncrementalRestoreResponse
+        : public TEventPB<TEvIncrementalRestoreResponse,
+                          NKikimrTxDataShard::TEvIncrementalRestoreResponse,
+                          TEvDataShard::EvIncrementalRestoreResponse> {
+        TEvIncrementalRestoreResponse() = default;
+        
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+                                     NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage = "") {
+            Record.SetTxId(txId);
+            Record.SetTableId(tableId);
+            Record.SetOperationId(operationId);
+            Record.SetIncrementalIdx(incrementalIdx);
+            Record.SetRestoreStatus(status);
+            if (!errorMessage.empty()) {
+                Record.SetErrorMessage(errorMessage);
+            }
+        }
+        
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+                                     NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
+                                     const TString& lastProcessedKey = "", const TString& errorMessage = "") {
+            Record.SetTxId(txId);
+            Record.SetTableId(tableId);
+            Record.SetOperationId(operationId);
+            Record.SetIncrementalIdx(incrementalIdx);
+            Record.SetRestoreStatus(status);
+            Record.SetProcessedRows(processedRows);
+            Record.SetProcessedBytes(processedBytes);
+            if (!lastProcessedKey.empty()) {
+                Record.SetLastProcessedKey(lastProcessedKey);
+            }
+            if (!errorMessage.empty()) {
+                Record.SetErrorMessage(errorMessage);
+            }
+        }
     };
 
     struct TEvKqpScan
@@ -1580,21 +1643,21 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
-                                          TEvDataShard::EvForceDataCleanup> {
-        TEvForceDataCleanup() = default;
+    struct TEvVacuum : TEventPB<TEvVacuum, NKikimrTxDataShard::TEvVacuum,
+                                          TEvDataShard::EvVacuum> {
+        TEvVacuum() = default;
 
-        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuum(ui64 vacuumGeneration) {
+            Record.SetVacuumGeneration(vacuumGeneration);
         }
     };
 
-    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
-                                                TEvDataShard::EvForceDataCleanupResult> {
-        TEvForceDataCleanupResult() = default;
+    struct TEvVacuumResult : TEventPB<TEvVacuumResult, NKikimrTxDataShard::TEvVacuumResult,
+                                                TEvDataShard::EvVacuumResult> {
+        TEvVacuumResult() = default;
 
-        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuumResult(ui64 vacuumGeneration, ui64 tabletId, NKikimrTxDataShard::TEvVacuumResult::EStatus status) {
+            Record.SetVacuumGeneration(vacuumGeneration);
             Record.SetTabletId(tabletId);
             Record.SetStatus(status);
         }
@@ -1833,6 +1896,20 @@ namespace TEvDataShard {
                           EvInMemoryStateResponse>
     {
         TEvInMemoryStateResponse() = default;
+    };
+
+    struct TEvValidateUniqueIndexRequest
+        : public TEventPB<TEvValidateUniqueIndexRequest,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexRequest,
+                          TEvDataShard::EvValidateUniqueIndexRequest>
+    {
+    };
+
+    struct TEvValidateUniqueIndexResponse
+        : public TEventPB<TEvValidateUniqueIndexResponse,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
+                          TEvDataShard::EvValidateUniqueIndexResponse>
+    {
     };
 };
 

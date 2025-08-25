@@ -10,9 +10,53 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
 
+// Determines whether the right input can be safely skipped when the left input is empty.
+// For certain join kinds, the result will always be empty if the left side is empty,
+// regardless of the content of the right side. In such cases, it's safe to avoid reading the right input entirely.
+constexpr bool ShouldSkipRightIfLeftEmpty(EJoinKind kind) {
+    switch (kind) {
+        case EJoinKind::Inner:
+        case EJoinKind::LeftOnly:
+        case EJoinKind::LeftSemi:
+        case EJoinKind::RightSemi:
+            return true;
+        case EJoinKind::RightOnly:
+        case EJoinKind::Left:
+        case EJoinKind::Right:
+        case EJoinKind::Exclusion:
+        case EJoinKind::Full:
+        case EJoinKind::SemiMask:
+        case EJoinKind::SemiSide:
+        case EJoinKind::Cross:
+            return false;
+    }
+}
+
+// Determines whether the left input can be safely skipped when the right input is empty.
+// For certain join kinds, the result will always be empty if the right side is empty,
+// regardless of the content of the left side. In such cases, it's safe to avoid reading the left input entirely.
+constexpr bool ShouldSkipLeftIfRightEmpty(EJoinKind kind) {
+    switch (kind) {
+        case EJoinKind::Inner:
+        case EJoinKind::RightOnly:
+        case EJoinKind::RightSemi:
+        case EJoinKind::LeftSemi:
+            return true;
+        case EJoinKind::Min:
+        case EJoinKind::Left:
+        case EJoinKind::Right:
+        case EJoinKind::Exclusion:
+        case EJoinKind::Full:
+        case EJoinKind::SemiMask:
+        case EJoinKind::SemiSide:
+        case EJoinKind::Cross:
+            return false;
+    }
+}
+
 class TTableBucketSpiller;
-#define GRACEJOIN_DEBUG DEBUG
-#define GRACEJOIN_TRACE TRACE
+#define GRACEJOIN_DEBUG NUdf::ELogLevel::Debug
+#define GRACEJOIN_TRACE NUdf::ELogLevel::Trace
 
 const ui64 BitsForNumberOfBuckets = 6; // 2^6 = 64
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
@@ -348,6 +392,9 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
+    const NUdf::TLoggerPtr Logger_ = nullptr; // Logger instance
+    const NUdf::TLogComponentId LogComponent_ = 0; // Unique component id. GraceJoin here.
+
 public:
 
 
@@ -417,10 +464,12 @@ public:
     void Clear();
 
     // Creates new table with key columns and data columns
-    TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
-            ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
-            ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+    TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,
+           ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
+           ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
+           ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
+           ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr,
+           bool isAny = false);
 
     enum class EAddTupleResult { Added, Unmatched, AnyMatch };
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns,

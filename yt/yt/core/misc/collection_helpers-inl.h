@@ -87,6 +87,13 @@ std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 }
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
+{
+    auto vec = GetKeys(collection, sizeLimit);
+    return THashSet<typename T::key_type>(vec.begin(), vec.end());
+}
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
     return GetIthsImpl<typename T::mapped_type>(
@@ -103,9 +110,7 @@ std::vector<typename T::value_type> GetItems(const T& collection, size_t sizeLim
     return GetIthsImpl<typename T::value_type>(
         collection,
         sizeLimit,
-        [] (const auto& item) {
-            return item;
-        });
+        /*getter*/ std::identity{});
 }
 
 template <size_t I, class T>
@@ -235,6 +240,17 @@ const T& GetOrCrash(const std::variant<TVariantArgs...>& variant)
 
 template <class TMap, class TKey>
 typename TMap::mapped_type GetOrDefault(
+    const TMap& map,
+    const TKey& key,
+    const typename TMap::mapped_type& defaultValue)
+    requires (!TIsDefaultMap<TMap>::Value)
+{
+    auto it = map.find(key);
+    return it == map.end() ? defaultValue : it->second;
+}
+
+template <class TMap, class TKey>
+const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue)

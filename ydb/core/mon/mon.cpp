@@ -1,12 +1,21 @@
 #include "mon.h"
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/http/http_proxy.h>
+#include "mon_impl.h"
+#include "counters_adapter_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/protos/mon.pb.h>
+#include <ydb/core/util/wildcard.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -14,21 +23,12 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <ydb/library/actors/core/probes.h>
-#include <ydb/core/base/monitoring_provider.h>
-
 #include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
 
 #include <util/system/hostname.h>
-
-#include <ydb/core/base/counters.h>
-#include <ydb/core/protos/mon.pb.h>
-
-#include "mon_impl.h"
-#include "counters_adapter_impl.h"
 
 namespace NActors {
 
@@ -365,6 +365,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -380,6 +381,7 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
@@ -392,6 +394,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -403,7 +406,19 @@ public:
             type = "application/json";
         }
         NHttp::THeaders headers(request->Headers);
-        TString origin = TString(headers["Origin"]);
+        TString allowOrigin = AppData()->Mon->GetConfig().AllowOrigin;
+        TString requestOrigin = TString(headers["Origin"]);
+        TString origin;
+        if (allowOrigin) {
+            if (IsMatchesWildcards(requestOrigin, allowOrigin)) {
+                origin = requestOrigin;
+            } else {
+                Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseBadRequest("Invalid CORS origin")));
+                return PassAway();
+            }
+        } else if (requestOrigin) {
+            origin = requestOrigin;
+        }
         if (origin.empty()) {
             origin = "*";
         }
@@ -494,7 +509,7 @@ public:
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
@@ -509,8 +524,10 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
+            AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -560,6 +577,7 @@ class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndex
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
         : Event(std::move(event))
@@ -571,12 +589,15 @@ public:
     }
 
     void Bootstrap() {
+        AuditCtx.InitAudit(Event);
         ProcessRequest();
     }
 
     void ProcessRequest() {
+        AuditCtx.LogOnReceived();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
     }
@@ -1013,15 +1034,15 @@ protected:
 class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
-    TActorId TargetActorId;
+    TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
-    TVector<TString> AllowedSIDs;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
-        , TargetActorId(targetActorId)
+        , Fields(fields)
         , Authorizer(std::move(authorizer))
-        , AllowedSIDs(allowedSIDs)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1029,7 +1050,9 @@ public:
     }
 
     void Bootstrap() {
-        if (Authorizer) {
+        AuditCtx.InitAudit(Event);
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Fields.UseAuth && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1037,8 +1060,13 @@ public:
                 return;
             }
         }
-        Forward(Event, TargetActorId);
-        PassAway();
+        SendRequest();
+        Become(&THttpMonAuthorizedActorRequest::StateWork);
+    }
+
+    void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.LogOnCompleted(response);
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     bool CredentialsProvided() {
@@ -1123,36 +1151,47 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+        ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
 
     void ReplyForbiddenAndPassAway(const TString& error = {}) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, false);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
-    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = result.UserToken ? result.UserToken->GetUserSID() : "anonymous";
+            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result.UserToken) {
-            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        if (result && result->UserToken) {
+            AuditCtx.AddAuditLogParts(result->UserToken);
+            Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
-        Forward(Event, TargetActorId);
+        AuditCtx.LogOnReceived();
+        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+    }
+
+    void Cancelled() {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
         PassAway();
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return Cancelled();
+        }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-            request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
+        ReplyWith(request->CreateResponseServiceUnavailable(
+            TStringBuilder() << "Actor is not available"));
         PassAway();
     }
 
@@ -1161,17 +1200,42 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
-            SendRequest(result);
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
+            SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
         }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
+        bool endOfData = ev->Get()->Response->IsDone();
+        AuditCtx.LogOnCompleted(ev->Get()->Response);
+        Forward(ev, Event->Sender);
+        if (endOfData) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
+        bool endOfData = ev->Get()->DataChunk && ev->Get()->DataChunk->IsEndOfData() || ev->Get()->Error;
+        Forward(ev, Event->Sender);
+        if (endOfData) {
+            PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr& ev) {
+        CancelSubscriber = std::move(ev);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
         }
     }
 };
@@ -1263,11 +1327,7 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
-                } else {
-                    Forward(ev, it->second.Handler);
-                }
+                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
                 return;
             } else {
                 if (url.EndsWith('/')) {

@@ -123,7 +123,7 @@ public:
         }
 
         ui64 GetListLength() const override {
-            if (!Length) {
+            if (!Length_) {
                 ui64 length = 0;
                 if (!Lists.empty()) {
                     if (!All) {
@@ -140,18 +140,18 @@ public:
                     }
                 }
 
-                Length = length;
+                Length_ = length;
             }
 
-            return *Length;
+            return *Length_;
         }
 
         bool HasListItems() const override {
-            if (!HasItems) {
-                HasItems = GetListLength() != 0;
+            if (!HasItems_) {
+                HasItems_ = GetListLength() != 0;
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         TUnboxedValueVector Lists;

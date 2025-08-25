@@ -360,7 +360,7 @@ public:
         const auto it = Callbacks_.find(input.Get());
         YQL_ENSURE(it != Callbacks_.cend());
         auto& future = it->second;
-        YQL_ENSURE(future.HasValue());
+        HandleFutureException(future);
         const auto status = future.GetValue()(input, output, ctx);
         Callbacks_.erase(it);
         return status;

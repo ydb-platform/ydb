@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "proto_yson_struct.h"
+
 #include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/misc/guid.h>
@@ -156,29 +158,27 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// Any associative container (except TCompactFlatMap).
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
-void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
-
-// TCompactFlatMap.
-template <class K, class V, size_t N>
-void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer);
+// Any associative container (except TCompactFlatMap/TCompactSet).
+template <NMpl::CAssociative TContainer>
+void Serialize(const TContainer& value, NYson::IYsonConsumer* consumer);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& value, NYson::IYsonConsumer* consumer);
 
 // Subtypes of google::protobuf::Message
-template <class T>
+template <CProtobufMessageAsYson T>
 void Serialize(
     const T& message,
-    NYson::IYsonConsumer* consumer,
-    typename std::enable_if<std::is_convertible<T*, google::protobuf::Message*>::value, void>::type* = nullptr);
+    NYson::IYsonConsumer* consumer);
+
+template <CProtobufMessageAsString T>
+void Serialize(
+    const T& message,
+    NYson::IYsonConsumer* consumer);
 
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
-
-void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
 
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
@@ -278,24 +278,26 @@ template <class... T>
 void Deserialize(std::tuple<T...>& value, INodePtr node);
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
-void Deserialize(C<T...>& value, INodePtr node);
+template <NMpl::CAssociative TContainer>
+void Deserialize(TContainer& mapping, INodePtr node);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
 void Deserialize(TEnumIndexedArray<E, T, Min, Max>& vector, INodePtr node);
 
 // Subtypes of google::protobuf::Message
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <CProtobufMessageAsYson T>
+void Deserialize(
+    T& message,
+    const INodePtr& node);
+
+template <CProtobufMessageAsString T>
 void Deserialize(
     T& message,
     const INodePtr& node);
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
-
-void Deserialize(TSize& value, INodePtr node);
 
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 

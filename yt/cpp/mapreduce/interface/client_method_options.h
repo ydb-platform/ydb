@@ -50,6 +50,21 @@ enum class EComplexTypeMode : int
     Positional /* "positional" */,
 };
 
+/// Base class for options dealing with access tracking suppression.
+template <typename TDerived>
+struct TSuppressableAccessTrackingOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Whether to disable update of access_time on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressAccessTracking, false);
+
+    /// @brief Whether to disable update of modification on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressModificationTracking, false);
+};
+
 ///
 /// @brief Options for @ref NYT::ICypressClient::Create
 ///
@@ -118,6 +133,7 @@ struct TMasterReadOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
 struct TExistsOptions
     : public TMasterReadOptions<TExistsOptions>
+    , public TSuppressableAccessTrackingOptions<TExistsOptions>
 {
 };
 
@@ -127,6 +143,7 @@ struct TExistsOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#get
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
+    , public TSuppressableAccessTrackingOptions<TGetOptions>
 {
     /// @brief Attributes that should be fetched with each node.
     FLUENT_FIELD_OPTION(TAttributeFilter, AttributeFilter);
@@ -140,6 +157,7 @@ struct TGetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#set
 struct TSetOptions
+    : public TSuppressableAccessTrackingOptions<TSetOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSetOptions;
@@ -157,6 +175,7 @@ struct TSetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
+    : public TSuppressableAccessTrackingOptions<TMultisetAttributesOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMultisetAttributesOptions;
@@ -171,6 +190,7 @@ struct TMultisetAttributesOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list
 struct TListOptions
     : public TMasterReadOptions<TListOptions>
+    , public TSuppressableAccessTrackingOptions<TListOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TListOptions;
@@ -277,6 +297,7 @@ struct TConcatenateOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#read_blob_table
 struct TBlobTableReaderOptions
+    : public TSuppressableAccessTrackingOptions<TBlobTableReaderOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TBlobTableReaderOptions;
@@ -477,6 +498,7 @@ struct TIOOptions
 /// @brief Options for reading file from YT.
 struct TFileReaderOptions
     : public TIOOptions<TFileReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TFileReaderOptions>
 {
     ///
     /// @brief Offset to start reading from.
@@ -670,12 +692,13 @@ public:
 /// Options for @ref NYT::IClient::CreateTableReader
 struct TTableReaderOptions
     : public TIOOptions<TTableReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TTableReaderOptions>
 {
     /// @deprecated Size of internal client buffer.
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
 
     ///
-    /// @brief Allows to fine tune format that is used for reading tables.
+    /// @brief Allows fine-tuning of the format used for reading tables.
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
@@ -684,6 +707,21 @@ struct TTableReaderOptions
     /// @brief Allows to tune which attributes are added to rows while reading tables.
     ///
     FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+};
+
+/// Options for @ref NYT::IClient::CreatePartitionTableReader
+struct TTablePartitionReaderOptions
+    : public TSuppressableAccessTrackingOptions<TTablePartitionReaderOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TTablePartitionReaderOptions;
+    /// @endcond
+
+    ///
+    /// @brief Allows fine-tuning of the format used for reading tables.
+    ///
+    /// Has no effect when used with raw-reader.
+    FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
 };
 
 /// Options for @ref NYT::IClient::CreateTableWriter
@@ -1005,7 +1043,7 @@ struct TLookupRowsOptions
     FLUENT_FIELD_DEFAULT(bool, KeepMissingRows, false);
 
     /// If set to true returned values will have "timestamp" attribute.
-    FLUENT_FIELD_OPTION(bool, Versioned);
+    FLUENT_FIELD_DEFAULT(bool, Versioned, false);
 };
 
 ///
@@ -1013,6 +1051,7 @@ struct TLookupRowsOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands#select_rows
 struct TSelectRowsOptions
+    : public TSuppressableAccessTrackingOptions<TSelectRowsOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSelectRowsOptions;
@@ -1119,9 +1158,9 @@ struct TCreateClientOptions
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
 
-    /// @brief Specifies the Unix socket used for connection,
-    /// typically when the RPC proxy is enabled within the job proxy.
-    FLUENT_FIELD_OPTION(TString, ProxyUnixDomainSocket);
+    /// @brief Job proxy unix domain socket used for connection.
+    /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
+    FLUENT_FIELD_OPTION(TString, JobProxySocketPath);
 };
 
 ///
@@ -1471,6 +1510,12 @@ struct TGetTablePartitionsOptions
     ///
     /// |True| by default.
     FLUENT_FIELD_DEFAULT(bool, AdjustDataWeightPerPartition, true);
+
+    ///
+    /// @brief Enable partition cookies in response.
+    ///
+    /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
 };
 
 ///

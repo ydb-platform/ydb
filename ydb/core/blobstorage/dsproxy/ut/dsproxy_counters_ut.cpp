@@ -37,7 +37,7 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, erasure, 1, 0);
-    TTestState testState(runtime, erasure, env.Info);
+    TTestState testState(runtime, env.Info);
 
     TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
     NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
@@ -92,7 +92,7 @@ Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, erasure, 1, 0);
-    TTestState testState(runtime, erasure, env.Info);
+    TTestState testState(runtime, env.Info);
 
     TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
     NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;

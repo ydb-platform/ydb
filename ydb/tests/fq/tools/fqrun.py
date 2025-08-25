@@ -61,8 +61,7 @@ class FqRun:
         cmd += (
             '--exclude-linked-udfs '
             f'--action={action} '
-            f'--fq-cfg={self.config_file} '
-            '--as-cfg=- '
+            f'--cfg={self.config_file} '
             f'--result-file={results_file} '
             f'--ast-file={ast_file} '
             f'--plan-file={plan_file} '

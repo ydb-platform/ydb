@@ -168,6 +168,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TListOperationEventsCommand
+    : public TSimpleOperationCommandBase<NApi::TListOperationEventsOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListOperationEventsCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TListOperationsCommand
     : public TTypedCommand<NApi::TListOperationsOptions>
 {

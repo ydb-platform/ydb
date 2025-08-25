@@ -1,6 +1,6 @@
 #include "monitoring.h"
 
-#include <ydb/core/ymq/actor/cfg.h>
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/base/run_query.h>
 
 

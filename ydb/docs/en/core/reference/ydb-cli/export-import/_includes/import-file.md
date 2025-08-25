@@ -10,6 +10,14 @@ If the table already includes data, it's replaced by imported data on primary ke
 
 The imported file must be in the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding. Line feeds aren't supported in the data field.
 
+{% note info %}
+
+If the table doesn't exist yet, you can use the [{{ ydb-cli }} tools infer csv](../../tools-infer.md) command to generate the `CREATE TABLE` statement based on an existing CSV file.
+
+You can also try to import into a non-existent table. In that case, the command will suggest running [{{ ydb-cli }} tools infer csv](../../tools-infer.md) with the correct options.
+
+{% endnote %}
+
 General format of the command:
 
 ```bash
@@ -56,7 +64,7 @@ The file includes data without any additional information. The `,` character is 
 
 {% note info %}
 
-The `release_date` column in the `series` table has the [Date](../../../../yql/reference/types/primitive.md#datetime) type, so the release date in the imported file has a numeric format. To import values in the [timestamp]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/ISO_8601){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/ISO_8601){% endif %} format, use string-type table columns for them. Alternatively, you can import them to a temporary table and convert them to a relevant type.
+The `release_date` column in the `series` table has the [Date](../../../../yql/reference/types/primitive.md#datetime) type, so the release date in the imported file has a numeric format. To import values in the [timestamp](https://en.wikipedia.org/wiki/ISO_8601) format, use string-type table columns for them. Alternatively, you can import them to a temporary table and convert them to a relevant type.
 
 {% endnote %}
 

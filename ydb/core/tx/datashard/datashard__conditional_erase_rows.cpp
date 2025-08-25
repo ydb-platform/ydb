@@ -34,7 +34,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
+class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -174,12 +174,14 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         SerializedKeys.Clear();
     }
 
-    void Reply(bool aborted = false) {
+    void Reply(EStatus status = EStatus::Done) {
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (aborted) {
-            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
+        if (status != EStatus::Done) {
+            response->Record.SetStatus(status == EStatus::Exception
+                ? NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR
+                : NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
         } else if (!Success) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
         } else if (!NoMoreData) {
@@ -305,11 +307,19 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
-        Reply(abort != EAbort::None);
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        Reply(status);
         PassAway();
 
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {

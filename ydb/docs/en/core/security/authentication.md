@@ -13,7 +13,7 @@ The following authentication modes are supported:
 * [Anonymous](#anonymous) authentication.
 * Authentication by [username and password](#static-credentials).
 * [LDAP](#ldap-auth-provider) authentication.
-* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management](https://cloud.yandex.com/en/docs/iam/).
+* [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management](https://yandex.cloud/en/docs/iam/).
 
 ## Anonymous authentication {#anonymous}
 
@@ -27,12 +27,15 @@ Anonymous authentication should be used only for informational purposes for loca
 
 {% endnote %}
 
-To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/auth_config.md#auth).
 
 ## Authenticating by username and password {#static-credentials}
 
+Authentication by username and password using the YDB server is available only to [local users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
+
 This access type implies that each database user has a username and password.
-Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords are allowed.
+
+Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
 
 The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
@@ -44,9 +47,25 @@ Authentication by username and password includes the following steps:
 1. The service validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
 1. The client accesses the database, presenting their token as authentication data.
 
-To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+To enable authentication by username and password, ensure that the `use_login_provider` and `enable_login_authentication` parameters are set to the default value of `true` in the [configuration file](../reference/configuration/auth_config.md). Besides, to disable anonymous authentication, set the [`enforce_user_token_requirement` parameter](../reference/configuration/security_config.md) to `true`.
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
+
+### Password complexity {#password-complexity}
+
+{{ ydb-short-name }} allows configuring requirements for password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will result in an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
+
+### Password brute-force protection
+
+{{ ydb-short-name }} provides password brute-force protection. A user is locked out after exceeding a specified number of failed attempts to enter a password. After a certain period, the user will be unlocked and able to log in again.
+
+By default, a user has four attempts to enter a password. If a user fails to enter the correct password in four attempts, the user will be locked out for an hour. You can change these lockout settings in the `auth_config` section of the [configuration](../reference/configuration/auth_config.md#account-lockout).
+
+If necessary, a {{ ydb-short-name }} cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) a user before the lockout period expires.
+
+### Manual user lockout
+
+{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command description.
 
 ## LDAP directory integration {#ldap-auth-provider}
 
@@ -91,7 +110,7 @@ Since the LDAP directory is an external, independent service, {{ ydb-short-name 
 
 {% endnote %}
 
-Currently, {{ ydb-short-name }} supports only one method of LDAP authentication, known as the `search+bind` method, which involves several steps. Upon receiving the username and password of the user being authenticated, a *bind* operation is performed using the credentials of a special service account specified in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section. These credentials are defined by the **bind_dn** and **bind_password** configuration parameters. After the service account is successfully authenticated, a search is conducted in the LDAP directory for the user attempting to authenticate in the system. The *search* operation is performed across the entire subtree rooted at the location specified by the **base_dn** configuration parameter and uses the filter defined in the **search_filter** configuration parameter.
+Currently, {{ ydb-short-name }} supports only one method of LDAP authentication, known as the `search+bind` method, which involves several steps. Upon receiving the username and password of the user being authenticated, a *bind* operation is performed using the credentials of a special service account specified in the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section. These credentials are defined by the **bind_dn** and **bind_password** configuration parameters. After the service account is successfully authenticated, a search is conducted in the LDAP directory for the user attempting to authenticate in the system. The *search* operation is performed across the entire subtree rooted at the location specified by the **base_dn** configuration parameter and uses the filter defined in the **search_filter** configuration parameter.
 
 Once the user entry is found, {{ ydb-short-name }} performs another *bind* operation using the found user's entry and the password provided earlier. The success of this second *bind* operation determines whether the user authentication is successful.
 
@@ -109,11 +128,11 @@ After a user is authenticated in the system, a token is generated and verified b
 
 Groups, like users, are entities that can have assigned access rights to perform operations on database schema objects and other resources. These assigned rights determine which operations a user is authorized to perform.
 
-The process of retrieving a user's group list from an LDAP directory is similar to the steps taken during authentication. First, a *bind* operation is performed using the service user credentials specified by the **bind_dn** and **bind_password** parameters in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section of the configuration file. After successful authentication, a search is conducted for the user entry associated with the previously generated token. This search uses the **search_filter** parameter. If the user still exists, the result of the *search* operation will be a list of attribute values specified by the **requested_group_attribute** parameter. If this parameter is not set, the *memberOf* attribute is used as the default for reverse group membership. The *memberOf* attribute contains the distinguished names (DNs) of the groups to which the user belongs.
+The process of retrieving a user's group list from an LDAP directory is similar to the steps taken during authentication. First, a *bind* operation is performed using the service user credentials specified by the **bind_dn** and **bind_password** parameters in the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section of the configuration file. After successful authentication, a search is conducted for the user entry associated with the previously generated token. This search uses the **search_filter** parameter. If the user still exists, the result of the *search* operation will be a list of attribute values specified by the **requested_group_attribute** parameter. If this parameter is not set, the *memberOf* attribute is used as the default for reverse group membership. The *memberOf* attribute contains the distinguished names (DNs) of the groups to which the user belongs.
 
 #### Group search
 
-By default, {{ ydb-short-name }} only searches for groups in which the user is a direct member. However, by enabling the **extended_settings.enable_nested_groups_search** flag in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section, {{ ydb-short-name }} will attempt to retrieve groups at all levels of nesting, not just those the user directly belongs to. If {{ ydb-short-name }} is configured to work with Active Directory, the Active Directory-specific matching rule [LDAP_MATCHING_RULE_IN_CHAIN](https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax?redirectedfrom=MSDN) will be used to find all nested groups. This rule allows for the retrieval of all nested groups with a single query. For LDAP servers based on OpenLDAP, group searches will be conducted using recursive graph traversal, which generally requires multiple queries. In both Active Directory and OpenLDAP configurations, the group search is performed only within the subtree specified by the **base_dn** parameter.
+By default, {{ ydb-short-name }} only searches for groups in which the user is a direct member. However, by enabling the **extended_settings.enable_nested_groups_search** flag in the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section, {{ ydb-short-name }} will attempt to retrieve groups at all levels of nesting, not just those the user directly belongs to. If {{ ydb-short-name }} is configured to work with Active Directory, the Active Directory-specific matching rule [LDAP_MATCHING_RULE_IN_CHAIN](https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax?redirectedfrom=MSDN) will be used to find all nested groups. This rule allows for the retrieval of all nested groups with a single query. For LDAP servers based on OpenLDAP, group searches will be conducted using recursive graph traversal, which generally requires multiple queries. In both Active Directory and OpenLDAP configurations, the group search is performed only within the subtree specified by the **base_dn** parameter.
 
 {% note info %}
 
@@ -129,7 +148,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/index.md#auth-config) section.
+In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/auth_config.md#auth-config) section.
 
 {% endnote %}
 
@@ -143,7 +162,7 @@ It should be noted that currently, {{ ydb-short-name }} does not have the capabi
 
 Since {{ ydb-short-name }} supports various methods of user authentication (login and password authentication, IAM provider usage, LDAP directory), it is often helpful to identify the specific source of authentication when handling user and group names. For all authentication types except login and password, a suffix in the format `<username>@<domain>` is appended to user and group names.
 
-For LDAP users, the `<domain>` is determined by the **ldap_authentication_domain** configuration parameter in the [configuration section](../reference/configuration/index.md#ldap-auth-config). By default, this parameter is set to `ldap`, so all usernames authenticated through the LDAP directory, as well as their corresponding group names in {{ ydb-short-name }}, will follow this format:
+For LDAP users, the `<domain>` is determined by the **ldap_authentication_domain** configuration parameter in the [configuration section](../reference/configuration/auth_config.md#ldap-auth-config). By default, this parameter is set to `ldap`, so all usernames authenticated through the LDAP directory, as well as their corresponding group names in {{ ydb-short-name }}, will follow this format:
 
 - `user1@ldap`
 - `group1@ldap`
@@ -171,8 +190,8 @@ When using an unencrypted connection, all data transmitted in requests to the LD
 
 #### LDAPS {#ldaps}
 
-To have {{ ydb-short-name }} automatically establish an encrypted connection with the LDAP server, the **scheme** value in the [configuration parameter](../reference/configuration/index.md#ldap-auth-config) should be set to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
+To have {{ ydb-short-name }} automatically establish an encrypted connection with the LDAP server, the **scheme** value in the [configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) should be set to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
 
 #### LDAP protocol extension `StartTls` {#starttls}
 
-`StartTls` is an LDAP protocol extension that enables message encryption using the TLS protocol. It allows a combination of encrypted and plain-text message transmission within a single connection to the LDAP server. {{ ydb-short-name }} sends a `StartTls` request to the LDAP server to initiate a TLS connection. In {{ ydb-short-name }}, enabling or disabling TLS within an active session is not supported. Therefore, once an encrypted connection is established using `StartTls`, all subsequent messages sent to the LDAP server will be encrypted. One advantage of using this extension, provided the LDAP server is appropriately configured, is the capability to initiate a TLS connection over an unencrypted port. The extension can be enabled in the [`use_tls` section](../reference/configuration/index.md#ldap-auth-config) of the configuration file.
+`StartTls` is an LDAP protocol extension that enables message encryption using the TLS protocol. It allows a combination of encrypted and plain-text message transmission within a single connection to the LDAP server. {{ ydb-short-name }} sends a `StartTls` request to the LDAP server to initiate a TLS connection. In {{ ydb-short-name }}, enabling or disabling TLS within an active session is not supported. Therefore, once an encrypted connection is established using `StartTls`, all subsequent messages sent to the LDAP server will be encrypted. One advantage of using this extension, provided the LDAP server is appropriately configured, is the capability to initiate a TLS connection over an unencrypted port. The extension can be enabled in the [`use_tls` section](../reference/configuration/auth_config.md#ldap-auth-config) of the configuration file.

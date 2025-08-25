@@ -54,9 +54,11 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
 void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in);
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
@@ -108,9 +110,15 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // out
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TPathDescription& in);
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
     const NKikimrSchemeOp::TPathDescription& in);
 void FillAttributes(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TPathDescription& in);
@@ -135,6 +143,8 @@ void FillKeyBloomFilter(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
 // in

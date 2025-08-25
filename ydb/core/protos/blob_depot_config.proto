@@ -14,7 +14,7 @@ message TChannelKind {
 message TChannelProfile {
     optional string StoragePoolName = 1; // used when creating tablet through BSC -> Hive
     optional string StoragePoolKind = 2; // used when creating tablet through Schemeshard
-    optional uint32 Count = 3;
+    optional uint32 Count = 3 [default = 1];
     optional TChannelKind.E ChannelKind = 4;
 }
 

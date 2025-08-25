@@ -1,23 +1,24 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import os
 import random
 import time
 import string
 import threading
+import socket
 import collections
 import itertools
 import queue
+import traceback
 import ydb
 from library.python.monlib.metric_registry import MetricRegistry
-import socket
-
 
 BLOB_MIN_SIZE = 128 * 1024
 
 
 def random_string(size):
-    return ''.join([random.choice(string.ascii_lowercase) for _ in range(size)])
+    return ''.join(random.choices(string.ascii_lowercase, k=size))
 
 
 def generate_blobs(count=32):
@@ -25,51 +26,74 @@ def generate_blobs(count=32):
 
 
 class EventKind(object):
-    ALTER_TABLE = 'alter_table'
-    COPY_TABLE = 'copy_table'
+    CREATE_TABLE = 'create_table'
+    ADD_COLUMN = 'add_column'
     DROP_TABLE = 'drop_table'
-    START_READ_TABLE = 'start_read_table'
-    READ_TABLE_CHUNK = 'read_table_chunk'
+
+    ADD_COLUMN_DEFAULT = 'add_column_default'
+    DROP_COLUMN = 'drop_column'
+
+    READ_TABLE = 'read_table'
 
     WRITE = 'write'
     REMOVE_OUTDATED = 'remove_outdated'
     FIND_OUTDATED = 'find_outdated'
 
-    SCAN_QUERY_CHUNK = 'scan_query_chunk'
-    START_SCAN_QUERY = 'start_scan_query'
+    BATCH_UPDATE = 'batch_update'
+    BATCH_DELETE = 'batch_delete'
 
     @classmethod
-    def periodic_tasks(cls):
+    def periodic_tasks_column(cls):
         return (
-            cls.START_READ_TABLE,
-            cls.START_SCAN_QUERY,
+            cls.READ_TABLE,
         )
+
+    @classmethod
+    def periodic_tasks_row(cls):
+        return (
+            cls.READ_TABLE,
+
+            cls.BATCH_DELETE,
+            cls.BATCH_UPDATE,
+        )
+
+    @classmethod
+    def basic_schema_row(cls):
+        return (
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
+        )
+
+    @classmethod
+    def basic_schema_column(cls):
+        return ()
 
     @classmethod
     def rare(cls):
         return (
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
             cls.DROP_TABLE,
-            cls.COPY_TABLE,
-            cls.START_READ_TABLE,
-            cls.START_SCAN_QUERY,
         )
 
     @classmethod
     def list(cls):
         return (
-            cls.COPY_TABLE,
             cls.DROP_TABLE,
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
 
-            cls.START_READ_TABLE,
-            cls.READ_TABLE_CHUNK,
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
+
+            cls.READ_TABLE,
 
             cls.FIND_OUTDATED,
             cls.REMOVE_OUTDATED,
             cls.WRITE,
-            cls.START_SCAN_QUERY,
-            cls.SCAN_QUERY_CHUNK,
+
+            cls.BATCH_DELETE,
+            cls.BATCH_UPDATE,
+
+            cls.CREATE_TABLE
         )
 
 
@@ -204,13 +228,14 @@ class YdbQueue(object):
         self.driver.scheme_client.make_directory(self.copies_dir)
         self.mode = mode
         print("Working dir %s" % self.working_dir)
-        f = self.prepare_new_queue(self.table_name)
-        f.result()
+        self.prepare_new_queue(self.table_name)
         # a queue with tables to drop
         self.drop_queue = collections.deque()
         # a set with keys that are ready to be removed
         self.outdated_keys = collections.deque()
         self.outdated_keys_max_size = 50
+        # a dict with table_name -> set of column ids
+        self.alter_column_ids = dict()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -218,51 +243,30 @@ class YdbQueue(object):
         return os.path.join(self.working_dir, "queue_" + str(timestamp()))
 
     def prepare_new_queue(self, table_name=None):
-        session = self.pool.acquire()
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
-        f = session.async_execute_scheme(get_table_description(table_name, self.mode), settings=self.ops)
-        f.add_done_callback(lambda x: self.on_received_response(session, x, 'create'))
-        return f
+        self.send_query(get_table_description(table_name, self.mode), parameters=None, event_kind=EventKind.CREATE_TABLE)
 
     def switch(self, switch_to):
         self.table_name = switch_to
         self.outdated_keys.clear()
 
-    def on_received_response(self, session, response, event, callback=None):
-        self.pool.release(session)
+    def update_stats(self, event):
+        self.stats.save_event(event)
 
-        if callback is not None:
-            callback(response)
-
+    def send_query(self, query, parameters, event_kind):
         try:
-            response.result()
-            self.stats.save_event(event)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
+            self.update_stats(event_kind)
+            return result_list
         except ydb.Error as e:
-            debug = False
-            if debug:
-                print(event)
-                print(e)
-                print()
+            # print(f'{event_kind}: produced an error {e}')
+            self.stats.save_event(event_kind, e.status)
+            return None
+        except Exception as e:
+            # print(f'{event_kind}: produced an unxpected error {e}')
+            self.stats.save_event(event_kind, e.status)
 
-            self.stats.save_event(event, e.status)
-
-    def send_query(self, query, parameters, event_kind, callback=None):
-        session = self.pool.acquire()
-        f = session.transaction().async_execute(
-            query, parameters=parameters, commit_tx=True, settings=self.ops)
-        f.add_done_callback(
-            lambda response: self.on_received_response(
-                session, response, event_kind, callback
-            )
-        )
-        return f
-
-    def on_list_response(self, base, f, switch=True):
-        try:
-            response = f.result()
-        except ydb.Error:
-            return
-
+    def process_dir_content(self, base, response, switch=True):
         tables = []
         for child in response.children:
             if child.is_directory():
@@ -275,54 +279,65 @@ class YdbQueue(object):
             )
 
         candidates = list(sorted(tables))
-        if switch:
+
+        if switch and len(candidates) > 0:
             switch_to = candidates.pop()
             self.switch(switch_to)
         self.drop_queue.extend(candidates)
 
     def list_copies_dir(self):
-        f = self.driver.scheme_client.async_list_directory(self.copies_dir)
-        f.add_done_callback(
-            lambda x: self.on_list_response(
-                self.copies_dir, x, switch=False
-            )
+        response = self.driver.scheme_client.list_directory(self.copies_dir)
+        self.process_dir_content(
+            self.copies_dir, response, switch=False
         )
 
     def list_working_dir(self):
-        f = self.driver.scheme_client.async_list_directory(self.working_dir)
-        f.add_done_callback(
-            lambda x: self.on_list_response(
-                self.working_dir, x, switch=True,
-            )
+        response = self.driver.scheme_client.list_directory(self.working_dir)
+        self.process_dir_content(
+            self.working_dir, response, switch=True,
         )
+
+    def generate_alter_column_id(self):
+        val = random.randint(1, 100000)
+        while val in self.alter_column_ids.get(self.table_name, set()):
+            val = random.randint(1, 100000)
+        self.alter_column_ids.setdefault(self.table_name, set()).add(val)
+        return val
+
+    def read_table(self):
+        it = self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
+        try:
+            while it is not None:
+                self.update_stats(EventKind.READ_TABLE)
+                it = next(it)
+        except ydb.Error as e:
+            self.stats.save_event(EventKind.READ_TABLE, e.status)
+        except StopIteration:
+            return
 
     def remove_outdated(self):
         try:
             keys_set = self.outdated_keys.popleft()
+            if len(keys_set) == 0:
+                return
         except IndexError:
             return
 
-        query = ydb.DataQuery(
-            """
+        query = """
             --!syntax_v1
             DECLARE $keys as List<Struct<key: Uint64>>;
             DELETE FROM `{}` ON SELECT `key` FROM AS_TABLE($keys);
-            """.format(self.table_name), {
-                '$keys': ydb.ListType(ydb.StructType().add_member('key', ydb.PrimitiveType.Uint64)).proto
-            }
-        )
+            """.format(self.table_name)
+
         parameters = {
-            '$keys': keys_set
+            '$keys': (keys_set, ydb.ListType(ydb.StructType().add_member('key', ydb.PrimitiveType.Uint64)).proto)
         }
 
-        return self.send_query(query=query, event_kind=EventKind.REMOVE_OUTDATED, parameters=parameters)
+        self.send_query(query=query, event_kind=EventKind.REMOVE_OUTDATED, parameters=parameters)
 
-    def on_find_outdated(self, resp):
-        try:
-            rs = resp.result()
-            self.outdated_keys.append(rs[0].rows)
-        except ydb.Error:
-            return
+    def update_outdated_keys(self, resp):
+        if resp is not None:
+            self.outdated_keys.append(resp.rows)
 
     def find_outdated(self):
         # ensure queue is not large enough
@@ -338,82 +353,58 @@ class YdbQueue(object):
             LIMIT 50;
             """.format(table_name=self.table_name, outdated_timestamp=outdated_timestamp)
         parameters = None
-        return self.send_query(query=query, event_kind=EventKind.FIND_OUTDATED, parameters=parameters, callback=self.on_find_outdated)
+        response = self.send_query(query=query, event_kind=EventKind.FIND_OUTDATED, parameters=parameters)
+        self.update_outdated_keys(response)
 
     def write(self):
         current_timestamp = timestamp()
         blob = next(self.blobs_iter)
-        query = ydb.DataQuery(
-            """
+        query = """
             --!syntax_v1
             DECLARE $key as Uint64;
             DECLARE $value as Utf8;
             DECLARE $timestamp as Uint64;
             UPSERT INTO `{}` (`key`, `timestamp`, `value`) VALUES ($key, $timestamp, $value);
-            """.format(self.table_name),
-            {
-                '$key': ydb.PrimitiveType.Uint64.proto,
-                '$value': ydb.PrimitiveType.Utf8.proto,
-                '$timestamp': ydb.PrimitiveType.Uint64.proto,
-            }
-        )
+            """.format(self.table_name)
+
         parameters = {
-            '$key': current_timestamp,
-            '$value': blob,
-            '$timestamp': current_timestamp,
+            '$key': (current_timestamp, ydb.PrimitiveType.Uint64.proto),
+            '$value': (blob, ydb.PrimitiveType.Utf8.proto),
+            '$timestamp': (current_timestamp, ydb.PrimitiveType.Uint64.proto),
         }
 
-        return self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
+        self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
-    def move_iterator(self, it, callback):
-        next_f = next(it)
-        next_f.add_done_callback(lambda x: callback(it, x))
-
-    def on_read_table_chunk(self, it, f):
-        try:
-            f.result()
-            self.stats.save_event(EventKind.READ_TABLE_CHUNK)
-        except ydb.Error as e:
-            self.stats.save_event(EventKind.READ_TABLE_CHUNK, e.status)
-        except StopIteration:
-            return
-        self.move_iterator(it, self.on_read_table_chunk)
-
-    def on_scan_query_chunk(self, it, f):
-        try:
-            f.result()
-            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK)
-        except ydb.Error as e:
-            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e.status)
-        except StopIteration:
-            return
-
-        self.move_iterator(it, self.on_scan_query_chunk)
-
-    def start_scan_query(self):
-        it = self.driver.table_client.async_scan_query('select count(*) as cnt from `%s`' % self.table_name)
-        self.stats.save_event(EventKind.START_SCAN_QUERY)
-        self.move_iterator(it, self.on_scan_query_chunk)
-
-    def start_read_table(self):
-        with self.pool.checkout() as session:
-            it = session.async_read_table(self.table_name, columns=('key', ))
-            self.stats.save_event(EventKind.START_READ_TABLE)
-            self.move_iterator(it, self.on_read_table_chunk)
-
-    def alter_table(self):
-        session = self.pool.acquire()
+    def add_column(self):
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
-            val=random.randint(1, 100000),
+            val=self.generate_alter_column_id(),
         )
 
-        f = session.async_execute_scheme(query, settings=self.ops)
-        f.add_done_callback(
-            lambda response: self.on_received_response(
-                session, response, EventKind.ALTER_TABLE,
-            )
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
+
+    def add_column_default(self):
+        query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
+            table_name=self.table_name,
+            val=self.generate_alter_column_id(),
+            default_value=random_string(10),
         )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+
+    def drop_column(self):
+        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+            return
+
+        val = random.choice(list(self.alter_column_ids[self.table_name]))
+        self.alter_column_ids[self.table_name].remove(val)
+
+        query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
+            table_name=self.table_name,
+            val=val,
+        )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
 
     def drop_table(self):
         duplicates = set()
@@ -424,29 +415,34 @@ class YdbQueue(object):
 
             duplicates.add(candidate)
             session = self.pool.acquire()
-            f = session.async_drop_table(candidate, settings=self.ops)
-            f.add_done_callback(
-                lambda response: self.on_received_response(
-                    session, response, EventKind.DROP_TABLE,
-                )
-            )
+            try:
+                session.drop_table(candidate, settings=self.ops)
+                self.update_stats(EventKind.DROP_TABLE)
+            except ydb.Error as e:
+                self.stats.save_event(EventKind.DROP_TABLE, e.status)
+            finally:
+                self.pool.release(session)
 
-    def copy_table(self):
-        session = self.pool.acquire()
-        dst_table = self.table_name_with_timestamp(self.copies_dir)
-        f = session.async_copy_table(self.table_name, dst_table, settings=self.ops)
-        f.add_done_callback(
-            lambda response: self.on_received_response(
-                session, response, EventKind.COPY_TABLE
-            )
-        )
+    def batch_update(self):
+        blob = next(self.blobs_iter)
+        parameters = {
+            "$value": blob,
+            "$timestamp": timestamp() - 10
+        }
+        self.send_query("BATCH UPDATE `{}` SET value = $value WHERE `timestamp` >= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_UPDATE)
+
+    def batch_delete(self):
+        parameters = {
+            "$timestamp": timestamp() - 20
+        }
+        self.send_query("BATCH DELETE FROM `{}` WHERE `timestamp` <= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_DELETE)
 
 
-class Workload(object):
+class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = ydb.SessionPool(self.driver, size=200)
+        self.pool = ydb.QuerySessionPool(self.driver, size=200)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -457,9 +453,20 @@ class Workload(object):
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
+        self.pool_semaphore = threading.BoundedSemaphore(value=100)
+        self.worker_exception = []
 
     def random_points(self, size=1):
         return set([random.randint(0, self.round_size) for _ in range(size)])
+
+    def wrapper(self, f):
+        try:
+            if len(self.worker_exception) == 0:
+                f()
+        except Exception as e:
+            self.worker_exception.append(traceback.format_exc(e))
+        finally:
+            self.pool_semaphore.release()
 
     def loop(self):
         started_at = time.time()
@@ -469,14 +476,14 @@ class Workload(object):
         while time.time() - started_at < self.duration:
 
             for ydb_queue in self.ydb_queues:
-                ydb_queue.list_working_dir()
-                ydb_queue.list_copies_dir()
+                yield ydb_queue.list_working_dir
+                yield ydb_queue.list_copies_dir
                 print("Table name: %s" % ydb_queue.table_name)
 
             round_id = next(round_id_it)
             if round_id % 10 == 0:
                 for ydb_queue in self.ydb_queues:
-                    ydb_queue.prepare_new_queue()
+                    yield ydb_queue.prepare_new_queue
 
             self.workload_stats.print_stats()
 
@@ -484,12 +491,15 @@ class Workload(object):
             for op in EventKind.rare():
                 schedule.extend([(point, op) for point in self.random_points()])
 
-            for op in EventKind.periodic_tasks():
+            for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
+                schedule.extend([(point, op) for point in self.random_points(size=10)])
+
+            for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])
 
             schedule = collections.deque(list(sorted(schedule)))
 
-            print("Starting round_id %d" % round_id)
+            print(f"Starting round_id {round_id}")
             print("Round schedule %s" % schedule)
             for step_id in range(self.round_size):
 
@@ -519,3 +529,14 @@ class Workload(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.pool.stop()
         self.driver.stop()
+
+    def start(self):
+        pool = ThreadPoolExecutor()
+        for lambda_call in self.loop():
+            if len(self.worker_exception) == 0:
+                self.pool_semaphore.acquire()
+                pool.submit(self.wrapper, lambda_call)
+            else:
+                assert False, f"Worker exceptions {self.worker_exception}"
+        pool.shutdown(wait=True)
+        self.workload_stats.print_stats()

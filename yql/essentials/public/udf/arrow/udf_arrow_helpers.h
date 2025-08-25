@@ -62,7 +62,7 @@ public:
 
         return *ScalarBuilder_;
     }
-    
+
     const IValueBuilder& GetValueBuilder() {
         Y_ENSURE(ValueBuilder_);
         return *ValueBuilder_;
@@ -214,11 +214,10 @@ public:
 
                 return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& ex) {
             TStringBuilder sb;
-            sb << Pos_ << " ";
-            sb << CurrentExceptionMessage();
-            sb << Endl << "[" << Name_ << "]";
+            APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)
+            sb << ex.what();
             UdfTerminate(sb.c_str());
         }
     }
@@ -332,7 +331,7 @@ TBuilder* CastToArrayBuilderImpl(IArrayBuilder& builder) {
     static_assert(std::is_base_of_v<IArrayBuilder, TBuilder>);
 
     auto* builderImpl = dynamic_cast<TBuilder*>(&builder);
-    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << typeid(builder).name() << " as ArrayBuilder");
+    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << TypeName(builder) << " as ArrayBuilder");
     return builderImpl;
 }
 
@@ -341,16 +340,16 @@ TScalarBuilderImpl* CastToScalarBuilderImpl(IScalarBuilder& builder) {
     static_assert(std::is_base_of_v<IScalarBuilder, TScalarBuilderImpl>);
 
     auto* builderImpl = dynamic_cast<TScalarBuilderImpl*>(&builder);
-    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << typeid(builder).name() << " as ArrayBuilder");
+    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << TypeName(builder) << " as ScalarBuilder");
     return builderImpl;
 }
 
 template<typename TReader>
 TReader* CastToBlockReaderImpl(IBlockReader& reader) {
     static_assert(std::is_base_of_v<IBlockReader, TReader>);
-    
+
     auto* readerImpl = dynamic_cast<TReader*>(&reader);
-    Y_ENSURE(readerImpl, TStringBuilder() << "Got " << typeid(reader).name() << " as BlockReader");
+    Y_ENSURE(readerImpl, TStringBuilder() << "Got " << TypeName(reader) << " as BlockReader");
     return readerImpl;
 }
 
@@ -444,7 +443,7 @@ struct TBinaryKernelExec {
 
             *res = MakeArray(outputArrays);
         } else if (arg1.is_array() && arg2.is_scalar()) {
-            auto& array1 = *arg1.array();            
+            auto& array1 = *arg1.array();
             auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
             auto& builder = state.GetArrayBuilder();
             auto* builderImpl = CastToArrayBuilderImpl<TArrayBuilderImpl>(builder);
@@ -644,7 +643,7 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
         }
         auto validMask = nullBuilder.Finish();
         validMask = MakeDenseBitmap(validMask->data(), length, GetYqlMemoryPool());
-        
+
         auto inMask = inArray->buffers[0];
         if (inMask) {
             outArray->buffers[0] = AllocateBitmapWithReserve(length, GetYqlMemoryPool());
@@ -702,6 +701,10 @@ public:
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
+
+#define BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(udfName, signatureFunc, options) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true)     \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict(); options;, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \

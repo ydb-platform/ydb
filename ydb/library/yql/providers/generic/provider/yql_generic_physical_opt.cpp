@@ -27,7 +27,19 @@ namespace NYql {
                 : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
             {
                 using EFlag = NPushdown::TSettings::EFeatureFlag;
-                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
+                Enable(
+                    EFlag::ExpressionAsPredicate | 
+                    EFlag::ArithmeticalExpressions | 
+                    EFlag::ImplicitConversionToInt64 | 
+                    EFlag::DateTimeTypes |
+                    EFlag::TimestampCtor |
+                    EFlag::StringTypes |
+                    EFlag::LikeOperator |
+                    EFlag::JustPassthroughOperators | // To pushdown REGEXP over String column
+                    EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
+                    EFlag::ToStringFromStringExpressions // To pushdown REGEXP over Utf8 column
+                );
+                EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }
         };
 

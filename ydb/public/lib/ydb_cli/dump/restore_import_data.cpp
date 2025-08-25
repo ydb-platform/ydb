@@ -22,6 +22,20 @@
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
 
+namespace NYdb {
+
+bool operator<(const TUuidValue& lhs, const TUuidValue& rhs) {
+    // Lexicographical comparison of UUIDs for TValue comparison.
+    // It works just like TCell::CompareCellsAsByteString.
+    // We need it since RPC Import Data expects keys to be sorted.
+    const char* pa = lhs.Buf_.Bytes;
+    const char* pb = rhs.Buf_.Bytes;
+    int cmp = memcmp(pa, pb, 16);
+    return cmp < 0;
+}
+
+}
+
 namespace NYdb::NDump {
 
 using namespace NImport;
@@ -44,6 +58,7 @@ class TValue {
         Null,
         String,
         Pod,
+        Uuid
     };
 
     inline EType GetType() const {
@@ -54,6 +69,8 @@ class TValue {
             return EType::Null;
         case 2:
             return EType::String;
+        case 9:
+            return EType::Uuid;
         default:
             return EType::Pod;
         }
@@ -110,7 +127,8 @@ private:
         i32,
         ui32,
         i64,
-        ui64
+        ui64,
+        TUuidValue
     > Value;
 
 }; // TValue
@@ -140,15 +158,17 @@ class TValueConverter {
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
         case EPrimitiveType::Date32:
-            return TValue(Parser.GetDate32());
+            return TValue(Parser.GetDate32().time_since_epoch().count());
         case EPrimitiveType::Datetime64:
-            return TValue(Parser.GetDatetime64());
+            return TValue(Parser.GetDatetime64().time_since_epoch().count());
         case EPrimitiveType::Timestamp64:
-            return TValue(Parser.GetTimestamp64());
+            return TValue(Parser.GetTimestamp64().time_since_epoch().count());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
             return TValue(Parser.GetUtf8());
+        case EPrimitiveType::Uuid:
+            return TValue(Parser.GetUuid());
         default:
             Y_ENSURE(false, "Unexpected primitive type: " << type);
         }
@@ -270,16 +290,16 @@ public:
         return TInstant::ParseIso8601(Value);
     }
 
-    i32 GetDate32() const {
-        return FromString<i32>(Value);
+    std::chrono::sys_time<TWideDays> GetDate32() const {
+        return std::chrono::sys_time<TWideDays>(TWideDays(FromString<int32_t>(Value)));
     }
 
-    i64 GetDatetime64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const {
+        return std::chrono::sys_time<TWideSeconds>(TWideSeconds(FromString<int64_t>(Value)));
     }
 
-    i64 GetTimestamp64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const {
+        return std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(FromString<int64_t>(Value)));
     }
 
     TString GetString() const {
@@ -288,6 +308,10 @@ public:
 
     TString GetUtf8() const {
         return CheckedUnescape();
+    }
+
+    TUuidValue GetUuid() const {
+        return TUuidValue(std::string(Value));
     }
 
     bool IsNull() const {

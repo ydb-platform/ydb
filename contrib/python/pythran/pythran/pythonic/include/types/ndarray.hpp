@@ -17,10 +17,12 @@
 #include "pythonic/include/types/tuple.hpp"
 
 #include "pythonic/include/numpy/bool_.hpp"
+#include "pythonic/include/numpy/complex256.hpp"
 #include "pythonic/include/numpy/complex128.hpp"
 #include "pythonic/include/numpy/complex64.hpp"
 #include "pythonic/include/numpy/float32.hpp"
 #include "pythonic/include/numpy/float64.hpp"
+#include "pythonic/include/numpy/float128.hpp"
 #include "pythonic/include/numpy/int16.hpp"
 #include "pythonic/include/numpy/int32.hpp"
 #include "pythonic/include/numpy/int64.hpp"
@@ -798,6 +800,10 @@ namespace types
     template <>
     struct dtype_helper<double> {
       using type = pythonic::numpy::functor::float64;
+    };
+    template <>
+    struct dtype_helper<long double> {
+      using type = pythonic::numpy::functor::float128;
     };
     template <>
     struct dtype_helper<std::complex<float>> {

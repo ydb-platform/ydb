@@ -119,6 +119,15 @@ bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& 
     return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
+TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator |= (const TReplicationCardFetchOptions& other)
+{
+    IncludeCoordinators |= other.IncludeCoordinators;
+    IncludeProgress |= other.IncludeProgress;
+    IncludeHistory |= other.IncludeHistory;
+    IncludeReplicatedTableOptions |= other.IncludeReplicatedTableOptions;
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(
@@ -330,6 +339,8 @@ void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicatio
     auto updateEnd = update.Segments.end();
     auto progressTimestamp = NullTimestamp;
     auto updateTimestamp = NullTimestamp;
+
+    segments.reserve(progress->Segments.size() + update.Segments.size());
 
     auto append = [&] (TUnversionedOwningRow key) {
         auto timestamp = std::max(progressTimestamp, updateTimestamp);
@@ -743,19 +754,31 @@ TReplicationProgress BuildMaxProgress(
 
         if (otherIt == otherEnd) {
             cmpResult = -1;
-            if (!upperKeySelected && CompareRows(progressIt->LowerKey, other.UpperKey) >= 0) {
-                upperKeySelected = true;
-                otherTimestamp = NullTimestamp;
-                tryAppendSegment(other.UpperKey, progressTimestamp);
-                continue;
+            if (!upperKeySelected) {
+                int upperKeyCmpResult = CompareRows(progressIt->LowerKey, other.UpperKey);
+                if (upperKeyCmpResult >= 0) {
+                    upperKeySelected = true;
+                    otherTimestamp = NullTimestamp;
+                    if (upperKeyCmpResult > 0) {
+                        // UpperKey is smaller than progressIt->LowerKey so there's a gap to fill with progressTimestamp.
+                        tryAppendSegment(other.UpperKey, progressTimestamp);
+                        continue;
+                    }
+                }
             }
         } else if (progressIt == progressEnd) {
             cmpResult = 1;
-            if (!upperKeySelected && CompareRows(otherIt->LowerKey, progress.UpperKey) >= 0) {
-                upperKeySelected = true;
-                progressTimestamp = NullTimestamp;
-                tryAppendSegment(progress.UpperKey, otherTimestamp);
-                continue;
+            if (!upperKeySelected) {
+                int upperKeyCmpResult = CompareRows(otherIt->LowerKey, progress.UpperKey);
+                if (upperKeyCmpResult >= 0) {
+                    upperKeySelected = true;
+                    progressTimestamp = NullTimestamp;
+                    if (upperKeyCmpResult > 0) {
+                        // UpperKey is smaller than otherIt->LowerKey so there's a gap to fill with otherTimestamp.
+                        tryAppendSegment(progress.UpperKey, otherTimestamp);
+                        continue;
+                    }
+                }
             }
         } else {
             cmpResult = CompareRows(progressIt->LowerKey, otherIt->LowerKey);
@@ -902,4 +925,3 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient
-

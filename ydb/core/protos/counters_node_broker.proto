@@ -7,8 +7,13 @@ option java_package = "ru.yandex.kikimr.proto";
 option (NKikimr.TabletTypeName) = "NodeBroker"; // Used as prefix for all counters
 
 enum ESimpleCounters {
-    COUNTER_EPOCH_SIZE_BYTES = 0           [(CounterOpts) = {Name: "EpochSizeBytes"}];
-    COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1    [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
+    COUNTER_EPOCH_SIZE_BYTES = 0            [(CounterOpts) = {Name: "EpochSizeBytes"}];
+    COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1     [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
+    COUNTER_UPDATE_NODES_LOG_SIZE_BYTES = 2 [(CounterOpts) = {Name: "UpdateNodesLogSizeBytes"}];
+    COUNTER_EPOCH_VERSION = 3               [(CounterOpts) = {Name: "EpochVersion"}];
+    COUNTER_ACTIVE_NODES = 4                [(CounterOpts) = {Name: "ActiveNodes"}];
+    COUNTER_EXPIRED_NODES = 5               [(CounterOpts) = {Name: "ExpiredNodes"}];
+    COUNTER_REMOVED_NODES = 6               [(CounterOpts) = {Name: "RemovedNodes"}];
 }
 
 enum ECumulativeCounters {
@@ -17,11 +22,37 @@ enum ECumulativeCounters {
     COUNTER_REGISTRATION_REQUESTS = 2      [(CounterOpts) = {Name: "RegistrationRequests"}];
     COUNTER_EXTEND_LEASE_REQUESTS = 3      [(CounterOpts) = {Name: "ExtendLeaseRequests"}];
     COUNTER_GRACEFUL_SHUTDOWN_REQUESTS = 4 [(CounterOpts) = {Name: "GracefulShutdownRequests"}];
+    COUNTER_SUBSCRIBE_NODES_REQUESTS = 5   [(CounterOpts) = {Name: "SubscribeNodesRequests"}];
+    COUNTER_SYNC_NODES_REQUESTS = 6        [(CounterOpts) = {Name: "SyncNodesRequests"}];
 }
 
 enum EPercentileCounters {
     COUNTER_LIST_NODES_BYTES = 0 [(CounterOpts) = {
         Name: "ListNodesBytes",
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 128          Name: "128"         }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+        Ranges: { Value: 134217728    Name: "134217728"   }
+    }];
+
+    COUNTER_UPDATE_NODES_BYTES = 1 [(CounterOpts) = {
+        Name: "UpdateNodesBytes",
         Ranges: { Value: 0            Name: "0"           }
         Ranges: { Value: 128          Name: "128"         }
         Ranges: { Value: 1024         Name: "1024"        }
@@ -54,4 +85,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_CONFIG_SUBSCRIPTION = 5   [(TxTypeOpts) = {Name: "TTxUpdateConfigSubscription"}];
     TXTYPE_UPDATE_EPOCH = 6                 [(TxTypeOpts) = {Name: "TTxUpdateEpoch"}];
     TXTYPE_GRACESFUL_SHUTDOWN = 7           [(TxTypeOpts) = {Name: "TTxGracefulShutdown"}];
+    TXTYPE_MIGRATE_STATE = 8                [(TxTypeOpts) = {Name: "TTxMigrateState"}];
 }

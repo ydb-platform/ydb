@@ -11,7 +11,7 @@ namespace NKikimr {
 
 class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
-    ui64 Generation;
+    ui64 Generation = 0;
     const TInstant Deadline;
     ui64 Requests = 0;
     ui64 Responses = 0;

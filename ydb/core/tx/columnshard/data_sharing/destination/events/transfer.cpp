@@ -12,8 +12,8 @@ THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
     const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        auto schema = i.GetPortionInfo().GetSchema(index);
-        i.FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
+        auto schema = i->GetPortionInfo().GetSchema(index);
+        i->FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
 
     const std::shared_ptr<TSharedBlobsManager> sharedBlobs = storages->GetSharedBlobsManager();

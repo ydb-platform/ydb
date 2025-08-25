@@ -29,41 +29,41 @@ namespace {
     class TCyclicRWBuffer {
     public:
         TCyclicRWBuffer(size_t capacity)
-            : Buffer(capacity)
-            , Finished(false)
-            , DataStart(0)
-            , DataSize(0)
+            : Buffer_(capacity)
+            , Finished_(false)
+            , DataStart_(0)
+            , DataSize_(0)
         {
-            Buffer.Resize(capacity);
+            Buffer_.Resize(capacity);
         }
 
         bool IsFinished() const {
-            return Finished;
+            return Finished_;
         }
 
         void Finish() {
-            Finished = true;
+            Finished_ = true;
         }
 
         bool HasData() const {
-            return DataSize > 0;
+            return DataSize_ > 0;
         }
 
         size_t GetDataSize() const {
-            return DataSize;
+            return DataSize_;
         }
 
         void GetData(const char*& ptr, size_t& len) const {
-            size_t readSize = GetDataRegionSize(DataStart, DataSize);
-            ptr = Buffer.Data() + DataStart;
+            size_t readSize = GetDataRegionSize(DataStart_, DataSize_);
+            ptr = Buffer_.Data() + DataStart_;
             len = readSize;
         }
 
         void CommitRead(size_t len) {
-            Y_DEBUG_ABORT_UNLESS(len <= GetDataRegionSize(DataStart, DataSize));
+            Y_DEBUG_ABORT_UNLESS(len <= GetDataRegionSize(DataStart_, DataSize_));
 
-            DataStart = GetBufferPosition(DataStart + len);
-            DataSize -= len;
+            DataStart_ = GetBufferPosition(DataStart_ + len);
+            DataSize_ -= len;
         }
 
         bool CanWrite() const {
@@ -71,7 +71,7 @@ namespace {
         }
 
         size_t WriteSize() const {
-            return Buffer.Size() - DataSize;
+            return Buffer_.Size() - DataSize_;
         }
 
         size_t Write(const char*& ptr, size_t& len) {
@@ -87,7 +87,7 @@ namespace {
 
                 MemCopy(Data(writeStart), ptr, writeSize);
 
-                DataSize += writeSize;
+                DataSize_ += writeSize;
                 bytesWritten += writeSize;
                 bytesToWrite -= writeSize;
 
@@ -107,32 +107,32 @@ namespace {
 
     private:
         size_t GetBufferPosition(size_t pos) const {
-            return pos % Buffer.Size();
+            return pos % Buffer_.Size();
         }
 
         size_t GetDataRegionSize(size_t start, size_t size) const {
-            Y_DEBUG_ABORT_UNLESS(start < Buffer.Size());
+            Y_DEBUG_ABORT_UNLESS(start < Buffer_.Size());
 
-            return std::min(size, Buffer.Size() - start);
+            return std::min(size, Buffer_.Size() - start);
         }
 
         size_t GetWriteStart() const {
-            return GetBufferPosition(DataStart + DataSize);
+            return GetBufferPosition(DataStart_ + DataSize_);
         }
 
         char* Data(size_t pos) {
-            Y_DEBUG_ABORT_UNLESS(pos < Buffer.Size());
+            Y_DEBUG_ABORT_UNLESS(pos < Buffer_.Size());
 
-            return (Buffer.Data() + pos);
+            return (Buffer_.Data() + pos);
         }
 
     private:
-        TBuffer Buffer;
+        TBuffer Buffer_;
 
-        bool Finished;
+        bool Finished_;
 
-        size_t DataStart;
-        size_t DataSize;
+        size_t DataStart_;
+        size_t DataSize_;
     };
 
     struct TStreamingParams {
@@ -174,14 +174,14 @@ namespace {
     public:
         TStringListBufferedInputStream(TUnboxedValue rowsStream, const TString& delimiter, size_t bufferSizeBytes,
                                        TThreadSyncData& syncData, TSourcePosition pos)
-            : RowsStream(rowsStream)
-            , Delimiter(delimiter)
-            , SyncData(syncData)
+            : RowsStream_(rowsStream)
+            , Delimiter_(delimiter)
+            , SyncData_(syncData)
             , Pos_(pos)
-            , DelimiterMatcher(delimiter)
-            , DelimiterInput(delimiter)
-            , Buffer(bufferSizeBytes)
-            , CurReadMode(ReadMode::Start)
+            , DelimiterMatcher_(delimiter)
+            , DelimiterInput_(delimiter)
+            , Buffer_(bufferSizeBytes)
+            , CurReadMode_(ReadMode::Start)
         {
         }
 
@@ -189,20 +189,20 @@ namespace {
         TStringListBufferedInputStream& operator=(const TStringListBufferedInputStream&) = delete;
 
         TCyclicRWBuffer& GetBuffer() {
-            return Buffer;
+            return Buffer_;
         }
 
         // Fetch input from upstream list iterator to the buffer.
         // Called from Main thread.
         EFetchStatus FetchInput() {
-            with_lock (SyncData.BuffersMutex) {
-                Y_DEBUG_ABORT_UNLESS(!Buffer.HasData());
-                Y_DEBUG_ABORT_UNLESS(Buffer.CanWrite());
+            with_lock (SyncData_.BuffersMutex) {
+                Y_DEBUG_ABORT_UNLESS(!Buffer_.HasData());
+                Y_DEBUG_ABORT_UNLESS(Buffer_.CanWrite());
 
                 bool receivedYield = false;
 
-                while (Buffer.CanWrite() && CurReadMode != ReadMode::Done && !receivedYield) {
-                    switch (CurReadMode) {
+                while (Buffer_.CanWrite() && CurReadMode_ != ReadMode::Done && !receivedYield) {
+                    switch (CurReadMode_) {
                         case ReadMode::Start: {
                             auto status = ReadNextString();
                             if (status == EFetchStatus::Yield) {
@@ -210,7 +210,7 @@ namespace {
                                 break;
                             }
 
-                            CurReadMode = (status == EFetchStatus::Ok)
+                            CurReadMode_ = (status == EFetchStatus::Ok)
                                               ? ReadMode::String
                                               : ReadMode::Done;
 
@@ -218,22 +218,22 @@ namespace {
                         }
 
                         case ReadMode::String:
-                            if (CurStringInput.Exhausted()) {
-                                DelimiterInput.Reset(Delimiter.data(), Delimiter.size());
-                                CurReadMode = ReadMode::Delimiter;
+                            if (CurStringInput_.Exhausted()) {
+                                DelimiterInput_.Reset(Delimiter_.data(), Delimiter_.size());
+                                CurReadMode_ = ReadMode::Delimiter;
                                 break;
                             }
 
-                            Buffer.Write(CurStringInput);
+                            Buffer_.Write(CurStringInput_);
                             break;
 
                         case ReadMode::Delimiter:
-                            if (DelimiterInput.Exhausted()) {
-                                CurReadMode = ReadMode::Start;
+                            if (DelimiterInput_.Exhausted()) {
+                                CurReadMode_ = ReadMode::Start;
                                 break;
                             }
 
-                            Buffer.Write(DelimiterInput);
+                            Buffer_.Write(DelimiterInput_);
                             break;
 
                         default:
@@ -241,11 +241,11 @@ namespace {
                     }
                 }
 
-                if (CurReadMode == ReadMode::Done) {
-                    Buffer.Finish();
+                if (CurReadMode_ == ReadMode::Done) {
+                    Buffer_.Finish();
                 }
 
-                SyncData.InputBufferCanReadCond.Signal();
+                SyncData_.InputBufferCanReadCond.Signal();
                 return receivedYield ? EFetchStatus::Yield : EFetchStatus::Ok;
             }
         }
@@ -255,37 +255,37 @@ namespace {
         // Called from Communicate thread.
         size_t DoRead(void* buf, size_t len) override {
             try {
-                with_lock (SyncData.BuffersMutex) {
-                    while (!Buffer.HasData() && !Buffer.IsFinished()) {
-                        SyncData.MainThreadHasWorkCond.Signal();
-                        SyncData.InputBufferCanReadCond.WaitI(SyncData.BuffersMutex);
+                with_lock (SyncData_.BuffersMutex) {
+                    while (!Buffer_.HasData() && !Buffer_.IsFinished()) {
+                        SyncData_.MainThreadHasWorkCond.Signal();
+                        SyncData_.InputBufferCanReadCond.WaitI(SyncData_.BuffersMutex);
                     }
 
-                    if (!Buffer.HasData()) {
-                        Y_DEBUG_ABORT_UNLESS(Buffer.IsFinished());
+                    if (!Buffer_.HasData()) {
+                        Y_DEBUG_ABORT_UNLESS(Buffer_.IsFinished());
                         return 0;
                     }
 
                     const char* dataPtr;
                     size_t dataLen;
-                    Buffer.GetData(dataPtr, dataLen);
+                    Buffer_.GetData(dataPtr, dataLen);
 
                     size_t bytesRead = std::min(dataLen, len);
                     Y_DEBUG_ABORT_UNLESS(bytesRead > 0);
                     memcpy(buf, dataPtr, bytesRead);
-                    Buffer.CommitRead(bytesRead);
+                    Buffer_.CommitRead(bytesRead);
                     return bytesRead;
                 }
 
                 ythrow yexception();
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
         EFetchStatus ReadNextString() {
             TUnboxedValue item;
-            EFetchStatus status = RowsStream.Fetch(item);
+            EFetchStatus status = RowsStream_.Fetch(item);
             switch (status) {
                 case EFetchStatus::Yield:
                 case EFetchStatus::Finish:
@@ -294,15 +294,15 @@ namespace {
                     break;
             }
 
-            CurString = item.GetElement(0);
-            CurStringInput.Reset(CurString.AsStringRef().Data(), CurString.AsStringRef().Size());
+            CurString_ = item.GetElement(0);
+            CurStringInput_.Reset(CurString_.AsStringRef().Data(), CurString_.AsStringRef().Size());
 
             // Check that input string doesn't contain delimiters
             const char* match;
             Y_UNUSED(match);
-            if (DelimiterMatcher.SubStr(
-                    CurString.AsStringRef().Data(),
-                    CurString.AsStringRef().Data() + CurString.AsStringRef().Size(),
+            if (DelimiterMatcher_.SubStr(
+                    CurString_.AsStringRef().Data(),
+                    CurString_.AsStringRef().Data() + CurString_.AsStringRef().Size(),
                     match))
             {
                 ythrow yexception() << "Delimiter found in input string.";
@@ -319,32 +319,32 @@ namespace {
             Done
         };
 
-        TUnboxedValue RowsStream;
-        TString Delimiter;
-        TThreadSyncData& SyncData;
+        TUnboxedValue RowsStream_;
+        TString Delimiter_;
+        TThreadSyncData& SyncData_;
         TSourcePosition Pos_;
 
-        TKMPMatcher DelimiterMatcher;
-        TUnboxedValue CurString;
-        TMemoryInput CurStringInput;
-        TMemoryInput DelimiterInput;
+        TKMPMatcher DelimiterMatcher_;
+        TUnboxedValue CurString_;
+        TMemoryInput CurStringInput_;
+        TMemoryInput DelimiterInput_;
 
-        TCyclicRWBuffer Buffer;
+        TCyclicRWBuffer Buffer_;
 
-        ReadMode CurReadMode;
+        ReadMode CurReadMode_;
     };
 
     class TStringListBufferedOutputStream: public IOutputStream {
     public:
         TStringListBufferedOutputStream(const TString& delimiter, size_t stringBufferSizeBytes,
                                         TStringListBufferedInputStream& inputStream, TThreadSyncData& syncData)
-            : Delimiter(delimiter)
-            , InputStream(inputStream)
-            , SyncData(syncData)
-            , HasDelimiterMatch(false)
-            , DelimiterMatcherCallback(HasDelimiterMatch)
-            , DelimiterMatcher(delimiter.data(), delimiter.data() + delimiter.size(), &DelimiterMatcherCallback)
-            , Buffer(stringBufferSizeBytes)
+            : Delimiter_(delimiter)
+            , InputStream_(inputStream)
+            , SyncData_(syncData)
+            , HasDelimiterMatch_(false)
+            , DelimiterMatcherCallback_(HasDelimiterMatch_)
+            , DelimiterMatcher_(delimiter.data(), delimiter.data() + delimiter.size(), &DelimiterMatcherCallback_)
+            , Buffer_(stringBufferSizeBytes)
         {
         }
 
@@ -354,22 +354,22 @@ namespace {
         // Get string record from buffer.
         // Called from Main thread.
         EFetchStatus FetchNextString(TString& str) {
-            while (!HasDelimiterMatch) {
-                with_lock (SyncData.BuffersMutex) {
+            while (!HasDelimiterMatch_) {
+                with_lock (SyncData_.BuffersMutex) {
                     bool inputHasData;
                     bool bufferNeedsData;
 
                     do {
-                        inputHasData = InputStream.GetBuffer().HasData() || InputStream.GetBuffer().IsFinished();
-                        bufferNeedsData = !Buffer.HasData() && !Buffer.IsFinished();
+                        inputHasData = InputStream_.GetBuffer().HasData() || InputStream_.GetBuffer().IsFinished();
+                        bufferNeedsData = !Buffer_.HasData() && !Buffer_.IsFinished();
 
                         if (inputHasData && bufferNeedsData) {
-                            SyncData.MainThreadHasWorkCond.WaitI(SyncData.BuffersMutex);
+                            SyncData_.MainThreadHasWorkCond.WaitI(SyncData_.BuffersMutex);
                         }
                     } while (inputHasData && bufferNeedsData);
 
                     if (!inputHasData) {
-                        auto status = InputStream.FetchInput();
+                        auto status = InputStream_.FetchInput();
                         if (status == EFetchStatus::Yield) {
                             return EFetchStatus::Yield;
                         }
@@ -379,44 +379,44 @@ namespace {
                         continue;
                     }
 
-                    if (!Buffer.HasData()) {
-                        Y_DEBUG_ABORT_UNLESS(Buffer.IsFinished());
-                        str = TString(TStringBuf(CurrentString.Data(), CurrentString.Size()));
-                        CurrentString.Clear();
+                    if (!Buffer_.HasData()) {
+                        Y_DEBUG_ABORT_UNLESS(Buffer_.IsFinished());
+                        str = TString(TStringBuf(CurrentString_.Data(), CurrentString_.Size()));
+                        CurrentString_.Clear();
                         return str.empty() ? EFetchStatus::Finish : EFetchStatus::Ok;
                     }
 
                     const char* data;
                     size_t size;
-                    Buffer.GetData(data, size);
+                    Buffer_.GetData(data, size);
 
                     size_t read = 0;
-                    while (!HasDelimiterMatch && read < size) {
-                        DelimiterMatcher.Push(data[read]);
+                    while (!HasDelimiterMatch_ && read < size) {
+                        DelimiterMatcher_.Push(data[read]);
                         ++read;
                     }
 
                     Y_DEBUG_ABORT_UNLESS(read > 0);
-                    CurrentString.Append(data, read);
-                    bool signalCanWrite = !Buffer.CanWrite();
-                    Buffer.CommitRead(read);
+                    CurrentString_.Append(data, read);
+                    bool signalCanWrite = !Buffer_.CanWrite();
+                    Buffer_.CommitRead(read);
 
                     if (signalCanWrite) {
-                        SyncData.OutputBufferCanWriteCond.Signal();
+                        SyncData_.OutputBufferCanWriteCond.Signal();
                     }
                 }
             }
 
-            Y_DEBUG_ABORT_UNLESS(CurrentString.Size() >= Delimiter.size());
-            str = TString(TStringBuf(CurrentString.Data(), CurrentString.Size() - Delimiter.size()));
-            CurrentString.Clear();
-            HasDelimiterMatch = false;
+            Y_DEBUG_ABORT_UNLESS(CurrentString_.Size() >= Delimiter_.size());
+            str = TString(TStringBuf(CurrentString_.Data(), CurrentString_.Size() - Delimiter_.size()));
+            CurrentString_.Clear();
+            HasDelimiterMatch_ = false;
 
             return EFetchStatus::Ok;
         }
 
         TCyclicRWBuffer& GetBuffer() {
-            return Buffer;
+            return Buffer_;
         }
 
     private:
@@ -427,20 +427,20 @@ namespace {
             size_t curStrLen = len;
 
             while (curStrLen > 0) {
-                with_lock (SyncData.BuffersMutex) {
-                    while (!Buffer.CanWrite() && !Buffer.IsFinished()) {
-                        SyncData.OutputBufferCanWriteCond.WaitI(SyncData.BuffersMutex);
+                with_lock (SyncData_.BuffersMutex) {
+                    while (!Buffer_.CanWrite() && !Buffer_.IsFinished()) {
+                        SyncData_.OutputBufferCanWriteCond.WaitI(SyncData_.BuffersMutex);
                     }
 
-                    if (Buffer.IsFinished()) {
+                    if (Buffer_.IsFinished()) {
                         return;
                     }
 
-                    bool signalCanRead = !Buffer.HasData();
-                    Buffer.Write(curStrPos, curStrLen);
+                    bool signalCanRead = !Buffer_.HasData();
+                    Buffer_.Write(curStrPos, curStrLen);
 
                     if (signalCanRead) {
-                        SyncData.MainThreadHasWorkCond.Signal();
+                        SyncData_.MainThreadHasWorkCond.Signal();
                     }
                 }
             }
@@ -449,9 +449,9 @@ namespace {
         void DoFinish() override {
             IOutputStream::DoFinish();
 
-            with_lock (SyncData.BuffersMutex) {
-                Buffer.Finish();
-                SyncData.MainThreadHasWorkCond.Signal();
+            with_lock (SyncData_.BuffersMutex) {
+                Buffer_.Finish();
+                SyncData_.MainThreadHasWorkCond.Signal();
             }
         }
 
@@ -459,7 +459,7 @@ namespace {
         class MatcherCallback: public TKMPStreamMatcher<char>::ICallback {
         public:
             MatcherCallback(bool& hasMatch)
-                : HasMatch(hasMatch)
+                : HasMatch_(hasMatch)
             {
             }
 
@@ -467,32 +467,32 @@ namespace {
                 Y_UNUSED(begin);
                 Y_UNUSED(end);
 
-                HasMatch = true;
+                HasMatch_ = true;
             }
 
         private:
-            bool& HasMatch;
+            bool& HasMatch_;
         };
 
     private:
-        TString Delimiter;
-        TStringListBufferedInputStream& InputStream;
-        TThreadSyncData& SyncData;
+        TString Delimiter_;
+        TStringListBufferedInputStream& InputStream_;
+        TThreadSyncData& SyncData_;
 
-        bool HasDelimiterMatch;
-        MatcherCallback DelimiterMatcherCallback;
-        TKMPStreamMatcher<char> DelimiterMatcher;
+        bool HasDelimiterMatch_;
+        MatcherCallback DelimiterMatcherCallback_;
+        TKMPStreamMatcher<char> DelimiterMatcher_;
 
-        TBuffer CurrentString;
+        TBuffer CurrentString_;
 
-        TCyclicRWBuffer Buffer;
+        TCyclicRWBuffer Buffer_;
     };
 
     class TStreamingOutputListIterator {
     public:
         TStreamingOutputListIterator(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-            : StreamingParams(params)
-            , ValueBuilder(valueBuilder)
+            : StreamingParams_(params)
+            , ValueBuilder_(valueBuilder)
             , Pos_(pos)
         {
         }
@@ -501,24 +501,24 @@ namespace {
         TStreamingOutputListIterator& operator=(const TStreamingOutputListIterator&) = delete;
 
         ~TStreamingOutputListIterator() {
-            if (ShellCommand) {
-                Y_DEBUG_ABORT_UNLESS(InputStream && OutputStream);
+            if (ShellCommand_) {
+                Y_DEBUG_ABORT_UNLESS(InputStream_ && OutputStream_);
 
                 try {
-                    ShellCommand->Terminate();
+                    ShellCommand_->Terminate();
                 } catch (const std::exception& e) {
                     Cerr << CurrentExceptionMessage();
                 }
 
                 // Let Communicate thread finish.
-                with_lock (ThreadSyncData.BuffersMutex) {
-                    InputStream->GetBuffer().Finish();
-                    OutputStream->GetBuffer().Finish();
-                    ThreadSyncData.InputBufferCanReadCond.Signal();
-                    ThreadSyncData.OutputBufferCanWriteCond.Signal();
+                with_lock (ThreadSyncData_.BuffersMutex) {
+                    InputStream_->GetBuffer().Finish();
+                    OutputStream_->GetBuffer().Finish();
+                    ThreadSyncData_.InputBufferCanReadCond.Signal();
+                    ThreadSyncData_.OutputBufferCanWriteCond.Signal();
                 }
 
-                ShellCommand->Wait();
+                ShellCommand_->Wait();
             }
         }
 
@@ -531,89 +531,89 @@ namespace {
 
                     // Don't try to fetch data if there was a problem starting the process,
                     // this causes infinite wait on Windows system due to incorrect ShellCommand behavior.
-                    if (ShellCommand->GetStatus() != TShellCommand::SHELL_RUNNING && ShellCommand->GetStatus() != TShellCommand::SHELL_FINISHED) {
+                    if (ShellCommand_->GetStatus() != TShellCommand::SHELL_RUNNING && ShellCommand_->GetStatus() != TShellCommand::SHELL_FINISHED) {
                         status = EFetchStatus::Finish;
                     }
                 }
 
                 if (status == EFetchStatus::Ok) {
-                    status = OutputStream->FetchNextString(CurrentRecord);
+                    status = OutputStream_->FetchNextString(CurrentRecord_);
                 }
 
                 if (status == EFetchStatus::Finish) {
-                    switch (ShellCommand->GetStatus()) {
+                    switch (ShellCommand_->GetStatus()) {
                         case TShellCommand::SHELL_FINISHED:
                             break;
                         case TShellCommand::SHELL_INTERNAL_ERROR:
-                            ythrow yexception() << "Internal error running process: " << ShellCommand->GetInternalError();
+                            ythrow yexception() << "Internal error running process: " << ShellCommand_->GetInternalError();
                             break;
                         case TShellCommand::SHELL_ERROR:
-                            ythrow yexception() << "Error running user process: " << ShellCommand->GetError();
+                            ythrow yexception() << "Error running user process: " << ShellCommand_->GetError();
                             break;
                         default:
-                            ythrow yexception() << "Unexpected shell command status: " << (int)ShellCommand->GetStatus();
+                            ythrow yexception() << "Unexpected shell command status: " << (int)ShellCommand_->GetStatus();
                     }
                     return EFetchStatus::Finish;
                 }
 
                 if (status == EFetchStatus::Ok) {
                     TUnboxedValue* items = nullptr;
-                    result = ValueBuilder->NewArray(1, items);
-                    *items = ValueBuilder->NewString(TStringRef(CurrentRecord.data(), CurrentRecord.size()));
+                    result = ValueBuilder_->NewArray(1, items);
+                    *items = ValueBuilder_->NewString(TStringRef(CurrentRecord_.data(), CurrentRecord_.size()));
                 }
 
                 return status;
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
     private:
         void StartProcess() {
-            InputStream.Reset(new TStringListBufferedInputStream(
-                StreamingParams.InputStreamObj, StreamingParams.InputDelimiter,
-                StreamingParams.InputBufferSizeBytes, ThreadSyncData, Pos_));
+            InputStream_.Reset(new TStringListBufferedInputStream(
+                StreamingParams_.InputStreamObj, StreamingParams_.InputDelimiter,
+                StreamingParams_.InputBufferSizeBytes, ThreadSyncData_, Pos_));
 
-            OutputStream.Reset(new TStringListBufferedOutputStream(
-                StreamingParams.OutputDelimiter, StreamingParams.OutputBufferSizeBytes, *InputStream,
-                ThreadSyncData));
+            OutputStream_.Reset(new TStringListBufferedOutputStream(
+                StreamingParams_.OutputDelimiter, StreamingParams_.OutputBufferSizeBytes, *InputStream_,
+                ThreadSyncData_));
 
             TShellCommandOptions opt;
-            opt.SetAsync(true).SetUseShell(false).SetLatency(StreamingParams.ProcessPollLatencyMs).SetInputStream(InputStream.Get()).SetOutputStream(OutputStream.Get()).SetCloseStreams(true).SetCloseAllFdsOnExec(true);
+            opt.SetAsync(true).SetUseShell(false).SetLatency(StreamingParams_.ProcessPollLatencyMs).SetInputStream(InputStream_.Get()).SetOutputStream(OutputStream_.Get()).SetCloseStreams(true).SetCloseAllFdsOnExec(true);
 
             TList<TString> commandArguments;
-            auto argumetsIterator = StreamingParams.ArgumentsList.GetListIterator();
+            auto argumetsIterator = StreamingParams_.ArgumentsList.GetListIterator();
             for (TUnboxedValue item; argumetsIterator.Next(item);) {
                 commandArguments.emplace_back(TStringBuf(item.AsStringRef()));
             }
 
-            ShellCommand.Reset(new TShellCommand(StreamingParams.CommandLine, commandArguments, opt));
-            ShellCommand->Run();
+            ShellCommand_.Reset(new TShellCommand(StreamingParams_.CommandLine, commandArguments, opt));
+            ShellCommand_->Run();
         }
 
         bool ProcessStarted() const {
-            return !!ShellCommand;
+            return !!ShellCommand_;
         }
 
     private:
-        TStreamingParams StreamingParams;
-        const IValueBuilder* ValueBuilder;
+        TStreamingParams StreamingParams_;
+        const IValueBuilder* ValueBuilder_;
         TSourcePosition Pos_;
 
-        TThreadSyncData ThreadSyncData;
+        TThreadSyncData ThreadSyncData_;
 
-        THolder<TShellCommand> ShellCommand;
-        THolder<TStringListBufferedInputStream> InputStream;
-        THolder<TStringListBufferedOutputStream> OutputStream;
+        THolder<TShellCommand> ShellCommand_;
+        THolder<TStringListBufferedInputStream> InputStream_;
+        THolder<TStringListBufferedOutputStream> OutputStream_;
 
-        TString CurrentRecord;
+        TString CurrentRecord_;
     };
 
     class TStreamingOutput: public TBoxedValue {
     public:
         TStreamingOutput(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-            : StreamingParams(params)
-            , ValueBuilder(valueBuilder)
+            : StreamingParams_(params)
+            , ValueBuilder_(valueBuilder)
             , Pos_(pos)
         {
         }
@@ -623,29 +623,29 @@ namespace {
 
     private:
         EFetchStatus Fetch(TUnboxedValue& result) override {
-            if (IsFinished) {
+            if (IsFinished_) {
                 return EFetchStatus::Finish;
             }
 
-            if (!Iterator) {
-                Iterator.Reset(new TStreamingOutputListIterator(StreamingParams, ValueBuilder, Pos_));
+            if (!Iterator_) {
+                Iterator_.Reset(new TStreamingOutputListIterator(StreamingParams_, ValueBuilder_, Pos_));
             }
 
-            auto ret = Iterator->Fetch(result);
+            auto ret = Iterator_->Fetch(result);
 
             if (ret == EFetchStatus::Finish) {
-                IsFinished = true;
-                Iterator.Reset();
+                IsFinished_ = true;
+                Iterator_.Reset();
             }
 
             return ret;
         }
 
-        TStreamingParams StreamingParams;
-        const IValueBuilder* ValueBuilder;
+        TStreamingParams StreamingParams_;
+        const IValueBuilder* ValueBuilder_;
         TSourcePosition Pos_;
-        bool IsFinished = false;
-        THolder<TStreamingOutputListIterator> Iterator;
+        bool IsFinished_ = false;
+        THolder<TStreamingOutputListIterator> Iterator_;
     };
 
     class TStreamingScriptOutput: public TStreamingOutput {
@@ -653,14 +653,14 @@ namespace {
         TStreamingScriptOutput(const TStreamingParams& params, const IValueBuilder* valueBuilder,
                                TSourcePosition pos, const TString& script, const TString& scriptFilename)
             : TStreamingOutput(params, valueBuilder, pos)
-            , ScriptFileHandle(scriptFilename)
+            , ScriptFileHandle_(scriptFilename)
         {
             auto scriptStripped = StripBeforeShebang(script);
-            ScriptFileHandle.Write(scriptStripped.data(), scriptStripped.size());
-            ScriptFileHandle.Close();
+            ScriptFileHandle_.Write(scriptStripped.data(), scriptStripped.size());
+            ScriptFileHandle_.Close();
 
-            if (Chmod(ScriptFileHandle.Name().c_str(), MODE0755) != 0) {
-                ythrow yexception() << "Chmod failed for script file:" << ScriptFileHandle.Name()
+            if (Chmod(ScriptFileHandle_.Name().c_str(), MODE0755) != 0) {
+                ythrow yexception() << "Chmod failed for script file:" << ScriptFileHandle_.Name()
                                     << " with error: " << LastSystemErrorText();
             }
         }
@@ -679,7 +679,7 @@ namespace {
             return script;
         }
 
-        TTempFileHandle ScriptFileHandle;
+        TTempFileHandle ScriptFileHandle_;
     };
 
     class TStreamingProcess: public TBoxedValue {

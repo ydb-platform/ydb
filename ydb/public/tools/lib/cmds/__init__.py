@@ -383,6 +383,7 @@ def deploy(arguments):
         extra_feature_flags=enable_feature_flags,
         extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
+        verbose_memory_limit_exception=True,
         **optionals
     )
 

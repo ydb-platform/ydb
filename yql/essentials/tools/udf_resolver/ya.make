@@ -25,6 +25,7 @@ PEERDIR(
     yql/essentials/utils/backtrace
     yql/essentials/utils/sys
     yql/essentials/sql/pg_dummy
+    yql/essentials/public/langver
 )
 
 YQL_LAST_ABI_VERSION()

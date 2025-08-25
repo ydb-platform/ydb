@@ -564,7 +564,7 @@ public:
             block = make;
 
             const auto itemsType = PointerType::getUnqual(list->getType());
-            const auto itemsPtr = *this->Stateless || ctx.AlwaysInline ?
+            const auto itemsPtr = *this->Stateless_ || ctx.AlwaysInline ?
                 new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(itemsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, copy, itemsPtr, block);

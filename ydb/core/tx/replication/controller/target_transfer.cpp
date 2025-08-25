@@ -17,7 +17,9 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
     Config = std::make_shared<TTargetTransfer::TTransferConfig>(
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
-        t.GetTransformLambda());
+        t.GetTransformLambda(),
+        cfg.GetTransferSpecific().GetRunAsUser(),
+        t.GetDirectoryPath());
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {
@@ -25,7 +27,7 @@ void TTargetTransfer::Progress(const TActorContext& ctx) {
 
     switch (GetStreamState()) {
     case EStreamState::Removing:
-        if (GetWorkers()) {
+        if (HasWorkers()) {
             RemoveWorkers(ctx);
         } else if (!StreamConsumerRemover) {
             StreamConsumerRemover = ctx.Register(CreateStreamConsumerRemover(replication, GetId(), ctx));
@@ -55,14 +57,24 @@ TString TTargetTransfer::GetStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 
-TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda)
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath)
     : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
     , TransformLambda(transformLambda)
+    , RunAsUser(runAsUser)
+    , DirectoryPath(directoryPath)
 {
 }
 
 const TString& TTargetTransfer::TTransferConfig::GetTransformLambda() const {
     return TransformLambda;
+}
+
+const TString& TTargetTransfer::TTransferConfig::GetRunAsUser() const {
+    return RunAsUser;
+}
+
+const TString& TTargetTransfer::TTransferConfig::GetDirectoryPath() const {
+    return DirectoryPath;
 }
 
 }

@@ -18,6 +18,11 @@ items:
   include:
     mode: link
     path: dev/toc_p.yaml
+- name: For Analysts
+  href: analyst/index.md
+  include:
+    mode: link
+    path: analyst/toc_p.yaml
 - name: For Security Engineers
   href: security/index.md
   include:
@@ -54,6 +59,9 @@ items:
     path: public-materials/toc_p.yaml
 - name: Downloads
   href: downloads/index.md
+  include:
+    mode: link
+    path: downloads/toc_i.yaml
 - name: Changelog
   include:
     mode: link

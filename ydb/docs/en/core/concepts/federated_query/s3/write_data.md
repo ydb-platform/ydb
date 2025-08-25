@@ -1,8 +1,8 @@
-# Writing data to S3 buckets ({{ objstorage-full-name }})
+# Writing Data to S3 Buckets ({{ objstorage-full-name }})
 
 In {{ ydb-full-name }}, you can use [external connections](#connection-write) or [external tables](#external-table-write) to write data to the {{ objstorage-full-name }} bucket.
 
-## Writing data via external connection {#connection-write}
+## Writing Data via External Connection {#connection-write}
 
 Using connections for data writing is convenient for prototyping and initial setup. The SQL expression demonstrates writing data directly to an external data source.
 
@@ -20,7 +20,7 @@ The data will be written to the specified path. In this mode, the resulting file
 
 When working with external connections, only read (`SELECT`) and insert (`INSERT`) operations are possible; other types of operations are not supported.
 
-## Writing data via external tables {#external-table-write}
+## Writing Data via External Tables {#external-table-write}
 
 If you need to write data regularly, doing this using external tables is convenient. In this case, there is no need to specify all the details of working with this data in each query. To write data to the bucket, create an [external table](external_table.md) in S3 ({{ objstorage-full-name }}) and use the usual SQL `INSERT INTO` statement:
 

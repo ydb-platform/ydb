@@ -5,7 +5,7 @@
 namespace NYql::NJsonPath {
 
 TJsonPathTypeChecker::TJsonPathTypeChecker(TIssues& issues)
-    : Issues(issues)
+    : Issues_(issues)
 {
 }
 
@@ -125,8 +125,8 @@ void TJsonPathTypeChecker::VisitLikeRegexPredicate(const TLikeRegexPredicateNode
 }
 
 void TJsonPathTypeChecker::Error(const TAstNodePtr node, const TStringBuf message) {
-    Issues.AddIssue(node->GetPos(), message);
-    Issues.back().SetCode(TIssuesIds::JSONPATH_TYPE_CHECK_ERROR, TSeverityIds::S_ERROR);
+    Issues_.AddIssue(node->GetPos(), message);
+    Issues_.back().SetCode(TIssuesIds::JSONPATH_TYPE_CHECK_ERROR, TSeverityIds::S_ERROR);
 }
 
 }

@@ -41,15 +41,18 @@ public:
             {T::ExpectedSlotCount::ColumnId, {E::kInfoFieldNumber, V::kExpectedSlotCountFieldNumber}},
             {T::NumActiveSlots::ColumnId, {E::kInfoFieldNumber, V::kNumActiveSlotsFieldNumber}},
             {T::DecommitStatus::ColumnId, {E::kInfoFieldNumber, V::kDecommitStatusFieldNumber}},
+            {T::SlotSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kSlotSizeInUnitsFieldNumber}},
+            {T::InferPDiskSlotCountFromUnitSize::ColumnId, {E::kInfoFieldNumber, V::kInferPDiskSlotCountFromUnitSizeFieldNumber}},
         };
         return fieldMap;
     }
 };
 
-THolder<NActors::IActor> CreatePDisksScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreatePDisksScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPDisksScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TPDisksScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

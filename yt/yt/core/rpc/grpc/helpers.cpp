@@ -68,9 +68,9 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
     return TStringBuf();
 }
 
-THashMap<std::string, TString> TGrpcMetadataArray::ToMap() const
+THashMap<std::string, std::string> TGrpcMetadataArray::ToMap() const
 {
-    THashMap<std::string, TString> result;
+    THashMap<std::string, std::string> result;
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
         result[NYT::ToString(metadata.key)] = NYT::ToString(metadata.value);
@@ -106,14 +106,14 @@ size_t TGrpcSlice::Size() const
     return GRPC_SLICE_LENGTH(Native_);
 }
 
-TString TGrpcSlice::AsString() const
+std::string TGrpcSlice::AsString() const
 {
     return NYT::ToString(Native_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGrpcMetadataArrayBuilder::Add(const char* key, TString value)
+void TGrpcMetadataArrayBuilder::Add(const char* key, std::string value)
 {
     Strings_.push_back(TSharedRef::FromString(std::move(value)));
     grpc_metadata metadata;
@@ -195,7 +195,7 @@ grpc_channel_args* TGrpcChannelArgs::Unwrap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGrpcPemKeyCertPair::TGrpcPemKeyCertPair(TString privateKey, TString certChain)
+TGrpcPemKeyCertPair::TGrpcPemKeyCertPair(std::string privateKey, std::string certChain)
     : PrivateKey_(std::move(privateKey))
     , CertChain_(std::move(certChain))
     , Native_({
@@ -444,7 +444,7 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
     }
 }
 
-TString SerializeError(const TError& error)
+std::string SerializeError(const TError& error)
 {
     TString serializedError;
     google::protobuf::io::StringOutputStream output(&serializedError);
@@ -539,7 +539,7 @@ TX509Ptr ParsePemCertToX509(TStringBuf pemCert)
     return MakeX509Ptr(PEM_read_bio_X509(bio, nullptr, nullptr, nullptr));
 }
 
-std::optional<TString> ParseIssuerFromX509(const TX509Ptr& pemCertX509)
+std::optional<std::string> ParseIssuerFromX509(const TX509Ptr& pemCertX509)
 {
     auto* issuerName = X509_get_issuer_name(pemCertX509.get());
 
@@ -549,10 +549,10 @@ std::optional<TString> ParseIssuerFromX509(const TX509Ptr& pemCertX509)
         return std::nullopt;
     }
 
-    return TString(issuerString);
+    return std::string(issuerString);
 }
 
-std::optional<TString> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509)
+std::optional<std::string> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509)
 {
     ASN1_STRING* serialNumber = X509_get_serialNumber(pemCertX509.get());
     if (!serialNumber) {
@@ -572,7 +572,7 @@ std::optional<TString> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509)
     if (!hexSerialNumber) {
         return std::nullopt;
     }
-    return TString(hexSerialNumber);
+    return std::string(hexSerialNumber);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

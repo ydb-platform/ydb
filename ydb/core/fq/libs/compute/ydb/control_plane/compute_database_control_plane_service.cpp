@@ -16,7 +16,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -89,7 +88,7 @@ public:
                 LOG_T("Scope: " << Scope << " Single control plane mode has been chosen");
                 const auto& singleConfig = Config.GetYdb().GetControlPlane().GetSingle();
                 *Result.mutable_connection() = singleConfig.GetConnection();
-                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), singleConfig.GetWorkloadManagerConfig()});
+                Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), GetWorkloadManagerConfig(singleConfig)});
             }
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -163,7 +162,7 @@ public:
         }
 
         if (response.IsExists) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
         } else {
             auto invalidateSynchronizationEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Scope);
             invalidateSynchronizationEvent->Synchronized = false;
@@ -199,7 +198,7 @@ public:
         }
 
         if (ev->Cookie == OnlyDatabaseCreateCookie) {
-            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
             return;
         }
         Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Result});
@@ -266,7 +265,7 @@ public:
             return;
         }
 
-        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), client->Config.GetWorkloadManagerConfig()});
+        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection(), GetWorkloadManagerConfig(client->Config)});
     }
 
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
@@ -299,10 +298,19 @@ public:
     }
 
 private:
+    template <typename TComputeConfig>
+    NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TComputeConfig& config) const {
+        if (config.HasWorkloadManagerConfig()) {
+            return config.GetWorkloadManagerConfig();
+        }
+        return Config.GetYdb().GetControlPlane().GetDefaultWorkloadManagerConfig();
+    }
+
+private:
     TString Scope;
     std::shared_ptr<TDatabaseClients> Clients;
     TActorId SynchronizationServiceActorId;
-    NFq::NConfig::TComputeConfig Config;
+    NConfig::TComputeConfig Config;
     TEvYdbCompute::TEvCreateDatabaseRequest::TPtr Request;
     FederatedQuery::Internal::ComputeDatabaseInternal Result;
 

@@ -139,6 +139,8 @@ enum ECumulativeCounters {
     COUNTER_IMMEDIATE_TX_COMPLETED = 83                     [(CounterOpts) = {Name: "ImmediateTxCompleted"}];
     COUNTER_ROWS_ERASED = 84                                [(CounterOpts) = {Name: "RowsErased"}];
     COUNTER_OPERATIONS_ROWS_WRITTEN = 85                    [(CounterOpts) = {Name: "OperationsRowsWritten"}];
+    COUNTER_OPERATIONS_BULK_ROWS_WRITTEN = 86               [(CounterOpts) = {Name: "OperationsBulkRowsWritten"}];
+    COUNTER_OPERATIONS_BULK_BYTES_WRITTEN = 87              [(CounterOpts) = {Name: "OperationsBulkBytesWritten"}];
 }
 
 enum EPercentileCounters {
@@ -207,4 +209,5 @@ enum ETxTypes {
     TXTYPE_WRITE_PORTIONS_FAILED = 40                       [(TxTypeOpts) = {Name: "TxWritePortionsFailed"}];
     TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE = 41              [(TxTypeOpts) = {Name: "TxPersistSubDomainOutOfSpace"}];
     TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 42                   [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
+    TXTYPE_CLEANUP_SCHEMAS = 43                             [(TxTypeOpts) = {Name: "TxCleanupSchemasWithnoData"}];
 }

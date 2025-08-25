@@ -78,10 +78,10 @@ namespace detail
                 if (v_color == Color::white())
                 {
                     vis.tree_edge(*ei, g);
-                    src_e = *ei;
                     stack.push_back(std::make_pair(u,
-                        std::make_pair(src_e, std::make_pair(++ei, ei_end))));
+                        std::make_pair(src_e, std::make_pair(std::next(ei), ei_end))));
                     u = v;
+                    src_e = *ei;
                     put(vertex_color, u, Color::gray());
                     vis.discover_vertex(u, g);
                     boost::tie(ei, ei_end) = out_edges(u, g);

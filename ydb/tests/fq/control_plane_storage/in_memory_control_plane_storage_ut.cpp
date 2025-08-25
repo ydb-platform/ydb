@@ -40,32 +40,45 @@ public:
 
         TFqSetupSettings settings;
         settings.VerboseLevel = TFqSetupSettings::EVerbose::Max;
+        settings.EnableYdbCompute = true;
 
-        settings.LogConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
-        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG}}, settings.LogConfig);
+        auto& logConfig = *settings.AppConfig.MutableLogConfig();
+        logConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
+        ModifyLogPriorities({
+            {NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG},
+            {NKikimrServices::EServiceKikimr::FQ_RUN_ACTOR, NLog::EPriority::PRI_TRACE}
+        }, logConfig);
 
-        auto& cpStorageConfig = *settings.FqConfig.MutableControlPlaneStorage();
+        auto& fqConfig = *settings.AppConfig.MutableFederatedQueryConfig();
+        auto& cpStorageConfig = *fqConfig.MutableControlPlaneStorage();
         cpStorageConfig.SetEnabled(true);
         cpStorageConfig.SetUseInMemory(true);
 
-        auto& privateApiConfig = *settings.FqConfig.MutablePrivateApi();
+        auto& privateApiConfig = *fqConfig.MutablePrivateApi();
         privateApiConfig.SetEnabled(true);
         privateApiConfig.SetLoopback(true);
 
-        settings.FqConfig.SetEnableDynamicNameservice(true);
-        settings.FqConfig.MutableControlPlaneProxy()->SetEnabled(true);
-        settings.FqConfig.MutableDbPool()->SetEnabled(true);
-        settings.FqConfig.MutableNodesManager()->SetEnabled(true);
-        settings.FqConfig.MutablePendingFetcher()->SetEnabled(true);
-        settings.FqConfig.MutablePrivateProxy()->SetEnabled(true);
-        settings.FqConfig.MutableGateways()->SetEnabled(true);
-        settings.FqConfig.MutableResourceManager()->SetEnabled(true);
-        settings.FqConfig.MutableCommon()->SetIdsPrefix("ut");
+        fqConfig.SetEnableDynamicNameservice(true);
+        fqConfig.MutableControlPlaneProxy()->SetEnabled(true);
+        fqConfig.MutableDbPool()->SetEnabled(true);
+        fqConfig.MutableNodesManager()->SetEnabled(true);
+        fqConfig.MutablePendingFetcher()->SetEnabled(true);
+        fqConfig.MutablePrivateProxy()->SetEnabled(true);
+        fqConfig.MutableGateways()->SetEnabled(true);
+        fqConfig.MutableResourceManager()->SetEnabled(true);
+        fqConfig.MutableCommon()->SetIdsPrefix("ut");
+
+        auto& computeConfig = *fqConfig.MutableCompute();
+        computeConfig.SetDefaultCompute(NFq::NConfig::IN_PLACE);
+
+        auto& computeMapping = *computeConfig.AddComputeMapping();
+        computeMapping.SetQueryType(FederatedQuery::QueryContent::ANALYTICS);
+        computeMapping.SetCompute(NFq::NConfig::YDB);
+        computeMapping.MutableActivation()->SetPercentage(100);
 
         FqSetup = std::make_unique<TFqSetup>(settings);
     }
 
-protected:
     static void CheckSuccess(const TRequestResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
     }
@@ -76,7 +89,7 @@ protected:
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start <= timeout) {
             TExecutionMeta meta;
-            CheckSuccess(FqSetup->DescribeQuery(queryId, meta));
+            CheckSuccess(FqSetup->DescribeQuery(queryId, {}, meta));
 
             if (!IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, meta.Status)) {
                 Cerr << "Wait query execution " << TInstant::Now() - start << ": " << EStatus::ComputeStatus_Name(meta.Status) << "\n";
@@ -92,33 +105,50 @@ protected:
         return {};
     }
 
-protected:
+public:
     std::unique_ptr<TFqSetup> FqSetup;
 };
 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
-    Y_UNIT_TEST_F(ExecuteSimpleQuery, TTestFuxture) {
-        TString queryId;
-        CheckSuccess(FqSetup->StreamRequest({
-            .Query = "SELECT 42 AS result_value",
-            .Action = FederatedQuery::ExecuteMode::RUN
-        }, queryId));
+    void CheckQueryResults(const TTestFuxture& ctx, const TString& queryId) {
         UNIT_ASSERT(queryId);
 
-        const auto meta = WaitQueryExecution(queryId);
+        const auto meta = ctx.WaitQueryExecution(queryId);
         UNIT_ASSERT_VALUES_EQUAL(meta.ResultSetSizes.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(meta.ResultSetSizes[0], 1);
 
         Ydb::ResultSet resultSet;
-        CheckSuccess(FqSetup->FetchQueryResults(queryId, 0, resultSet));
+        ctx.CheckSuccess(ctx.FqSetup->FetchQueryResults(queryId, 0, {}, resultSet));
 
         NYdb::TResultSetParser parser(resultSet);
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("result_value").GetInt32(), 42);
+    }
+
+    Y_UNIT_TEST_F(ExecuteSimpleStreamQuery, TTestFuxture) {
+        TString queryId;
+        CheckSuccess(FqSetup->QueryRequest({
+            .Query = "SELECT 42 AS result_value",
+            .Action = FederatedQuery::ExecuteMode::RUN,
+            .Type = FederatedQuery::QueryContent::STREAMING
+        }, queryId));
+
+        CheckQueryResults(*this, queryId);
+    }
+
+    Y_UNIT_TEST_F(ExecuteSimpleAnalyticsQuery, TTestFuxture) {
+        TString queryId;
+        CheckSuccess(FqSetup->QueryRequest({
+            .Query = "SELECT 42 AS result_value",
+            .Action = FederatedQuery::ExecuteMode::RUN,
+            .Type = FederatedQuery::QueryContent::ANALYTICS
+        }, queryId));
+
+        CheckQueryResults(*this, queryId);
     }
 }
 

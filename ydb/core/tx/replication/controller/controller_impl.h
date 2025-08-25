@@ -162,8 +162,8 @@ private:
 
     // other
     template <typename T>
-    TReplication::TPtr Add(ui64 id, const TPathId& pathId, T&& config) {
-        auto replication = MakeIntrusive<TReplication>(id, pathId, std::forward<T>(config));
+    TReplication::TPtr Add(ui64 id, const TPathId& pathId, T&& config, const TString& database) {
+        auto replication = MakeIntrusive<TReplication>(id, pathId, std::forward<T>(config), database);
         {
             const auto res = Replications.emplace(id, replication);
             Y_VERIFY_S(res.second, "Duplication replication: " << id);

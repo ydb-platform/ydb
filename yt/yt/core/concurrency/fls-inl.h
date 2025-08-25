@@ -20,6 +20,7 @@ int AllocateFlsSlot(TFlsSlotDtor dtor);
 TFls* GetPerThreadFls();
 
 YT_DECLARE_THREAD_LOCAL(TFls*, CurrentFls);
+YT_DECLARE_THREAD_LOCAL(TFls*, PerThreadFls);
 
 } // namespace NDetail
 
@@ -47,6 +48,17 @@ inline TFls* GetCurrentFls()
         fls = NDetail::GetPerThreadFls();
     }
     return fls;
+}
+
+inline TFls* TryGetCurrentFls()
+{
+    if (auto* fls = NDetail::CurrentFls()) {
+        return fls;
+    }
+    if (auto* fls = NDetail::PerThreadFls()) {
+        return fls;
+    }
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,7 +127,8 @@ const T* TFlsSlot<T>::Get(const TFls& fls) const
 template <class T>
 Y_FORCE_INLINE bool TFlsSlot<T>::IsInitialized() const
 {
-    return static_cast<bool>(GetCurrentFls()->Get(Index_));
+    const auto* fls = TryGetCurrentFls();
+    return fls && fls->Get(Index_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

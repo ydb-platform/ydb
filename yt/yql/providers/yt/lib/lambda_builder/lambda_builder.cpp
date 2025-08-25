@@ -12,6 +12,7 @@
 namespace NYql {
 
 using namespace NCommon;
+using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
@@ -23,7 +24,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         NKikimr::NMiniKQL::IStatsRegistry* jobStats,
         NKikimr::NUdf::ICountersProvider* counters,
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
-        const NKikimr::NUdf::ILogProvider* logProvider)
+        const NKikimr::NUdf::ILogProvider* logProvider,
+        TLangVersion langVer)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -32,6 +34,7 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , Counters(counters)
     , SecureParamsProvider(secureParamsProvider)
     , LogProvider(logProvider)
+    , LangVer(langVer)
     , Env(env)
 {
 }
@@ -52,7 +55,7 @@ const NKikimr::NMiniKQL::TTypeEnvironment* TLambdaBuilder::CreateTypeEnv() const
 TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, const TExprNode::TPtr& lambdaNode,
     TExprContext& exprCtx, TArgumentsMap&& arguments) const
 {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, lambdaNode->UniqueId(), std::move(arguments));
     return MkqlBuildExpr(*lambdaNode, ctx);
 }
@@ -60,7 +63,7 @@ TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, 
 TRuntimeNode TLambdaBuilder::TransformAndOptimizeProgram(NKikimr::NMiniKQL::TRuntimeNode root,
     TCallableVisitFuncProvider funcProvider) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(root.GetNode(), GetTypeEnvironment());
+    explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
     bool wereChanges = false;
     TRuntimeNode program = SinglePassVisitCallables(root, explorer, funcProvider, GetTypeEnvironment(), true, wereChanges);
     program = LiteralPropagationOptimization(program, GetTypeEnvironment(), true);
@@ -184,7 +187,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
     patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
         optLLVM, graphPerProcess, JobStats, Counters,
-        SecureParamsProvider, LogProvider);
+        SecureParamsProvider, LogProvider, LangVer);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -194,7 +197,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
                 entryPoints[index] = tupleNodes->GetValue(1 + index).GetNode();
             }
         }
-        explorer.Walk(root.GetNode(), GetTypeEnvironment());
+        explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
         auto pattern = MakeComputationPattern(explorer, root, entryPoints, patternOpts);
         for (const auto& node : explorer.GetNodes()) {
             node->SetCookie(0);
@@ -206,13 +209,13 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider);
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }
 
 TRuntimeNode TLambdaBuilder::MakeTuple(const TVector<TRuntimeNode>& items) const {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     return pgmBuilder.NewTuple(items);
 }
 
@@ -222,8 +225,8 @@ TRuntimeNode TLambdaBuilder::Deserialize(const TString& code) {
 
 std::pair<TString, size_t> TLambdaBuilder::Serialize(TRuntimeNode rootNode) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment());
-    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment());
+    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment().GetNodeStack());
+    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment().GetNodeStack());
     size_t nodes = explorer.GetNodes().size();
     return std::make_pair(code, nodes);
 }
@@ -235,4 +238,77 @@ TRuntimeNode TLambdaBuilder::UpdateLambdaCode(TString& code, size_t& nodes, TCal
     return rootNode;
 }
 
+TGatewayLambdaBuilder::TGatewayLambdaBuilder(
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    const NKikimr::NMiniKQL::TTypeEnvironment* env,
+    const TIntrusivePtr<IRandomProvider>& randomProvider,
+    const TIntrusivePtr<ITimeProvider>& timeProvider,
+    NKikimr::NMiniKQL::IStatsRegistry* jobStats,
+    NKikimr::NUdf::ICountersProvider* counters,
+    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
+    const NKikimr::NUdf::ILogProvider* logProvider,
+    TLangVersion langVer)
+    : TLambdaBuilder(functionRegistry, alloc, env, randomProvider, timeProvider, jobStats, counters, secureParamsProvider, logProvider, langVer)
+{
 }
+
+TString TGatewayLambdaBuilder::BuildLambdaWithIO(const TString& prefix, const IMkqlCallableCompiler& compiler, TCoLambda lambda, TExprContext& exprCtx) {
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TArgumentsMap arguments(1U);
+    if (lambda.Args().Size() > 0) {
+        const auto arg = lambda.Args().Arg(0);
+        const auto argType = arg.Ref().GetTypeAnn();
+        auto inputItemType = NCommon::BuildType(arg.Ref(), *GetSeqItemType(argType), pgmBuilder);
+        switch (bool isStream = true; argType->GetKind()) {
+        case ETypeAnnotationKind::Flow:
+            if (ETypeAnnotationKind::Multi == argType->Cast<TFlowExprType>()->GetItemType()->GetKind()) {
+                arguments.emplace(arg.Raw(), TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), prefix + "Input", pgmBuilder.NewFlowType(inputItemType)).Build(), false));
+                break;
+            }
+            isStream = false;
+            [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
+        case ETypeAnnotationKind::Stream: {
+            auto inputStream = pgmBuilder.SourceOf(isStream ?
+                pgmBuilder.NewStreamType(pgmBuilder.GetTypeEnvironment().GetTypeOfVoidLazy()) : pgmBuilder.NewFlowType(pgmBuilder.GetTypeEnvironment().GetTypeOfVoidLazy()));
+
+            inputItemType = pgmBuilder.NewOptionalType(inputItemType);
+            inputStream = pgmBuilder.Map(inputStream, [&] (TRuntimeNode item) {
+                TCallableBuilder inputCall(GetTypeEnvironment(), prefix + "Input", inputItemType);
+                inputCall.Add(item);
+                return TRuntimeNode(inputCall.Build(), false);
+            });
+            inputStream = pgmBuilder.TakeWhile(inputStream, [&] (TRuntimeNode item) {
+                return pgmBuilder.Exists(item);
+            });
+
+            inputStream = pgmBuilder.FlatMap(inputStream, [&] (TRuntimeNode item) {
+                return item;
+            });
+
+            arguments[arg.Raw()] = inputStream;
+            break;
+        }
+        default:
+            YQL_ENSURE(false, "Unsupported lambda argument type: " << arg.Ref().GetTypeAnn()->GetKind());
+        }
+    }
+    TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, lambda.Ref().UniqueId(), std::move(arguments));
+    TRuntimeNode outStream = MkqlBuildExpr(lambda.Body().Ref(), ctx);
+    if (outStream.GetStaticType()->IsFlow()) {
+        TCallableBuilder outputCall(GetTypeEnvironment(), prefix + "Output", pgmBuilder.NewFlowType(GetTypeEnvironment().GetTypeOfVoidLazy()));
+        outputCall.Add(outStream);
+        outStream = TRuntimeNode(outputCall.Build(), false);
+    } else {
+        outStream = pgmBuilder.Map(outStream, [&] (TRuntimeNode item) {
+            TCallableBuilder outputCall(GetTypeEnvironment(), prefix + "Output", GetTypeEnvironment().GetTypeOfVoidLazy());
+            outputCall.Add(item);
+            return TRuntimeNode(outputCall.Build(), false);
+        });
+    }
+    outStream = pgmBuilder.Discard(outStream);
+
+    return SerializeRuntimeNode(outStream, GetTypeEnvironment());
+}
+
+} // namespace NYql

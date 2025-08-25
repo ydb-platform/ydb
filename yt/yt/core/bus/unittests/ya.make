@@ -15,6 +15,7 @@ PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
     library/cpp/testing/common
+    library/cpp/resource
 )
 
 REQUIREMENTS(
@@ -31,7 +32,12 @@ SIZE(MEDIUM)
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
 ENDIF()
 
 END()

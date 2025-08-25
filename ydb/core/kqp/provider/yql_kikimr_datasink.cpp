@@ -7,7 +7,7 @@
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/core/kqp/common/batch/params.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NYql {
 namespace {
@@ -16,6 +16,7 @@ using namespace NKikimr;
 using namespace NNodes;
 
 namespace {
+
 bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     THashSet<TStringBuf> columnNames;
     auto equalStmts = settings.Update.Cast().Ptr()->Child(1);
@@ -41,112 +42,6 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     return hasIntersection;
 }
 
-TExprNode::TPtr CreateNodeTypeParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
-    TExprContext& ctx) {
-    if (colType->GetKind() == ETypeAnnotationKind::Optional) {
-      colType = colType->Cast<TOptionalExprType>()->GetItemType();
-    }
-
-    return ctx.NewCallable(pos, "Parameter", {
-        ctx.NewAtom(pos, name),
-        ctx.NewCallable(pos, "DataType", {
-            ctx.NewAtom(pos, FormatType(colType))
-        })
-    });
-}
-
-TExprNode::TPtr CreateNodeBoolParameter(const TString& name, TPositionHandle pos, TExprContext& ctx) {
-    return ctx.NewCallable(pos, "Parameter", {
-        ctx.NewAtom(pos, name),
-        ctx.NewCallable(pos, "DataType", {
-            ctx.NewAtom(pos, "Bool")
-        })
-    });
-}
-
-TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescription& tableDesc, TExprContext& ctx) {
-    const TPositionHandle pos = node.Pos();
-    const TExprNode::TPtr newLambda = ctx.DeepCopyLambda(node.Ref());
-    const TExprNode::TPtr row = newLambda->ChildPtr(0)->ChildPtr(0);
-    const TExprNode::TPtr filter = newLambda->ChildPtr(1);
-
-    TVector<TString> primaryColumns = tableDesc.Metadata->KeyColumnNames;
-
-    TExprNode::TListType beginParamsList;
-    TExprNode::TListType endParamsList;
-    TExprNode::TListType primaryMembersList;
-
-    for (size_t i = 0; i < primaryColumns.size(); ++i) {
-        auto colType = tableDesc.GetColumnType(primaryColumns[i]);
-        beginParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::Begin + ToString(i + 1), colType, pos, ctx));
-        endParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::End + ToString(i + 1), colType, pos, ctx));
-
-        primaryMembersList.push_back(ctx.NewCallable(pos, "Member", {
-            row,
-            ctx.NewAtom(pos, primaryColumns[i])
-        }));
-    }
-
-    TExprNode::TPtr beginNodeParams = beginParamsList.front();
-    TExprNode::TPtr endNodeParams = endParamsList.front();
-    TExprNode::TPtr primaryNodeMember = primaryMembersList.front();
-
-    if (primaryColumns.size() > 1) {
-        beginNodeParams = ctx.NewList(pos, std::move(beginParamsList));
-        endNodeParams = ctx.NewList(pos, std::move(endParamsList));
-        primaryNodeMember = ctx.NewList(pos, std::move(primaryMembersList));
-    }
-
-    TExprNode::TPtr newFilter = ctx.ChangeChild(*filter, 0, ctx.NewCallable(pos, "And", {
-        ctx.NewCallable(pos, "And", {
-            ctx.NewCallable(pos, "Or", {
-                CreateNodeBoolParameter(NKqp::NBatchParams::IsFirstQuery, pos, ctx),
-                ctx.NewCallable(pos, "Or", {
-                    ctx.NewCallable(pos, "And", {
-                        CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveLeft, pos, ctx),
-                        ctx.NewCallable(pos, ">=", {
-                            primaryNodeMember,
-                            beginNodeParams
-                        })
-                    }),
-                    ctx.NewCallable(pos, "And", {
-                        ctx.NewCallable(pos, "Not", {
-                            CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveLeft, pos, ctx)
-                        }),
-                        ctx.NewCallable(pos, ">", {
-                            primaryNodeMember,
-                            beginNodeParams
-                        })
-                    })
-                })
-            }),
-            ctx.NewCallable(pos, "Or", {
-                CreateNodeBoolParameter(NKqp::NBatchParams::IsLastQuery, pos, ctx),
-                ctx.NewCallable(pos, "Or", {
-                    ctx.NewCallable(pos, "And", {
-                        CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveRight, pos, ctx),
-                        ctx.NewCallable(pos, "<=", {
-                            primaryNodeMember,
-                            endNodeParams
-                        })
-                    }),
-                    ctx.NewCallable(pos, "And", {
-                        ctx.NewCallable(pos, "Not", {
-                            CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveRight, pos, ctx)
-                        }),
-                        ctx.NewCallable(pos, "<", {
-                            primaryNodeMember,
-                            endNodeParams
-                        })
-                    })
-                })
-            }),
-        }),
-        filter->ChildPtr(0)
-    }));
-
-    return TCoLambda(ctx.ChangeChild(*newLambda, 1, std::move(newFilter)));
-}
 } // namespace
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {
@@ -453,8 +348,12 @@ private:
                     mode == "insert_revert" ||
                     mode == "insert_abort" ||
                     mode == "delete_on" ||
-                    mode == "update_on")
+                    mode == "update_on" ||
+                    mode == "fill_table")
                 {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "fill_table") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
@@ -991,6 +890,11 @@ public:
             ? settings.Temporary.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+        if (temporary.Value() == "true") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary sequence data is not supported."));
+            return nullptr;
+        }
+
         auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
         return Build<TKiCreateSequence>(ctx, node->Pos())
@@ -1144,7 +1048,18 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap
+                && mode != "replace"
+                && mode != "drop"
+                && mode != "drop_if_exists"
+                && mode != "insert_abort"
+                && mode != "update"
+                && mode != "upsert"
+                && mode != "delete"
+                && mode != "update_on"
+                && mode != "delete_on"
+                && mode != "analyze"
+                && mode != "fill_table") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
         }
@@ -1259,16 +1174,6 @@ public:
                 } else if (mode == "update") {
                     if (settings.Filter) {
                         YQL_ENSURE(settings.Update);
-
-                        if (settings.IsBatch) {
-                            TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
-                        }
-
                         return Build<TKiUpdateTable>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1301,15 +1206,6 @@ public:
                 } else if (mode == "delete") {
                     YQL_ENSURE(settings.Filter || settings.PgFilter);
                     if (settings.Filter) {
-                        if (settings.IsBatch) {
-                            TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
-                        }
-
                         return Build<TKiDeleteTable>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1406,6 +1302,24 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+                    
+                    const bool isCreateTableAs = std::any_of(
+                        settings.Other.Ptr()->Children().begin(),
+                        settings.Other.Ptr()->Children().end(),
+                        [&](const TExprNode::TPtr& child) {
+                            NYql::NNodes::TExprBase expr(child);
+                            if (auto maybeTuple = expr.Maybe<TCoNameValueTuple>()) {
+                                const auto tuple = maybeTuple.Cast();
+                                const auto name = tuple.Name().Value();
+                                return name == "ctas";
+                            }
+                            return false;
+                        });
+
+                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTablesForUser && !isCreateTableAs) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
+                        return nullptr;
+                    }
 
                     auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");

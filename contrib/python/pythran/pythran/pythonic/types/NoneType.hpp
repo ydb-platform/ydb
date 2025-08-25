@@ -135,191 +135,23 @@ namespace types
     return is_none ? NONE_ID : reinterpret_cast<intptr_t>(&data);
   }
 
-  template <class T>
-  T operator+(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data + t1;
-  }
-
-  template <class T>
-  T operator+(T const &t0, none<T, true> const &t1)
-  {
-    return t0 + t1.data;
-  }
-
-  template <class T>
-  none<T, true> operator+(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data + t1.data};
-  }
-
-  template <class T>
-  bool operator>(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data > t1;
-  }
-
-  template <class T>
-  bool operator>(T const &t0, none<T, true> const &t1)
-  {
-    return t0 > t1.data;
-  }
-
-  template <class T>
-  none<bool> operator>(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data > t1.data};
-  }
-
-  template <class T>
-  bool operator>=(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data >= t1;
-  }
-
-  template <class T>
-  bool operator>=(T const &t0, none<T, true> const &t1)
-  {
-    return t0 >= t1.data;
-  }
-
-  template <class T>
-  none<bool> operator>=(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data >= t1.data};
-  }
-
-  template <class T>
-  bool operator<(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data < t1;
-  }
-
-  template <class T>
-  bool operator<(T const &t0, none<T, true> const &t1)
-  {
-    return t0 < t1.data;
-  }
-
-  template <class T>
-  none<bool> operator<(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data < t1.data};
-  }
-
-  template <class T>
-  bool operator<=(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data <= t1;
-  }
-
-  template <class T>
-  bool operator<=(T const &t0, none<T, true> const &t1)
-  {
-    return t0 <= t1.data;
-  }
-
-  template <class T>
-  none<bool> operator<=(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data <= t1.data};
-  }
-
-  template <class T>
-  T operator-(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data - t1;
-  }
-
-  template <class T>
-  T operator-(T const &t0, none<T, true> const &t1)
-  {
-    return t0 - t1.data;
-  }
-
-  template <class T>
-  none<T, true> operator-(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data - t1.data};
-  }
-
-  template <class T>
-  T operator*(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data * t1;
-  }
-
-  template <class T>
-  T operator*(T const &t0, none<T, true> const &t1)
-  {
-    return t0 * t1.data;
-  }
-
-  template <class T>
-  none<T, true> operator*(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data * t1.data};
-  }
-
-  template <class T>
-  T operator/(none<T, true> const &t0, T const &t1)
-  {
-    return t0.data / t1;
-  }
-
-  template <class T>
-  T operator/(T const &t0, none<T, true> const &t1)
-  {
-    return t0 / t1.data;
-  }
-
-  template <class T>
-  none<T, true> operator/(none<T, true> const &t0, none<T, true> const &t1)
-  {
-    if (t0.is_none && t1.is_none)
-      return none_type{};
-    else
-      return {t0.data / t1.data};
-  }
-
   template <class T0, class T1>
   decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(none<T0, true> const &t0, T1 const &t1)
+  operator%(none<T0> const &t0, T1 const &t1)
   {
     return operator_::mod(t0.data, t1);
   }
 
   template <class T0, class T1>
   decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(T0 const &t0, none<T1, true> const &t1)
+  operator%(T0 const &t0, none<T1> const &t1)
   {
     return operator_::mod(t0, t1.data);
   }
 
   template <class T0, class T1>
   none<decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())), true>
-  operator%(none<T0, true> const &t0, none<T1, true> const &t1)
+  operator%(none<T0> const &t0, none<T1> const &t1)
   {
     if (t0.is_none && t1.is_none)
       return none_type{};
@@ -363,14 +195,6 @@ namespace types
     return *this;
   }
 
-  template <class T>
-  std::ostream &operator<<(std::ostream &os, none<T, true> const &v)
-  {
-    if (v.is_none)
-      return os << none_type();
-    else
-      return os << v.data;
-  }
 } // namespace types
 PYTHONIC_NS_END
 

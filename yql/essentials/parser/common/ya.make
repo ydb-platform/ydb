@@ -9,3 +9,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    antlr4
+)

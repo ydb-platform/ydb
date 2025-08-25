@@ -13,19 +13,19 @@ namespace NProtoAST {
 
     public:
         TProtoASTBuilder3(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
-            : QueryName(queryName)
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr??
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
-            , TokenStream(ANTLR_SIZE_HINT, Lexer.get_tokSource())
-            , Parser(&TokenStream, arena)
+            : QueryName_(queryName)
+            , InputStream_((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName_.begin())  // Why the hell antlr needs non-const ptr??
+            , Lexer_(&InputStream_, static_cast<google::protobuf::Arena*>(nullptr))
+            , TokenStream_(ANTLR_SIZE_HINT, Lexer_.get_tokSource())
+            , Parser_(&TokenStream_, arena)
         {
         }
 
         google::protobuf::Message* BuildAST(IErrorCollector& errors) {
             // TODO: find a better way to break on lexer errors
             try {
-                Lexer.ReportErrors(&errors);
-                return Parser.Parse(Lexer, &errors);
+                Lexer_.ReportErrors(&errors);
+                return Parser_.Parse(Lexer_, &errors);
             } catch (const TTooManyErrors&) {
                 return nullptr;
             } catch (...) {
@@ -35,13 +35,13 @@ namespace NProtoAST {
         }
 
     private:
-        TString QueryName;
+        TString QueryName_;
 
-        typename TLexer::InputStreamType InputStream;
-        TLexer Lexer;
+        typename TLexer::InputStreamType InputStream_;
+        TLexer Lexer_;
 
-        typename TParser::TokenStreamType TokenStream;
-        TParser Parser;
+        typename TParser::TokenStreamType TokenStream_;
+        TParser Parser_;
     };
 
     template <typename TLexer>
@@ -50,24 +50,24 @@ namespace NProtoAST {
 
     public:
         TLexerTokensCollector3(TStringBuf data, const char** tokenNames, const TString& queryName = "query")
-            : TokenNames(tokenNames)
-            , QueryName(queryName)
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
+            : TokenNames_(tokenNames)
+            , QueryName_(queryName)
+            , InputStream_((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName_.begin())
+            , Lexer_(&InputStream_, static_cast<google::protobuf::Arena*>(nullptr))
         {
         }
 
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
-                Lexer.ReportErrors(&errors);
-                auto src = Lexer.get_tokSource();
+                Lexer_.ReportErrors(&errors);
+                auto src = Lexer_.get_tokSource();
 
                 for (;;) {
                     auto token = src->nextToken();
                     auto type = token->getType();
                     const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
                     NSQLTranslation::TParsedToken last;
-                    last.Name = isEOF ? "EOF" : TokenNames[type];
+                    last.Name = isEOF ? "EOF" : TokenNames_[type];
                     last.Content = token->getText();
                     last.Line = token->get_line();
                     last.LinePos = token->get_charPositionInLine();
@@ -84,9 +84,9 @@ namespace NProtoAST {
         }
 
     private:
-        const char** TokenNames;
-        TString QueryName;
-        typename TLexer::InputStreamType InputStream;
-        TLexer Lexer;
+        const char** TokenNames_;
+        TString QueryName_;
+        typename TLexer::InputStreamType InputStream_;
+        TLexer Lexer_;
     };
 } // namespace NProtoAST

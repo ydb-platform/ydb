@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.11.0)
+VERSION(25.5.0)
 
 LICENSE(MIT)
 
@@ -401,6 +401,7 @@ PY_SRCS(
     twisted/web/_responses.py
     twisted/web/_stan.py
     twisted/web/_template_util.py
+    twisted/web/_websocket_impl.py
     twisted/web/client.py
     twisted/web/demo.py
     twisted/web/distrib.py
@@ -426,6 +427,7 @@ PY_SRCS(
     twisted/web/twcgi.py
     twisted/web/util.py
     twisted/web/vhost.py
+    twisted/web/websocket.py
     twisted/web/wsgi.py
     twisted/web/xmlrpc.py
     twisted/words/__init__.py
@@ -477,6 +479,7 @@ RESOURCE_FILES(
     twisted/newsfragments/.gitignore
     twisted/persisted/newsfragments/9831.misc
     twisted/py.typed
+    twisted/python/_pydoctortemplates/stable-link.js
     twisted/python/_pydoctortemplates/subheader.html
     twisted/python/twisted-completion.zsh
     twisted/runner/newsfragments/11681.misc

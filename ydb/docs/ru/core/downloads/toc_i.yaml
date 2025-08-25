@@ -1,5 +1,15 @@
 items:
-- name: Загрузки
-  href: index.md
+- name: YDB Open-Source Database
+  href: ydb-open-source-database.md
+- name: Yandex Enterprise Database
+  href: yandex-enterprise-database.md
+- name: YDB CLI
+  href: ydb-cli.md
+- name: YDB DSTool
+  href: ydb-dstool.md
+- name: YDB Ops
+  href: ydb-ops.md
+- name: YDB Ansible
+  href: ydb-ansible.md
 
 

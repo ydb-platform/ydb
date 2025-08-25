@@ -3,7 +3,7 @@
 #define FIELD_ADD(name) structBuilder->AddField(#name, optionalStringType, &urlParseIndexes.name);
 #define FIELD_FILL(name) \
     if (value.FldIsSet(TUri::Field##name)) { \
-        fields[UrlParseIndexes.name] = valueBuilder->NewString(value.GetField(TUri::Field##name)); \
+        fields[UrlParseIndexes_.name] = valueBuilder->NewString(value.GetField(TUri::Field##name)); \
     }
 
 namespace NUrlUdf {
@@ -15,13 +15,13 @@ namespace NUrlUdf {
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const {
         TUri value;
-        const auto ParseError = value.ParseAbs(args[0].AsStringRef(), ParseFlags);
+        const auto ParseError = value.ParseAbs(args[0].AsStringRef(), ParseFlags_);
         TUnboxedValue* fields = nullptr;
         const auto result = valueBuilder->NewArray(FieldsCount, fields);
         if (ParseError == TUri::ParsedOK) {
             FIELD_MAP(FIELD_FILL)
         } else {
-            fields[UrlParseIndexes.ParseError] = valueBuilder->NewString(TStringBuilder() << ParseError);
+            fields[UrlParseIndexes_.ParseError] = valueBuilder->NewString(TStringBuilder() << ParseError);
         }
         return result;
     }

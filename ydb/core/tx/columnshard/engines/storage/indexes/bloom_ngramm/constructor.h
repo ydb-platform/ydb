@@ -19,6 +19,7 @@ private:
     ui32 FilterSizeBytes = 512;
     ui32 HashesCount = 2;
     ui32 RecordsCount = 10000;
+    bool CaseSensitive = true;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:

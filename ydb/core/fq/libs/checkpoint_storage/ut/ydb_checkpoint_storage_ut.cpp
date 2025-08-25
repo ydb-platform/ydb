@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
+#include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -27,10 +28,12 @@ TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGen
     checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointStorageConfig.SetToken("");
     checkpointStorageConfig.SetTablePrefix(tablePrefix);
+    checkpointStorageConfig.SetTableClientMaxActiveSessions(20);
 
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-    auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, credFactory, entityIdGenerator, yqSharedResources);
+    NYdb::TDriver driver(NYdb::TDriverConfig{});
+    auto ydbConnectionPtr = NewYdbConnection(checkpointStorageConfig, credFactory, driver);
+    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
     auto issues = storage->Init().GetValueSync();
     UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     return storage;

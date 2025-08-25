@@ -15,7 +15,11 @@ default:
       ivanov:
         name: Evgenii Ivanov
         position: Senior developer
-        profile: https://www.linkedin.com/in/eivanov89/  
+        profile: https://www.linkedin.com/in/eivanov89/
+      zevaykin:
+        name: Alexander Zevaykin
+        position: Team leader
+        profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/
       ozeritskiy:
         name: Alexey Ozeritskiy
         position: Lead Software Engineer
@@ -28,4 +32,8 @@ default:
         name: Elena Kalinina
         position: Technical Project Manager
         profile: https://www.linkedin.com/in/elena-kalinina-2907b398/
+      kovalenko:
+        name: Anton Kovalenko
+        position: Technical Project Manager
+        profile: https://www.linkedin.com/in/kovalad/
 

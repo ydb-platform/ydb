@@ -26,11 +26,11 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
         }));
 }
 
-ui64 CalculateTupleHash(const std::vector<ui64>& hashes) {
+TMaybe<ui64> CalculateTupleHash(const std::vector<NYql::NUdf::TBlockItem>& items, const std::vector<ui64>& hashes) {
     ui64 hash = 0;
     for (size_t i = 0; i < hashes.size(); i++) {
-        if (!hashes[i]) {
-            return 0;
+        if (!items[i]) {
+            return {};
         }
 
         hash = CombineHashes(hash, hashes[i]);
@@ -315,57 +315,66 @@ public:
 
     TBlockStorage(
         TMemoryUsageInfo* memInfo,
-        const TVector<TType*>& itemTypes,
-        NUdf::TUnboxedValue stream,
+        const TVector<TType*>& types,
+        size_t blockLengthIndex,
+        NUdf::TUnboxedValue listIter,
         TStringBuf resourceTag,
         arrow::MemoryPool* pool
     )
         : TBase(memInfo)
-        , InputsDescr_(ToValueDescr(itemTypes))
-        , Stream_(std::move(stream))
-        , Inputs_(itemTypes.size())
+        , InputsDescr_(ToValueDescr(types))
+        , Readers_(types.size())
+        , Hashers_(types.size())
+        , Comparators_(types.size())
+        , Trimmers_(types.size())
+        , ListIter_(std::move(listIter))
+        , BlockLengthIndex_(blockLengthIndex)
         , ResourceTag_(std::move(resourceTag))
     {
         TBlockTypeHelper helper;
-        for (size_t i = 0; i < itemTypes.size(); i++) {
-            TType* blockItemType = AS_TYPE(TBlockType, itemTypes[i])->GetItemType();
-            Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
-            Hashers_.push_back(helper.MakeHasher(blockItemType));
-            Comparators_.push_back(helper.MakeComparator(blockItemType));
-            Trimmers_.push_back(MakeBlockTrimmer(TTypeInfoHelper(), blockItemType, pool));
+        for (size_t i = 0; i < types.size(); i++) {
+            if (i == BlockLengthIndex_) {
+                continue;
+            }
+
+            TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+            Readers_[i] = MakeBlockReader(TTypeInfoHelper(), blockItemType);
+            Hashers_[i] = helper.MakeHasher(blockItemType);
+            Comparators_[i] = helper.MakeComparator(blockItemType);
+            Trimmers_[i] = MakeBlockTrimmer(TTypeInfoHelper(), blockItemType, pool);
         }
     }
 
-    NUdf::EFetchStatus FetchStream() {
-        switch (Stream_.WideFetch(Inputs_.data(), Inputs_.size())) {
-        case NUdf::EFetchStatus::Yield:
-            return NUdf::EFetchStatus::Yield;
-        case NUdf::EFetchStatus::Finish:
+    bool FetchNextBlock() {
+        if (!ListIter_.Next(Block_)) {
             IsFinished_ = true;
-            return NUdf::EFetchStatus::Finish;
-        case NUdf::EFetchStatus::Ok:
-            break;
+            return false;
         }
+        BlockItems_ = Block_.GetElements();
 
         Y_ENSURE(!IsFinished_, "Got data on finished stream");
 
-        std::vector<arrow::Datum> blockColumns;
-        for (size_t i = 0; i < Inputs_.size() - 1; i++) {
-            auto& datum = TArrowBlock::From(Inputs_[i]).GetDatum();
+        std::vector<arrow::Datum> blockColumns(Readers_.size());
+        for (size_t i = 0; i < Readers_.size(); i++) {
+            if (i == BlockLengthIndex_) {
+                continue;
+            }
+
+            auto& datum = TArrowBlock::From(BlockItems_[i]).GetDatum();
             ARROW_DEBUG_CHECK_DATUM_TYPES(InputsDescr_[i], datum.descr());
             if (datum.is_scalar()) {
-                blockColumns.push_back(datum);
+                blockColumns[i] = datum;
             } else {
                 MKQL_ENSURE(datum.is_array(), "Expecting array");
-                blockColumns.push_back(Trimmers_[i]->Trim(datum.array()));
+                blockColumns[i] = Trimmers_[i]->Trim(datum.array());
             }
         }
 
-        auto blockSize = ::GetBlockCount(Inputs_[Inputs_.size() - 1]);
+        auto blockSize = ::GetBlockCount(BlockItems_[BlockLengthIndex_]);
         Data_.emplace_back(blockSize, std::move(blockColumns));
         RowCount_ += blockSize;
 
-        return NUdf::EFetchStatus::Ok;
+        return true;
     }
 
     const TBlock& GetBlock(size_t blockOffset) const {
@@ -392,11 +401,11 @@ public:
     }
 
     TBlockItem GetItem(TRowEntry entry, ui32 columnIdx) const {
-        Y_ENSURE(columnIdx < Inputs_.size() - 1);
         return GetItemFromBlock(GetBlock(entry.BlockOffset), columnIdx, entry.ItemOffset);
     }
 
     TBlockItem GetItemFromBlock(const TBlock& block, ui32 columnIdx, size_t offset) const {
+        Y_ENSURE(columnIdx < Readers_.size() && columnIdx != BlockLengthIndex_);
         Y_ENSURE(offset < block.Size);
         const auto& datum = block.Columns[columnIdx];
         if (datum.is_scalar()) {
@@ -447,8 +456,11 @@ protected:
     size_t RowCount_ = 0;
     bool IsFinished_ = false;
 
-    NUdf::TUnboxedValue Stream_;
-    TUnboxedValueVector Inputs_;
+    NUdf::TUnboxedValue ListIter_;
+    NUdf::TUnboxedValue Block_;
+    const NUdf::TUnboxedValue* BlockItems_ = nullptr;
+
+    size_t BlockLengthIndex_ = 0;
 
     const TStringBuf ResourceTag_;
 };
@@ -459,20 +471,29 @@ class TBlockStorageWrapper : public TMutableComputationNode<TBlockStorageWrapper
 public:
     TBlockStorageWrapper(
         TComputationMutables& mutables,
-        TVector<TType*>&& itemTypes,
-        IComputationNode* stream,
+        TStructType* structType,
+        IComputationNode* list,
         const TStringBuf& resourceTag
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , ItemTypes_(std::move(itemTypes))
-        , Stream_(stream)
+        , List_(list)
         , ResourceTag_(resourceTag)
-    {}
+    {
+        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+            if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+                BlockLengthIndex_ = i;
+                Types_.push_back(nullptr);
+                continue;
+            }
+            Types_.push_back(structType->GetMemberType(i));
+        }
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TBlockStorage>(
-            ItemTypes_,
-            std::move(Stream_->GetValue(ctx)),
+            Types_,
+            BlockLengthIndex_,
+            List_->GetValue(ctx).GetListIterator(),
             ResourceTag_,
             &ctx.ArrowMemoryPool
         );
@@ -480,12 +501,14 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Stream_);
+        DependsOn(List_);
     }
 
 private:
-    const TVector<TType*> ItemTypes_;
-    IComputationNode* const Stream_;
+    TVector<TType*> Types_;
+    size_t BlockLengthIndex_ = 0;
+
+    IComputationNode* const List_;
 
     const TString ResourceTag_;
 };
@@ -750,13 +773,13 @@ public:
             Y_ENSURE(blockOffset <= std::numeric_limits<ui32>::max());
             Y_ENSURE(blockSize <= std::numeric_limits<ui32>::max());
             for (size_t itemOffset = 0; itemOffset < blockSize; itemOffset++) {
-                ui64 keyHash = GetKey(block, itemOffset, insertBatchKeys[insertBatchLen]);
+                auto keyHash = GetKey(block, itemOffset, insertBatchKeys[insertBatchLen]);
                 if (!keyHash) {
                     continue;
                 }
 
                 insertBatchEntries[insertBatchLen] = TBlockStorage::TRowEntry(blockOffset, itemOffset);
-                insertBatch[insertBatchLen].ConstructKey(keyHash);
+                insertBatch[insertBatchLen].ConstructKey(*keyHash);
                 insertBatchLen++;
 
                 if (insertBatchLen == PrefetchBatchSize) {
@@ -777,15 +800,22 @@ public:
 
         std::array<TRobinHoodBatchRequestItem<ui64>, PrefetchBatchSize> lookupBatch;
         std::array<std::vector<NYql::NUdf::TBlockItem>, PrefetchBatchSize> itemsBatch;
+        std::array<bool, PrefetchBatchSize> notNullBatch = {};
 
         for (size_t i = 0; i < batchSize; i++) {
             const auto& [items, keyHash] = getKey(i);
-            lookupBatch[i].ConstructKey(keyHash);
+            if (!keyHash) {
+                lookupBatch[i].ConstructKey(0);
+                continue;
+            }
+
+            notNullBatch[i] = true;
+            lookupBatch[i].ConstructKey(*keyHash);
             itemsBatch[i] = items;
         }
 
         Index_->BatchLookup({lookupBatch.data(), batchSize}, [&](size_t i, TIndexMap::iterator iter) {
-            if (!iter) {
+            if (!notNullBatch[i] || !iter) {
                 // Empty iterator
                 iterators[i] = TIterator(this);
                 return;
@@ -819,7 +849,7 @@ public:
     }
 
 private:
-    ui64 GetKey(const TBlockStorage::TBlock& block, size_t offset, std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+    TMaybe<ui64> GetKey(const TBlockStorage::TBlock& block, size_t offset, std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
         auto& blockStorage = *static_cast<TBlockStorage*>(BlockStorage_.GetResource());
 
         ui64 keyHash = 0;
@@ -828,7 +858,7 @@ private:
             auto item = blockStorage.GetItemFromBlock(block, keyColumn, offset);
             if (!item) {
                 keyItems.clear();
-                return 0;
+                return {};
             }
 
             keyHash = CombineHashes(keyHash, blockStorage.GetItemHashers()[keyColumn]->Hash(item));
@@ -992,17 +1022,13 @@ private:
             auto& indexState = *static_cast<TIndexState*>(RightBlockIndex_.GetResource());
             auto& storageState = *static_cast<TStorageState*>(indexState.GetBlockStorage().GetResource());
 
-            if (!RightStreamConsumed_) {
-                auto fetchStatus = NUdf::EFetchStatus::Ok;
-                while (fetchStatus != NUdf::EFetchStatus::Finish) {
-                    fetchStatus = storageState.FetchStream();
-                    if (fetchStatus == NUdf::EFetchStatus::Yield) {
-                        return NUdf::EFetchStatus::Yield;
-                    }
+            if (!RightInputConsumed_) {
+                while (storageState.FetchNextBlock()) {
+                    // Fetch entire data from the right input
                 }
 
                 indexState.BuildIndex();
-                RightStreamConsumed_ = true;
+                RightInputConsumed_ = true;
             }
 
             auto* inputFields = joinState.GetRawInputFields();
@@ -1052,7 +1078,7 @@ private:
                     LookupBatchSize_ = std::min(PrefetchBatchSize, static_cast<ui32>(joinState.RemainingRowsCount()));
                     indexState.BatchLookup(LookupBatchSize_, LookupBatchIterators_, [&](size_t i) {
                         MakeLeftKeys(leftKeyColumns, leftKeyColumnHashes, i);
-                        ui64 keyHash = CalculateTupleHash(leftKeyColumnHashes);
+                        auto keyHash = CalculateTupleHash(leftKeyColumns, leftKeyColumnHashes);
                         return std::make_pair(std::ref(leftKeyColumns), keyHash);
                     });
 
@@ -1104,7 +1130,7 @@ private:
         const TVector<ui32>& LeftKeyColumns_;
 
         const TVector<ui32>& RightIOMap_;
-        bool RightStreamConsumed_ = false;
+        bool RightInputConsumed_ = false;
 
         std::array<typename TIndexState::TIterator, PrefetchBatchSize> LookupBatchIterators_;
         ui32 LookupBatchCurrent_ = 0;
@@ -1204,16 +1230,12 @@ private:
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& storageState = *static_cast<TStorageState*>(RightBlockStorage_.GetResource());
 
-            if (!RightStreamConsumed_) {
-                auto fetchStatus = NUdf::EFetchStatus::Ok;
-                while (fetchStatus != NUdf::EFetchStatus::Finish) {
-                    fetchStatus = storageState.FetchStream();
-                    if (fetchStatus == NUdf::EFetchStatus::Yield) {
-                        return NUdf::EFetchStatus::Yield;
-                    }
+            if (!RightInputConsumed_) {
+                while (storageState.FetchNextBlock()) {
+                    // Fetch entire data from the right input
                 }
 
-                RightStreamConsumed_ = true;
+                RightInputConsumed_ = true;
                 RightRowIterator_ = storageState.GetRowIterator();
             }
 
@@ -1270,7 +1292,7 @@ private:
         NUdf::TUnboxedValue JoinState_;
 
         const TVector<ui32>& RightIOMap_;
-        bool RightStreamConsumed_ = false;
+        bool RightInputConsumed_ = false;
 
         TStorageState::TRowIterator RightRowIterator_;
 
@@ -1310,19 +1332,15 @@ IComputationNode* WrapBlockStorage(TCallable& callable, const TComputationNodeFa
     MKQL_ENSURE(resultResourceType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
 
     const auto inputType = callable.GetInput(0).GetStaticType();
-    MKQL_ENSURE(inputType->IsStream(), "Expected WideStream as an input stream");
-    const auto inputStreamType = AS_TYPE(TStreamType, inputType);
-    MKQL_ENSURE(inputStreamType->GetItemType()->IsMulti(),
-                "Expected Multi as a left stream item type");
-    const auto inputStreamComponents = GetWideComponents(inputStreamType);
-    MKQL_ENSURE(inputStreamComponents.size() > 0, "Expected at least one column");
-    TVector<TType*> inputStreamItems(inputStreamComponents.cbegin(), inputStreamComponents.cend());
+    MKQL_ENSURE(inputType->IsList(), "Expected List as an input stream");
+    const auto inputItemType = AS_TYPE(TListType, inputType)->GetItemType();;
+    MKQL_ENSURE(inputItemType->IsStruct(), "Expected Struct as a list item type");
 
-    const auto inputStream = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto list = LocateNode(ctx.NodeLocator, callable, 0);
     return new TBlockStorageWrapper(
         ctx.Mutables,
-        std::move(inputStreamItems),
-        inputStream,
+        AS_TYPE(TStructType, inputItemType),
+        list,
         resultResourceType->GetTag()
     );
 }
@@ -1341,9 +1359,9 @@ IComputationNode* WrapBlockMapJoinIndex(TCallable& callable, const TComputationN
     MKQL_ENSURE(inputResourceType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
 
     auto origInputItemType = AS_VALUE(TTypeType, callable.GetInput(1));
-    MKQL_ENSURE(origInputItemType->IsMulti(), "Expected Multi as an input item type");
-    const auto streamComponents = AS_TYPE(TMultiType, origInputItemType)->GetElements();
-    MKQL_ENSURE(streamComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(origInputItemType->IsStruct(), "Expected Struct as an input item type");
+    const auto origInputItemStructType = AS_TYPE(TStructType, origInputItemType);
+    MKQL_ENSURE(origInputItemStructType->GetMembersCount() > 0, "Expected at least one column");
 
     const auto keyColumnsLiteral = callable.GetInput(2);
     const auto keyColumnsTuple = AS_VALUE(TTupleLiteral, keyColumnsLiteral);
@@ -1355,7 +1373,7 @@ IComputationNode* WrapBlockMapJoinIndex(TCallable& callable, const TComputationN
     }
 
     for (ui32 keyColumn : keyColumns) {
-        MKQL_ENSURE(keyColumn < streamComponents.size() - 1, "Key column out of range");
+        MKQL_ENSURE(keyColumn < origInputItemStructType->GetMembersCount(), "Key column out of range");
     }
 
     const auto anyNode = callable.GetInput(3);
@@ -1408,10 +1426,9 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     }
 
     auto origRightItemType = AS_VALUE(TTypeType, callable.GetInput(2));
-    MKQL_ENSURE(origRightItemType->IsMulti(), "Expected Multi as a right stream item type");
-    const auto rightStreamComponents = AS_TYPE(TMultiType, origRightItemType)->GetElements();
-    MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> rightStreamItems(rightStreamComponents.cbegin(), rightStreamComponents.cend());
+    MKQL_ENSURE(origRightItemType->IsStruct(), "Expected Struct as a right stream item type");
+    const auto origRightItemStructType = AS_TYPE(TStructType, origRightItemType);
+    MKQL_ENSURE(origRightItemStructType->GetMembersCount() > 0, "Expected at least one column");
 
     const auto leftKeyColumnsLiteral = callable.GetInput(4);
     const auto leftKeyColumnsTuple = AS_VALUE(TTupleLiteral, leftKeyColumnsLiteral);
@@ -1479,8 +1496,8 @@ IComputationNode* WrapBlockMapJoinCore(TCallable& callable, const TComputationNo
     // XXX: Mind the last wide item, containing block length.
     TVector<ui32> rightIOMap;
     if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left || joinKind == EJoinKind::Cross) {
-        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {
-            if (rightKeyDrops.contains(i)) {
+        for (size_t i = 0; i < origRightItemStructType->GetMembersCount(); i++) {
+            if (rightKeyDrops.contains(i) || origRightItemStructType->GetMemberName(i) == NYql::BlockLengthColumnName) {
                 continue;
             }
             rightIOMap.push_back(i);

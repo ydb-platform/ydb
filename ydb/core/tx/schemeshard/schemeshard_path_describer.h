@@ -48,6 +48,7 @@ class TPathDescriber {
     void DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeBackupCollection(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
 
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)

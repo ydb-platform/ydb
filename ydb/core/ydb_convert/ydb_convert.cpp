@@ -813,20 +813,6 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     }
 }
 
-void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-                                     NKikimrMiniKQL::TParams& output) {
-    output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto type = output.MutableType()->MutableStruct();
-    auto value = output.MutableValue();
-    for (const auto& p : input) {
-        auto typeMember = type->AddMember();
-        auto valueItem = value->AddStruct();
-        typeMember->SetName(p.first);
-        ConvertYdbTypeToMiniKQLType(p.second.type(), *typeMember->MutableType());
-        ConvertYdbValueToMiniKQLValue(p.second.type(), p.second.value(), *valueItem);
-    }
-}
-
 void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
     google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions) {
     const auto& securityObject = TSecurityObject(owner, acl, isContainer);
@@ -1411,16 +1397,16 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         vb.Interval(cell.AsValue<i64>());
         break;
     case EPrimitiveType::Date32:
-        vb.Date32(cell.AsValue<i32>());
+        vb.Date32(std::chrono::sys_time<TWideDays>(TWideDays(cell.AsValue<i32>())));
         break;
     case EPrimitiveType::Datetime64:
-        vb.Datetime64(cell.AsValue<i64>());
+        vb.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Timestamp64:
-        vb.Timestamp64(cell.AsValue<i64>());
+        vb.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Interval64:
-        vb.Interval64(cell.AsValue<i64>());
+        vb.Interval64(TWideMicroseconds(cell.AsValue<i64>()));
         break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());

@@ -7,7 +7,7 @@
 #include <yt/yt/core/net/connection.h>
 #include <yt/yt/core/net/address.h>
 
-#include <contrib/restricted/http-parser/http_parser.h>
+#include <contrib/deprecated/http-parser/http_parser.h>
 
 #include <util/stream/buffer.h>
 
@@ -51,6 +51,8 @@ public:
     TSharedRef Feed(const TSharedRef& buf);
 
 private:
+    const http_parser_type ParserType_{};
+
     http_parser Parser_{};
 
     TStringBuilder FirstLine_;
@@ -91,8 +93,7 @@ public:
         const NNet::TNetworkAddress& remoteAddress,
         IInvokerPtr readInvoker,
         EMessageType messageType,
-        THttpIOConfigPtr config,
-        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+        THttpIOConfigPtr config);
 
     EMethod GetMethod() override;
     const TUrlRef& GetUrl() override;
@@ -137,7 +138,6 @@ private:
     const EMessageType MessageType_;
     const THttpIOConfigPtr Config_;
     const IInvokerPtr ReadInvoker_;
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TSharedMutableRef InputBuffer_;
     TSharedRef UnconsumedData_;
@@ -185,14 +185,12 @@ public:
         THeadersPtr headers,
         NNet::IConnectionPtr connection,
         EMessageType messageType,
-        THttpIOConfigPtr config,
-        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+        THttpIOConfigPtr config);
 
     THttpOutput(
         NNet::IConnectionPtr connection,
         EMessageType messageType,
-        THttpIOConfigPtr config,
-        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+        THttpIOConfigPtr config);
 
     const THeadersPtr& GetHeaders() override;
     void SetHeaders(const THeadersPtr& headers);
@@ -228,7 +226,6 @@ private:
     const THttpIOConfigPtr Config_;
 
     const TClosure OnWriteFinish_;
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     // Debug
     TRequestId RequestId_;
@@ -237,7 +234,7 @@ private:
     bool HeadersLogged_ = false;
     TInstant LastProgressLogTime_;
 
-    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> FilteredHeaders_;
+    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> FilteredHeaders_;
 
     bool ConnectionClose_ = false;
 

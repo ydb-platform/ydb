@@ -1,9 +1,9 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -281,7 +281,7 @@ namespace NKikimr::NSchemeShard {
 
                     if (checks) {
                         checks
-                            .IsValidLeafName()
+                            .IsValidLeafName(context.UserToken.Get())
                             .DepthLimit()
                             .PathsLimit()
                             .DirChildrenLimit()

@@ -54,6 +54,7 @@
                                         "PlanNodeId": 6,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "depname"
                                                 ],
@@ -77,6 +78,7 @@
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "depname"
                                                                 ],
@@ -96,12 +98,9 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_window.test_plan/empsalary",
                                                                                         "ReadColumns": [
+                                                                                            "empno (-\u221e, +\u221e)",
                                                                                             "depname",
-                                                                                            "empno",
                                                                                             "salary"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "empno (-\u221e, +\u221e)"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",

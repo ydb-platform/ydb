@@ -49,7 +49,7 @@ std::exception_ptr WrapSystemError(
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
-    TYtError outer(1, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
+    TYtError outer(NClusterErrorCodes::NBus::TransportError, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
         {"request_id", context.RequestId},
         {"host", context.HostName},
         {"method", context.Method},

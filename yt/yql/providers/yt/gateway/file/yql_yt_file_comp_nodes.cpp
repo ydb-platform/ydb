@@ -102,7 +102,7 @@ public:
     }
 
 protected:
-    THolder<IInputState> MakeState() const override {
+    THolder<TFileInputState> MakeState() const override {
         return MakeHolder<TFileInputStateWithTableState>(Spec, HolderFactory, MakeTextYsonInputs(TablePaths_),
             0u, 1_MB, TTableState(TableState_));
     }
@@ -310,7 +310,7 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
         currentRowOffset = 0;
         for (ui32 t = 0; t < tableList->GetItemsCount(); ++t) {
             TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[t]);
-            YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the table tuple");
+            YQL_ENSURE(tuple->GetValuesCount() == 8, "Expect 8 elements in the table tuple");
 
             NYT::TRichYPath richYPath;
             NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));

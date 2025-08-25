@@ -2,6 +2,7 @@ RECURSE(
     auth
     backup
     bg_tasks
+    bridge
     cms
     config
     datastreams

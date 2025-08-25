@@ -30,15 +30,10 @@ TCounter::TCounter(const NProfiling::TTagSet& tagSet)
 
 TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
     const NProfiling::TRegistry& registry,
-    const std::vector<std::string>& clusters)
+    [[maybe_unused]] const std::vector<std::string>& clusters)
     : SuccessRequestCount(registry.Counter("/update_success"))
     , ErrorRequestCount(registry.Counter("/update_error"))
-    , TotalTabletCount(registry.Gauge("/tablets_total"))
-{
-    for (const auto& cluster : clusters) {
-        TabletWithLagCountPerReplica.emplace(cluster, registry.WithTag("yt_cluster", cluster).Gauge("/tablets_with_lag"));
-    }
-}
+{ }
 
 TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
     const NYPath::TYPath& tablePath,

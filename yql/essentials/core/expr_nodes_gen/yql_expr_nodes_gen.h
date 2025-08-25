@@ -27,13 +27,13 @@ public:
     }
 
     explicit TExprBase(TExprNode::TPtr&& node)
-        : Raw_(node.Get()), Node(std::move(node))
+        : Raw_(node.Get()), Node_(std::move(node))
     {
         YQL_ENSURE(Raw_);
     }
 
     explicit TExprBase(const TExprNode::TPtr& node)
-        : Raw_(node.Get()), Node(node)
+        : Raw_(node.Get()), Node_(node)
     {
         YQL_ENSURE(node);
     }
@@ -43,13 +43,13 @@ public:
     }
 
     TExprNode* MutableRaw() const {
-        YQL_ENSURE(Node);
-        return Node.Get();
+        YQL_ENSURE(Node_);
+        return Node_.Get();
     }
 
     TExprNode::TPtr Ptr() const {
-        YQL_ENSURE(Node);
-        return Node;
+        YQL_ENSURE(Node_);
+        return Node_;
     }
 
     const TExprNode& Ref() const {
@@ -57,8 +57,8 @@ public:
     }
 
     TExprNode& MutableRef() const {
-        YQL_ENSURE(Node);
-        return *Node;
+        YQL_ENSURE(Node_);
+        return *Node_;
     }
 
     TExprBase NonOwning() const {
@@ -76,12 +76,12 @@ public:
 
     template<typename TNode>
     TNode Cast() const {
-        return Node ? TNode(Node) : TNode(Raw_);
+        return Node_ ? TNode(Node_) : TNode(Raw_);
     }
 
 private:
     const TExprNode* Raw_;
-    TExprNode::TPtr Node;
+    TExprNode::TPtr Node_;
 };
 
 template<>
@@ -91,10 +91,10 @@ public:
         : Raw_(node) {}
 
     TMaybeNode(const TExprNode::TPtr& node)
-        : Raw_(node.Get()), Node(node) {}
+        : Raw_(node.Get()), Node_(node) {}
 
     TMaybeNode(const TExprBase& node)
-        : Raw_(node.Raw()), Node(node.Ptr()) {}
+        : Raw_(node.Raw()), Node_(node.Ptr()) {}
 
     const TExprNode& Ref() const {
         YQL_ENSURE(IsValid());
@@ -103,8 +103,8 @@ public:
 
     TExprNode& MutableRef() const {
         YQL_ENSURE(IsValid());
-        YQL_ENSURE(Node);
-        return *Node;
+        YQL_ENSURE(Node_);
+        return *Node_;
     }
 
     const TExprNode* Raw() const {
@@ -113,8 +113,8 @@ public:
 
     TExprNode* MutableRaw() const {
         YQL_ENSURE(IsValid());
-        YQL_ENSURE(Node);
-        return Node.Get();
+        YQL_ENSURE(Node_);
+        return Node_.Get();
     }
 
     bool IsValid() const {
@@ -127,23 +127,23 @@ public:
 
     template<typename TNode>
     TMaybeNode<TNode> Maybe() const {
-        return Node ? TMaybeNode<TNode>(Node) : TMaybeNode<TNode>(Raw_);
+        return Node_ ? TMaybeNode<TNode>(Node_) : TMaybeNode<TNode>(Raw_);
     }
 
     template<typename TNode>
     TNode Cast() const {
         YQL_ENSURE(IsValid());
-        return Node ? TNode(Node) : TNode(Raw_);
+        return Node_ ? TNode(Node_) : TNode(Raw_);
     }
 
     TExprBase Cast() const {
         YQL_ENSURE(IsValid());
-        return Node ? TExprBase(Node) : TExprBase(Raw_);
+        return Node_ ? TExprBase(Node_) : TExprBase(Raw_);
     }
 
 private:
     const TExprNode* Raw_;
-    TExprNode::TPtr Node;
+    TExprNode::TPtr Node_;
 };
 
 template<typename TNode>
@@ -151,28 +151,28 @@ class TChildIterator : public std::iterator<std::forward_iterator_tag, TNode> {
 public:
     TChildIterator()
     {
-        CurIt = EndIt = {};
+        CurIt_ = EndIt_ = {};
     }
 
     TChildIterator(const TExprBase &node, size_t startIndex = 0)
-        : CurIt(node.Ref().Children().begin() + startIndex)
-        , EndIt(node.Ref().Children().end())
+        : CurIt_(node.Ref().Children().begin() + startIndex)
+        , EndIt_(node.Ref().Children().end())
     {
-        if (CurIt != EndIt) {
-            CurNode = *CurIt;
+        if (CurIt_ != EndIt_) {
+            CurNode_ = *CurIt_;
         }
     }
 
     TChildIterator& operator++ () // Pre-increment
     {
-        YQL_ENSURE(CurNode);
+        YQL_ENSURE(CurNode_);
         Move();
         return *this;
     }
 
     TChildIterator operator++ (int) // Post-increment
     {
-        YQL_ENSURE(CurNode);
+        YQL_ENSURE(CurNode_);
         TChildIterator<TNode> tmp(*this);
         Move();
         return tmp;
@@ -180,29 +180,29 @@ public:
 
     bool operator ==(const TChildIterator<TNode>& rhs) const
     {
-        return CurNode == rhs.CurNode;
+        return CurNode_ == rhs.CurNode_;
     }
 
     bool operator !=(const TChildIterator<TNode>& rhs) const
     {
-        return CurNode != rhs.CurNode;
+        return CurNode_ != rhs.CurNode_;
     }
 
     TNode operator*() const
     {
-        YQL_ENSURE(CurNode);
-        return TNode(CurNode);
+        YQL_ENSURE(CurNode_);
+        return TNode(CurNode_);
     }
 
 private:
     void Move() {
-        ++CurIt;
-        CurNode = CurIt == EndIt ? nullptr : *CurIt;
+        ++CurIt_;
+        CurNode_ = CurIt_ == EndIt_ ? nullptr : *CurIt_;
     }
 
-    TExprNode::TPtr CurNode;
-    TExprNode::TListType::const_iterator CurIt;
-    TExprNode::TListType::const_iterator EndIt;
+    TExprNode::TPtr CurNode_;
+    TExprNode::TListType::const_iterator CurIt_;
+    TExprNode::TListType::const_iterator EndIt_;
 };
 
 template<typename TItem>
@@ -366,17 +366,17 @@ class TArgs
 {
 public:
     TArgs(const TExprBase& node, size_t startIndex)
-        : Node(node)
-        , StartIndex(startIndex) {}
+        : Node_(node)
+        , StartIndex_(startIndex) {}
 
-    TExprBase Get(size_t index) const { return TExprBase(Node.Ref().ChildPtr(index)); }
-    size_t Count() const { return Node.Ref().ChildrenSize(); }
-    TChildIterator<TExprBase> begin() const { return TChildIterator<TExprBase>(Node, StartIndex); }
+    TExprBase Get(size_t index) const { return TExprBase(Node_.Ref().ChildPtr(index)); }
+    size_t Count() const { return Node_.Ref().ChildrenSize(); }
+    TChildIterator<TExprBase> begin() const { return TChildIterator<TExprBase>(Node_, StartIndex_); }
     TChildIterator<TExprBase> end() const { return TChildIterator<TExprBase>(); }
 
 private:
-    TExprBase Node;
-    size_t StartIndex;
+    TExprBase Node_;
+    size_t StartIndex_;
 };
 
 template<const size_t FixedArgsCount>
@@ -430,14 +430,14 @@ protected:
     typedef std::function<TExprBase (const TStringBuf& arg)> GetArgFuncType;
 
     TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
-        : Ctx(ctx)
-        , Pos(pos)
-        , GetArgFunc(getArgFunc) {}
+        : Ctx_(ctx)
+        , Pos_(pos)
+        , GetArgFunc_(getArgFunc) {}
 
 protected:
-    TExprContext& Ctx;
-    TPositionHandle Pos;
-    GetArgFuncType GetArgFunc;
+    TExprContext& Ctx_;
+    TPositionHandle Pos_;
+    GetArgFuncType GetArgFunc_;
 };
 
 template <typename TParent, typename TDerived, typename TItem>
@@ -447,17 +447,17 @@ protected:
 
     TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc(buildFunc) {}
+        , BuildFunc_(buildFunc) {}
 
-    TVector<TExprBase> Items;
-    BuildFuncType BuildFunc;
+    TVector<TExprBase> Items_;
+    BuildFuncType BuildFunc_;
 
 public:
     typedef TDerived ResultType;
 
     TParent& Build() {
         TDerived node = static_cast<TNodeBuilder<TParent, TDerived>*>(this)->DoBuild();
-        return BuildFunc(node);
+        return BuildFunc_(node);
     }
 
     typename TParent::ResultType Done() {
@@ -466,58 +466,58 @@ public:
     }
 
     TNodeBuilder<TParent, TDerived>& InitFrom(const ResultType& item) {
-        Items.assign(item.begin(), item.end());
+        Items_.assign(item.begin(), item.end());
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TExprBase& node) {
-        Items.push_back(node);
+        Items_.push_back(node);
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TPtr& node) {
-        Items.push_back(TExprBase(node));
+        Items_.push_back(TExprBase(node));
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
     TNodeBuilder<TNodeBuilder<TParent, TDerived>, TItem> Add() {
-        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TItem>(this->Ctx, this->Pos,
+        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TItem>(this->Ctx_, this->Pos_,
             [this] (const TExprBase& node) mutable -> TNodeBuilder<TParent, TDerived>& {
                 return Add(node);
-            }, GetArgFunc);
+            }, GetArgFunc_);
     }
 
     template<typename TNode>
     TNodeBuilder<TNodeBuilder<TParent, TDerived>, TNode> Add() {
-        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TNode>(this->Ctx, this->Pos,
+        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TNode>(this->Ctx_, this->Pos_,
             [this] (const TNode& node) mutable -> TNodeBuilder<TParent, TDerived>&{
                 return Add(node);
-            }, GetArgFunc);
+            }, GetArgFunc_);
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TStringBuf& argName) {
-        return Add(TExprBase(this->GetArgFunc(argName)));
+        return Add(TExprBase(this->GetArgFunc_(argName)));
     }
 
     template <typename T, typename = std::enable_if_t<!std::is_same<T, TExprBase>::value
         && std::is_same<T, TItem>::value>>
     TNodeBuilder<TParent, TDerived>& Add(const TVector<T>& list) {
         for (auto item : list) {
-            Items.push_back(item);
+            Items_.push_back(item);
         }
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TVector<TExprBase>& list) {
         for (auto item : list) {
-            Items.push_back(item);
+            Items_.push_back(item);
         }
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TListType& list) {
         for (auto item : list) {
-            Items.push_back(TExprBase(item));
+            Items_.push_back(TExprBase(item));
         }
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
@@ -537,7 +537,7 @@ public:
         : TListBuilderBase<TParent, TVector<TExprBase>, TExprBase>(ctx, pos, buildFunc, getArgFunc) {}
 
     TVector<TExprBase> DoBuild() {
-        return this->Items;
+        return this->Items_;
     }
 };
 
@@ -547,15 +547,15 @@ protected:
     TFreeArgCallableBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc) {}
 
-    TVector<TExprBase> FreeArgsHolder;
+    TVector<TExprBase> FreeArgsHolder_;
 
 public:
     TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>> FreeArgs() {
-        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>>(this->Ctx, this->Pos,
+        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>>(this->Ctx_, this->Pos_,
             [this] (const TVector<TExprBase>& freeArgs) mutable -> TNodeBuilder<TParent, TDerived>& {
-                FreeArgsHolder = freeArgs;
+                FreeArgsHolder_ = freeArgs;
                 return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
-            }, GetArgFunc);
+            }, GetArgFunc_);
     }
 };
 
@@ -565,17 +565,17 @@ public:
     typedef TNode ResultType;
 
     void SetValue(const TNode& node) {
-        Node = node.template Maybe<TNode>();
+        Node_ = node.template Maybe<TNode>();
     }
 
     TNode Value() const {
-        YQL_ENSURE(Node);
+        YQL_ENSURE(Node_);
 
-        return Node.Cast();
+        return Node_.Cast();
     }
 
 private:
-    TMaybeNode<TNode> Node;
+    TMaybeNode<TNode> Node_;
 };
 
 template<typename TNode>

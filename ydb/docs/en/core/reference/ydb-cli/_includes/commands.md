@@ -22,6 +22,10 @@ Any command can be run from the command line with the `--help` option to get hel
 
 | Command / subcommand | Brief description |
 --- | ---
+| [admin cluster dump](../export-import/tools-dump.md#cluster) | Dumping cluster' metadata to the file system |
+| [admin cluster restore](../export-import/tools-restore.md#cluster) | Restoring cluster' metadata from the file system |
+| [admin database dump](../export-import/tools-dump.md#db) | Dumping database' data and metadata to the file system |
+| [admin database restore](../export-import/tools-restore.md#db) | Restoring database' data and metadata from the file system |
 | [config info](../commands/config-info.md) | Displaying [connection parameters](../connect.md) |
 | [config profile activate](../profile/activate.md) | Activating a [profile](../profile/index.md) |
 | [config profile create](../profile/create.md) | Creating a [profile](../profile/index.md) |
@@ -36,6 +40,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [import file tsv](../export-import/import-file.md) | Importing data from a TSV file |
 | [import s3](../export-import/import-s3.md) | Importing data from S3 storage |
 | [init](../profile/create.md) | Initializing the CLI, creating a [profile](../profile/index.md) |
+| [monitoring healthcheck](../commands/monitoring-healthcheck.md) | Health check |
 | [operation cancel](../operation-cancel.md) | Aborting long-running operations |
 | [operation forget](../operation-forget.md) | Deleting long-running operations from the list |
 | [operation get](../operation-get.md) | Status of long-running operations |
@@ -52,22 +57,24 @@ Any command can be run from the command line with the `--help` option to get hel
 | [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Disable permission inheritance |
 | [scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Enable permission inheritance |
 | [scheme rmdir](../commands/dir.md#rmdir) | Deleting a directory |
-| [scripting yql](../scripting-yql.md) | Executing a YQL script |
+| [scripting yql](../scripting-yql.md) | Executing a YQL script (deprecated, use [`ydb sql`](../sql.md)) |
+| [sql](../sql.md) | Execute any query |
 | table attribute add | Adding a table attribute |
 | table attribute drop | Deleting a table attribute |
 | [table drop](../table-drop.md) | Deleting a table |
 | [table index add global-async](../commands/secondary_index.md#add) | Adding an asynchronous index |
 | [table index add global-sync](../commands/secondary_index.md#add) | Adding a synchronous index |
 | [table index drop](../commands/secondary_index.md#drop) | Deleting an index |
-| [table query execute](../table-query-execute.md) | Executing a YQL query |
-| [table query explain](../commands/explain-plan.md) | YQL query execution plan |
+| [table query execute](../table-query-execute.md) | Executing a YQL query (deprecated, use [`ydb sql`](../sql.md)) |
+| [table query explain](../commands/explain-plan.md) | YQL query execution plan (deprecated, use [`ydb sql --explain`](../sql.md)) |
 | [table read](../commands/readtable.md) | Streaming table reads |
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |
-| [tools dump](../export-import/tools-dump.md) | Dumping a directory or table to the file system |
+| [tools dump](../export-import/tools-dump.md#schema-objects) | Dumping invidiual schema objects to the file system |
+| [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
-| [tools restore](../export-import/tools-restore.md) | Restoring data from the file system |
+| [tools restore](../export-import/tools-restore.md#schema-objects) | Restoring invidiual schema objects from the file system |
 | [topic create](../topic-create.md) | Creating a topic |
 | [topic alter](../topic-alter.md) | Updating topic parameters and consumers |
 | [topic drop](../topic-drop.md) | Deleting a topic |
@@ -77,8 +84,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | [topic read](../topic-read.md) | Reading messages from a topic |
 | [topic write](../topic-write.md) | Writing messages to a topic |
 {% if ydb-cli == "ydb" %}
-[update](../commands/service.md) | Update the {{ ydb-short-name }} CLI
-[version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version
+| [update](../commands/service.md) | Update the {{ ydb-short-name }} CLI |
+| [version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version |
 {% endif %}
-[workload](../commands/workload/index.md) | Generate the workload
-[yql](../yql.md) | Execute a YQL script (with streaming support)
+| [workload](../commands/workload/index.md) | Generate the workload |
+| [yql](../yql.md) | Execute a YQL script (deprecated, use [`ydb sql`](../sql.md)) |

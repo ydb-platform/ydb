@@ -2,6 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -204,6 +205,8 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, tablePath)];
 }
 
+
+
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
     if (TempTablesState) {
@@ -218,6 +221,26 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
+}
+
+bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
+    auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
+    if (mainTableImpl) {
+        for (const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (index.KeyColumns.size() > 1) {
+                    // prefixed index update is not supported yet
+                    return true;
+                }
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::PostingTable;
+                if (path == levelTablePath || path == postingTablePath) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
@@ -632,12 +655,14 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             protoValue.SetBool(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.SetUint32(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.SetInt32(FromString<i32>(value));
@@ -791,12 +816,14 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_bool_value(FromString<bool>(value));
             break;
         case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
         case EDataSlot::Uint32:
         case EDataSlot::Date:
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
         case EDataSlot::Int8:
+        case EDataSlot::Int16:
         case EDataSlot::Int32:
         case EDataSlot::Date32:
             protoValue.set_int32_value(FromString<i32>(value));
@@ -879,17 +906,16 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
-            YQL_ENSURE(!implTable.Next);
+            for (auto implTable = desc.Metadata->ImplTables[idxNo]; implTable; implTable = implTable->Next) {
+                auto info = NKqpProto::TKqpTableInfo();
+                info.SetTableName(implTable->Name);
+                info.MutableTableId()->SetOwnerId(implTable->PathId.OwnerId());
+                info.MutableTableId()->SetTableId(implTable->PathId.TableId());
+                info.SetSchemaVersion(implTable->SchemaVersion);
 
-            auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(implTable.Name);
-            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
-            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
-            info.SetSchemaVersion(implTable.SchemaVersion);
-
-            back_inserter = std::move(info);
-            ++back_inserter;
+                back_inserter = std::move(info);
+                ++back_inserter;
+            }
         }
     }
 }

@@ -107,7 +107,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         DIV() {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
             out << "<pre>";
-            OutputPrettyMessage(out, StorageConfig);
+            OutputPrettyMessage(out, *StorageConfig);
             out << "</pre>";
         }
 
@@ -210,6 +210,43 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        TAG(TH3) { out << "Bridge syncers"; }
+        TABLE_CLASS("table oddgray") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() { out << "BridgeProxyGroupId"; }
+                    TABLEH() { out << "BridgeProxyGroupGeneration"; }
+                    TABLEH() { out << "SourceGroupId"; }
+                    TABLEH() { out << "TargetGroupId"; }
+                    TABLEH() { out << "ActorId"; }
+                    TABLEH() { out << "Finished"; }
+                    TABLEH() { out << "ErrorReason"; }
+                    TABLEH() { out << "Start/Stop/OK/Error"; }
+                    TABLEH() { out << "LastErrorReason"; }
+                }
+            }
+            TABLEBODY() {
+                for (const auto& syncer : WorkingSyncers) {
+                    out << "<a name='syncer-" << syncer.TargetGroupId << "'>";
+                    TABLER() {
+                        TABLED() { out << syncer.BridgeProxyGroupId; }
+                        TABLED() { out << syncer.BridgeProxyGroupGeneration; }
+                        TABLED() { out << syncer.SourceGroupId; }
+                        TABLED() { out << syncer.TargetGroupId; }
+                        TABLED() { out << syncer.ActorId; }
+                        TABLED() { out << syncer.Finished; }
+                        TABLED() { out << syncer.ErrorReason; }
+                        TABLED() {
+                            out << syncer.NumStart << '/' << syncer.NumStop << '/' << syncer.NumFinishOK << '/'
+                                << syncer.NumFinishError;
+                        }
+                        TABLED() { out << syncer.LastErrorReason; }
+                    }
+                    out << "</a>";
                 }
             }
         }

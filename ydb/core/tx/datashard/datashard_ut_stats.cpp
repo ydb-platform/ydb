@@ -1,4 +1,5 @@
 #include "datashard_ut_common_kqp.h"
+#include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
@@ -381,7 +382,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         // each batch ~70KB, ~700KB in total
         auto counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
         Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
-        UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
+        UNIT_ASSERT_LE(counters->Owners->Val(), 2);
+        UNIT_ASSERT_LE(counters->PageCollectionOwners->Val(), 2);
     }
 
     Y_UNIT_TEST(CollectStatsForSeveralParts) {

@@ -431,8 +431,11 @@ private:
     {
         size_t remaining = CurrentBlock_.Size() - CurrentOffset_;
         size_t bytes = std::min(buffer.Size(), remaining);
-        ::memcpy(buffer.Begin(), CurrentBlock_.Begin() + CurrentOffset_, bytes);
-        CurrentOffset_ += bytes;
+        if (bytes != 0) {
+            YT_VERIFY(CurrentBlock_.Begin() != nullptr);
+            ::memcpy(buffer.Begin(), CurrentBlock_.Begin() + CurrentOffset_, bytes);
+            CurrentOffset_ += bytes;
+        }
         if (CurrentOffset_ == std::ssize(CurrentBlock_)) {
             CurrentBlock_.Reset();
             CurrentOffset_ = 0;

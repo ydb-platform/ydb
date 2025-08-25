@@ -210,6 +210,11 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
 
+    std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) override;
+
     // File cache
 
     TMaybe<TYPath> GetFileFromCache(
@@ -279,6 +284,11 @@ public:
         const TRichYPath& path,
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) override;
+
+    std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,

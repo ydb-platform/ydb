@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -119,6 +120,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
     clusterConfig.SetUseSsl(useSsl);
+
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
@@ -154,6 +156,9 @@ void FillGenericClusterConfigBase(
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         case NYql::EGenericDataSourceKind::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
+            break;
+        case NYql::EGenericDataSourceKind::ICEBERG:
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         default:
@@ -218,13 +223,13 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
 
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
         const TString& authToken,
-        const TString& endpoint,
+        const TString& monitoringEndpoint,
         const TString& accountSignature,
         const FederatedQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
-    FillSolomonClusterConfig(cluster, name, authToken, endpoint, accountIdSignatures, monitoring);
+    FillSolomonClusterConfig(cluster, name, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
     return cluster;
 }
 
@@ -338,6 +343,17 @@ void AddClustersFromConnections(
             clusterCfg->SetName(connectionName);
             clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
             FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
+
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            const auto& db = conn.content().setting().iceberg();
+            auto& clusterConfig = *gatewaysConfig.MutableGeneric()->AddClusterMapping();
+
+            clusterConfig.SetName(connectionName);
+            NFq::FillIcebergGenericClusterConfig(common, db, clusterConfig);
+            FillClusterAuth(clusterConfig, db.warehouse_auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }

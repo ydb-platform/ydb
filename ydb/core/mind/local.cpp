@@ -5,6 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -83,6 +84,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
+    TBridgePileId BridgePileId;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -207,6 +209,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
+        BridgePileId.CopyToProto(&request->Record, &decltype(request->Record)::SetBridgePileId);
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
 
@@ -655,7 +658,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvPrivate::TEvUpdateSystemUsage::TPtr&, const TActorContext&) {
-        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
+        static constexpr auto REQUIRED_FIELDS = std::to_array<i32>({
+            NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kMemoryUsedInAllocFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kMemoryLimitFieldNumber,
+        });
+        auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+        req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
     }
 
@@ -894,23 +905,50 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void SendDrain(const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
+        SentDrainNode = true;
+        LastDrainRequest->OnSend();
+        UpdateEstimate();
+        NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
+        ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
+    }
+
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
         if (!HivePipeClient) {
             TryToRegister(ctx);
         }
 
         if (!SentDrainNode) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
-            SentDrainNode = true;
-            ev->Get()->DrainProgress->OnSend();
             LastDrainRequest = ev->Get()->DrainProgress;
-            UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
-            ev->Get()->DrainProgress->OnReceive();
+            SendDrain(ctx);
+            LastDrainRequest->OnReceive();
         } else {
             ev->Get()->DrainProgress->OnReceive();
         }
+    }
+
+    void HandleInit(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext&) {
+        LastDrainRequest = ev->Get()->DrainProgress;
+        LastDrainRequest->OnReceive();
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        auto bridgeInfo = ev->Get()->BridgeInfo;
+        if (bridgeInfo == nullptr) {
+            // There will be an update with bridge info later
+            return;
+        }
+        auto pileInfo = bridgeInfo->SelfNodePile;
+        if (pileInfo) {
+            BridgePileId = pileInfo->BridgePileId;
+        }
+        TryToRegister(ctx);
+        if (LastDrainRequest) {
+            SendDrain(ctx);
+        }
+        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+        Become(&TThis::StateWork);
     }
 
     void UpdateCacheQuota() {
@@ -965,10 +1003,16 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
-        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         StartTime = ctx.Now();
-        TryToRegister(ctx);
-        Become(&TThis::StateWork);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        if (IsBridgeMode(ctx)) {
+            Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+            Become(&TThis::StateInit);
+        } else {
+            TryToRegister(ctx);
+            Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+            Become(&TThis::StateWork);
+        }
     }
 
     STFUNC(StateWork) {
@@ -1002,6 +1046,19 @@ public:
         }
     }
 
+    STFUNC(StateInit) {
+        switch(ev->GetTypeRewrite()) {
+            HFunc(TEvNodeWardenStorageConfig, Handle);
+            HFunc(TEvLocal::TEvEnumerateTablets, Handle);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
+            default:
+                Y_DEBUG_ABORT("TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
+                    " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
+                break;
+        }
+    }
+
 };
 
 class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
@@ -1022,7 +1079,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         TRegistrationInfo Info;
         TVector<TActorId> Locals;
         TActorId Subscriber;
-        TVector<TTabletId> HiveIds;
+        std::set<TTabletId> HiveIds;
         THashMap<TString, TString> Attributes;
         TSubDomainKey DomainKey;
     };
@@ -1144,7 +1201,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
     void RegisterAsSubDomain(const NKikimrScheme::TEvDescribeSchemeResult &rec,
                              const TResolveTask &task,
-                             const TVector<TTabletId> hiveIds,
+                             const std::set<TTabletId> hiveIds,
                              const TActorContext &ctx)
     {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
@@ -1265,14 +1322,14 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
         Y_ABORT_UNLESS(domainDesc.GetDomainKey().GetSchemeShard() == SchemeRoot);
 
-        TVector<TTabletId> hiveIds(HiveIds);
+        std::set<TTabletId> hiveIds(HiveIds.begin(), HiveIds.end());
         TTabletId hiveId = domainDesc.GetProcessingParams().GetHive();
         if (hiveId) {
-            hiveIds.emplace_back(hiveId);
+            hiveIds.emplace(hiveId);
         }
         TTabletId sharedHiveId = domainDesc.GetSharedHive();
         if (sharedHiveId) {
-            hiveIds.emplace_back(sharedHiveId);
+            hiveIds.emplace(sharedHiveId);
         }
         RegisterAsSubDomain(rec, task, hiveIds, ctx);
 
@@ -1303,7 +1360,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             TTenantInfo& tenant = itTenant->second;
             TTabletId hiveId = ev->Get()->DescribeSchemeResult.GetPathDescription().GetDomainDescription().GetProcessingParams().GetHive();
             if (hiveId) {
-                auto itHiveId = Find(tenant.HiveIds, hiveId);
+                auto itHiveId = tenant.HiveIds.find(hiveId);
                 if (itHiveId == tenant.HiveIds.end()) {
                     const auto &domainDesc = ev->Get()->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                     TVector<TSubDomainKey> servicedDomains = {TSubDomainKey(domainDesc.GetDomainKey())};
@@ -1313,7 +1370,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                                 << " to hive " << hiveId
                                 << " (allocated resources: " << tenant.Info.ResourceLimit.ShortDebugString() << ")");
                     RegisterLocalNode(tenant.Info.TenantName, tenant.Info.ResourceLimit, hiveId, servicedDomains, ctx);
-                    tenant.HiveIds.emplace_back(hiveId);
+                    tenant.HiveIds.emplace(hiveId);
                 }
             }
         }

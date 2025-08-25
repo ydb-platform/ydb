@@ -11,7 +11,7 @@ namespace NYql::NDq {
                                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient) {
         auto readActorFactory = [credentialsFactory, genericClient](
-                                    NGeneric::TSource&& settings,
+                                    Generic::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(
                 genericClient,
@@ -27,14 +27,14 @@ namespace NYql::NDq {
                 args.HolderFactory);
         };
 
-        auto lookupActorFactory = [credentialsFactory, genericClient](NYql::NGeneric::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [credentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
                 credentialsFactory,
                 std::move(args.ParentId),
-                args.TaskCounters,
-                args.Alloc,
-                args.KeyTypeHelper,
+                std::move(args.TaskCounters),
+                std::move(args.Alloc),
+                std::move(args.KeyTypeHelper),
                 std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,
@@ -51,9 +51,14 @@ namespace NYql::NDq {
                  "GreenplumGeneric",
                  "MsSQLServerGeneric",
                  "OracleGeneric",
-                 "LoggingGeneric"}) {
-            factory.RegisterSource<NGeneric::TSource>(name, readActorFactory);
-            factory.RegisterLookupSource<NGeneric::TLookupSource>(name, lookupActorFactory);
+                 "LoggingGeneric",
+                 "IcebergGeneric",
+                 "RedisGeneric",
+                 "PrometheusGeneric",
+                 "MongoDBGeneric",
+                 "OpenSearchGeneric"}) {
+            factory.RegisterSource<Generic::TSource>(name, readActorFactory);
+            factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }
     }
 

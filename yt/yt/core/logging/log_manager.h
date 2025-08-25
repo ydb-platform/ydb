@@ -32,6 +32,7 @@ public:
     static TLogManager* Get();
 
     void Configure(TLogManagerConfigPtr config, bool sync = true);
+    bool IsDefaultConfigured();
 
     void ConfigureFromEnv();
     bool IsConfiguredFromEnv();
@@ -62,6 +63,8 @@ public:
     void SuppressRequest(NTracing::TRequestId requestId);
 
     void Synchronize(TInstant deadline = TInstant::Max());
+
+    double GetBacklogQueueFillFraction() const;
 
 private:
     TLogManager();

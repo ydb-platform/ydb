@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -280,12 +281,16 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
         return DescribeReplication(driver);
+    case NScheme::ESchemeEntryType::Transfer:
+        return DescribeTransfer(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
     case NScheme::ESchemeEntryType::ExternalDataSource:
         return DescribeExternalDataSource(driver);
     case NScheme::ESchemeEntryType::ExternalTable:
         return DescribeExternalTable(driver);
+    case NScheme::ESchemeEntryType::SysView:
+        return DescribeSystemView(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -516,6 +521,26 @@ static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
     return value;
 }
 
+void PrintConnectionParams(const NReplication::TConnectionParams& connParams) {
+    bool isLocal = connParams.GetDiscoveryEndpoint().empty();
+    if (isLocal) {
+        return;
+    }
+
+    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+    Cout << Endl << "Database: " << connParams.GetDatabase();
+
+    switch (connParams.GetCredentials()) {
+    case NReplication::TConnectionParams::ECredentials::Static:
+        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+        break;
+    case NReplication::TConnectionParams::ECredentials::OAuth:
+        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
+    }
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
@@ -545,18 +570,7 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     const auto& srcDatabase = connParams.GetDatabase();
     const auto& dstDatabase = Database;
 
-    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
-    Cout << Endl << "Database: " << connParams.GetDatabase();
-
-    switch (connParams.GetCredentials()) {
-    case NReplication::TConnectionParams::ECredentials::Static:
-        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
-        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
-        break;
-    case NReplication::TConnectionParams::ECredentials::OAuth:
-        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
-        break;
-    }
+    PrintConnectionParams(connParams);
 
     Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
     switch (desc.GetConsistencyLevel()) {
@@ -594,6 +608,36 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     return EXIT_SUCCESS;
 }
 
+int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const {
+    const auto& desc = result.GetTransferDescription();
+
+    Cout << Endl << "State: ";
+    switch (desc.GetState()) {
+    case NReplication::TTransferDescription::EState::Running:
+    case NReplication::TTransferDescription::EState::Paused:
+        Cout << desc.GetState();
+        break;
+    case NReplication::TTransferDescription::EState::Error:
+        Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        break;
+    default:
+        break;
+    }
+
+    const auto& connParams = desc.GetConnectionParams();
+    PrintConnectionParams(connParams);
+
+    Cout << Endl << "Source path: " << desc.GetSrcPath();
+    Cout << Endl << "Destination path: " << desc.GetDstPath();
+    Cout << Endl << "Consumer: " << desc.GetConsumerName();
+    Cout << Endl << "Transformation lambda: " << desc.GetTransformationLambda();
+    Cout << Endl << "Batch size, bytes: " << desc.GetBatchingSettings().SizeBytes;
+    Cout << Endl << "Batch flush interval: " << desc.GetBatchingSettings().FlushInterval;
+
+    Cout << Endl;
+    return EXIT_SUCCESS;
+}
+
 int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     NReplication::TReplicationClient client(driver);
     auto settings = NReplication::TDescribeReplicationSettings()
@@ -601,21 +645,34 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
 
     auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
 }
 
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
-    return EXIT_SUCCESS;
+int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
+    NReplication::TReplicationClient client(driver);
+
+    auto result = client.DescribeTransfer(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
+}
+
+namespace {
+
+    void PrintViewQuery(const std::string& query) {
+        Cout << "\nQuery text:\n" << query << Endl;
+    }
+
 }
 
 int TCommandDescribe::DescribeView(const TDriver& driver) {
-    NView::TViewClient client(driver);
-    auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, Path, query);
+    if (status.IsSuccess()) {
+        PrintViewQuery(query);
+        return EXIT_SUCCESS;
+    }
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_FAILURE;
 }
 
 int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
@@ -648,8 +705,20 @@ int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
+int TCommandDescribe::DescribeSystemView(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeSystemView(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    const auto desc = result.GetSystemViewDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintSystemViewResponsePretty);
+}
+
 namespace {
-    void PrintColumns(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintColumns(const TTableLikeObjectDescription& tableDescription) {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
@@ -732,7 +801,8 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
+        const auto externalDataChannelsCount = settings.GetExternalDataChannelsCount();
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value() && !externalDataChannelsCount.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
@@ -748,6 +818,9 @@ namespace {
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
                 << (storeExternalBlobs.value() ? "true" : "false") << Endl;
+        }
+        if (externalDataChannelsCount) {
+            Cout << "External data channels: " << externalDataChannelsCount.value() << Endl;
         }
     }
 
@@ -788,7 +861,8 @@ namespace {
         Cout << table;
     }
 
-    void PrintAttributes(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintAttributes(const TTableLikeObjectDescription& tableDescription) {
         if (tableDescription.GetAttributes().empty()) {
             return;
         }
@@ -1005,6 +1079,14 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     return EXIT_SUCCESS;
 }
 
+int TCommandDescribe::PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const {
+    Cout << "Id: "  << result.GetSysViewId() << " (" << result.GetSysViewName() <<  ")" << Endl;
+    PrintColumns(result);
+    PrintAttributes(result);
+
+    return EXIT_SUCCESS;
+}
+
 std::pair<TString, TString> TCommandDescribe::ParseTopicConsumer() const {
     const size_t slashPos = Path.find_last_of('/');
     std::pair<TString, TString> result;
@@ -1165,6 +1247,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToGrant);
 }
 
@@ -1210,6 +1293,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/revoke")
         .RequiredArgument("NAME").AppendTo(&PermissionsToRevoke);
 }
 
@@ -1255,6 +1339,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToSet);
 }
 

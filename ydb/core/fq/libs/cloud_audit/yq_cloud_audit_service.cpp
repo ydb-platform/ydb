@@ -8,6 +8,7 @@
 
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/security/util.h>
 
 #include <library/cpp/unified_agent_client/client.h>
 
@@ -71,6 +72,8 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "MySQLCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kLogging:
         return "Logging";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kIceberg:
+        return "Iceberg";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }
@@ -107,6 +110,7 @@ void FillAuthentication(::yandex::cloud::events::Authentication& authentication,
     authentication.set_authenticated(true);
     authentication.set_subject_id(MaybeRemoveSuffix(info.User));
     authentication.set_subject_type(GetCloudSubjectType(info.SubjectType));
+    authentication.mutable_token_info()->set_masked_iam_token(NKikimr::MaskIAMTicket(info.Token));
 }
 
 void FillAuthorization(::yandex::cloud::events::Authorization& authorization, const NYql::TIssues& issues) {

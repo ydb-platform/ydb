@@ -24,8 +24,8 @@ ORIGINAL_SOURCE(https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.g
 
 PEERDIR(
     contrib/libs/apache/orc
-    contrib/libs/brotli/dec
-    contrib/libs/brotli/enc
+    contrib/libs/brotli/c/dec
+    contrib/libs/brotli/c/enc
     contrib/libs/double-conversion
     contrib/libs/lz4
     contrib/libs/rapidjson

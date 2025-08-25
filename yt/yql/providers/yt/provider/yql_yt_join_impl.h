@@ -64,7 +64,7 @@ struct TYtJoinNodeOp : TYtJoinNode {
 
 struct TOptimizerLinkSettings {
     bool HasForceSortedMerge = false;
-    bool HasHints = false;
+    bool HasCBOUnsupportedHints = false;
 };
 
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx);
@@ -122,5 +122,7 @@ IGraphTransformer::TStatus TryEstimateDataSizeChecked(IYtGateway::TPathStatResul
 
 ui64 CalcInMemorySizeNoCrossJoin(const TJoinLabel& label, const TYtJoinNodeOp& op, const TMapJoinSettings& settings, bool isLeft,
     TExprContext& ctx, bool needPayload, ui64 size);
+
+bool AreJoinInputsReady(const TYtEquiJoin& equiJoin);
 
 }

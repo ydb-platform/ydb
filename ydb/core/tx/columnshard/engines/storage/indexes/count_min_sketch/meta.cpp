@@ -1,16 +1,19 @@
 #include "meta.h"
-#include <ydb/library/formats/arrow/hash/xx_hash.h>
+
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <yql/essentials/core/minsketch/count_min_sketch.h>
+
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
     for (auto& colReader : reader) {
@@ -43,8 +46,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
         }
     }
 
-    TString result(sketch->AsStringBuf());
-    return result;
+    TString indexData(sketch->AsStringBuf());
+    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

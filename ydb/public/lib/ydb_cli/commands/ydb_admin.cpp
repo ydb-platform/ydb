@@ -136,7 +136,7 @@ void TCommandAdmin::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());

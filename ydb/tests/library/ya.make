@@ -69,15 +69,6 @@ IF (NOT PYTHON3)
     )
 ENDIF()
 
-IF (PYTHON3)
-    PEERDIR(
-        ydb/tools/ydbd_slice
-    )
-    PY_SRCS(
-        harness/ydbd_slice.py
-    )
-ENDIF()
-
 PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
@@ -85,6 +76,7 @@ PEERDIR(
     contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
+    contrib/python/requests
     contrib/python/setuptools
     contrib/python/six
     ydb/public/sdk/python

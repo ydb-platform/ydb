@@ -30,7 +30,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/src/client/topic/impl
-    
+    ydb/public/sdk/cpp/src/client/scheme
+
 )
 
 END()

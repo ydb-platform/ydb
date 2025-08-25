@@ -1,4 +1,7 @@
 #include "check_runner.h"
+
+#include "settings.h"
+
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -13,13 +16,13 @@ namespace NFastCheck {
 
 namespace {
 
-class TTranslatorRunner : public ICheckRunner {
+class TTranslatorRunner : public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "translator";
     }
 
-    TCheckResponse Run(const TChecksRequest& request) final {
+    TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
         case ESyntax::SExpr:
             return RunSExpr(request);
@@ -63,16 +66,7 @@ private:
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
         settings.SyntaxVersion = request.SyntaxVersion;
-        settings.Flags.insert({
-            "AnsiOrderByLimitInUnionAll",
-            "DisableCoalesceJoinKeysOnQualifiedAll",
-            "AnsiRankForNullableKeys",
-            "DisableUnorderedSubqueries",
-            "DisableAnsiOptionalAs",
-            "FlexibleTypes",
-            "CompactNamedExprs",
-            "DistinctOverWindow"
-        });
+        settings.Flags = TranslationFlags();
 
         switch (request.Mode) {
         case EMode::Default:

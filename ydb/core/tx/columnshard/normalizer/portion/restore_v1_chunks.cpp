@@ -159,9 +159,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            if (!portion.GetMetaProto().BlobIdsSize()) {
-                AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
-            }
+            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -210,8 +208,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (columns1Remove.empty() && portions0.empty()) {
         return tasks;
     }
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return tasks;
+    }
 
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;

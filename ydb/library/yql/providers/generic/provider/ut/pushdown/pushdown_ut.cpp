@@ -1,29 +1,29 @@
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/core/services/yql_out_transformers.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <google/protobuf/text_format.h>
@@ -169,7 +169,7 @@ struct TFakeGenericClient: public NConnector::IClient {
 
 class TBuildDqSourceSettingsTransformer: public TOptimizeTransformerBase {
 public:
-    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, NGeneric::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
+    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
         : TOptimizeTransformerBase(types, NLog::EComponent::ProviderGeneric, {})
         , DqSourceSettings_(dqSourceSettings)
         , DqSourceSettingsWereBuilt_(dqSourceSettingsWereBuilt)
@@ -207,13 +207,13 @@ public:
         TString sourceType;
         dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
-        UNIT_ASSERT(settings.Is<NGeneric::TSource>());
+        UNIT_ASSERT(settings.Is<Generic::TSource>());
         settings.UnpackTo(DqSourceSettings_);
         *DqSourceSettingsWereBuilt_ = true;
     }
 
 private:
-    NGeneric::TSource* DqSourceSettings_;
+    Generic::TSource* DqSourceSettings_;
     bool* DqSourceSettingsWereBuilt_;
 };
 
@@ -232,7 +232,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
     TAutoPtr<IGraphTransformer> Transformer;
     TAutoPtr<IGraphTransformer> BuildDqSourceSettingsTransformer;
-    NGeneric::TSource DqSourceSettings;
+    Generic::TSource DqSourceSettings;
     bool DqSourceSettingsWereBuilt = false;
 
     TExprNode::TPtr InitialExprRoot;
@@ -246,7 +246,12 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         TypesCtx = MakeIntrusive<TTypeAnnotationContext>();
         TypesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone(); // TODO: remove Clone()
+        auto functionRegistry = CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})->Clone();
+        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+        FunctionRegistry = std::move(functionRegistry);
+
+        TypesCtx->UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry.Get());
+        TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
 
         {
             auto* setting = GatewaysCfg.MutableGeneric()->AddDefaultSettings();
@@ -352,7 +357,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     void AssertFilter(const TString& lambdaText, const TString& filterText) {
         const auto& filter = BuildProtoFilterFromLambda(lambdaText);
         NConnector::NApi::TPredicate expectedFilter;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter));
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter), expectedFilter.InitializationErrorString());
         UNIT_ASSERT_STRINGS_EQUAL(filter.Utf8DebugString(), expectedFilter.Utf8DebugString());
     }
 
@@ -657,7 +662,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (Coalesce
@@ -667,17 +672,97 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_utf8"
+                    }
+                    right_value {
+                        column: "col_optional_utf8"
+                    }
+                }
+            )proto"
+        );
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported2) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (!=
                     (Member $row '"col_string")
                     (String '"value")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: NE
+                    left_value {
+                        column: "col_string"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "value"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
+
+    Y_UNIT_TEST(RegexpPushdown) {
+        AssertFilter(
+            // Test REGEXP pushdown with a simple pattern matching digits
+            R"ast(
+                (Coalesce
+                    (Apply (Udf '"Re2.Grep" '((String '"\\\\d+") (Nothing 
+                        (OptionalType 
+                            (StructType 
+                                '('"CaseSensitive" (DataType 'Bool))
+                                '('"DotNl" (DataType 'Bool)) 
+                                '('"Literal" (DataType 'Bool)) 
+                                '('"LogErrors" (DataType 'Bool)) 
+                                '('"LongestMatch" (DataType 'Bool)) 
+                                '('"MaxMem" (DataType 'Uint64)) 
+                                '('"NeverCapture" (DataType 'Bool)) 
+                                '('"NeverNl" (DataType 'Bool)) 
+                                '('"OneLine" (DataType 'Bool)) 
+                                '('"PerlClasses" (DataType 'Bool)) 
+                                '('"PosixSyntax" (DataType 'Bool)) 
+                                '('"Utf8" (DataType 'Bool)) 
+                                '('"WordBoundary" (DataType 'Bool))
+                            )
+                        )
+                    ))) 
+                        (Member $row '"col_string")
+                    )
+                    (Bool '"false")
+                )
+                )ast",
+            R"proto(
+                regexp {
+                    value {
+                        column: "col_string"
+                    }
+                    pattern {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "\\\\d+"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
     }
 }

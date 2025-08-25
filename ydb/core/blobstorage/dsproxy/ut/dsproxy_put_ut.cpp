@@ -35,7 +35,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TBlobStorageGroupType groupType(erasureSpecies);
     const ui32 domainCount = groupType.BlobSubgroupSize();;
 
-    TGroupMock group(groupId, erasureSpecies, 1, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
@@ -393,7 +393,7 @@ void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NK
     SetupRuntime(runtime);
     TDSProxyEnv env;
     env.Configure(runtime, type, 0, 0);
-    TTestState testState(runtime, type, env.Info);
+    TTestState testState(runtime, env.Info);
 
     TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
     TStringBuilder dataBuilder;

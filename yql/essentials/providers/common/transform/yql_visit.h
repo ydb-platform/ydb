@@ -17,7 +17,7 @@ public:
     using THandler = std::function<TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
 
     TVisitorTransformerBase(bool failOnUnknown)
-        : FailOnUnknown(failOnUnknown)
+        : FailOnUnknown_(failOnUnknown)
     {
     }
 
@@ -27,7 +27,7 @@ public:
     }
 
     bool CanParse(const TExprNode& node) const {
-        return Handlers.contains(node.Content());
+        return Handlers_.contains(node.Content());
     }
 
 protected:
@@ -67,8 +67,8 @@ protected:
     }
 
 protected:
-    const bool FailOnUnknown;
-    THashMap<TStringBuf, THandler> Handlers;
+    const bool FailOnUnknown_;
+    THashMap<TStringBuf, THandler> Handlers_;
 };
 
 } // NYql

@@ -78,6 +78,42 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(MissingOptionalParameter, UseSink) {
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$_amount")
+                    .Uint64(42)
+                    .Build()
+                .Build();
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                --!syntax_v1
+
+                DECLARE $_amount AS Uint64;
+                DECLARE $_comment AS String?;
+
+                UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES
+                    (1u, "test", $_amount, $_comment);
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "test";
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([[[42u];#;[1u];["test"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(BadParameterType) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -103,11 +139,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitParameterTypes) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -131,11 +164,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForPreparedQuery) {
         // All params are declared in the text
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -172,11 +202,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForUnpreparedQuery) {
         // Some params are declared in text, some by user
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -296,11 +323,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForExecuteAndPreparedQueries) {
         // All params are declared in the text
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -349,12 +373,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         {
             // Check disable setting
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
             auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
-                .SetKqpSettings({setting});
+            auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
@@ -370,12 +391,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
         }
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
 
         {
             // Check 2 exec queries
@@ -414,12 +432,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
 
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
@@ -509,11 +524,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -539,11 +551,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -623,10 +632,10 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             .AddParam("$ParamTzDate").TzDate("2022-03-14,GMT").Build()
             .AddParam("$ParamTzDateTime").TzDatetime("2022-03-14T00:00:00,GMT").Build()
             .AddParam("$ParamTzTimestamp").TzTimestamp("2022-03-14T00:00:00.123,GMT").Build()
-            .AddParam("$ParamDate32").Date32(-17158).Build()
-            .AddParam("$ParamDatetime64").Datetime64(TInstant::ParseIso8601("2020-01-11 15:04:53").Seconds()).Build()
-            .AddParam("$ParamTimestamp64").Timestamp64(TInstant::ParseIso8601("2020-01-12 21:18:37").MicroSeconds()).Build()
-            .AddParam("$ParamInterval64").Interval64(3600).Build()
+            .AddParam("$ParamDate32").Date32(std::chrono::sys_time<TWideDays>(TWideDays(-17158))).Build()
+            .AddParam("$ParamDatetime64").Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(TInstant::ParseIso8601("2020-01-11 15:04:53").Seconds()))).Build()
+            .AddParam("$ParamTimestamp64").Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(TInstant::ParseIso8601("2020-01-12 21:18:37").MicroSeconds()))).Build()
+            .AddParam("$ParamInterval64").Interval64(TWideMicroseconds(3600)).Build()
             .AddParam("$ParamOpt").OptionalString("Opt").Build()
             .AddParam("$ParamTuple")
                 .BeginTuple()

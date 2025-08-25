@@ -3,19 +3,18 @@ IF (OS_LINUX AND NOT SANITIZER_TYPE)
 PY3TEST()
 
 TEST_SRCS(
-#    test_break.py
+    test_break.py
 )
 
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 PEERDIR(
     ydb/tests/library
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 

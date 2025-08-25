@@ -1,5 +1,6 @@
 RECURSE(
     actors
+    common
     events
     expr_nodes
     gateway

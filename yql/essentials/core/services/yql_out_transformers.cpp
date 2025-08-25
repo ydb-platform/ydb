@@ -52,14 +52,14 @@ IGraphTransformer::TStatus TExprLogTransformer::operator()(
 {
     Y_UNUSED(ctx);
     output = input;
-    if (YQL_CVLOG_ACTIVE(Level, Component)) {
+    if (YQL_CVLOG_ACTIVE(Level_, Component_)) {
         TConvertToAstSettings settings;
         settings.AllowFreeArgs = true;
         settings.RefAtoms = true;
         auto ast = ConvertToAst(*input, ctx, settings);
         TStringStream out;
         ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        YQL_CVLOG(Level, Component) << Description << ":\n" << out.Str();
+        YQL_CVLOG(Level_, Component_) << Description_ << ":\n" << out.Str();
     }
     return IGraphTransformer::TStatus::Ok;
 }

@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/health/health.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/core/fq/libs/private_client/loopback_service.h>
@@ -45,6 +46,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
@@ -173,7 +175,12 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        auto checkpointStorage = NFq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources);
+        auto checkpointStorage = NFq::NewCheckpointStorageService(
+            protoConfig.GetCheckpointCoordinator(),
+            protoConfig.GetCommon(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
@@ -234,6 +241,7 @@ void Init(
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
             pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+            MakeNodesManagerId(),
             appData->Mon,
             appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
@@ -268,6 +276,7 @@ void Init(
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"));
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
+        RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);
     }
 
     ui64 mkqlInitialMemoryLimit = 8_GB;

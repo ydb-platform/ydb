@@ -1,6 +1,6 @@
 #include "action.h"
 #include "attributes_md5.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "executor.h"
 #include "log.h"

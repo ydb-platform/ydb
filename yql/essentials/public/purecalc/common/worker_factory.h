@@ -25,11 +25,12 @@ namespace NYql {
             TString LLVMSettings;
             EBlockEngineMode BlockEngineMode;
             IOutputStream* ExprOutputStream;
-            NKikimr::NUdf::ICountersProvider* CountersProvider_;
-            ETranslationMode TranslationMode_;
-            ui16 SyntaxVersion_;
-            ui64 NativeYtTypeFlags_;
-            TMaybe<ui64> DeterministicTimeProviderSeed_;
+            NKikimr::NUdf::ICountersProvider* CountersProvider;
+            ETranslationMode TranslationMode;
+            ui16 SyntaxVersion;
+            TLangVersion LangVer;
+            ui64 NativeYtTypeFlags;
+            TMaybe<ui64> DeterministicTimeProviderSeed;
             bool UseSystemColumns;
             bool UseWorkerPool;
             bool UseAntlr4;
@@ -49,6 +50,7 @@ namespace NYql {
                 NKikimr::NUdf::ICountersProvider* CountersProvider,
                 ETranslationMode translationMode,
                 ui16 syntaxVersion,
+                TLangVersion langver,
                 ui64 nativeYtTypeFlags,
                 TMaybe<ui64> deterministicTimeProviderSeed,
                 bool useSystemColumns,
@@ -66,11 +68,12 @@ namespace NYql {
                 , LLVMSettings(std::move(LLVMSettings))
                 , BlockEngineMode(BlockEngineMode)
                 , ExprOutputStream(ExprOutputStream)
-                , CountersProvider_(CountersProvider)
-                , TranslationMode_(translationMode)
-                , SyntaxVersion_(syntaxVersion)
-                , NativeYtTypeFlags_(nativeYtTypeFlags)
-                , DeterministicTimeProviderSeed_(deterministicTimeProviderSeed)
+                , CountersProvider(CountersProvider)
+                , TranslationMode(translationMode)
+                , SyntaxVersion(syntaxVersion)
+                , LangVer(langver)
+                , NativeYtTypeFlags(nativeYtTypeFlags)
+                , DeterministicTimeProviderSeed(deterministicTimeProviderSeed)
                 , UseSystemColumns(useSystemColumns)
                 , UseWorkerPool(useWorkerPool)
                 , UseAntlr4(useAntlr4)
@@ -104,6 +107,7 @@ namespace NYql {
             TMaybe<ui64> DeterministicTimeProviderSeed_;
             bool UseSystemColumns_;
             bool UseWorkerPool_;
+            TLangVersion LangVer_;
             TVector<THolder<IWorker>> WorkerPool_;
 
         public:
@@ -129,6 +133,7 @@ namespace NYql {
                 ETranslationMode mode,
                 IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
+                NYql::TLangVersion langver,
                 const THashMap<TString, TString>& modules,
                 const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,

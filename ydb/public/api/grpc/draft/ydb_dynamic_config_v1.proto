@@ -49,4 +49,7 @@ service DynamicConfigService {
 
     // Generate dynamic config based on cluster's static config.
     rpc FetchStartupConfig(DynamicConfig.FetchStartupConfigRequest) returns (DynamicConfig.FetchStartupConfigResponse);
+
+    // Get configuration version of nodes.
+    rpc GetConfigurationVersion(DynamicConfig.GetConfigurationVersionRequest) returns (DynamicConfig.GetConfigurationVersionResponse);
 }

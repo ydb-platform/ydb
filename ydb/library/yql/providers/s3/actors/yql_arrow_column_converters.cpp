@@ -669,6 +669,28 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
     }
 }
 
+TColumnConverter ArrowComputeConvertor(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
+    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Can not cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
+    return [targetType](const std::shared_ptr<arrow::Array>& value) {
+        auto res = arrow::compute::Cast(*value, targetType);
+        THROW_ARROW_NOT_OK(res.status());
+        return std::move(res).ValueOrDie();
+    };
+}
+
+TColumnConverter YqlBlockTzDateToArrow(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType) {
+    YQL_ENSURE(sourceType->id() == arrow::Type::STRUCT, "Yql Tz block shoud have struct type");
+    YQL_ENSURE(sourceType->num_fields() == 2, "Yql Tz block shoud have two fields");
+    return [columnName, sourceType](const std::shared_ptr<arrow::Array>& value) {
+        YQL_ENSURE(value->type()->Equals(sourceType), "Unexpected block type: " << value->type()->ToString() << ", expected type: " << sourceType->ToString() << " in column: " << columnName);
+        const auto structValue = std::static_pointer_cast<arrow::StructArray>(value);
+        const auto dateField = structValue->field(0)->data()->Copy();
+        dateField->null_count = structValue->null_count();
+        dateField->buffers[0] = structValue->null_bitmap();
+        return arrow::MakeArray(dateField);
+    };
+}
+
 }
 
 namespace NYql::NDq {
@@ -678,8 +700,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         auto pgType = AS_TYPE(TPgType, yqlType);
         auto conv = BuildPgColumnConverter(originalType, pgType);
         if (!conv) {
-            ythrow yexception() << "Arrow type: " << originalType->ToString() <<
-                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name;
+            throw parquet::ParquetException(TStringBuilder() << "Arrow type: " << originalType->ToString() <<
+                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name);
         }
 
         return conv;
@@ -693,15 +715,55 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return {};
     }
 
-    YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
-        << targetType->ToString() << ", got: " << originalType->ToString());
+    if (!arrow::compute::CanCast(*originalType, *targetType)) {
+        throw parquet::ParquetException(TStringBuilder() << "Mismatch type for field: " << columnName << ", expected: "
+            << targetType->ToString() << ", got: " << originalType->ToString());
+    }
 
+    return ArrowComputeConvertor(columnName, originalType, targetType);
+}
 
-    return [targetType](const std::shared_ptr<arrow::Array>& value) {
-        auto res = arrow::compute::Cast(*value, targetType);
-        THROW_ARROW_NOT_OK(res.status());
-        return std::move(res).ValueOrDie();
-    };
+TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKikimr::NMiniKQL::TType* columnType) {
+    std::shared_ptr<arrow::DataType> yqlArrowType, s3OutputType;
+    YQL_ENSURE(ConvertArrowType(columnType, yqlArrowType), "Got unsupported yql block type: " << *columnType << " in column " << columnName);
+    YQL_ENSURE(S3ConvertArrowOutputType(columnType, s3OutputType), "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
+
+    if (columnType->IsOptional()) {
+        columnType = AS_TYPE(TOptionalType, columnType)->GetItemType();
+    }
+    YQL_ENSURE(columnType->IsData(), "Allowed only data types for S3 output, but got: " << *columnType << " in column " << columnName);
+    const auto slot = AS_TYPE(TDataType, columnType)->GetDataSlot();
+    YQL_ENSURE(slot, "Got invalid data type " << *columnType << " in column " << columnName);
+
+    switch (*slot) {
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Int8:
+        case NUdf::EDataSlot::Uint8:
+        case NUdf::EDataSlot::Int16:
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Float:
+        case NUdf::EDataSlot::Double:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Date:
+        case NUdf::EDataSlot::Datetime:
+        case NUdf::EDataSlot::Timestamp:
+            return {};
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
+            return ArrowComputeConvertor(columnName, yqlArrowType, s3OutputType);
+        case NUdf::EDataSlot::TzDate:
+        case NUdf::EDataSlot::TzDatetime:
+        case NUdf::EDataSlot::TzTimestamp:
+            return YqlBlockTzDateToArrow(columnName, yqlArrowType);
+        default:
+            YQL_ENSURE(false, "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
+    }
+
+    return {};
 }
 
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
@@ -726,7 +788,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         const auto& targetField = outputSchema->field(i);
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
         if (srcFieldIndex == -1) {
-            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name());
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name() << ", found fields in arrow file: " << dataSchema->ToString());
         };
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();
@@ -750,6 +812,84 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
         }
     }
     return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
+}
+
+// Type conversion same as in ClickHouseClient.SerializeFormat udf
+bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    switch (slot) {
+        case NUdf::EDataSlot::Int8:
+            type = arrow::int8();
+            return true;
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Uint8:
+            type = arrow::uint8();
+            return true;
+        case NUdf::EDataSlot::Int16:
+            type = arrow::int16();
+            return true;
+        case NUdf::EDataSlot::Date:
+        case NUdf::EDataSlot::TzDate:
+        case NUdf::EDataSlot::Uint16:
+            type = arrow::uint16();
+            return true;
+        case NUdf::EDataSlot::Int32:
+            type = arrow::int32();
+            return true;
+        case NUdf::EDataSlot::Datetime:
+        case NUdf::EDataSlot::TzDatetime:
+        case NUdf::EDataSlot::Uint32:
+            type = arrow::uint32();
+            return true;
+        case NUdf::EDataSlot::Int64:
+            type = arrow::int64();
+            return true;
+        case NUdf::EDataSlot::Uint64:
+            type = arrow::uint64();
+            return true;
+        case NUdf::EDataSlot::Float:
+            type = arrow::float32();
+            return true;
+        case NUdf::EDataSlot::Double:
+            type = arrow::float64();
+            return true;
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
+            type = arrow::binary();
+            return true;
+        case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::TzTimestamp:
+            type = arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool S3ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
+    if (itemType->IsOptional()) {
+        itemType = AS_TYPE(TOptionalType, itemType)->GetItemType();
+    }
+    if (!itemType->IsData()) {
+        return false;
+    }
+
+    const auto slot = AS_TYPE(TDataType, itemType)->GetDataSlot();
+    if (!slot) {
+        return false;
+    }
+
+    return S3ConvertArrowOutputType(*slot, type);
+}
+
+void BuildOutputColumnConverters(const NKikimr::NMiniKQL::TStructType* outputStructType, std::vector<TColumnConverter>& columnConverters) {
+    columnConverters.reserve(outputStructType->GetMembersCount());
+    for (ui32 i = 0; i < outputStructType->GetMembersCount(); ++i) {
+        auto* const type = outputStructType->GetMemberType(i);
+        const std::string name(outputStructType->GetMemberName(i));
+        columnConverters.emplace_back(BuildOutputColumnConverter(name, type));
+    }
 }
 
 } // namespace NYql::NDq

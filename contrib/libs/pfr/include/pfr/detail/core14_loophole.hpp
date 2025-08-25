@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2018 Alexandr Poltavsky, Antony Polukhin.
-// Copyright (c) 2019-2023 Antony Polukhin.
+// Copyright (c) 2019-2025 Antony Polukhin.
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -24,10 +24,6 @@
 
 #include <pfr/detail/config.hpp>
 
-#include <type_traits>
-#include <utility>
-
-#include <pfr/detail/cast_to_layout_compatible.hpp> // still needed for enums
 #include <pfr/detail/offset_based_getter.hpp>
 #include <pfr/detail/fields_count.hpp>
 #include <pfr/detail/make_flat_tuple_of_references.hpp>
@@ -36,6 +32,9 @@
 #include <pfr/detail/rvalue_t.hpp>
 #include <pfr/detail/unsafe_declval.hpp>
 
+#if !defined(PFR_INTERFACE_UNIT)
+#include <utility>
+#endif
 
 #ifdef __clang__
 #   pragma clang diagnostic push

@@ -53,85 +53,85 @@ struct TAstNode {
     }
 
     inline EType GetType() const {
-        return Type;
+        return Type_;
     }
 
     inline bool IsAtom() const {
-        return Type == Atom;
+        return Type_ == Atom;
     }
 
     inline bool IsList() const {
-        return Type == List;
+        return Type_ == List;
     }
 
     inline bool IsListOfSize(ui32 len) const {
-        return Type == List && ListCount == len;
+        return Type_ == List && ListCount_ == len;
     }
 
     inline TPosition GetPosition() const {
-        return Position;
+        return Position_;
     }
 
     inline void SetPosition(TPosition position) {
-        Position = position;
+        Position_ = position;
     }
 
     inline TStringBuf GetContent() const {
         Y_ABORT_UNLESS(IsAtom());
-        return TStringBuf(Data.A.Content, Data.A.Size);
+        return TStringBuf(Data_.A.Content, Data_.A.Size);
     }
 
     inline void SetContent(TStringBuf newContent, TMemoryPool& pool) {
         Y_ABORT_UNLESS(IsAtom());
         auto poolContent = pool.AppendString(newContent);
-        Data.A.Content = poolContent.data();
-        Data.A.Size = poolContent.size();
+        Data_.A.Content = poolContent.data();
+        Data_.A.Size = poolContent.size();
     }
 
     inline void SetLiteralContent(TStringBuf newContent) {
         Y_ABORT_UNLESS(IsAtom());
-        Data.A.Content = newContent.data();
-        Data.A.Size = newContent.size();
+        Data_.A.Content = newContent.data();
+        Data_.A.Size = newContent.size();
     }
 
     inline ui32 GetFlags() const {
         Y_ABORT_UNLESS(IsAtom());
-        return Data.A.Flags;
+        return Data_.A.Flags;
     }
 
     inline void SetFlags(ui32 flags) {
         Y_ABORT_UNLESS(IsAtom());
-        Data.A.Flags = flags;
+        Data_.A.Flags = flags;
     }
 
     inline ui32 GetChildrenCount() const {
         Y_ABORT_UNLESS(IsList());
-        return ListCount;
+        return ListCount_;
     }
 
     inline const TAstNode* GetChild(ui32 index) const {
         Y_ABORT_UNLESS(IsList());
-        Y_ABORT_UNLESS(index < ListCount);
-        if (ListCount <= SmallListCount) {
-            return Data.S.Children[index];
+        Y_ABORT_UNLESS(index < ListCount_);
+        if (ListCount_ <= SmallListCount) {
+            return Data_.S.Children[index];
         } else {
-            return Data.L.Children[index];
+            return Data_.L.Children[index];
         }
     }
 
     inline TAstNode* GetChild(ui32 index) {
         Y_ABORT_UNLESS(IsList());
-        Y_ABORT_UNLESS(index < ListCount);
-        if (ListCount <= SmallListCount) {
-            return Data.S.Children[index];
+        Y_ABORT_UNLESS(index < ListCount_);
+        if (ListCount_ <= SmallListCount) {
+            return Data_.S.Children[index];
         } else {
-            return Data.L.Children[index];
+            return Data_.L.Children[index];
         }
     }
-    
+
     inline TArrayRef<TAstNode* const> GetChildren() const {
         Y_ABORT_UNLESS(IsList());
-        return {ListCount <= SmallListCount ? Data.S.Children : Data.L.Children, ListCount};
+        return {ListCount_ <= SmallListCount ? Data_.S.Children : Data_.L.Children, ListCount_};
     }
 
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
@@ -187,37 +187,37 @@ struct TAstNode {
     inline ~TAstNode() {}
 
     void Destroy() {
-        TString().swap(Position.File);
+        TString().swap(Position_.File);
     }
 
 private:
     inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
-        : Position(position)
-        , Type(Atom)
-        , ListCount(0)
+        : Position_(position)
+        , Type_(Atom)
+        , ListCount_(0)
     {
-        Data.A.Content = content.data();
-        Data.A.Size = content.size();
-        Data.A.Flags = flags;
+        Data_.A.Content = content.data();
+        Data_.A.Size = content.size();
+        Data_.A.Flags = flags;
     }
 
     inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
-        : Position(position)
-        , Type(List)
-        , ListCount(childrenCount)
+        : Position_(position)
+        , Type_(List)
+        , ListCount_(childrenCount)
     {
         if (childrenCount <= SmallListCount) {
             for (ui32 index = 0; index < childrenCount; ++index) {
-                Data.S.Children[index] = children[index];
+                Data_.S.Children[index] = children[index];
             }
         } else {
-            Data.L.Children = children;
+            Data_.L.Children = children;
         }
     }
 
-    TPosition Position;
-    const EType Type;
-    const ui32 ListCount;
+    TPosition Position_;
+    const EType Type_;
+    const ui32 ListCount_;
 
     struct TAtom {
         const char* Content;
@@ -237,7 +237,7 @@ private:
         TAtom A;
         TListType L;
         TSmallList S;
-    } Data;
+    } Data_;
 };
 
 enum class ESyntaxType {

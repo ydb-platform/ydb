@@ -78,23 +78,6 @@ void WriteToStderr(const char* buffer)
 
 namespace NDetail {
 
-constinit NThreading::TSpinLock CrashLock;
-constinit YT_DEFINE_THREAD_LOCAL(bool, CrashLockAcquiredByCurrentThread);
-
-void AcquireCrashLock()
-{
-    if (!std::exchange(CrashLockAcquiredByCurrentThread(), true)) {
-        CrashLock.Acquire();
-    }
-}
-
-void ReleaseCrashLock()
-{
-    if (std::exchange(CrashLockAcquiredByCurrentThread(), false)) {
-        CrashLock.Release();
-    }
-}
-
 Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 {
 #ifdef _unix_
@@ -469,9 +452,9 @@ void DumpSigcontext(void* uc)
 
 void CrashTimeoutHandler(int /*signal*/)
 {
-    AbortProcessDramatically(
-        EProcessExitCode::GenericError,
-        "Process hung during crash");
+    WriteToStderr("*** Crash signal handler timed out\n");
+
+    YT_BUILTIN_TRAP();
 }
 
 void DumpUndumpableBlocksInfo()
@@ -512,6 +495,7 @@ Y_WEAK void MaybeThrowSafeAssertionException(TStringBuf /*message*/)
 void AssertTrapImpl(
     TStringBuf trapType,
     TStringBuf expr,
+    TStringBuf description,
     TStringBuf file,
     int line,
     TStringBuf function)
@@ -521,6 +505,14 @@ void AssertTrapImpl(
     formatter.AppendString(trapType);
     formatter.AppendString("(");
     formatter.AppendString(expr);
+    if (!description.empty()) {
+        if (!expr.empty()) {
+            formatter.AppendString(", ");
+        }
+        formatter.AppendChar('"');
+        FormatString(&formatter, description, "Q");
+        formatter.AppendChar('"');
+    }
     formatter.AppendString(") at ");
     formatter.AppendString(file);
     formatter.AppendString(":");
@@ -533,16 +525,10 @@ void AssertTrapImpl(
 
     MaybeThrowSafeAssertionException(formatter.GetBuffer());
 
-    // Prevent clashes in stderr.
-    AcquireCrashLock();
-
     WriteToStderr(formatter.GetBuffer());
 
     // This (hopefully) invokes CrashSignalHandler.
     YT_BUILTIN_TRAP();
-
-    // Not expected to get here but anyway...
-    ReleaseCrashLock();
 }
 
 } // namespace NDetail
@@ -560,9 +546,6 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
     ::alarm(60);
 
-    // Prevent clashes in stderr.
-    NDetail::AcquireCrashLock();
-
     NDetail::DumpTimeInfo();
 
     NDetail::DumpCodicils();
@@ -575,9 +558,6 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     DumpStackTrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
 
     NDetail::DumpUndumpableBlocksInfo();
-
-    // Releasing the lock gives other threads a chance to yell at us.
-    NDetail::ReleaseCrashLock();
 
     WriteToStderr("*** Waiting for logger to shut down\n");
 

@@ -314,6 +314,7 @@ private:
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
             );
     }
@@ -606,11 +607,15 @@ private:
         );
     }
 
-    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
         Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
+
+        if (AssignRuntimeCluster(op, output, ctx)) {
+            return SyncRepeatWithRestart();
+        }
 
         if (!input->HasResult()) {
             if (!tmpTable.Name().Value().empty()) {
@@ -705,7 +710,7 @@ private:
         TString operationHash;
         if (const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable); queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*input);
+                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
@@ -754,10 +759,9 @@ private:
         }
 
         if (!delegatedNode) {
-            const auto cluster = op.DataSink().Cluster();
+            const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config);
-            auto clusterStr = TString{cluster.Value()};
+            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 

@@ -1,5 +1,4 @@
 #include "ydb_command.h"
-#include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
@@ -19,27 +18,12 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
     : TLeafCommand(name, aliases, description)
 {}
 
-TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
-    auto driverConfig = TDriverConfig()
-        .SetEndpoint(config.Address)
-        .SetDatabase(config.Database)
-        .SetCredentialsProviderFactory(config.GetSingletonCredentialsProviderFactory());
-
-    if (config.EnableSsl)
-        driverConfig.UseSecureConnection(config.CaCerts);
-    if (config.IsNetworkIntensive)
-        driverConfig.SetNetworkThreadsNum(16);
-    driverConfig.UseClientCertificate(config.ClientCert, config.ClientCertPrivateKey);
-
-    return driverConfig;
-}
-
 TDriver TYdbCommand::CreateDriver(TConfig& config) {
-    return TDriver(CreateDriverConfig(config));
+    return TDriver(config.CreateDriverConfig());
 }
 
 TDriver TYdbCommand::CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
-    auto driverConfig = CreateDriverConfig(config);
+    auto driverConfig = config.CreateDriverConfig();
     driverConfig.SetLog(std::move(loggingBackend));
 
     return TDriver(driverConfig);

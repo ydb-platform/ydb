@@ -2,12 +2,11 @@ import os
 import subprocess
 import sys
 from abc import ABCMeta, abstractmethod
-from six import add_metaclass
 
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
 from .utils import build_nm_path, build_pj_path
-from .timeit import timeit
+from .timeit import timeit, is_timeit_enabled
 
 
 class PackageManagerError(RuntimeError):
@@ -25,8 +24,7 @@ class PackageManagerCommandError(PackageManagerError):
         super(PackageManagerCommandError, self).__init__(msg)
 
 
-@add_metaclass(ABCMeta)
-class BasePackageManager(object):
+class BasePackageManager(object, metaclass=ABCMeta):
     def __init__(
         self,
         build_root,
@@ -55,13 +53,18 @@ class BasePackageManager(object):
         return PackageJson.load(path)
 
     @classmethod
-    def load_package_json_from_dir(cls, dir_path):
+    def load_package_json_from_dir(cls, dir_path, empty_if_missing=False):
         """
         :param dir_path: path to directory with package.json
         :type dir_path: str
         :rtype: PackageJson
         """
-        return cls.load_package_json(build_pj_path(dir_path))
+        pj_path = build_pj_path(dir_path)
+        if empty_if_missing and not os.path.exists(pj_path):
+            pj = PackageJson(pj_path)
+            pj.data = {}
+            return pj
+        return cls.load_package_json(pj_path)
 
     def _build_package_json(self):
         """
@@ -88,7 +91,7 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False):
         pass
 
     @abstractmethod
@@ -102,11 +105,15 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
+    def calc_node_modules_inouts(self, nm_bundle: bool) -> tuple[list[str], list[str]]:
         pass
 
     @abstractmethod
     def build_workspace(self, tarballs_store: str):
+        pass
+
+    @abstractmethod
+    def build_ts_proto_auto_workspace(self, deps_mod: str):
         pass
 
     def get_local_peers_from_package_json(self):
@@ -115,16 +122,6 @@ class BasePackageManager(object):
         :rtype: list of str
         """
         return self.load_package_json_from_dir(self.sources_path).get_workspace_dep_paths(base_path=self.module_path)
-
-    def get_peers_from_package_json(self):
-        """
-        Returns paths of workspace dependencies (source root related).
-        :rtype: list of str
-        """
-        pj = self.load_package_json_from_dir(self.sources_path)
-        prefix_len = len(self.sources_root) + 1
-
-        return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
     @timeit
     def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env={}):
@@ -138,6 +135,11 @@ class BasePackageManager(object):
         )
         p = subprocess.Popen(cmd, cwd=cwd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         stdout, stderr = p.communicate()
+
+        if is_timeit_enabled():
+            print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
+            print(f'stdout: {stdout.decode("utf-8")}', file=sys.stderr)
+            print(f'stderr: {stderr.decode("utf-8")}', file=sys.stderr)
 
         if p.returncode != 0:
             self._dump_debug_log()

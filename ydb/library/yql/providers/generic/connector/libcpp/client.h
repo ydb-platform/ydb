@@ -3,11 +3,19 @@
 #include "error.h"
 
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/error.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+namespace NYql::NConnector::NApi {
+    class TDescribeTableRequest;
+    class TDescribeTableResponse;
+    class TListSplitsRequest;
+    class TListSplitsResponse;
+    class TReadSplitsRequest;
+    class TReadSplitsResponse;
+} // namespace NYql::NConnector::NApi
 
 namespace NYql::NConnector {
     template <typename TResponse>

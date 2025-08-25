@@ -87,8 +87,8 @@ namespace NKikimr {
                 ui32 len = TSerializeRoutines::SetLogoBlob(VCtx->Top->GType,
                         buffer,
                         lsn,
-                        it->Key.LogoBlobID(),
-                        it->MemRec.GetIngress());
+                        it.GetCurKey().LogoBlobID(),
+                        it.GetMemRec().GetIngress());
                 Y_DEBUG_ABORT_UNLESS(len <= sizeof(buffer));
                 SyncLogPtr->PutOne(reinterpret_cast<const TRecordHdr *>(buffer), len);
                 it.Next();

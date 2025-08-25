@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/http_proxy/error/error.h>

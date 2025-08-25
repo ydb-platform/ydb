@@ -70,14 +70,13 @@ struct TEvDq {
             return issues;
         }
 
-        static IEventBase* Load(NActors::TEventSerializedData *input) {
+        static TEvAbortExecution* Load(const NActors::TEventSerializedData *input) {
             auto result = NActors::TEventPB<TEvAbortExecution, NDqProto::TEvAbortExecution, TDqEvents::EvAbortExecution>::Load(input);
             if (result) {
-                auto evAbort = reinterpret_cast<TEvAbortExecution *>(result);
-                auto dqStatus = evAbort->Record.GetStatusCode();
-                auto ydbStatus = evAbort->Record.GetYdbStatusCode();
+                auto dqStatus = result->Record.GetStatusCode();
+                auto ydbStatus = result->Record.GetYdbStatusCode();
                 if (dqStatus == NYql::NDqProto::StatusIds::UNSPECIFIED && ydbStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
-                    evAbort->Record.SetStatusCode(YdbStatusToDqStatus(ydbStatus));
+                    result->Record.SetStatusCode(YdbStatusToDqStatus(ydbStatus));
                 }
             }
             return result;

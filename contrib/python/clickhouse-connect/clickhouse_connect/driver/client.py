@@ -19,6 +19,7 @@ from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOC
 from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
+from clickhouse_connect.driver.options import check_arrow, check_pandas, check_numpy
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
 from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer
@@ -68,7 +69,7 @@ class Client(ABC):
         self.uri = uri
         self._init_common_settings(apply_server_timezone)
 
-    def _init_common_settings(self, apply_server_timezone:Optional[Union[str, bool]] ):
+    def _init_common_settings(self, apply_server_timezone: Optional[Union[str, bool]]):
         self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
             tuple(self.command('SELECT version(), timezone()', use_database=False))
@@ -102,11 +103,10 @@ class Client(ABC):
         if self._setting_status('date_time_input_format').is_writable:
             self.set_client_setting('date_time_input_format', 'best_effort')
         if self._setting_status('allow_experimental_json_type').is_set and \
-                self._setting_status('cast_string_to_dynamic_user_inference').is_writable:
+                self._setting_status('cast_string_to_dynamic_use_inference').is_writable:
             self.set_client_setting('cast_string_to_dynamic_use_inference', '1')
         if self.min_version('24.8') and not self.min_version('24.10'):
             dynamic_module.json_serialization_format = 0
-
 
     def _validate_settings(self, settings: Optional[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -123,8 +123,16 @@ class Client(ABC):
         return validated
 
     def _validate_setting(self, key: str, value: Any, invalid_action: str) -> Optional[str]:
+        str_value = str(value)
+        if value is True:
+            str_value = '1'
+        elif value is False:
+            str_value = '0'
         if key not in self.valid_transport_settings:
             setting_def = self.server_settings.get(key)
+            current_setting = self.get_client_setting(key)
+            if setting_def and setting_def.value == str_value and (current_setting is None or current_setting == setting_def.value):
+                return None  # don't send settings that are already the expected value
             if setting_def is None or setting_def.readonly:
                 if key in self.optional_transport_settings:
                     return None
@@ -135,9 +143,7 @@ class Client(ABC):
                     return None
                 else:
                     raise ProgrammingError(f'Setting {key} is unknown or readonly') from None
-        if isinstance(value, bool):
-            return '1' if value else '0'
-        return str(value)
+        return str_value
 
     def _setting_status(self, key: str) -> SettingStatus:
         comp_setting = self.server_settings.get(key)
@@ -184,6 +190,13 @@ class Client(ABC):
         :return: The string value of the setting, if it exists, or None
         """
 
+    @abstractmethod
+    def set_access_token(self, access_token: str):
+        """
+        Set the ClickHouse access token for the client
+        :param access_token: Access token string
+        """
+
     # pylint: disable=unused-argument,too-many-locals
     def query(self,
               query: Optional[str] = None,
@@ -199,7 +212,8 @@ class Client(ABC):
               context: QueryContext = None,
               query_tz: Optional[Union[str, tzinfo]] = None,
               column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-              external_data: Optional[ExternalData] = None) -> QueryResult:
+              external_data: Optional[ExternalData] = None,
+              transport_settings: Optional[Dict[str, str]] = None) -> QueryResult:
         """
         Main query method for SELECT, DESCRIBE and other SQL statements that return a result matrix.  For
         parameters, see the create_query_context method
@@ -215,7 +229,8 @@ class Client(ABC):
             response = self.command(query,
                                     parameters=query_context.parameters,
                                     settings=query_context.settings,
-                                    external_data=query_context.external_data)
+                                    external_data=query_context.external_data,
+                                    transport_settings=query_context.transport_settings)
             if isinstance(response, QuerySummary):
                 return response.as_query_result()
             return QueryResult([response] if isinstance(response, list) else [[response]])
@@ -232,7 +247,8 @@ class Client(ABC):
                                   context: QueryContext = None,
                                   query_tz: Optional[Union[str, tzinfo]] = None,
                                   column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                                  external_data: Optional[ExternalData] = None) -> StreamContext:
+                                  external_data: Optional[ExternalData] = None,
+                                  transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Variation of main query method that returns a stream of column oriented blocks. For
         parameters, see the create_query_context method.
@@ -251,7 +267,8 @@ class Client(ABC):
                                context: QueryContext = None,
                                query_tz: Optional[Union[str, tzinfo]] = None,
                                column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                               external_data: Optional[ExternalData] = None) -> StreamContext:
+                               external_data: Optional[ExternalData] = None,
+                               transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks. For
         parameters, see the create_query_context method.
@@ -270,7 +287,8 @@ class Client(ABC):
                           context: QueryContext = None,
                           query_tz: Optional[Union[str, tzinfo]] = None,
                           column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                          external_data: Optional[ExternalData] = None) -> StreamContext:
+                          external_data: Optional[ExternalData] = None,
+                          transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks. For
         parameters, see the create_query_context method.
@@ -284,16 +302,18 @@ class Client(ABC):
                   settings: Optional[Dict[str, Any]] = None,
                   fmt: str = None,
                   use_database: bool = True,
-                  external_data: Optional[ExternalData] = None) -> bytes:
+                  external_data: Optional[ExternalData] = None,
+                  transport_settings: Optional[Dict[str, str]] = None) -> bytes:
         """
         Query method that simply returns the raw ClickHouse format bytes
         :param query: Query statement/format string
         :param parameters: Optional dictionary used to format the query
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
         :param fmt: ClickHouse output format
-        :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
+        :param use_database: Send the database parameter to ClickHouse so the command will be executed in the client
          database context.
-        :param external_data  External data to send with the query
+        :param external_data: External data to send with the query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: bytes representing raw ClickHouse return value based on format
         """
 
@@ -303,7 +323,8 @@ class Client(ABC):
                    settings: Optional[Dict[str, Any]] = None,
                    fmt: str = None,
                    use_database: bool = True,
-                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+                   external_data: Optional[ExternalData] = None,
+                   transport_settings: Optional[Dict[str, str]] = None) -> io.IOBase:
         """
        Query method that returns the result as an io.IOBase iterator
        :param query: Query statement/format string
@@ -312,7 +333,8 @@ class Client(ABC):
        :param fmt: ClickHouse output format
        :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
         database context.
-       :param external_data  External data to send with the query
+       :param external_data: External data to send with the query.
+       :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
        :return: io.IOBase stream/iterator for the result
        """
 
@@ -327,12 +349,14 @@ class Client(ABC):
                  use_none: Optional[bool] = None,
                  max_str_len: Optional[int] = None,
                  context: QueryContext = None,
-                 external_data: Optional[ExternalData] = None):
+                 external_data: Optional[ExternalData] = None,
+                 transport_settings: Optional[Dict[str, str]] = None):
         """
         Query method that returns the results as a numpy array.  For parameter values, see the
         create_query_context method
         :return: Numpy array representing the result set
         """
+        check_numpy()
         return self._context_query(locals(), use_numpy=True).np_result
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
@@ -346,12 +370,14 @@ class Client(ABC):
                         use_none: Optional[bool] = None,
                         max_str_len: Optional[int] = None,
                         context: QueryContext = None,
-                        external_data: Optional[ExternalData] = None) -> StreamContext:
+                        external_data: Optional[ExternalData] = None,
+                        transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Query method that returns the results as a stream of numpy arrays.  For parameter values, see the
         create_query_context method
         :return: Generator that yield a numpy array per block representing the result set
         """
+        check_numpy()
         return self._context_query(locals(), use_numpy=True, streaming=True).np_stream
 
     # pylint: disable=duplicate-code,unused-argument
@@ -369,12 +395,14 @@ class Client(ABC):
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
                  context: QueryContext = None,
                  external_data: Optional[ExternalData] = None,
-                 use_extended_dtypes: Optional[bool] = None):
+                 use_extended_dtypes: Optional[bool] = None,
+                 transport_settings: Optional[Dict[str, str]] = None):
         """
         Query method that results the results as a pandas dataframe.  For parameter values, see the
         create_query_context method
         :return: Pandas dataframe representing the result set
         """
+        check_pandas()
         return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
 
     # pylint: disable=duplicate-code,unused-argument
@@ -392,12 +420,14 @@ class Client(ABC):
                         column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
                         context: QueryContext = None,
                         external_data: Optional[ExternalData] = None,
-                        use_extended_dtypes: Optional[bool] = None) -> StreamContext:
+                        use_extended_dtypes: Optional[bool] = None,
+                        transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Query method that returns the results as a StreamContext.  For parameter values, see the
         create_query_context method
         :return: Generator that yields a Pandas dataframe per block representing the result set
         """
+        check_pandas()
         return self._context_query(locals(), use_numpy=True,
                                    as_pandas=True,
                                    streaming=True).df_stream
@@ -420,7 +450,8 @@ class Client(ABC):
                              streaming: bool = False,
                              as_pandas: bool = False,
                              external_data: Optional[ExternalData] = None,
-                             use_extended_dtypes: Optional[bool] = None) -> QueryContext:
+                             use_extended_dtypes: Optional[bool] = None,
+                             transport_settings: Optional[Dict[str, str]] = None) -> QueryContext:
         """
         Creates or updates a reusable QueryContext object
         :param query: Query statement/format string
@@ -438,10 +469,10 @@ class Client(ABC):
           structured array even with ClickHouse variable length String columns.  If 0, Numpy arrays for
           String columns will always be object arrays
         :param context: An existing QueryContext to be updated with any provided parameter values
-        :param query_tz  Either a string or a pytz tzinfo object.  (Strings will be converted to tzinfo objects).
+        :param query_tz: Either a string or a pytz tzinfo object.  (Strings will be converted to tzinfo objects).
           Values for any DateTime or DateTime64 column in the query will be converted to Python datetime.datetime
           objects with the selected timezone.
-        :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
+        :param column_tzs: A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
         :param use_na_values: Deprecated alias for use_advanced_dtypes
         :param as_pandas Return the result columns as pandas.Series objects
@@ -450,6 +481,7 @@ class Client(ABC):
         :param use_extended_dtypes:  Only relevant to Pandas Dataframe queries.  Use Pandas "missing types", such as
           pandas.NA and pandas.NaT for ClickHouse NULL values, as well as extended Pandas dtypes such as IntegerArray
           and StringArray.  Defaulted to True for query_df methods
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Reusable QueryContext
         """
         if context:
@@ -469,7 +501,8 @@ class Client(ABC):
                                         as_pandas=as_pandas,
                                         use_extended_dtypes=use_extended_dtypes,
                                         streaming=streaming,
-                                        external_data=external_data)
+                                        external_data=external_data,
+                                        transport_settings=transport_settings)
         if use_numpy and max_str_len is None:
             max_str_len = 0
         if use_extended_dtypes is None:
@@ -493,51 +526,60 @@ class Client(ABC):
                             as_pandas=as_pandas,
                             streaming=streaming,
                             apply_server_tz=self.apply_server_timezone,
-                            external_data=external_data)
+                            external_data=external_data,
+                            transport_settings=transport_settings)
 
     def query_arrow(self,
                     query: str,
                     parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                     settings: Optional[Dict[str, Any]] = None,
                     use_strings: Optional[bool] = None,
-                    external_data: Optional[ExternalData] = None):
+                    external_data: Optional[ExternalData] = None,
+                    transport_settings: Optional[Dict[str, str]] = None):
         """
         Query method using the ClickHouse Arrow format to return a PyArrow table
         :param query: Query statement/format string
         :param parameters: Optional dictionary used to format the query
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
-        :param use_strings:  Convert ClickHouse String type to Arrow string type (instead of binary)
-        :param external_data ClickHouse "external data" to send with query
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: PyArrow.Table
         """
+        check_arrow()
         settings = self._update_arrow_settings(settings, use_strings)
         return to_arrow(self.raw_query(query,
                                        parameters,
                                        settings,
                                        fmt='Arrow',
-                                       external_data=external_data))
+                                       external_data=external_data,
+                                       transport_settings=transport_settings))
 
     def query_arrow_stream(self,
                            query: str,
                            parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                            settings: Optional[Dict[str, Any]] = None,
                            use_strings: Optional[bool] = None,
-                           external_data: Optional[ExternalData] = None) -> StreamContext:
+                           external_data: Optional[ExternalData] = None,
+                           transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
         Query method that returns the results as a stream of Arrow tables
         :param query: Query statement/format string
         :param parameters: Optional dictionary used to format the query
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
-        :param use_strings:  Convert ClickHouse String type to Arrow string type (instead of binary)
-        :param external_data ClickHouse "external data" to send with query
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Generator that yields a PyArrow.Table for per block representing the result set
         """
+        check_arrow()
         settings = self._update_arrow_settings(settings, use_strings)
         return to_arrow_batches(self.raw_stream(query,
                                                 parameters,
                                                 settings,
                                                 fmt='ArrowStream',
-                                                external_data=external_data))
+                                                external_data=external_data,
+                                                transport_settings=transport_settings))
 
     def _update_arrow_settings(self,
                                settings: Optional[Dict[str, Any]],
@@ -562,7 +604,8 @@ class Client(ABC):
                 data: Union[str, bytes] = None,
                 settings: Dict[str, Any] = None,
                 use_database: bool = True,
-                external_data: Optional[ExternalData] = None) -> Union[str, int, Sequence[str], QuerySummary]:
+                external_data: Optional[ExternalData] = None,
+                transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
         """
         Client method that returns a single value instead of a result set
         :param cmd: ClickHouse query/command as a python format string
@@ -570,9 +613,10 @@ class Client(ABC):
         :param data: Optional 'data' for the command (for INSERT INTO in particular)
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
         :param use_database: Send the database parameter to ClickHouse so the command will be executed in the client
-         database context.  Otherwise, no database will be specified with the command.  This is useful for determining
+         database context. Otherwise, no database will be specified with the command.  This is useful for determining
          the default user database
-        :param external_data ClickHouse "external data" to send with command/query
+        :param external_data: ClickHouse "external data" to send with command/query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Decoded response from ClickHouse as either a string, int, or sequence of strings, or QuerySummary
         if no data returned
         """
@@ -593,7 +637,8 @@ class Client(ABC):
                column_type_names: Sequence[str] = None,
                column_oriented: bool = False,
                settings: Optional[Dict[str, Any]] = None,
-               context: InsertContext = None) -> QuerySummary:
+               context: InsertContext = None,
+               transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
         """
         Method to insert multiple rows/data matrix of native Python objects.  If context is specified arguments
         other than data are ignored
@@ -610,6 +655,7 @@ class Client(ABC):
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
         :param context: Optional reusable insert context to allow repeated inserts into the same table with
             different data batches
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: QuerySummary with summary information, throws exception if insert fails
         """
         if (context is None or context.empty) and data is None:
@@ -621,7 +667,8 @@ class Client(ABC):
                                                  column_types,
                                                  column_type_names,
                                                  column_oriented,
-                                                 settings)
+                                                 settings,
+                                                 transport_settings=transport_settings)
         if data is not None:
             if not context.empty:
                 raise ProgrammingError('Attempting to insert new data with non-empty insert context') from None
@@ -635,7 +682,8 @@ class Client(ABC):
                   column_names: Optional[Sequence[str]] = None,
                   column_types: Sequence[ClickHouseType] = None,
                   column_type_names: Sequence[str] = None,
-                  context: InsertContext = None) -> QuerySummary:
+                  context: InsertContext = None,
+                  transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
         """
         Insert a pandas DataFrame into ClickHouse.  If context is specified arguments other than df are ignored
         :param table: ClickHouse table
@@ -650,8 +698,10 @@ class Client(ABC):
             retrieved from the server
         :param context: Optional reusable insert context to allow repeated inserts into the same table with
             different data batches
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: QuerySummary with summary information, throws exception if insert fails
         """
+        check_pandas()
         if context is None:
             if column_names is None:
                 column_names = df.columns
@@ -663,24 +713,28 @@ class Client(ABC):
                            database,
                            column_types=column_types,
                            column_type_names=column_type_names,
-                           settings=settings, context=context)
+                           settings=settings,
+                           transport_settings=transport_settings,
+                           context=context)
 
     def insert_arrow(self, table: str,
                      arrow_table,
                      database: str = None,
-                     settings: Optional[Dict] = None) -> QuerySummary:
+                     settings: Optional[Dict] = None,
+                     transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
         """
         Insert a PyArrow table DataFrame into ClickHouse using raw Arrow format
         :param table: ClickHouse table
         :param arrow_table: PyArrow Table object
         :param database: Optional ClickHouse database
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
-        :return: QuerySummary with summary information, throws exception if insert fails
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         """
+        check_arrow()
         full_table = table if '.' in table or not database else f'{database}.{table}'
         compression = self.write_compression if self.write_compression in ('zstd', 'lz4') else None
         column_names, insert_block = arrow_buffer(arrow_table, compression)
-        return self.raw_insert(full_table, column_names, insert_block, settings, 'Arrow')
+        return self.raw_insert(full_table, column_names, insert_block, settings, 'Arrow', transport_settings)
 
     def create_insert_context(self,
                               table: str,
@@ -690,7 +744,8 @@ class Client(ABC):
                               column_type_names: Sequence[str] = None,
                               column_oriented: bool = False,
                               settings: Optional[Dict[str, Any]] = None,
-                              data: Optional[Sequence[Sequence[Any]]] = None) -> InsertContext:
+                              data: Optional[Sequence[Sequence[Any]]] = None,
+                              transport_settings: Optional[Dict[str, str]] = None) -> InsertContext:
         """
         Builds a reusable insert context to hold state for a duration of an insert
         :param table: Target table
@@ -704,7 +759,8 @@ class Client(ABC):
         :param column_oriented: If true the data is already "pivoted" in column form
         :param settings: Optional dictionary of ClickHouse settings (key/string values)
         :param data: Initial dataset for insert
-        :return Reusable insert context
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :return: Reusable insert context
         """
         full_table = table
         if '.' not in table:
@@ -740,6 +796,7 @@ class Client(ABC):
                              column_types,
                              column_oriented=column_oriented,
                              settings=settings,
+                             transport_settings=transport_settings,
                              data=data)
 
     def min_version(self, version_str: str) -> bool:
@@ -780,15 +837,17 @@ class Client(ABC):
                    insert_block: Union[str, bytes, Generator[bytes, None, None], BinaryIO] = None,
                    settings: Optional[Dict] = None,
                    fmt: Optional[str] = None,
-                   compression: Optional[str] = None) -> QuerySummary:
+                   compression: Optional[str] = None,
+                   transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
         """
         Insert data already formatted in a bytes object
         :param table: Table name (whether qualified with the database name or not)
         :param column_names: Sequence of column names
         :param insert_block: Binary or string data already in a recognized ClickHouse format
         :param settings:  Optional dictionary of ClickHouse settings (key/string values)
-        :param compression:  Recognized ClickHouse `Accept-Encoding` header compression value
         :param fmt: Valid clickhouse format
+        :param compression:  Recognized ClickHouse `Accept-Encoding` header compression value
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         """
 
     @abstractmethod

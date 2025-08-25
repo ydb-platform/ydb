@@ -1,6 +1,6 @@
 from .yson_types import (
     YsonType, YsonString, YsonUnicode, YsonBoolean, YsonInt64, YsonUint64, YsonDouble,
-    YsonList, YsonMap, YsonEntity)
+    YsonList, YsonMap, YsonEntity, YsonStringProxy, get_bytes)
 from .common import YsonError
 
 try:
@@ -97,7 +97,7 @@ def json_to_yson(json_tree, use_byte_strings=None):
         result = YsonString(value)
     elif value is False or value is True:
         result = YsonBoolean(value)
-    elif isinstance(value, integer_types):
+    elif isinstance(value, int):
         greater_than_max_int64 = value >= 2 ** 63
         if greater_than_max_int64:
             result = YsonUint64(value)
@@ -119,44 +119,103 @@ def json_to_yson(json_tree, use_byte_strings=None):
     return result
 
 
-def yson_to_json(yson_tree, print_attributes=True):
+def _yson_to_json(yson_tree, print_attributes=True, attributes_printed=False, annotate_with_types=False, use_byte_strings=False):
+    should_annotate_with_types = (
+        annotate_with_types and
+        not isinstance(yson_tree, list) and
+        not isinstance(yson_tree, dict) and
+        not isinstance(yson_tree, YsonEntity) and
+        yson_tree is not None
+    )
+
     def encode_key(key):
-        if PY3 and isinstance(key, binary_type):
+        if isinstance(key, binary_type):
             key = key.decode("ascii")
         if key and key[0] == "$":
             return "$" + key
         return key
 
     def process_dict(d):
-        return dict((encode_key(k), yson_to_json(v)) for k, v in iteritems(d))
+        return dict(
+            (
+                encode_key(k),
+                _yson_to_json(v, print_attributes=print_attributes, annotate_with_types=annotate_with_types, use_byte_strings=use_byte_strings),
+            ) for k, v in iteritems(d)
+        )
 
-    if hasattr(yson_tree, "attributes") and yson_tree.attributes and print_attributes:
-        return {"$attributes": process_dict(yson_tree.attributes),
-                "$value": yson_to_json(yson_tree, print_attributes=False)}
+    def get_type_name():
+        if isinstance(yson_tree, YsonType):
+            yson_type_str = yson_tree.get_yson_type_str()
+
+            if yson_type_str is not None:
+                return yson_type_str
+
+        if isinstance(yson_tree, bool):
+            return "bool"
+        elif isinstance(yson_tree, int):
+            return "int64"
+        elif isinstance(yson_tree, float):
+            return "double"
+        elif isinstance(yson_tree, text_type):
+            # TODO: "utf8"
+            return "string"
+        elif isinstance(yson_tree, binary_type):
+            return "string"
+        else:
+            raise RuntimeError("Failed to perform yson to json conversion of {!r}, unknown type {!r} to annotate with types".format(
+                yson_tree,
+                type(yson_tree)
+            ))
+
+    def do_annotate_with_types(value):
+        return {"$type": get_type_name(), "$value": value} if should_annotate_with_types else value
+
+    if hasattr(yson_tree, "attributes") and yson_tree.attributes and print_attributes and not attributes_printed:
+        # If value is primitive do not pass annotate with types.
+        value_annotate_with_types = False if should_annotate_with_types else annotate_with_types
+
+        result = {
+            "$attributes": process_dict(yson_tree.attributes),
+            "$value": _yson_to_json(yson_tree, print_attributes=print_attributes, attributes_printed=True, annotate_with_types=value_annotate_with_types, use_byte_strings=use_byte_strings),
+        }
+
+        if should_annotate_with_types:
+            result["$type"] = get_type_name()
+
+        return result
+
     if isinstance(yson_tree, list):
-        return list(imap(yson_to_json, yson_tree))
+        return [_yson_to_json(element, print_attributes=print_attributes, annotate_with_types=annotate_with_types, use_byte_strings=use_byte_strings) for element in yson_tree]
     elif isinstance(yson_tree, dict):
         return process_dict(yson_tree)
     elif isinstance(yson_tree, YsonEntity):
         return None
-    elif PY3 and (isinstance(yson_tree, YsonString) or isinstance(yson_tree, binary_type)):
-        return yson_tree.decode("utf-8")
+    elif isinstance(yson_tree, YsonStringProxy):
+        tree_value = get_bytes(yson_tree)
+        if not use_byte_strings:
+            tree_value = tree_value.decode("utf-8")
+        return do_annotate_with_types(tree_value)
+    elif isinstance(yson_tree, binary_type) or isinstance(yson_tree, YsonString):
+        if use_byte_strings:
+            tree_value = get_bytes(yson_tree)
+        else:
+            tree_value = yson_tree.decode("utf-8")
+        return do_annotate_with_types(tree_value)
     elif isinstance(yson_tree, bool) or isinstance(yson_tree, YsonBoolean):
-        return True if yson_tree else False
+        return do_annotate_with_types(True if yson_tree else False)
     else:
-        if type(yson_tree) is YsonEntity:
-            return None
-
         bases = type(yson_tree).__bases__
-        iter = 0
         while len(bases) == 1 and YsonType not in bases:
             bases = bases[0].__bases__
-            iter += 1
 
         if YsonType in bases:
             other_types = list(set(bases) - set([YsonType]))
             if not other_types:
                 raise RuntimeError("Failed to perform yson to json conversion of {!r}".format(yson_tree))
             other = other_types[0]
-            return other(yson_tree)
-        return yson_tree
+            return do_annotate_with_types(other(yson_tree))
+        return do_annotate_with_types(yson_tree)
+
+
+def yson_to_json(yson_tree, print_attributes=True, annotate_with_types=False, use_byte_strings=False):
+    return _yson_to_json(yson_tree, print_attributes=print_attributes, annotate_with_types=annotate_with_types, use_byte_strings=use_byte_strings)

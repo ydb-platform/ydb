@@ -22,6 +22,10 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
+[admin cluster dump](../export-import/tools-dump.md#cluster) | Выгрузка метаданных кластера в файловую систему
+[admin cluster restore](../export-import/tools-restore.md#cluster) | Восстановление метаданных кластера из файловой системы
+[admin database dump](../export-import/tools-dump.md#db) | Выгрузка метаданных и данных базы данных в файловую систему
+[admin database restore](../export-import/tools-restore.md#db) | Восстановление метаданных и данных базы данных из файловой системы
 [config info](../commands/config-info.md) | Просмотр [параметров соединения](../connect.md)
 [config profile activate](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [config profile create](../profile/create.md) | Создание [профиля](../profile/index.md)
@@ -36,6 +40,7 @@
 [import file tsv](../export-import/import-file.md) | Импорт данных из TSV-файла
 [import s3](../export-import/import-s3.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
+[monitoring healthcheck](../commands/monitoring-healthcheck.md) | Проверка состояния базы
 [operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции
 [operation forget](../operation-forget.md) | Удаление фоновой операции из списка
 [operation get](../operation-get.md) | Статус фоновой операции
@@ -52,25 +57,27 @@
 [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений
 [scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
-[scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
+[scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта (команда устарела, используйте [`ydb sql`](../sql.md))
+[sql](../sql.md) | Выполнение любого запроса
 table attribute add | Добавление атрибута для строкой или колоночной таблицы
 table attribute drop | Удаление атрибута у строковой или колоночной таблицы
 [table drop](../table-drop.md) | Удаление строковой или колоночной таблицы
 [table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса для строковых таблиц
 [table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса для строковых таблиц
 [table index drop](../commands/secondary_index.md#drop) | Удаление индекса у строковых таблиц
-[table query execute](../table-query-execute.md) | Исполнение YQL-запроса
-[table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
+[table query execute](../table-query-execute.md) | Исполнение YQL-запроса (команда устарела, используйте [`ydb sql`](../sql.md))
+[table query explain](../commands/explain-plan.md) | Получение плана исполнения YQL-запроса (команда устарела, используйте [`ydb sql --explain`](../sql.md))
 [table read](../commands/readtable.md) | Потоковое чтение строковой таблицы
 [table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL для строковых и колоночных таблиц
 [tools copy](../tools-copy.md) | Копирование таблиц
-[tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблиц в файловую систему
+[tools dump](../export-import/tools-dump.md#schema-objects) | Выгрузка отдельных схемных объектов в файловую систему
+[tools infer csv](../tools-infer.md) | Генерация текста запроса `CREATE TABLE SQL` из CSV файла
 {% if ydb-cli == "ydb" %}
 [tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование строковых таблиц
-[tools restore](../export-import/tools-restore.md) | Восстановление из файловой системы
+[tools restore](../export-import/tools-restore.md#schema-objects) | Восстановление отдельных схемных объектов из файловой системы
 [topic create](../topic-create.md) | Создание топика
 [topic alter](../topic-alter.md) | Модификация параметров топика и перечня читателей
 [topic drop](../topic-drop.md) | Удаление топика
@@ -84,4 +91,4 @@ table attribute drop | Удаление атрибута у строковой �
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI
 {% endif %}
 [workload](../commands/workload/index.md) | Генерация нагрузки
-[yql](../yql.md) | Выполнение YQL-скрипта (с поддержкой стриминга)
+[yql](../yql.md) | Выполнение YQL-скрипта с поддержкой стриминга (команда устарела, используйте [`ydb sql`](../sql.md))

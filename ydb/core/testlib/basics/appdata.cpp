@@ -66,6 +66,8 @@ namespace NKikimr {
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
         app->InitFeatureFlags(FeatureFlags);
+        app->WorkloadManagerConfig = WorkloadManagerConfig;
+        app->QueryServiceConfig = QueryServiceConfig;
 
         // This is a special setting active in test runtime only
         app->EnableMvccSnapshotWithLegacyDomainRoot = true;

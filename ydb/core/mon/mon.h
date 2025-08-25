@@ -15,8 +15,6 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
-#include "mon.h"
-
 namespace NActors {
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
@@ -40,6 +38,7 @@ public:
         TString Certificate;
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
+        TString AllowOrigin;
     };
 
     TMon(TConfig config);
@@ -84,6 +83,10 @@ public:
             .Path = path,
             .Handler = handler
         });
+    }
+
+    const TConfig& GetConfig() const {
+        return Config;
     }
 
 protected:

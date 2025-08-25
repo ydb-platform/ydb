@@ -35,6 +35,9 @@ namespace NTestUtils {
     TString GetAllObjects(const TString& bucket, TStringBuf separator, Aws::S3::S3Client& s3Client);
     TString GetAllObjects(const TString& bucket, TStringBuf separator = {});
 
+    ui64 GetUncommittedUploadsCount(const TString& bucket, Aws::S3::S3Client& s3Client);
+    ui64 GetUncommittedUploadsCount(const TString& bucket);
+
     TString GetBucketLocation(const TStringBuf bucket);
 
 } // namespace NTestUtils

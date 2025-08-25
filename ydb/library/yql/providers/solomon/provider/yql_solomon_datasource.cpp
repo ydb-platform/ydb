@@ -40,18 +40,34 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+        cluster.SetUseSsl(properties.Value("use_tls", "true") == "true"sv);
 
-        if (auto value = properties.Value("grpc_port", ""); !value.empty()) {
+        if (properties.Value("project", "") && properties.Value("cluster", "")) {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(properties.Value("project", ""));
+            cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
+        } else {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
+        }
+
+        if (auto value = properties.Value("grpc_location", "")) {
             auto grpcPort = cluster.MutableSettings()->Add();
-            *grpcPort->MutableName() = "grpcPort";
+            *grpcPort->MutableName() = "grpc_location";
             *grpcPort->MutableValue() = value;
+        }
+
+        auto authMethod = properties.Value("authMethod", "");
+        TString structuredToken = "";
+        if (authMethod == "SERVICE_ACCOUNT") {
+            structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+        } else {
+            structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
         }
 
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->Tokens[name] = structuredToken;
         State_->Configuration->ClusterConfigs[name] = cluster;
     }
 
@@ -63,13 +79,13 @@ public:
         return *ConfigurationTransformer_;
     }
 
-   IGraphTransformer& GetIODiscoveryTransformer() override {
-       return *IODiscoveryTransformer_;
-   }
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
 
-   IGraphTransformer& GetLoadTableMetadataTransformer() override {
-       return *LoadMetaDataTransformer_;
-   }
+    IGraphTransformer& GetLoadTableMetadataTransformer() override {
+        return *LoadMetaDataTransformer_;
+    }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
@@ -84,7 +100,7 @@ public:
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
-                if (!State_->Gateway->HasCluster(clusterName)) {
+                if (clusterName != NCommon::ALL_CLUSTERS && !State_->Gateway->HasCluster(clusterName)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
                         "Unknown cluster name: " << clusterName));
                     return false;

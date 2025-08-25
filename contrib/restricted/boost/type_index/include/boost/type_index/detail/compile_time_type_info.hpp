@@ -1,5 +1,5 @@
 //
-// Copyright 2012-2024 Antony Polukhin.
+// Copyright 2012-2025 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -196,11 +196,12 @@ constexpr ctti_skip skip() noexcept { return detail::make_ctti_skip(0, 0, ""); }
 
     template <unsigned int ArrayLength>
     BOOST_CXX14_CONSTEXPR inline const char* skip_begining_runtime(const char* begin) noexcept {
+        constexpr auto skip_value = detail::skip();  // to have the same `.until_runtime` value in code below
         const char* const it = detail::constexpr_search(
             begin, begin + ArrayLength,
-            skip().until_runtime, skip().until_runtime + skip().until_runtime_length
+            skip_value.until_runtime, skip_value.until_runtime + skip_value.until_runtime_length
         );
-        return (it == begin + ArrayLength ? begin : it + skip().until_runtime_length);
+        return (it == begin + ArrayLength ? begin : it + skip_value.until_runtime_length);
     }
 
     template <unsigned int ArrayLength>

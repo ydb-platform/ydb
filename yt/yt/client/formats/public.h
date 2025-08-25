@@ -59,16 +59,17 @@ DEFINE_ENUM(EFormatType,
     (Skiff)
     (Arrow)
     (Yaml)
+    (Blob)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(TYsonFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TTableFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TTableFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TYamrFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TYamrFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TYamrFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TDsvFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TDsvFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TDsvFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TYamredDsvFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TSchemafulDsvFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TProtobufTypeConfig)
@@ -78,10 +79,13 @@ DECLARE_REFCOUNTED_STRUCT(TProtobufFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TWebJsonFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TSkiffFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TYamlFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TArrowFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TBlobFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IYamrConsumer)
 
 DECLARE_REFCOUNTED_STRUCT(ISchemalessFormatWriter)
+DECLARE_REFCOUNTED_STRUCT(IFormatFactory)
 
 DECLARE_REFCOUNTED_STRUCT(TControlAttributesConfig)
 

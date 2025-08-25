@@ -14,15 +14,15 @@
 
 #include "tcmalloc/internal/range_tracker.h"
 
-#include <algorithm>
+#include <stddef.h>
+#include <sys/types.h>
+
 #include <utility>
 #include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/base/attributes.h"
 #include "absl/container/fixed_array.h"
-#include "absl/random/distributions.h"
 #include "absl/random/random.h"
 
 namespace tcmalloc {
@@ -35,17 +35,17 @@ using testing::Pair;
 class BitmapTest : public testing::Test {
  protected:
   template <size_t N>
-  std::vector<size_t> FindSetResults(const Bitmap<N> &map) {
+  std::vector<size_t> FindSetResults(const Bitmap<N>& map) {
     return FindResults<N, true>(map);
   }
 
   template <size_t N>
-  std::vector<size_t> FindClearResults(const Bitmap<N> &map) {
+  std::vector<size_t> FindClearResults(const Bitmap<N>& map) {
     return FindResults<N, false>(map);
   }
 
   template <size_t N, bool Value>
-  std::vector<size_t> FindResults(const Bitmap<N> &map) {
+  std::vector<size_t> FindResults(const Bitmap<N>& map) {
     std::vector<size_t> results;
     ssize_t last = -1;
     for (size_t i = 0; i < N; ++i) {
@@ -63,17 +63,17 @@ class BitmapTest : public testing::Test {
   }
 
   template <size_t N>
-  std::vector<size_t> FindSetResultsBackwards(const Bitmap<N> &map) {
+  std::vector<size_t> FindSetResultsBackwards(const Bitmap<N>& map) {
     return FindResultsBackwards<N, true>(map);
   }
 
   template <size_t N>
-  std::vector<size_t> FindClearResultsBackwards(const Bitmap<N> &map) {
+  std::vector<size_t> FindClearResultsBackwards(const Bitmap<N>& map) {
     return FindResultsBackwards<N, false>(map);
   }
 
   template <size_t N, bool Value>
-  std::vector<size_t> FindResultsBackwards(const Bitmap<N> &map) {
+  std::vector<size_t> FindResultsBackwards(const Bitmap<N>& map) {
     std::vector<size_t> results;
     ssize_t last = N;
     for (ssize_t i = N - 1; i >= 0; --i) {
@@ -187,6 +187,7 @@ TEST_F(BitmapTest, FindClear) {
 TEST_F(BitmapTest, CountBits) {
   Bitmap<253> map;
   map.SetRange(0, 253);
+  EXPECT_EQ(map.CountBits(), 253);
   EXPECT_EQ(map.CountBits(0, 253), 253);
   EXPECT_EQ(map.CountBits(8, 245), 245);
   EXPECT_EQ(map.CountBits(0, 250), 250);
@@ -197,6 +198,7 @@ TEST_F(BitmapTest, CountBits) {
   map.ClearBit(63);
   map.ClearBit(128);
 
+  EXPECT_EQ(map.CountBits(), 248);
   EXPECT_EQ(map.CountBits(0, 253), 248);
   EXPECT_EQ(map.CountBits(8, 245), 241);
   EXPECT_EQ(map.CountBits(0, 250), 245);
@@ -206,12 +208,14 @@ TEST_F(BitmapTest, CountBits) {
   map.ClearBit(251);
   map.ClearBit(252);
 
+  EXPECT_EQ(map.CountBits(), 244);
   EXPECT_EQ(map.CountBits(0, 253), 244);
   EXPECT_EQ(map.CountBits(8, 245), 237);
   EXPECT_EQ(map.CountBits(0, 250), 243);
 
   map.ClearBit(0);
 
+  EXPECT_EQ(map.CountBits(), 243);
   EXPECT_EQ(map.CountBits(0, 253), 243);
   EXPECT_EQ(map.CountBits(8, 245), 237);
   EXPECT_EQ(map.CountBits(0, 250), 242);
@@ -287,6 +291,17 @@ TEST_F(RangeTrackerTest, Trivial) {
   EXPECT_EQ(300, range_.longest_free());
   EXPECT_EQ(kBits - 300, range_.used());
   EXPECT_THAT(FreeRanges(), ElementsAre(Pair(0, 300)));
+}
+
+TEST_F(RangeTrackerTest, Mark) {
+  EXPECT_EQ(range_.longest_free(), kBits);
+  range_.Mark(100, 100);
+  EXPECT_EQ(range_.used(), 100);
+  EXPECT_EQ(range_.longest_free(), kBits - 200);
+  EXPECT_THAT(FreeRanges(), ElementsAre(Pair(0, 100), Pair(200, kBits - 200)));
+  range_.Unmark(100, 100);
+  EXPECT_EQ(range_.used(), 0);
+  EXPECT_EQ(range_.longest_free(), kBits);
 }
 
 }  // namespace

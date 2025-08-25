@@ -35,6 +35,8 @@ PEERDIR(
     yql/essentials/core/user_data
     yql/essentials/utils/backtrace
     yql/essentials/utils/log
+    yql/essentials/public/langver
+    yql/essentials/core/langver
     yql/essentials/core
     yql/essentials/core/type_ann
     yql/essentials/sql

@@ -426,9 +426,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
-                LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0);
+                LWTRACK(DSProxyScheduleAccelerate, Orbit,  nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
                     Schedule(nextAcceleration - now, new TEvAccelerate(causeIdx));
                     IsAccelerateScheduled = true;
                 } else {
@@ -548,7 +548,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic),
+                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic,
+                    item.IssueKeepFlag, item.IgnoreBlock),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,

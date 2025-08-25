@@ -4,292 +4,292 @@
 namespace NYql {
 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx)
-    : Ctx(ctx)
-    , Parent(nullptr)
-    , ParentReplacer(nullptr)
-    , Container(nullptr)
-    , Pos(pos)
-    , CurrentNode(nullptr)
+    : Ctx_(ctx)
+    , Parent_(nullptr)
+    , ParentReplacer_(nullptr)
+    , Container_(nullptr)
+    , Pos_(pos)
+    , CurrentNode_(nullptr)
 {}
 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc)
-    : Ctx(ctx)
-    , Parent(nullptr)
-    , ParentReplacer(nullptr)
-    , Container(nullptr)
-    , Pos(pos)
-    , CurrentNode(nullptr)
-    , ExtArgsFunc(extArgsFunc)
+    : Ctx_(ctx)
+    , Parent_(nullptr)
+    , ParentReplacer_(nullptr)
+    , Container_(nullptr)
+    , Pos_(pos)
+    , CurrentNode_(nullptr)
+    , ExtArgsFunc_(extArgsFunc)
 {}
 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNode::TPtr& container)
-    : Ctx(parent->Ctx)
-    , Parent(parent)
-    , ParentReplacer(nullptr)
-    , Container(std::move(container))
-    , Pos(pos)
-    , CurrentNode(nullptr)
+    : Ctx_(parent->Ctx_)
+    , Parent_(parent)
+    , ParentReplacer_(nullptr)
+    , Container_(std::move(container))
+    , Pos_(pos)
+    , CurrentNode_(nullptr)
 {
-    if (Parent) {
-        ExtArgsFunc = Parent->ExtArgsFunc;
+    if (Parent_) {
+        ExtArgsFunc_ = Parent_->ExtArgsFunc_;
     }
 }
 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer)
-    : Ctx(parentReplacer->Owner->Ctx)
-    , Parent(nullptr)
-    , ParentReplacer(parentReplacer)
-    , Container(nullptr)
-    , Pos(pos)
-    , CurrentNode(nullptr)
+    : Ctx_(parentReplacer->Owner_->Ctx_)
+    , Parent_(nullptr)
+    , ParentReplacer_(parentReplacer)
+    , Container_(nullptr)
+    , Pos_(pos)
+    , CurrentNode_(nullptr)
 {
 }
 
 TExprNode::TPtr TExprNodeBuilder::Build() {
-    Y_ENSURE(CurrentNode, "No current node");
-    Y_ENSURE(!Parent, "Build is allowed only on top level");
-    if (CurrentNode->Type() == TExprNode::Lambda) {
-        Y_ENSURE(CurrentNode->ChildrenSize() > 0U, "Lambda is not complete");
+    Y_ENSURE(CurrentNode_, "No current node");
+    Y_ENSURE(!Parent_, "Build is allowed only on top level");
+    if (CurrentNode_->Type() == TExprNode::Lambda) {
+        Y_ENSURE(CurrentNode_->ChildrenSize() > 0U, "Lambda is not complete");
     }
 
-    return CurrentNode;
+    return CurrentNode_;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Seal() {
-    Y_ENSURE(Parent, "Seal is allowed only on non-top level");
-    if (Container->Type() == TExprNode::Lambda) {
-        if (CurrentNode) {
-            Y_ENSURE(Container->ChildrenSize() == 1, "Lambda is already complete.");
-            Container->Children_.emplace_back(std::move(CurrentNode));
+    Y_ENSURE(Parent_, "Seal is allowed only on non-top level");
+    if (Container_->Type() == TExprNode::Lambda) {
+        if (CurrentNode_) {
+            Y_ENSURE(Container_->ChildrenSize() == 1, "Lambda is already complete.");
+            Container_->Children_.emplace_back(std::move(CurrentNode_));
         } else {
-            Y_ENSURE(Container->ChildrenSize() > 0U, "Lambda isn't complete.");
+            Y_ENSURE(Container_->ChildrenSize() > 0U, "Lambda isn't complete.");
         }
     }
 
-    return *Parent;
+    return *Parent_;
 }
 
 TExprNodeReplaceBuilder& TExprNodeBuilder::Done() {
-    Y_ENSURE(ParentReplacer, "Done is allowed only if parent is a replacer");
-    Y_ENSURE(CurrentNode, "No current node");
-    for (auto& body : ParentReplacer->Body)
-        body = Ctx.ReplaceNode(std::move(body), ParentReplacer->CurrentNode ? *ParentReplacer->CurrentNode : *ParentReplacer->Args->Child(ParentReplacer->CurrentIndex), CurrentNode);
-    return *ParentReplacer;
+    Y_ENSURE(ParentReplacer_, "Done is allowed only if parent is a replacer");
+    Y_ENSURE(CurrentNode_, "No current node");
+    for (auto& body : ParentReplacer_->Body_)
+        body = Ctx_.ReplaceNode(std::move(body), ParentReplacer_->CurrentNode_ ? *ParentReplacer_->CurrentNode_ : *ParentReplacer_->Args_->Child(ParentReplacer_->CurrentIndex_), CurrentNode_);
+    return *ParentReplacer_;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 index, TPositionHandle pos, const TStringBuf& content, ui32 flags) {
-    Y_ENSURE(Container && !Container->IsLambda(), "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index,
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_ && !Container_->IsLambda(), "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index,
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    auto child = Ctx.NewAtom(pos, content, flags);
-    Container->Children_.push_back(child);
+    auto child = Ctx_.NewAtom(pos, content, flags);
+    Container_->Children_.push_back(child);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(TPositionHandle pos, const TStringBuf& content, ui32 flags) {
-    Y_ENSURE(!Container || Container->IsLambda(), "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = Ctx.NewAtom(pos, content, flags);
+    Y_ENSURE(!Container_ || Container_->IsLambda(), "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = Ctx_.NewAtom(pos, content, flags);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 index, const TStringBuf& content, ui32 flags) {
-    return Atom(index, Pos, content, flags);
+    return Atom(index, Pos_, content, flags);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(const TStringBuf& content, ui32 flags) {
-    return Atom(Pos, content, flags);
+    return Atom(Pos_, content, flags);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 index, ui32 literalIndexValue) {
-    return Atom(index, Pos, Ctx.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
+    return Atom(index, Pos_, Ctx_.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 literalIndexValue) {
-    return Atom(Pos, Ctx.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
+    return Atom(Pos_, Ctx_.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
 }
 
 TExprNodeBuilder TExprNodeBuilder::List(ui32 index, TPositionHandle pos) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    const auto child = Ctx.NewList(pos, {});
-    Container->Children_.push_back(child);
+    const auto child = Ctx_.NewList(pos, {});
+    Container_->Children_.push_back(child);
     return TExprNodeBuilder(pos, this, child);
 }
 
 TExprNodeBuilder TExprNodeBuilder::List(TPositionHandle pos) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = Ctx.NewList(pos, {});
-    return TExprNodeBuilder(pos, this, CurrentNode);
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = Ctx_.NewList(pos, {});
+    return TExprNodeBuilder(pos, this, CurrentNode_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::List(ui32 index) {
-    return List(index, Pos);
+    return List(index, Pos_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::List() {
-    return List(Pos);
+    return List(Pos_);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Add(ui32 index, const TExprNode::TPtr& child) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
     Y_ENSURE(child, "child should not be nullptr");
-    Container->Children_.push_back(child);
+    Container_->Children_.push_back(child);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Add(ui32 index, TExprNode::TPtr&& child) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
     Y_ENSURE(child, "child should not be nullptr");
-    Container->Children_.push_back(std::move(child));
+    Container_->Children_.push_back(std::move(child));
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Add(TExprNode::TListType&& children) {
-    Y_ENSURE(Container && Container->Type() != TExprNode::Lambda, "Container expected");
-    Y_ENSURE(Container->Children_.empty(), "container should be empty");
-    Container->Children_ = std::move(children);
+    Y_ENSURE(Container_ && Container_->Type() != TExprNode::Lambda, "Container expected");
+    Y_ENSURE(Container_->Children_.empty(), "container should be empty");
+    Container_->Children_ = std::move(children);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Set(TExprNode::TPtr&& body) {
-    Y_ENSURE(Container && Container->Type() == TExprNode::Lambda, "Lambda expected");
-    Y_ENSURE(!CurrentNode, "Lambda already has a body");
-    CurrentNode = std::move(body);
+    Y_ENSURE(Container_ && Container_->Type() == TExprNode::Lambda, "Lambda expected");
+    Y_ENSURE(!CurrentNode_, "Lambda already has a body");
+    CurrentNode_ = std::move(body);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Set(const TExprNode::TPtr& body) {
-    Y_ENSURE(Container && Container->Type() == TExprNode::Lambda, "Lambda expected");
-    Y_ENSURE(!CurrentNode, "Lambda already has a body");
-    CurrentNode = body;
+    Y_ENSURE(Container_ && Container_->Type() == TExprNode::Lambda, "Lambda expected");
+    Y_ENSURE(!CurrentNode_, "Lambda already has a body");
+    CurrentNode_ = body;
     return *this;
 }
 
 TExprNodeBuilder TExprNodeBuilder::Callable(ui32 index, TPositionHandle pos, const TStringBuf& content) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    auto child = Ctx.NewCallable(pos, content, {});
-    Container->Children_.push_back(child);
+    auto child = Ctx_.NewCallable(pos, content, {});
+    Container_->Children_.push_back(child);
     return TExprNodeBuilder(pos, this, child);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Callable(TPositionHandle pos, const TStringBuf& content) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = Ctx.NewCallable(pos, content, {});
-    return TExprNodeBuilder(pos, this, CurrentNode);
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = Ctx_.NewCallable(pos, content, {});
+    return TExprNodeBuilder(pos, this, CurrentNode_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Callable(ui32 index, const TStringBuf& content) {
-    return Callable(index, Pos, content);
+    return Callable(index, Pos_, content);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Callable(const TStringBuf& content) {
-    return Callable(Pos, content);
+    return Callable(Pos_, content);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::World(ui32 index, TPositionHandle pos) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    auto child = Ctx.NewWorld(pos);
-    Container->Children_.push_back(child);
+    auto child = Ctx_.NewWorld(pos);
+    Container_->Children_.push_back(child);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::World(TPositionHandle pos) {
-    Y_ENSURE(!Container, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = Ctx.NewWorld(pos);
+    Y_ENSURE(!Container_, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = Ctx_.NewWorld(pos);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::World(ui32 index) {
-    return World(index, Pos);
+    return World(index, Pos_);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::World() {
-    return World(Pos);
+    return World(Pos_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Lambda(ui32 index, TPositionHandle pos) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    auto child = Ctx.NewLambda(pos, Ctx.NewArguments(pos, {}), nullptr);
-    Container->Children_.push_back(child);
+    auto child = Ctx_.NewLambda(pos, Ctx_.NewArguments(pos, {}), nullptr);
+    Container_->Children_.push_back(child);
     return TExprNodeBuilder(pos, this, child);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Lambda(TPositionHandle pos) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = Ctx.NewLambda(pos, Ctx.NewArguments(pos, {}), nullptr);
-    return TExprNodeBuilder(pos, this, CurrentNode);
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = Ctx_.NewLambda(pos, Ctx_.NewArguments(pos, {}), nullptr);
+    return TExprNodeBuilder(pos, this, CurrentNode_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Lambda(ui32 index) {
-    return Lambda(index, Pos);
+    return Lambda(index, Pos_);
 }
 
 TExprNodeBuilder TExprNodeBuilder::Lambda() {
-    return Lambda(Pos);
+    return Lambda(Pos_);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Param(TPositionHandle pos, const TStringBuf& name) {
     Y_ENSURE(!name.empty(), "Empty parameter name is not allowed");
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->Type() == TExprNode::Lambda, "Container must be a lambda");
-    Y_ENSURE(!CurrentNode, "Lambda already has a body");
-    for (auto arg : Container->Head().Children()) {
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->Type() == TExprNode::Lambda, "Container must be a lambda");
+    Y_ENSURE(!CurrentNode_, "Lambda already has a body");
+    for (auto arg : Container_->Head().Children()) {
         Y_ENSURE(arg->Content() != name, "Duplicate of lambda param name: " << name);
     }
 
-    Container->Head().Children_.push_back(Ctx.NewArgument(pos, name));
+    Container_->Head().Children_.push_back(Ctx_.NewArgument(pos, name));
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Param(const TStringBuf& name) {
-    return Param(Pos, name);
+    return Param(Pos_, name);
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Params(const TStringBuf& name, ui32 width) {
     Y_ENSURE(!name.empty(), "Empty parameter name is not allowed");
     for (ui32 i = 0U; i < width; ++i)
-        Param(Pos, TString(name) += ToString(i));
+        Param(Pos_, TString(name) += ToString(i));
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Arg(ui32 index, const TStringBuf& name) {
     Y_ENSURE(!name.empty(), "Empty parameter name is not allowed");
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
     auto arg = FindArgument(name);
-    Container->Children_.push_back(arg);
+    Container_->Children_.push_back(arg);
     return *this;
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Arg(const TStringBuf& name) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = FindArgument(name);
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = FindArgument(name);
     return *this;
 }
 
@@ -305,9 +305,9 @@ TExprNodeBuilder& TExprNodeBuilder::Arg(const TStringBuf& name, ui32 toIndex) {
 
 TExprNodeBuilder& TExprNodeBuilder::Arg(const TExprNodePtr& arg) {
     Y_ENSURE(arg->Type() == TExprNode::Argument, "Argument expected");
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    CurrentNode = arg;
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    CurrentNode_ = arg;
     return *this;
 }
 
@@ -326,13 +326,13 @@ TExprNodeBuilder& TExprNodeBuilder::Args(const TStringBuf& name, ui32 toIndex) {
 }
 
 TExprNode::TPtr TExprNodeBuilder::FindArgument(const TStringBuf& name) {
-    for (auto builder = this; builder; builder = builder->Parent) {
-        while (builder->ParentReplacer) {
-            builder = builder->ParentReplacer->Owner;
+    for (auto builder = this; builder; builder = builder->Parent_) {
+        while (builder->ParentReplacer_) {
+            builder = builder->ParentReplacer_->Owner_;
         }
 
-        if (builder->Container && builder->Container->IsLambda()) {
-            for (const auto& arg : builder->Container->Head().Children()) {
+        if (builder->Container_ && builder->Container_->IsLambda()) {
+            for (const auto& arg : builder->Container_->Head().Children()) {
                 if (arg->Content() == name) {
                     return arg;
                 }
@@ -340,8 +340,8 @@ TExprNode::TPtr TExprNodeBuilder::FindArgument(const TStringBuf& name) {
         }
     }
 
-    if (ExtArgsFunc) {
-        if (const auto arg = ExtArgsFunc(name)) {
+    if (ExtArgsFunc_) {
+        if (const auto arg = ExtArgsFunc_(name)) {
             return arg;
         }
     }
@@ -350,17 +350,17 @@ TExprNode::TPtr TExprNodeBuilder::FindArgument(const TStringBuf& name) {
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::Apply(ui32 index, const TExprNode& lambda) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
-    return TExprNodeReplaceBuilder(this, Container, lambda.HeadPtr(), GetLambdaBody(lambda));
+    return TExprNodeReplaceBuilder(this, Container_, lambda.HeadPtr(), GetLambdaBody(lambda));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::Apply(const TExprNode& lambda) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
-    return TExprNodeReplaceBuilder(this, Container, lambda.HeadPtr(), GetLambdaBody(lambda));
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
+    return TExprNodeReplaceBuilder(this, Container_, lambda.HeadPtr(), GetLambdaBody(lambda));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::Apply(ui32 index, const TExprNode::TPtr& lambda) {
@@ -372,56 +372,56 @@ TExprNodeReplaceBuilder TExprNodeBuilder::Apply(const TExprNode::TPtr& lambda) {
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TPtr args, TExprNode::TPtr body) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
     Y_ENSURE(!args || args->IsArguments());
-    return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
+    return TExprNodeReplaceBuilder(this, Container_, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TPtr args, TExprNode::TListType body) {
-    Y_ENSURE(Container, "Container expected");
-    Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
-        "Container position mismatch, expected: " << Container->ChildrenSize() <<
+    Y_ENSURE(Container_, "Container expected");
+    Y_ENSURE(Container_->ChildrenSize() == index + (Container_->IsLambda() ? 1U : 0U),
+        "Container position mismatch, expected: " << Container_->ChildrenSize() <<
         ", actual: " << index);
     Y_ENSURE(!args || args->IsArguments());
-    return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
+    return TExprNodeReplaceBuilder(this, Container_, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TExprNode::TPtr body) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
     Y_ENSURE(!args || args->IsArguments());
-    return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
+    return TExprNodeReplaceBuilder(this, Container_, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TExprNode::TListType body) {
-    Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
-    Y_ENSURE(!CurrentNode, "Node is already build");
+    Y_ENSURE(!Container_ || Container_->Type() == TExprNode::Lambda, "No container expected");
+    Y_ENSURE(!CurrentNode_, "Node is already build");
     Y_ENSURE(!args || args->IsArguments());
-    return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
+    return TExprNodeReplaceBuilder(this, Container_, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder::TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNode::TPtr container,
     TExprNode::TPtr&& args, TExprNode::TPtr&& body)
-    : Owner(owner)
-    , Container(std::move(container))
-    , Args(std::move(args))
-    , Body({std::move(body)})
-    , CurrentIndex(0)
-    , CurrentNode(nullptr)
+    : Owner_(owner)
+    , Container_(std::move(container))
+    , Args_(std::move(args))
+    , Body_({std::move(body)})
+    , CurrentIndex_(0)
+    , CurrentNode_(nullptr)
 {
 }
 
 TExprNodeReplaceBuilder::TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNode::TPtr container,
     TExprNode::TPtr&& args, TExprNode::TListType&& body)
-    : Owner(owner)
-    , Container(std::move(container))
-    , Args(std::move(args))
-    , Body(std::move(body))
-    , CurrentIndex(0)
-    , CurrentNode(nullptr)
+    : Owner_(owner)
+    , Container_(std::move(container))
+    , Args_(std::move(args))
+    , Body_(std::move(body))
+    , CurrentIndex_(0)
+    , CurrentNode_(nullptr)
 {
 }
 
@@ -434,27 +434,27 @@ TExprNodeReplaceBuilder::TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprN
 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(
     ui32 argIndex, const TStringBuf& toName) {
-    Y_ENSURE(Args, "No arguments");
-    Y_ENSURE(argIndex < Args->ChildrenSize(), "Wrong argument index");
-    Body = Owner->Ctx.ReplaceNodes(std::move(Body), {{Args->Child(argIndex), Owner->FindArgument(toName)}});
+    Y_ENSURE(Args_, "No arguments");
+    Y_ENSURE(argIndex < Args_->ChildrenSize(), "Wrong argument index");
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), {{Args_->Child(argIndex), Owner_->FindArgument(toName)}});
     return *this;
 }
 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(
     ui32 argIndex, TExprNode::TPtr toNode) {
-    Y_ENSURE(Args, "No arguments");
-    Y_ENSURE(argIndex < Args->ChildrenSize(), "Wrong argument index");
-    Body = Owner->Ctx.ReplaceNodes(std::move(Body), {{Args->Child(argIndex), std::move(toNode)}});
+    Y_ENSURE(Args_, "No arguments");
+    Y_ENSURE(argIndex < Args_->ChildrenSize(), "Wrong argument index");
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), {{Args_->Child(argIndex), std::move(toNode)}});
     return *this;
 }
 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(const TStringBuf& toName) {
-    Y_ENSURE(Args, "No arguments");
+    Y_ENSURE(Args_, "No arguments");
     Y_ENSURE(!toName.empty(), "Empty parameter name is not allowed");
-    TNodeOnNodeOwnedMap replaces(Args->ChildrenSize());
-    for (ui32 i = 0U; i < Args->ChildrenSize(); ++i)
-        Y_ENSURE(replaces.emplace(Args->Child(i), Owner->FindArgument(TString(toName) += ToString(i))).second, "Must be uinique.");
-    Body = Owner->Ctx.ReplaceNodes(std::move(Body), replaces);
+    TNodeOnNodeOwnedMap replaces(Args_->ChildrenSize());
+    for (ui32 i = 0U; i < Args_->ChildrenSize(); ++i)
+        Y_ENSURE(replaces.emplace(Args_->Child(i), Owner_->FindArgument(TString(toName) += ToString(i))).second, "Must be uinique.");
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), replaces);
     return *this;
 }
 
@@ -468,34 +468,45 @@ TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(ui32 argIndex, const TStr
     return With(argIndex, TString(toName) += ToString(toIndex));
 }
 
+TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithArguments(TExprNodeSpan nodes) {
+    Y_ENSURE(Args_, "No arguments");
+    Y_ENSURE(nodes.size() == Args_->ChildrenSize(), "Wrong arguments size");
+    TNodeOnNodeOwnedMap replaces;
+    for (size_t argIndex = 0; argIndex < nodes.size(); ++argIndex) {
+        replaces[Args_->Child(argIndex)] = nodes[argIndex];
+    }
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), replaces);
+    return *this;
+}
+
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithNode(const TExprNode& fromNode, TExprNode::TPtr&& toNode) {
-    Body = Owner->Ctx.ReplaceNodes(std::move(Body), {{&fromNode, std::move(toNode)}});
+    Body_ = Owner_->Ctx_.ReplaceNodes(std::move(Body_), {{&fromNode, std::move(toNode)}});
     return *this;
 }
 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithNode(const TExprNode& fromNode, const TStringBuf& toName) {
-    return WithNode(fromNode, Owner->FindArgument(toName));
+    return WithNode(fromNode, Owner_->FindArgument(toName));
 }
 
 TExprNodeBuilder TExprNodeReplaceBuilder::With(ui32 argIndex) {
-    CurrentIndex = argIndex;
-    return TExprNodeBuilder(Owner->Pos, this);
+    CurrentIndex_ = argIndex;
+    return TExprNodeBuilder(Owner_->Pos_, this);
 }
 
 TExprNodeBuilder  TExprNodeReplaceBuilder::WithNode(TExprNode::TPtr&& fromNode) {
-    CurrentNode = std::move(fromNode);
-    return TExprNodeBuilder(Owner->Pos, this);
+    CurrentNode_ = std::move(fromNode);
+    return TExprNodeBuilder(Owner_->Pos_, this);
 }
 
 TExprNodeBuilder& TExprNodeReplaceBuilder::Seal() {
-    if (Container) {
-        std::move(Body.begin(), Body.end(), std::back_inserter(Container->Children_));
+    if (Container_) {
+        std::move(Body_.begin(), Body_.end(), std::back_inserter(Container_->Children_));
     } else {
-        Y_ENSURE(1U == Body.size() && Body.front(), "Expected single node.");
-        Owner->CurrentNode = std::move(Body.front());
+        Y_ENSURE(1U == Body_.size() && Body_.front(), "Expected single node.");
+        Owner_->CurrentNode_ = std::move(Body_.front());
     }
-    Body.clear();
-    return *Owner;
+    Body_.clear();
+    return *Owner_;
 }
 
 } // namespace NYql

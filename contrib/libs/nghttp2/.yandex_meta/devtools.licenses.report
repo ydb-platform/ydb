@@ -65,7 +65,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.rst [1463:1466]
+        README.rst [1462:1465]
 
 KEEP     MIT                  a3a8f7feced3937b87cd090ba748e24b
 BELONGS ya.make

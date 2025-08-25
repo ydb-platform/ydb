@@ -1,6 +1,6 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: lz4
-Version: 4.4.3
+Version: 4.4.4
 Summary: LZ4 Bindings for Python
 Home-page: https://github.com/python-lz4/python-lz4
 Author: Jonathan Underwood
@@ -31,6 +31,7 @@ Dynamic: author-email
 Dynamic: classifier
 Dynamic: description
 Dynamic: home-page
+Dynamic: license-file
 Dynamic: provides-extra
 Dynamic: requires-python
 Dynamic: summary

@@ -14,62 +14,38 @@ using namespace NMonitoring;
 class TJsonRender : public TViewerPipeClient {
     using TThis = TJsonRender;
     using TBase = TViewerPipeClient;
-    TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
-    ui32 Timeout = 0;
+    using TBase::ReplyAndPassAway;
     std::vector<TString> Metrics;
-    TCgiParameters Params;
 
 public:
     TJsonRender(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {
-        const auto& params(Event->Get()->Request.GetParams());
-
-        InitConfig(params);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 30000);
-    }
-
-    TJsonRender(TEvViewer::TEvViewerRequest::TPtr& ev)
-        : ViewerRequest(ev)
-    {
-        auto& request = ViewerRequest->Get()->Record.GetRenderRequest();
-
-        TCgiParameters params(request.GetUri());
-        InitConfig(params);
-        Direct = true;
-        Timeout = ViewerRequest->Get()->Record.GetTimeout();
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
         }
-        auto postData = Event
-            ? Event->Get()->Request.GetPostContent()
-            : ViewerRequest->Get()->Record.GetRenderRequest().GetContent();
-        BLOG_D("PostData=" << postData);
         NKikimrGraph::TEvGetMetrics getRequest;
-        if (postData) {
-            Params = TCgiParameters(postData);
-            if (Params.Has("target")) {
-                TString metric;
-                size_t num = 0;
-                for (;;) {
-                    metric = Params.Get("target", num);
-                    if (metric.empty()) {
-                        break;
-                    }
-                    Metrics.push_back(metric);
-                    ++num;
+        if (Params.Has("target")) {
+            TString metric;
+            size_t num = 0;
+            for (;;) {
+                metric = Params.Get("target", num);
+                if (metric.empty()) {
+                    break;
                 }
+                Metrics.push_back(metric);
+                ++num;
             }
             SendGraphRequest();
         } else {
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Bad Request"));
             return;
         }
 
-        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -90,7 +66,7 @@ public:
                                         "\x03\x00\x00\x00\x25\xdb\x56\xca\x00\x00\x00\x03\x50\x4c\x54\x45\x00\x00\x00\xa7\x7a\x3d\xda\x00\x00"
                                         "\x00\x01\x74\x52\x4e\x53\x00\x40\xe6\xd8\x66\x00\x00\x00\x0a\x49\x44\x41\x54\x08\xd7\x63\x60\x00\x00"
                                         "\x00\x02\x00\x01\xe2\x21\xbc\x33\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82";
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOK(Event->Get(), "image/png", png1x1), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(GetHTTPOK("image/png", png1x1));
             return PassAway();
         }
         if (Params.Has("from")) {
@@ -106,80 +82,54 @@ public:
     }
 
     void HandleRenderResponse(NKikimrGraph::TEvMetricsResult& response) {
-        if (Event) {
-            NJson::TJsonValue json;
+        NJson::TJsonValue json;
 
-            if (response.GetError()) {
+        if (response.GetError()) {
+            json["status"] = "error";
+            json["error"] = response.GetError();
+            return ReplyAndPassAway(GetHTTPOKJSON(json));
+        }
+        if (response.DataSize() != Metrics.size()) {
+            json["status"] = "error";
+            json["error"] = "Invalid data size received";
+            return ReplyAndPassAway(GetHTTPOKJSON(json));
+        }
+        for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
+            const auto& protoMetric(response.GetData(nMetric));
+            if (response.TimeSize() != protoMetric.ValuesSize()) {
                 json["status"] = "error";
-                json["error"] = response.GetError();
+                json["error"] = "Invalid value size received";
                 return ReplyAndPassAway(GetHTTPOKJSON(json));
             }
-            if (response.DataSize() != Metrics.size()) {
-                json["status"] = "error";
-                json["error"] = "Invalid data size received";
-                return ReplyAndPassAway(GetHTTPOKJSON(json));
-            }
+        }
+        { // graphite
+            json.SetType(NJson::JSON_ARRAY);
             for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
                 const auto& protoMetric(response.GetData(nMetric));
-                if (response.TimeSize() != protoMetric.ValuesSize()) {
-                    json["status"] = "error";
-                    json["error"] = "Invalid value size received";
-                    return ReplyAndPassAway(GetHTTPOKJSON(json));
-                }
-            }
-            { // graphite
-                json.SetType(NJson::JSON_ARRAY);
-                for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
-                    const auto& protoMetric(response.GetData(nMetric));
-                    NJson::TJsonValue& jsonMetric(json.AppendValue({}));
-                    jsonMetric["target"] = Metrics[nMetric];
-                    jsonMetric["title"] = Metrics[nMetric];
-                    jsonMetric["tags"]["name"] = Metrics[nMetric];
-                    NJson::TJsonValue& jsonDataPoints(jsonMetric["datapoints"]);
-                    jsonDataPoints.SetType(NJson::JSON_ARRAY);
-                    for (size_t nTime = 0; nTime < response.TimeSize(); ++nTime) {
-                        NJson::TJsonValue& jsonDataPoint(jsonDataPoints.AppendValue({}));
-                        double value = protoMetric.GetValues(nTime);
-                        if (isnan(value)) {
-                            jsonDataPoint.AppendValue(NJson::TJsonValue(NJson::JSON_NULL));
-                        } else {
-                            jsonDataPoint.AppendValue(value);
-                        }
-                        jsonDataPoint.AppendValue(response.GetTime(nTime));
+                NJson::TJsonValue& jsonMetric(json.AppendValue({}));
+                jsonMetric["target"] = Metrics[nMetric];
+                jsonMetric["title"] = Metrics[nMetric];
+                jsonMetric["tags"]["name"] = Metrics[nMetric];
+                NJson::TJsonValue& jsonDataPoints(jsonMetric["datapoints"]);
+                jsonDataPoints.SetType(NJson::JSON_ARRAY);
+                for (size_t nTime = 0; nTime < response.TimeSize(); ++nTime) {
+                    NJson::TJsonValue& jsonDataPoint(jsonDataPoints.AppendValue({}));
+                    double value = protoMetric.GetValues(nTime);
+                    if (isnan(value)) {
+                        jsonDataPoint.AppendValue(NJson::TJsonValue(NJson::JSON_NULL));
+                    } else {
+                        jsonDataPoint.AppendValue(value);
                     }
+                    jsonDataPoint.AppendValue(response.GetTime(nTime));
                 }
             }
-
-            ReplyAndPassAway(GetHTTPOKJSON(json));
-        } else {
-            TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
-            viewerResponse->Record.MutableRenderResponse()->CopyFrom(response);
-            ReplyAndPassAway(viewerResponse);
         }
+
+        ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     void Handle(NGraph::TEvGraph::TEvMetricsResult::TPtr& ev) {
         HandleRenderResponse(ev->Get()->Record);
-    }
-
-    void HandleTimeout() {
-        if (Event) {
-            ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
-        } else {
-            auto* response = new TEvViewer::TEvViewerResponse();
-            response->Record.MutableRenderResponse()->SetError("Request timed out");
-            ReplyAndPassAway(response);
-        }
-    }
-
-    void ReplyAndPassAway(TEvViewer::TEvViewerResponse* response) {
-        Send(ViewerRequest->Sender, response);
-        PassAway();
-    }
-
-    void ReplyAndPassAway(TString data) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
     }
 
     void ReplyAndPassAway() override {

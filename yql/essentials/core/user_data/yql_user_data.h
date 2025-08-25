@@ -23,10 +23,10 @@ enum class EDisposition {
 };
 
 struct TUserData {
-    EType Type_;
-    EDisposition Disposition_;
-    TString Name_;
-    TString Content_;
+    EType Type;
+    EDisposition Disposition;
+    TString Name;
+    TString Content;
 
     static void UserDataToLibraries(
         const TVector<TUserData>& userData,

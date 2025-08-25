@@ -197,36 +197,36 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttributeFilter::TAttributeFilter(std::vector<IAttributeDictionary::TKey> keys, std::vector<TYPath> paths)
-    : Keys(std::move(keys))
-    , Paths(std::move(paths))
-    , Universal(false)
+    : Keys_(std::move(keys))
+    , Paths_(std::move(paths))
+    , Universal_(false)
 { }
 
 TAttributeFilter::TAttributeFilter(std::initializer_list<TString> keys)
-    : Keys({keys.begin(), keys.end()})
-    , Universal(false)
+    : Keys_({keys.begin(), keys.end()})
+    , Universal_(false)
 { }
 
 TAttributeFilter::TAttributeFilter(const std::vector<TString>& keys)
-    : Keys({keys.begin(), keys.end()})
-    , Universal(false)
+    : Keys_({keys.begin(), keys.end()})
+    , Universal_(false)
 { }
 
 TAttributeFilter::operator bool() const
 {
-    return !Universal;
+    return !Universal_;
 }
 
 void TAttributeFilter::ValidateKeysOnly(TStringBuf context) const
 {
-    if (!Paths.empty()) {
+    if (!Paths_.empty()) {
         THROW_ERROR_EXCEPTION("Filtering attributes by path is not implemented for %v", context);
     }
 }
 
 bool TAttributeFilter::IsEmpty() const
 {
-    return !Universal && Keys.empty() && Paths.empty();
+    return !Universal_ && Keys_.empty() && Paths_.empty();
 }
 
 bool TAttributeFilter::AdmitsKeySlow(TStringBuf key) const
@@ -234,18 +234,18 @@ bool TAttributeFilter::AdmitsKeySlow(TStringBuf key) const
     if (!*this) {
         return true;
     }
-    return std::find(Keys.begin(), Keys.end(), key) != Keys.end() ||
-        std::find(Paths.begin(), Paths.end(), "/" + ToYPathLiteral(key)) != Paths.end();
+    return std::find(Keys_.begin(), Keys_.end(), key) != Keys_.end() ||
+        std::find(Paths_.begin(), Paths_.end(), "/" + ToYPathLiteral(key)) != Paths_.end();
 }
 
 TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
 {
     YT_VERIFY(*this);
-    if (Paths.empty()) {
+    if (Paths_.empty()) {
         // Fast path for key-only case.
         TKeyToFilter result;
-        result.reserve(Keys.size());
-        for (const auto& key : Keys) {
+        result.reserve(Keys_.size());
+        for (const auto& key : Keys_) {
             result[key] = std::nullopt;
         }
         return result;
@@ -254,12 +254,12 @@ TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
     // As a first step, prepare a combined vector of paths: canonize all paths
     // and transform all keys to paths of form /<ToYPathLiteral(key)> (which is
     // already a canonical form).
-    std::vector<TYPath> paths = Paths;
+    std::vector<TYPath> paths = Paths_;
     for (auto& path : paths) {
         NDetail::CanonizeAndValidatePath(path);
     }
-    paths.reserve(paths.size() + Keys.size());
-    for (const auto& key : Keys) {
+    paths.reserve(paths.size() + Keys_.size());
+    for (const auto& key : Keys_) {
         paths.emplace_back("/" + ToYPathLiteral(key));
     }
 
@@ -357,7 +357,7 @@ std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFi
             { }
 
         private:
-            IYsonConsumer* TargetConsumer_;
+            IYsonConsumer* const TargetConsumer_;
         };
 
         return std::make_unique<TBypassFilteringConsumer>(targetConsumer);
@@ -414,15 +414,17 @@ void ToProto(NProto::TAttributeFilter* protoFilter, const TAttributeFilter& filt
 {
     YT_VERIFY(filter);
 
-    ToProto(protoFilter->mutable_keys(), filter.Keys);
-    ToProto(protoFilter->mutable_paths(), filter.Paths);
+    ToProto(protoFilter->mutable_keys(), filter.Keys());
+    ToProto(protoFilter->mutable_paths(), filter.Paths());
 }
 
 void FromProto(TAttributeFilter* filter, const NProto::TAttributeFilter& protoFilter)
 {
-    filter->Universal = false;
-    FromProto(&filter->Keys, protoFilter.keys());
-    FromProto(&filter->Paths, protoFilter.paths());
+    std::vector<IAttributeDictionary::TKey> keys;
+    std::vector<NYPath::TYPath> paths;
+    FromProto(&keys, protoFilter.keys());
+    FromProto(&paths, protoFilter.paths());
+    *filter = TAttributeFilter(std::move(keys), std::move(paths));
 }
 
 void Serialize(const TAttributeFilter& filter, IYsonConsumer* consumer)
@@ -430,8 +432,8 @@ void Serialize(const TAttributeFilter& filter, IYsonConsumer* consumer)
     if (filter) {
         BuildYsonFluently(consumer)
             .BeginMap()
-                .Item("keys").Value(filter.Keys)
-                .Item("paths").Value(filter.Paths)
+                .Item("keys").Value(filter.Keys())
+                .Item("paths").Value(filter.Paths())
             .EndMap();
     } else {
         BuildYsonFluently(consumer)
@@ -445,30 +447,29 @@ void Deserialize(TAttributeFilter& filter, const INodePtr& node)
         case ENodeType::Map: {
             auto mapNode = node->AsMap();
 
-            filter.Universal = false;
-            filter.Keys.clear();
+            std::vector<IAttributeDictionary::TKey> keys;
+            std::vector<TYPath> paths;
             if (auto keysNode = mapNode->FindChild("keys")) {
-                filter.Keys = ConvertTo<std::vector<IAttributeDictionary::TKey>>(keysNode);
+                keys = ConvertTo<std::vector<IAttributeDictionary::TKey>>(keysNode);
             }
 
-            filter.Paths.clear();
             if (auto pathsNode = mapNode->FindChild("paths")) {
-                filter.Paths = ConvertTo<std::vector<TYPath>>(pathsNode);
+                paths = ConvertTo<std::vector<TYPath>>(pathsNode);
             }
+
+            filter = TAttributeFilter(std::move(keys), std::move(paths));
 
             break;
         }
         case ENodeType::List: {
             // Compatibility mode with HTTP clients that specify attribute keys as string lists.
-            filter.Universal = false;
-            filter.Keys = ConvertTo<std::vector<IAttributeDictionary::TKey>>(node);
-            filter.Paths = {};
+
+            auto keys = ConvertTo<std::vector<IAttributeDictionary::TKey>>(node);
+            filter = TAttributeFilter(keys);
             break;
         }
         case ENodeType::Entity: {
-            filter.Universal = true;
-            filter.Keys = {};
-            filter.Paths = {};
+            filter = TAttributeFilter();
             break;
         }
         default:
@@ -487,7 +488,7 @@ void FormatValue(
     TStringBuf /*spec*/)
 {
     if (attributeFilter) {
-        builder->AppendFormat("{Keys: %v, Paths: %v}", attributeFilter.Keys, attributeFilter.Paths);
+        builder->AppendFormat("{Keys: %v, Paths: %v}", attributeFilter.Keys(), attributeFilter.Paths());
     } else {
         builder->AppendString("(universal)");
     }
@@ -498,7 +499,7 @@ void FormatValue(
 
 TShrunkAttributeFilterView MakeShrunkFormattableView(
     const TAttributeFilter& attributeFilter,
-    size_t limit)
+    i64 limit)
 {
     return {attributeFilter, limit};
 }
@@ -512,8 +513,8 @@ void FormatValue(
     auto limit = view.Limit;
     if (attributeFilter) {
         builder->AppendFormat("{Keys: %v, Paths: %v}",
-            MakeShrunkFormattableView(attributeFilter.Keys, TDefaultFormatter{}, limit),
-            MakeShrunkFormattableView(attributeFilter.Paths, TDefaultFormatter{}, limit));
+            MakeShrunkFormattableView(attributeFilter.Keys(), TDefaultFormatter{}, limit),
+            MakeShrunkFormattableView(attributeFilter.Paths(), TDefaultFormatter{}, limit));
     } else {
         builder->AppendString("(universal)");
     }

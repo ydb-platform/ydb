@@ -8,7 +8,6 @@ SRCS(
     build_and_wait_dependencies_unit.cpp
     build_data_tx_out_rs_unit.cpp
     build_distributed_erase_tx_out_rs_unit.cpp
-    build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
     build_write_out_rs_unit.cpp
@@ -55,7 +54,6 @@ SRCS(
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__conditional_erase_rows.cpp
-    datashard__data_cleanup.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h
     datashard__get_state_tx.cpp
@@ -80,6 +78,7 @@ SRCS(
     datashard__stats.cpp
     datashard__store_scan_state.cpp
     datashard__store_table_path.cpp
+    datashard__vacuum.cpp
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
@@ -103,8 +102,6 @@ SRCS(
     datashard_kqp_compute.h
     datashard_kqp_delete_rows.cpp
     datashard_kqp_effects.cpp
-    datashard_kqp_lookup_table.cpp
-    datashard_kqp_read_table.cpp
     datashard_kqp_upsert_rows.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
@@ -119,6 +116,7 @@ SRCS(
     datashard_repl_offsets.cpp
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
+    datashard_s3_download.cpp
     datashard_s3_downloads.cpp
     datashard_s3_upload_rows.cpp
     datashard_s3_uploads.cpp
@@ -168,11 +166,9 @@ SRCS(
     key_conflicts.cpp
     key_conflicts.h
     key_validator.cpp
-    kmeans_helper.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
-    local_kmeans.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
     memory_state_migration.cpp
@@ -181,7 +177,6 @@ SRCS(
     operation.cpp
     operation.h
     plan_queue_unit.cpp
-    prefix_kmeans.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
@@ -201,9 +196,8 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     remove_schema_snapshots.cpp
-    reshuffle_kmeans.cpp
     restore_unit.cpp
-    sample_k.cpp
+    rotate_cdc_stream_unit.cpp
     scan_common.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
@@ -221,6 +215,15 @@ SRCS(
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
+
+    build_index/prefix_kmeans.cpp
+    build_index/kmeans_helper.cpp
+    build_index/local_kmeans.cpp
+    build_index/sample_k.cpp
+    build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
+    build_index/reshuffle_kmeans.cpp
+    build_index/unique_index.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
@@ -239,8 +242,6 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    ydb/library/actors/core
-    ydb/library/actors/http
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
@@ -252,9 +253,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -266,6 +264,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -274,16 +273,20 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/http
+    ydb/library/chunks_limiter
+    ydb/library/protobuf_printer
+    ydb/library/yql/dq/actors/compute
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/core/minsketch
     yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
-    ydb/library/yql/dq/actors/compute
     yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
-    ydb/library/chunks_limiter
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()
@@ -304,14 +307,15 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    build_index/ut
     ut_background_compaction
-    ut_build_index
     ut_change_collector
     ut_change_exchange
     ut_column_stats
     ut_compaction
-    ut_data_cleanup
+    ut_vacuum
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup
@@ -321,21 +325,17 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
-    ut_local_kmeans
     ut_locks
     ut_minikql
     ut_minstep
     ut_object_storage_listing
     ut_order
-    ut_prefix_kmeans
     ut_range_ops
     ut_read_iterator
     ut_read_table
     ut_reassign
     ut_replication
-    ut_reshuffle_kmeans
     ut_rs
-    ut_sample_k
     ut_sequence
     ut_snapshot
     ut_stats

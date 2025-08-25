@@ -19,6 +19,7 @@
 
 #include <yt/yt/core/yson/format.h>
 #include <yt/yt/core/yson/tokenizer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 
@@ -77,6 +78,12 @@ std::string TYPathRequest::GetService() const
     return FromProto<std::string>(Header_.service());
 }
 
+const std::string& TYPathRequest::GetRequestInfo() const
+{
+    static const std::string Empty;
+    return Empty;
+}
+
 void TYPathRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);
@@ -107,7 +114,7 @@ void TYPathRequest::SetUserTag(const std::string& /*tag*/)
     YT_ABORT();
 }
 
-void TYPathRequest::SetUserAgent(const TString& /*userAgent*/)
+void TYPathRequest::SetUserAgent(const std::string& /*userAgent*/)
 {
     YT_ABORT();
 }
@@ -152,6 +159,11 @@ NRpc::NProto::TRequestHeader& TYPathRequest::Header()
 }
 
 bool TYPathRequest::IsAttachmentCompressionEnabled() const
+{
+    return false;
+}
+
+bool TYPathRequest::HasAttachments() const
 {
     return false;
 }
@@ -264,6 +276,12 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
     return ypathExt.has_original_target_path()
         ? TYPathMaybeRef(ypathExt.original_target_path())
         : TYPathMaybeRef(ypathExt.target_path());
+}
+
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return ypathExt.additional_paths();
 }
 
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
@@ -477,7 +495,7 @@ TFuture<void> AsyncYPathSet(
     bool recursive)
 {
     auto request = TYPathProxy::Set(path);
-    request->set_value(value.ToString());
+    request->set_value(ToProto(value));
     request->set_recursive(recursive);
     return ExecuteVerb(service, request).AsVoid();
 }

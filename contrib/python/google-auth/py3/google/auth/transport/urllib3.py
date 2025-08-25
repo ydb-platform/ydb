@@ -34,14 +34,23 @@ except ImportError:  # pragma: NO COVER
 try:
     import urllib3  # type: ignore
     import urllib3.exceptions  # type: ignore
+    from packaging import version  # type: ignore
 except ImportError as caught_exc:  # pragma: NO COVER
     raise ImportError(
-        "The urllib3 library is not installed from please install the "
-        "urllib3 package to use the urllib3 transport."
+        ""
+        f"Error: {caught_exc}."
+        " The 'google-auth' library requires the extras installed "
+        "for urllib3 network transport."
+        "\n"
+        "Please install the necessary dependencies using pip:\n"
+        "  pip install google-auth[urllib3]\n"
+        "\n"
+        "(Note: Using '[urllib3]' ensures the specific dependencies needed for this feature are installed. "
+        "We recommend running this command in your virtual environment.)"
     ) from caught_exc
 
-from packaging import version  # type: ignore
 
+from google.auth import _helpers
 from google.auth import environment_vars
 from google.auth import exceptions
 from google.auth import transport
@@ -136,10 +145,11 @@ class Request(transport.Request):
             kwargs["timeout"] = timeout
 
         try:
-            _LOGGER.debug("Making request: %s %s", method, url)
+            _helpers.request_log(_LOGGER, method, url, body, headers)
             response = self.http.request(
                 method, url, body=body, headers=headers, **kwargs
             )
+            _helpers.response_log(_LOGGER, response)
             return _Response(response)
         except urllib3.exceptions.HTTPError as caught_exc:
             new_exc = exceptions.TransportError(caught_exc)
@@ -414,7 +424,7 @@ class AuthorizedHttp(RequestMethods):  # type: ignore
                 body=body,
                 headers=headers,
                 _credential_refresh_attempt=_credential_refresh_attempt + 1,
-                **kwargs
+                **kwargs,
             )
 
         return response

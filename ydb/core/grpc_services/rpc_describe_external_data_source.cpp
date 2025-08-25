@@ -5,6 +5,9 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
+
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
@@ -74,6 +77,21 @@ void Convert(const TAuth& in, TProperties& out) {
     }
 }
 
+void Convert(const TExternalTableReferences& in, TProperties& out) {
+    auto& references = out["REFERENCES"];
+    NJson::TJsonValue json(NJson::EJsonValueType::JSON_ARRAY);
+
+    for (const auto& reference : in.GetReferences()) {
+        if (reference.HasPath()) {
+            json.AppendValue(reference.GetPath());
+        } else if (reference.HasPathId()) {
+            // this should never happen, but in case it does, it is better to return something meaningful
+            json.AppendValue(TPathId::FromProto(reference.GetPathId()).ToString());
+        }
+    }
+    references = WriteJson(json, false);
+}
+
 Ydb::Table::DescribeExternalDataSourceResult Convert(const TDirEntry& inSelf, const TExternalDataSourceDescription& inDesc) {
     Ydb::Table::DescribeExternalDataSourceResult out;
     ConvertDirectoryEntry(inSelf, out.mutable_self(), true);
@@ -85,6 +103,7 @@ Ydb::Table::DescribeExternalDataSourceResult Convert(const TDirEntry& inSelf, co
         properties[to_upper(key)] = value;
     }
     Convert(inDesc.GetAuth(), properties);
+    Convert(inDesc.GetReferences(), properties);
     return out;
 }
 

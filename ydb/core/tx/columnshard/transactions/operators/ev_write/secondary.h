@@ -86,7 +86,7 @@ private:
 
     public:
         TTxWriteReceivedAck(TColumnShard& owner, const ui64 txId)
-            : TBase(&owner)
+            : TBase(&owner, "write_received_ack")
             , TxId(txId) {
         }
     };
@@ -135,7 +135,7 @@ private:
 
     public:
         TTxWriteReceivedBrokenFlag(TColumnShard* owner, const ui64 txId, const bool broken)
-            : TBase(owner)
+            : TBase(owner, "write_received_broken_flag")
             , TxId(txId)
             , BrokenFlag(broken) {
         }
@@ -150,7 +150,7 @@ private:
     void SendBrokenFlagAck(TColumnShard& owner) {
         owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
+                new TEvTxProcessing::TEvReadSetAck(GetStep(), GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
             IEventHandle::FlagTrackDelivery, GetTxId());
     }
 
@@ -191,7 +191,7 @@ private:
 
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
-            : TBase(owner)
+            : TBase(owner, "start_preparation")
             , TxId(txId) {
         }
     };

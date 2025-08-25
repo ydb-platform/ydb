@@ -12,7 +12,6 @@ using namespace NKikimr::NRawSocket;
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId);
+                                       const NKikimrConfig::TKafkaProxyConfig& config);
 
 } // namespace NKafka

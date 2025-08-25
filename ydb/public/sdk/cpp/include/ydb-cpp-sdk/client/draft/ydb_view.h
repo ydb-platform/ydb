@@ -7,7 +7,7 @@ namespace Ydb::View {
     class DescribeViewResult;
 }
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NDraft {
     class TProtoAccessor;
 }
 
@@ -31,7 +31,7 @@ private:
 };
 
 class TDescribeViewResult : public NScheme::TDescribePathResult {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::NDraft::TProtoAccessor;
     const Ydb::View::DescribeViewResult& GetProto() const;
 
 public:

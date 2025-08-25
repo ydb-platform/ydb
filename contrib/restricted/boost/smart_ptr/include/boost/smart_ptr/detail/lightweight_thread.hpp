@@ -104,7 +104,7 @@ public:
 
 #if defined( BOOST_HAS_PTHREADS )
 
-extern "C" void * lw_thread_routine( void * pv )
+extern "C" inline void * lw_thread_routine( void * pv )
 {
     std::unique_ptr<lw_abstract_thread> pt( static_cast<lw_abstract_thread *>( pv ) );
 
@@ -115,7 +115,7 @@ extern "C" void * lw_thread_routine( void * pv )
 
 #else
 
-unsigned __stdcall lw_thread_routine( void * pv )
+inline unsigned __stdcall lw_thread_routine( void * pv )
 {
     std::unique_ptr<lw_abstract_thread> pt( static_cast<lw_abstract_thread *>( pv ) );
 

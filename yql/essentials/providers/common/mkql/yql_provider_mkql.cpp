@@ -168,7 +168,7 @@ TMkqlBuildContext* GetContextForMemoize(const TExprNode& node, TMkqlBuildContext
 }
 
 const TRuntimeNode& CheckTypeAndMemoize(const TExprNode& node, TMkqlBuildContext& ctx, const TRuntimeNode& runtime) {
-    if (node.GetTypeAnn()) {
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
         TNullOutput null;
         if (const auto type = BuildType(*node.GetTypeAnn(), ctx.ProgramBuilder, *ctx.TypeMemoization, null)) {
             if (!type->IsSameType(*runtime.GetStaticType())) {
@@ -251,11 +251,11 @@ std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
 } // namespace
 
 bool TMkqlCallableCompilerBase::HasCallable(const std::string_view& name) const {
-    return Callables.contains(name);
+    return Callables_.contains(name);
 }
 
 void TMkqlCallableCompilerBase::AddCallable(const std::string_view& name, TCompiler compiler) {
-    const auto result = Callables.emplace(TString(name), compiler);
+    const auto result = Callables_.emplace(TString(name), compiler);
     YQL_ENSURE(result.second, "Callable already exists: " << name);
 }
 
@@ -354,21 +354,21 @@ void TMkqlCallableCompilerBase::AddSimpleCallables(const std::initializer_list<s
 }
 
 void TMkqlCallableCompilerBase::OverrideCallable(const std::string_view& name, TCompiler compiler) {
-    const auto prevCompiler = Callables.find(name);
-    YQL_ENSURE(Callables.cend() != prevCompiler, "Missed callable: " << name);
+    const auto prevCompiler = Callables_.find(name);
+    YQL_ENSURE(Callables_.cend() != prevCompiler, "Missed callable: " << name);
     prevCompiler->second = compiler;
-    Callables[name] = compiler;
+    Callables_[name] = compiler;
 }
 
 IMkqlCallableCompiler::TCompiler TMkqlCallableCompilerBase::GetCallable(const std::string_view& name) const {
-    const auto compiler = Callables.find(name);
-    YQL_ENSURE(Callables.cend() != compiler, "Missed callable: " << name);
+    const auto compiler = Callables_.find(name);
+    YQL_ENSURE(Callables_.cend() != compiler, "Missed callable: " << name);
     return compiler->second;
 }
 
 IMkqlCallableCompiler::TCompiler TMkqlCallableCompilerBase::FindCallable(const std::string_view& name) const {
-    const auto compiler = Callables.find(name);
-    return Callables.cend() != compiler ? compiler->second : IMkqlCallableCompiler::TCompiler();
+    const auto compiler = Callables_.find(name);
+    return Callables_.cend() != compiler ? compiler->second : IMkqlCallableCompiler::TCompiler();
 }
 
 bool TMkqlCommonCallableCompiler::HasCallable(const std::string_view& name) const {
@@ -448,7 +448,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"FromFlow", &TProgramBuilder::FromFlow},
 
         {"WideToBlocks", &TProgramBuilder::WideToBlocks},
+        {"ListToBlocks", &TProgramBuilder::ListToBlocks},
         {"WideFromBlocks", &TProgramBuilder::WideFromBlocks},
+        {"ListFromBlocks", &TProgramBuilder::ListFromBlocks},
         {"AsScalar", &TProgramBuilder::AsScalar},
 
         {"Just", &TProgramBuilder::NewOptional},
@@ -685,7 +687,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto lambda = [&](TRuntimeNode::TList items) { return MkqlBuildWideLambda(node.Tail(), ctx, items); };
         TRuntimeNode result = ctx.ProgramBuilder.WideMap(arg, lambda);
-        if (IsWideBlockType(*node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType())) {
+        if (IsWideBlockType(*GetWideFlowOrStreamComponents(*node.GetTypeAnn()))) {
             result = ctx.ProgramBuilder.BlockExpandChunked(result);
         }
         return result;
@@ -1673,17 +1675,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("BlockStorage", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        const auto list = MkqlBuildExpr(node.Head(), ctx);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.BlockStorage(stream, returnType);
+        return ctx.ProgramBuilder.BlockStorage(list, returnType);
     });
 
     AddCallable("BlockMapJoinIndex", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto blockStorage = MkqlBuildExpr(node.Head(), ctx);
-        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         std::vector<ui32> keyColumns;
-        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetWideBlockFieldPosition(*itemType, child.Content())); });
+        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetFieldPosition(*itemType, child.Content())); });
 
         const bool any = HasSetting(node.Tail(), "any");
 
@@ -1697,15 +1699,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto rightBlockStorage = MkqlBuildExpr(*node.Child(1), ctx);
 
         const auto leftItemType = node.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         const auto joinKind = GetJoinKind(node, node.Child(3)->Content());
 
         std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
         node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
         node.Child(5)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
-        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
-        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetFieldPosition(*rightItemType, child.Content())); });
+        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetFieldPosition(*rightItemType, child.Content())); });
 
         const auto rightItemMkqlType = BuildType(*node.Child(2), *rightItemType, ctx.ProgramBuilder);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
@@ -2430,7 +2432,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"WithWorld", "WithSideEffectsMode"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
@@ -2997,7 +2999,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.TryWeakMemberFromDict(other, rest, schemeType, member);
     });
 
-    AddCallable("DependsOn", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    // TODO: remove DependsOn from list below after NormalizeDependsOn is enabled by default
+    AddCallable({ "DependsOn", "InnerDependsOn" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
@@ -3014,7 +3017,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({ "AssumeStrict", "AssumeNonStrict", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "NoPush", "Likely", "Unessential" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

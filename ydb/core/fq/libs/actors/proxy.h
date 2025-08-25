@@ -21,7 +21,6 @@
 
 #include <ydb/public/lib/fq/scope.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -35,7 +34,6 @@ namespace NKikimr  {
 
 namespace NFq {
 
-NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(

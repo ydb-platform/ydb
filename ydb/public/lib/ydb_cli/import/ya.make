@@ -14,4 +14,6 @@ PEERDIR(
     library/cpp/string_utils/csv
 )
 
+GENERATE_ENUM_SERIALIZATION(import.h)
+
 END()

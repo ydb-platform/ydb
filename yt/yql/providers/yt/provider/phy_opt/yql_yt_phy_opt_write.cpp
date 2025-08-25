@@ -221,9 +221,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
 
     if (auto sorted = materialize.Input().Ref().GetConstraint<TSortedConstraintNode>()) {
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         TKeySelectorBuilder builder(materialize.Pos(), ctx, useNativeDescSort, outItemType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             writeLambda = Build<TCoLambda>(ctx, materialize.Pos())
@@ -342,9 +344,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     auto cluster = TString{write.DataSink().Cluster().Value()};
     const auto selectionMode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     const auto srcCluster = DeriveClusterFromInput(write.Content(), selectionMode);
-    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != srcCluster) {
+    if (!srcCluster) {
+        return node;
+    }
+    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != *srcCluster) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Result from cluster " << TString{srcCluster}.Quote()
+            << "Result from cluster " << srcCluster->Quote()
             << " cannot be written to a different destination cluster " << cluster.Quote()));
         return {};
     }
@@ -398,6 +403,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
         outMode = Build<TCoAtom>(ctx, write.Pos()).Value(ToString(EYtSettingType::Unordered)).Done();
     }
 
+    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
     TVector<TYtOutput> publishInput;
     if (requiresMap || requiresMerge) {
         TExprNode::TPtr mapper;
@@ -411,7 +418,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
         // For YtMerge passthrough native flags as is. AlignPublishTypes optimizer will add additional remapping
         TYtOutTableInfo outTable(outItemType, requiresMerge ? firstNativeTypeFlags : nativeTypeFlags);
         if (firstNativeType) {
-            outTable.RowSpec->CopyTypeOrders(*firstNativeType);
+            outTable.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
         }
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, write.Pos());
         bool useExplicitColumns = requiresMerge && AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
@@ -421,9 +428,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
             if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                 if (auto sorted = write.Content().Ref().GetConstraint<TSortedConstraintNode>()) {
                     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+
                     TKeySelectorBuilder builder(write.Pos(), ctx, useNativeDescSort, outItemType);
                     builder.ProcessConstraint(*sorted);
-                    builder.FillRowSpecSort(*outTable.RowSpec);
+                    builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
                     if (builder.NeedMap()) {
                         mapper = ctx.Builder(write.Pos())
@@ -442,7 +450,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 }
             } else {
                 if (inputPaths.size() == 1 && inputPaths.front()->Table->RowSpec && inputPaths.front()->Table->RowSpec->IsSorted()) {
-                    outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec);
+                    outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder);
                 }
             }
         }
@@ -456,7 +464,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 bool hasAux = inputPaths.front()->Table->RowSpec->HasAuxColumns();
                 bool sortIsChanged = inputPaths.front()->Table->IsUnordered
                     ? inputPaths.front()->Table->RowSpec->IsSorted()
-                    : outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec,
+                    : outTable.RowSpec->CopySortness(ctx, *inputPaths.front()->Table->RowSpec, useNativeYtDefaultColumnOrder,
                         exactCopySort ? TYqlRowSpecInfo::ECopySort::Exact : TYqlRowSpecInfo::ECopySort::WithDesc);
                 useExplicitColumns = useExplicitColumns || (inputPaths.front()->HasColumns() && hasAux);
 
@@ -599,12 +607,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
+    TString cluster;
     if (!IsYtProviderInput(input, false)) {
         if (!EnsurePersistable(input.Ref(), ctx)) {
             return {};
         }
 
-        TString cluster;
         TSyncMap syncList;
         if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false, selectionMode)) {
             return node;
@@ -660,10 +668,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         auto section = read.Input().Item(0);
         auto scheme = section.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        auto srcCluster = DeriveClusterFromInput(input, selectionMode);
+        if (!srcCluster) {
+            return node;
+        }
+        cluster = *srcCluster;
 
         auto path = CopyOrTrivialMap(section.Pos(),
             GetWorld(input, {}, ctx),
-            GetDataSink(input, ctx),
+            MakeDataSink(section.Pos(), cluster, ctx),
             *scheme,
             Build<TYtSection>(ctx, section.Pos())
                 .InitFrom(section)
@@ -685,6 +698,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         newInput = path.Table().Cast<TYtOutput>();
     } else if (auto op = input.Maybe<TYtOutput>().Operation()) {
         newInput = input.Cast<TYtOutput>();
+        cluster = GetClusterName(input);
     } else {
         YQL_ENSURE(false, "Unexpected operation input: " << input.Ptr()->Content());
     }
@@ -693,7 +707,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
     return Build<TYtStatOut>(ctx, write.Pos())
         .World(GetWorld(input, {}, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(write.Pos(), cluster, ctx))
         .Input(newInput.Cast())
         .Table(table)
         .ReplaceMask(write.ReplaceMask())
@@ -765,9 +779,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
     auto content = write.Content();
     if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outItemType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             content = Build<TExprApplier>(ctx, content.Pos())
@@ -880,9 +896,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
 
     if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outItemType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             content = Build<TExprApplier>(ctx, content.Pos())

@@ -2,14 +2,13 @@
 
 #include "public.h"
 #include "cache_config.h"
+#include "memory_usage_tracker.h"
 
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/library/profiling/sensor.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -117,18 +116,18 @@ protected:
     void OnCookieUpdated(i64 deltaCount, i64 deltaWeight);
 
 private:
-    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList;
-    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList_;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList_;
 
-    std::vector<TItem*> TouchBuffer;
-    std::atomic<int> TouchBufferPosition = 0;
+    std::vector<TItem*> TouchBuffer_;
+    std::atomic<int> TouchBufferPosition_ = 0;
 
-    i64 YoungerWeightCounter = 0;
-    i64 OlderWeightCounter = 0;
-    i64 CookieWeightCounter = 0;
+    i64 YoungerWeightCounter_ = 0;
+    i64 OlderWeightCounter_ = 0;
+    i64 CookieWeightCounter_ = 0;
 
-    std::atomic<i64> Capacity;
-    std::atomic<double> YoungerSizeFraction;
+    std::atomic<i64> Capacity_;
+    std::atomic<double> YoungerSizeFraction_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -201,8 +200,8 @@ public:
     // NB: Shards store reference to the cache, so the cache cannot be simply copied or moved.
     TAsyncSlruCacheBase(const TAsyncSlruCacheBase&) = delete;
     TAsyncSlruCacheBase(TAsyncSlruCacheBase&&) = delete;
-    TAsyncSlruCacheBase& operator=(const TAsyncSlruCacheBase&) = delete;
-    TAsyncSlruCacheBase& operator=(TAsyncSlruCacheBase&&) = delete;
+    TAsyncSlruCacheBase& operator = (const TAsyncSlruCacheBase&) = delete;
+    TAsyncSlruCacheBase& operator = (TAsyncSlruCacheBase&&) = delete;
 
     int GetSize() const;
     i64 GetCapacity() const;
@@ -298,9 +297,7 @@ private:
     struct TGhostItem
         : public TIntrusiveListItem<TGhostItem>
     {
-        explicit TGhostItem(TKey key)
-            : Key(std::move(key))
-        { }
+        explicit TGhostItem(TKey key);
 
         TKey Key;
         //! The value associated with this item. If Inserted == true and Value is null, then we refer to some
@@ -348,7 +345,7 @@ private:
         //! called with the same key. Do not call CancelInsert() or EndInsert() without matching BeginInsert().
         bool BeginInsert(const TKey& key, i64 cookieWeight);
         void CancelInsert(const TKey& key);
-        void EndInsert(const TValuePtr& value, i64 weight);
+        void EndInsert(TValuePtr value, i64 weight);
 
         //! Inserts the value back to the cache immediately. Called when the value is resurected in the
         //! main cache.
@@ -371,7 +368,7 @@ private:
     private:
         friend class TAsyncSlruCacheListManager<TGhostItem, TGhostShard>;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock);
+        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
 
@@ -421,7 +418,7 @@ private:
         TGhostShard LargeGhost;
 
         //! Returns the list of evicted items.
-        std::vector<TValuePtr> Trim(const TIntrusiveListWithAutoDelete<TItem, TDelete>& evictedItems);
+        std::vector<TValuePtr> Trim(TIntrusiveListWithAutoDelete<TItem, TDelete>&& evictedItems);
 
     protected:
         void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);

@@ -118,7 +118,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -215,7 +215,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -226,7 +226,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -237,7 +237,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -248,7 +248,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "refId": "D"
@@ -260,7 +260,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.999, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.999, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "hide": false,
           "interval": "",
           "legendFormat": "0.999",
@@ -359,7 +359,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -455,7 +455,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -466,7 +466,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -477,7 +477,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -488,7 +488,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "refId": "D"
@@ -586,7 +586,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -683,7 +683,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -694,7 +694,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -705,7 +705,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -717,7 +717,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,
@@ -730,7 +730,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.999, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.999, sum by(le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"PutAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "hide": false,
           "interval": "",
           "legendFormat": "0.999",
@@ -830,7 +830,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -927,7 +927,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -938,7 +938,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -949,7 +949,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -960,7 +960,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "refId": "D"
@@ -1058,7 +1058,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1155,7 +1155,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -1166,7 +1166,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -1177,7 +1177,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -1188,7 +1188,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "refId": "D"
@@ -1285,7 +1285,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1381,7 +1381,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "refId": "A"
@@ -1392,7 +1392,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "refId": "B"
@@ -1403,7 +1403,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "refId": "C"
@@ -1414,7 +1414,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", container=\"ydb-dynamic\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dsproxynode_responseTimeMs_bucket{container=\"ydb-dynamic\", database=\"$database\", handleClass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "refId": "D"
@@ -1515,7 +1515,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1666,7 +1666,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.999, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.999, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutTabletLog\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "hide": false,
           "interval": "",
           "legendFormat": "0.999",
@@ -1766,7 +1766,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -1864,7 +1864,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "range": true,
@@ -1877,7 +1877,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "range": true,
@@ -1890,7 +1890,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "range": true,
@@ -1903,7 +1903,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutUserData\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,
@@ -2003,7 +2003,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -2101,7 +2101,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "range": true,
@@ -2114,7 +2114,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "range": true,
@@ -2127,7 +2127,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "range": true,
@@ -2140,7 +2140,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"PutAsyncBlob\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,
@@ -2240,7 +2240,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -2338,7 +2338,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "range": true,
@@ -2351,7 +2351,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "range": true,
@@ -2364,7 +2364,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "range": true,
@@ -2377,7 +2377,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetFast\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,
@@ -2476,7 +2476,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -2574,7 +2574,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "range": true,
@@ -2587,7 +2587,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "range": true,
@@ -2600,7 +2600,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "range": true,
@@ -2613,7 +2613,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetDiscover\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,
@@ -2712,7 +2712,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval]))",
           "format": "heatmap",
           "interval": "",
           "legendFormat": "{{le}}",
@@ -2810,7 +2810,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.50",
           "range": true,
@@ -2823,7 +2823,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.90",
           "range": true,
@@ -2836,7 +2836,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.95",
           "range": true,
@@ -2849,7 +2849,7 @@
           },
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=\"ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vdisks_LatencyMs_bucket{container=~\"ydb-static|ydb-storage\", handleclass=\"GetAsync\", storagePool=\"$storagePool\"}[$__rate_interval])))",
           "interval": "",
           "legendFormat": "0.99",
           "range": true,

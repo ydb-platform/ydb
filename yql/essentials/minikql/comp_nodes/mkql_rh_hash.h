@@ -47,8 +47,8 @@ public:
     using iterator = char*;
     using const_iterator = const char*;
 protected:
-    THash HashLocal;
-    TEqual EqualLocal;
+    THash HashLocal_;
+    TEqual EqualLocal_;
     template <bool CacheHashForPSL>
     struct TPSLStorageImpl;
 
@@ -77,19 +77,19 @@ protected:
     using TPSLStorage = TPSLStorageImpl<CacheHash>;
 
     explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
-        : HashLocal(std::move(hash))
-        , EqualLocal(std::move(equal))
-        , Capacity(initialCapacity)
-        , CapacityShift(64 - MostSignificantBit(initialCapacity))
-        , Allocator()
-        , SelfHash(GetSelfHash(this))
+        : HashLocal_(std::move(hash))
+        , EqualLocal_(std::move(equal))
+        , Capacity_(initialCapacity)
+        , CapacityShift_(64 - MostSignificantBit(initialCapacity))
+        , Allocator_()
+        , SelfHash_(GetSelfHash(this))
     {
-        Y_ENSURE((Capacity & (Capacity - 1)) == 0);
+        Y_ENSURE((Capacity_ & (Capacity_ - 1)) == 0);
     }
 
     ~TRobinHoodHashBase() {
-        if (Data) {
-            Allocator.deallocate(Data, DataEnd - Data);
+        if (Data_) {
+            Allocator_.deallocate(Data_, DataEnd_ - Data_);
         }
     }
 
@@ -101,46 +101,46 @@ protected:
 public:
     // returns iterator
     Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
-        auto hash = HashLocal(key);
-        auto ptr = MakeIterator(hash, Data, CapacityShift);
-        auto ret = InsertImpl(key, hash, isNew, Data, DataEnd, ptr);
-        Size += isNew ? 1 : 0;
+        auto hash = HashLocal_(key);
+        auto ptr = MakeIterator(hash, Data_, CapacityShift_);
+        auto ret = InsertImpl(key, hash, isNew, Data_, DataEnd_, ptr);
+        Size_ += isNew ? 1 : 0;
         return ret;
     }
 
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
-        if (RHHashTableNeedsGrow(Size, Capacity)) {
+        if (RHHashTableNeedsGrow(Size_, Capacity_)) {
             Grow();
         }
     }
 
     // returns iterator or nullptr if key is not present
     Y_FORCE_INLINE char* Lookup(TKey key) {
-        auto hash = HashLocal(key);
-        auto ptr = MakeIterator(hash, Data, CapacityShift);
-        auto ret = LookupImpl(key, hash, Data, DataEnd, ptr);
+        auto hash = HashLocal_(key);
+        auto ptr = MakeIterator(hash, Data_, CapacityShift_);
+        auto ret = LookupImpl(key, hash, Data_, DataEnd_, ptr);
         return ret;
     }
 
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
-        while (RHHashTableNeedsGrow(Size + batchRequest.size(), Capacity)) {
+        while (RHHashTableNeedsGrow(Size_ + batchRequest.size(), Capacity_)) {
             Grow();
         }
 
         for (size_t i = 0; i < batchRequest.size(); ++i) {
             auto& r = batchRequest[i];
-            r.Hash = HashLocal(r.GetKey());
-            r.InitialIterator = MakeIterator(r.Hash, Data, CapacityShift);
+            r.Hash = HashLocal_(r.GetKey());
+            r.InitialIterator = MakeIterator(r.Hash, Data_, CapacityShift_);
             NYql::PrefetchForWrite(r.InitialIterator);
         }
 
         for (size_t i = 0; i < batchRequest.size(); ++i) {
             auto& r = batchRequest[i];
             bool isNew;
-            auto iter = InsertImpl(r.GetKey(), r.Hash, isNew, Data, DataEnd, r.InitialIterator);
-            Size += isNew ? 1 : 0;
+            auto iter = InsertImpl(r.GetKey(), r.Hash, isNew, Data_, DataEnd_, r.InitialIterator);
+            Size_ += isNew ? 1 : 0;
             sink(i, iter, isNew);
         }
     }
@@ -149,53 +149,53 @@ public:
     Y_NO_INLINE void BatchLookup(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
         for (size_t i = 0; i < batchRequest.size(); ++i) {
             auto& r = batchRequest[i];
-            r.Hash = HashLocal(r.GetKey());
-            r.InitialIterator = MakeIterator(r.Hash, Data, CapacityShift);
+            r.Hash = HashLocal_(r.GetKey());
+            r.InitialIterator = MakeIterator(r.Hash, Data_, CapacityShift_);
             NYql::PrefetchForRead(r.InitialIterator);
         }
 
         for (size_t i = 0; i < batchRequest.size(); ++i) {
             auto& r = batchRequest[i];
-            auto iter = LookupImpl(r.GetKey(), r.Hash, Data, DataEnd, r.InitialIterator);
+            auto iter = LookupImpl(r.GetKey(), r.Hash, Data_, DataEnd_, r.InitialIterator);
             sink(i, iter);
         }
     }
 
     ui64 GetCapacity() const {
-        return Capacity;
+        return Capacity_;
     }
 
     void Clear() {
-        char* ptr = Data;
-        for (ui64 i = 0; i < Capacity; ++i) {
+        char* ptr = Data_;
+        for (ui64 i = 0; i < Capacity_; ++i) {
             GetPSL(ptr).Distance = -1;
             ptr += AsDeriv().GetCellSize();
         }
-        Size = 0;
+        Size_ = 0;
     }
 
     bool Empty() const {
-        return !Size;
+        return !Size_;
     }
 
     ui64 GetSize() const {
-        return Size;
+        return Size_;
     }
 
     const char* Begin() const {
-        return Data;
+        return Data_;
     }
 
     const char* End() const {
-        return DataEnd;
+        return DataEnd_;
     }
 
     char* Begin() {
-        return Data;
+        return Data_;
     }
 
     char* End() {
-        return DataEnd;
+        return DataEnd_;
     }
 
     void Advance(char*& ptr) const {
@@ -241,7 +241,7 @@ private:
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
-        ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
+        ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485llu) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
     }
@@ -261,11 +261,11 @@ private:
             }
 
             if constexpr (CacheHash) {
-                if (pslPtr.Hash == psl.Hash && EqualLocal(GetKey(ptr), key)) {
+                if (pslPtr.Hash == psl.Hash && EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             } else {
-                if (EqualLocal(GetKey(ptr), key)) {
+                if (EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             }
@@ -317,11 +317,11 @@ private:
             }
 
             if constexpr (CacheHash) {
-                if (pslPtr.Hash == hash && EqualLocal(GetKey(ptr), key)) {
+                if (pslPtr.Hash == hash && EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             } else {
-                if (EqualLocal(GetKey(ptr), key)) {
+                if (EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             }
@@ -332,12 +332,12 @@ private:
     }
 
     Y_NO_INLINE void Grow() {
-        auto newCapacity = Capacity * CalculateRHHashTableGrowFactor(Capacity);
+        auto newCapacity = Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {
-            Allocator.deallocate(newData, newDataEnd - newData);
+            Allocator_.deallocate(newData, newDataEnd - newData);
         };
 
         std::array<TInternalBatchRequestItem, PrefetchBatchSize> batch;
@@ -359,7 +359,7 @@ private:
             if constexpr (CacheHash) {
                 r.Hash = GetPSL(iter).Hash;
             } else {
-                r.Hash = HashLocal(r.GetKey());
+                r.Hash = HashLocal_(r.GetKey());
             }
 
             r.InitialIterator = MakeIterator(r.Hash, newData, newCapacityShift);
@@ -368,10 +368,10 @@ private:
 
         CopyBatch({batch.data(), batchLen}, newData, newDataEnd);
 
-        Capacity = newCapacity;
-        CapacityShift = newCapacityShift;
-        std::swap(Data, newData);
-        std::swap(DataEnd, newDataEnd);
+        Capacity_ = newCapacity;
+        CapacityShift_ = newCapacityShift;
+        std::swap(Data_, newData);
+        std::swap(DataEnd_, newDataEnd);
     }
 
     Y_NO_INLINE void CopyBatch(std::span<TInternalBatchRequestItem> batch, char* newData, char* newDataEnd) {
@@ -396,13 +396,13 @@ private:
 
 protected:
     void Init() {
-        Allocate(Capacity, Data, DataEnd);
+        Allocate(Capacity_, Data_, DataEnd_);
     }
 
 private:
     void Allocate(ui64 capacity, char*& data, char*& dataEnd) {
         ui64 bytes = capacity * AsDeriv().GetCellSize();
-        data = Allocator.allocate(bytes);
+        data = Allocator_.allocate(bytes);
         dataEnd = data + bytes;
         char* ptr = data;
         for (ui64 i = 0; i < capacity; ++i) {
@@ -420,13 +420,13 @@ private:
     }
 
 private:
-    ui64 Size = 0;
-    ui64 Capacity;
-    ui64 CapacityShift;
-    TAllocator Allocator;
-    const ui64 SelfHash;
-    char* Data = nullptr;
-    char* DataEnd = nullptr;
+    ui64 Size_ = 0;
+    ui64 Capacity_;
+    ui64 CapacityShift_;
+    TAllocator Allocator_;
+    const ui64 SelfHash_;
+    char* Data_ = nullptr;
+    char* DataEnd_ = nullptr;
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
@@ -438,26 +438,26 @@ public:
 
     explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity, THash(), TEqual())
-        , CellSize(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
-        , PayloadSize(payloadSize)
+        , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
+        , PayloadSize_(payloadSize)
     {
-        TmpPayload.resize(PayloadSize);
-        TmpPayload2.resize(PayloadSize);
+        TmpPayload_.resize(PayloadSize_);
+        TmpPayload2_.resize(PayloadSize_);
         TBase::Init();
     }
 
     explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity, hash, equal)
-        , CellSize(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
-        , PayloadSize(payloadSize)
+        , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
+        , PayloadSize_(payloadSize)
     {
-        TmpPayload.resize(PayloadSize);
-        TmpPayload2.resize(PayloadSize);
+        TmpPayload_.resize(PayloadSize_);
+        TmpPayload2_.resize(PayloadSize_);
         TBase::Init();
     }
 
     ui32 GetCellSize() const {
-        return CellSize;
+        return CellSize_;
     }
 
     void* GetPayloadImpl(char* ptr) {
@@ -469,31 +469,31 @@ public:
     }
 
     void CopyPayload(void* dst, const void* src) {
-        memcpy(dst, src, PayloadSize);
+        memcpy(dst, src, PayloadSize_);
     }
 
     void SavePayload(const void* p, int& store) {
         Y_UNUSED(store);
-        memcpy(TmpPayload.data(), p, PayloadSize);
+        memcpy(TmpPayload_.data(), p, PayloadSize_);
     }
 
     void RestorePayload(void* p, const int& store) {
         Y_UNUSED(store);
-        memcpy(p, TmpPayload.data(), PayloadSize);
+        memcpy(p, TmpPayload_.data(), PayloadSize_);
     }
 
     void SwapPayload(void* p, int& store) {
         Y_UNUSED(store);
-        memcpy(TmpPayload2.data(), p, PayloadSize);
-        memcpy(p, TmpPayload.data(), PayloadSize);
-        TmpPayload2.swap(TmpPayload);
+        memcpy(TmpPayload2_.data(), p, PayloadSize_);
+        memcpy(p, TmpPayload_.data(), PayloadSize_);
+        TmpPayload2_.swap(TmpPayload_);
     }
 
 private:
-    const ui32 CellSize;
-    const ui32 PayloadSize;
+    const ui32 CellSize_;
+    const ui32 PayloadSize_;
     using TVec = std::vector<char, TAllocator>;
-    TVec TmpPayload, TmpPayload2;
+    TVec TmpPayload_, TmpPayload2_;
 };
 
 template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>

@@ -1,8 +1,10 @@
 #pragma once
+
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
@@ -45,10 +47,22 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetSchemaInclusionMode(const ::Ydb::Query::SchemaInclusionMode& mode) {
+        SchemaInclusionMode = mode;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetResultSetFormat(const ::Ydb::ResultSet::Format& format) {
+        ResultSetFormat = format;
+        return *this;
+    }
+
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    ::Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
+    ::Ydb::ResultSet::Format ResultSetFormat = Ydb::ResultSet::FORMAT_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -68,7 +82,8 @@ public:
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
-        const TString& poolId = "");
+        const TString& poolId = "",
+        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -96,8 +111,16 @@ public:
         return Record.GetRequest().GetTopicOperations();
     }
 
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperations() const {
+        return Record.GetRequest().GetKafkaApiOperations();
+    }
+
     bool HasTopicOperations() const {
         return Record.GetRequest().HasTopicOperations();
+    }
+
+    bool HasKafkaApiOperations() const {
+        return Record.GetRequest().HasKafkaApiOperations();
     }
 
     bool GetKeepSession() const {
@@ -295,23 +318,14 @@ public:
         return Record.SerializeToZeroCopyStream(chunker);
     }
 
-    static NActors::IEventBase* Load(TEventSerializedData* data) {
-        auto pbEv = THolder<TEvQueryRequestRemote>(static_cast<TEvQueryRequestRemote*>(TEvQueryRequestRemote::Load(data)));
+    static TEvQueryRequest* Load(const TEventSerializedData* data) {
+        auto pbEv = THolder<TEvQueryRequestRemote>(TEvQueryRequestRemote::Load(data));
         auto req = new TEvQueryRequest();
         req->Record.Swap(&pbEv->Record);
         return req;
     }
 
-    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as) {
-        if (RequestCtx) {
-            RequestCtx->SetFinishAction([actorId, as]() {
-                as->Send(actorId, new NGRpcService::TEvClientLost());
-                });
-        } else if (Record.HasCancelationActor()) {
-            auto cancelationActor = ActorIdFromProto(Record.GetCancelationActor());
-            NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, as);
-        }
-    }
+    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as);
 
     void SetUserRequestContext(TIntrusivePtr<TUserRequestContext> userRequestContext) {
         UserRequestContext = userRequestContext;
@@ -365,6 +379,38 @@ public:
         DatabaseId = databaseId;
     }
 
+    ::Ydb::Query::SchemaInclusionMode GetSchemaInclusionMode() const {
+        return RequestCtx ? QuerySettings.SchemaInclusionMode : Record.GetRequest().GetSchemaInclusionMode();
+    }
+
+    ::Ydb::ResultSet::Format GetResultSetFormat() const {
+        return RequestCtx ? QuerySettings.ResultSetFormat : Record.GetRequest().GetResultSetFormat();
+    }
+
+    bool HasArrowFormatSettings() const {
+        return ArrowFormatSettings.has_value();
+    }
+
+    std::optional<NKqp::TArrowFormatSettings> GetArrowFormatSettings() const {
+        return ArrowFormatSettings;
+    }
+
+    bool GetSaveQueryPhysicalGraph() const {
+        return SaveQueryPhysicalGraph;
+    }
+
+    void SetSaveQueryPhysicalGraph(bool saveQueryPhysicalGraph) {
+        SaveQueryPhysicalGraph = saveQueryPhysicalGraph;
+    }
+
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetQueryPhysicalGraph() const {
+        return QueryPhysicalGraph;
+    }
+
+    void SetQueryPhysicalGraph(NKikimrKqp::TQueryPhysicalGraph queryPhysicalGraph) {
+        QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -395,6 +441,9 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
+    std::optional<NKqp::TArrowFormatSettings> ArrowFormatSettings;
+    bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

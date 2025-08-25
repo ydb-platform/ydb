@@ -532,7 +532,7 @@ TRuntimeNode BuildRuntimeTableInput(TStringBuf callName,
     TType* const boolType = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<bool>::Id);
     TType* const ui64Type = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
     TType* const ui32Type = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
-    TType* const tupleTypeTables = ctx.ProgramBuilder.NewTupleType({strType, boolType, strType, ui64Type, ui64Type, boolType, ui32Type});
+    TType* const tupleTypeTables = ctx.ProgramBuilder.NewTupleType({strType, boolType, strType, ui64Type, ui64Type, boolType, ui32Type, ui64Type});
     TType* const listTypeGroup = ctx.ProgramBuilder.NewListType(tupleTypeTables);
 
     TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outListType);
@@ -550,6 +550,7 @@ TRuntimeNode BuildRuntimeTableInput(TStringBuf callName,
             ctx.ProgramBuilder.NewDataLiteral(ui64(1)),
             ctx.ProgramBuilder.NewDataLiteral(false),
             ctx.ProgramBuilder.NewDataLiteral(ui32(0)),
+            ctx.ProgramBuilder.NewDataLiteral(ui64(1)),
         })})
     );
 
@@ -639,13 +640,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                     output.Ref(), itemsCount, ctx, true);
             }
 
-            return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(values), [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                TRuntimeNode::TList result;
-                for (auto& origItem : origItemStructType->GetItems()) {
-                    result.push_back(ctx.ProgramBuilder.Member(item, origItem->GetName()));
-                }
-                return result;
-            })));
+            return ctx.ProgramBuilder.ListToBlocks(values);
         });
 
     compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName()},

@@ -28,6 +28,27 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,1,0,1,0,0");
     }
 
+    Y_UNIT_TEST(ApplyFilterToFilter) {
+        TColumnFilter filter1({ true, true, true, false, true, true, false });
+        TColumnFilter filter2({ false, true, true, true, true, false, false });
+
+        {
+            auto result = filter1.ApplyFilterFrom(filter2);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetRecordsCountVerified(), 4);
+            auto resultVec = result.BuildSimpleFilter();
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,0,1");
+        }
+
+        {
+            auto result = filter2.ApplyFilterFrom(filter1);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetRecordsCountVerified(), 5);
+            auto resultVec = result.BuildSimpleFilter();
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "0,1,1,1,0");
+        }
+    }
+
     Y_UNIT_TEST(FilterSlice) {
         TColumnFilter filter({ true, true, true, false, true, true, false });
         {
@@ -82,15 +103,15 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         {
             auto cut = filter.Cut(100, 10, false);
             AFL_VERIFY(cut.DebugString() == "{1}[10,90]")("val", cut.DebugString());
-            auto cut1 = cut.Cut(10, 3, false);
+            auto cut1 = cut.Cut(100, 3, false);
             AFL_VERIFY(cut1.DebugString() == "{1}[3,97]")("val", cut1.DebugString());
-            auto cut2 = cut.Cut(10, 3, true);
+            auto cut2 = cut.Cut(100, 3, true);
             AFL_VERIFY(cut2.DebugString() == "{0}[7,3,90]")("val", cut2.DebugString());
         }
         {
             auto cut = filter.Cut(100, 10, true);
             AFL_VERIFY(cut.DebugString() == "{0}[90,10]")("val", cut.DebugString());
-            auto cut1 = cut.Cut(10, 0, true);
+            auto cut1 = cut.Cut(100, 0, true);
             AFL_VERIFY(cut1.DebugString() == "{0}[100]")("val", cut1.DebugString());
         }
     }
@@ -108,27 +129,27 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         filter.Add(true, 3);
         filter.Add(false, 2);
         {
-            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 10, false);
+            auto cut = filter.Cut(filter.GetRecordsCountVerified(), 10, false);
             AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,18]")("val", cut.DebugString());
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
-            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 1, false);
+            auto cut = filter.Cut(filter.GetRecordsCountVerified(), 1, false);
             AFL_VERIFY(cut.DebugString() == "{1}[1,31]")("val", cut.DebugString());
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
-            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 8, false);
+            auto cut = filter.Cut(filter.GetRecordsCountVerified(), 8, false);
             AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,2,20]")("val", cut.DebugString());
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
-            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 10, true);
+            auto cut = filter.Cut(filter.GetRecordsCountVerified(), 10, true);
             AFL_VERIFY(cut.DebugString() == "{0}[13,1,6,6,1,3,2]")("val", cut.DebugString());
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
-            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 1000, true);
+            auto cut = filter.Cut(filter.GetRecordsCountVerified(), 1000, true);
             AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,6,6,1,3,2]")("val", cut.DebugString());
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }

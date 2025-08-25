@@ -38,6 +38,7 @@ inline bool IsDqCompletePureExpr(const NNodes::TExprBase& node, bool isPrecomput
 
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
+bool IsDqDependsOnOtherStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
 bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage, ui32 outputIndex);
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);

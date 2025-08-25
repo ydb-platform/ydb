@@ -232,7 +232,7 @@ public:
             *GetResponseCounterByStatus(status) += 1;
         }
 
-        Histo->Collect(requestDuration.MilliSeconds());
+        Histo->Collect(requestDuration.MillisecondsFloat());
     }
 
     NYdbGrpc::ICounterBlockPtr Clone() override {
@@ -678,7 +678,7 @@ NYdbGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName
     auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, streaming);
 
     NYdbGrpc::ICounterBlockPtr res(block);
-    if (ActorSystem && HasAppData() && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
+    if (ActorSystem && HasAppData(ActorSystem) && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
         res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, streaming);
     }
 

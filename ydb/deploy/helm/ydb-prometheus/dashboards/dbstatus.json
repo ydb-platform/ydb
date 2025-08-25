@@ -199,7 +199,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum(kqp_Workers_Active{database=\"$database\",container=\"ydb-dynamic\"})",
+          "expr": "sum(kqp_SessionActors_Active{database=\"$database\",container=\"ydb-dynamic\"})",
           "interval": "",
           "legendFormat": "count",
           "refId": "A"
@@ -557,7 +557,7 @@
             "uid": "$ds"
           },
           "exemplar": false,
-          "expr": "sum by (host, pod) (kqp_Workers_Active{database=\"$database\",container=\"ydb-dynamic\"})",
+          "expr": "sum by (host, pod) (kqp_SessionActors_Active{database=\"$database\",container=\"ydb-dynamic\"})",
           "interval": "",
           "legendFormat": "{{host}}{{pod}}",
           "refId": "A"

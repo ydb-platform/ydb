@@ -30,6 +30,7 @@ TEST_SRCS(
     test_continue_mode.py
     test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
+    test_disposition.py
     test_eval.py
     test_invalid_consumer.py
     test_kill_pq_bill.py
@@ -48,7 +49,6 @@ TEST_SRCS(
     test_select_limit.py
     test_select_timings.py
     test_stop.py
-    test_watermarks.py
     test_yds_bindings.py
     test_yq_streaming.py
 )

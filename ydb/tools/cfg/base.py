@@ -272,6 +272,7 @@ def normalize_domain(domain_name):
 
 class ClusterDetailsProvider(object):
     def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+
         if not validator:
             validator = validation.default_validator()
 
@@ -293,7 +294,12 @@ class ClusterDetailsProvider(object):
             self._host_info_provider = walle.NopHostsInformationProvider()
 
         self.__translated_storage_pools_deprecated = None
+
         self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", use_new_style_cfg)
+        self.use_new_style_config_yaml = self.__cluster_description.get("use_new_style_config_yaml", False)
+        if self.use_new_style_config_yaml:
+            self.use_new_style_kikimr_cfg = True
+
         self.need_generate_app_config = self.__cluster_description.get("need_generate_app_config", False)
         self.need_txt_files = self.__cluster_description.get("need_txt_files", True)
         self.use_auto_config = self.__cluster_description.get("use_auto_config", False)
@@ -306,11 +312,13 @@ class ClusterDetailsProvider(object):
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
+        self.kafka_proxy_config = self.__cluster_description.get("kafka_proxy_config")
         self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.cms_config = self.__cluster_description.get("cms_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
+        self.selector_config = self.__cluster_description.get("selector_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 
@@ -403,6 +411,7 @@ class ClusterDetailsProvider(object):
         body = host_description.get("location", {}).get("body", None)
         if body:
             return str(body)
+
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
@@ -441,7 +450,7 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
-        for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
+        for node_id, host_description in enumerate(self.__cluster_description.get("hosts", []), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 
         r = []
@@ -577,15 +586,15 @@ class ClusterDetailsProvider(object):
         )
 
     @property
-    def __coordinators_count_optimal(self):
+    def coordinators_count_optimal(self):
         return min(5, max(1, len(self.hosts) / 4 + 1))
 
     @property
-    def __mediators_count_optimal(self):
+    def mediators_count_optimal(self):
         return min(5, max(1, len(self.hosts) / 4 + 1))
 
     @property
-    def __allocators_count_optimal(self):
+    def allocators_count_optimal(self):
         return min(5, max(1, len(self.hosts) / 4 + 1))
 
     @property
@@ -612,9 +621,9 @@ class ClusterDetailsProvider(object):
                 Domain(
                     domain_name=domain_name,
                     domain_id=domain.get("domain_id", domain_id),
-                    mediators=domain.get("mediators", self.__coordinators_count_optimal),
-                    coordinators=domain.get("coordinators", self.__mediators_count_optimal),
-                    allocators=domain.get("allocators", self.__allocators_count_optimal),
+                    mediators=domain.get("mediators", self.coordinators_count_optimal),
+                    coordinators=domain.get("coordinators", self.mediators_count_optimal),
+                    allocators=domain.get("allocators", self.allocators_count_optimal),
                     plan_resolution=domain.get("plan_resolution", DEFAULT_PLAN_RESOLUTION),
                     dynamic_slots=domain.get("dynamic_slots", 0),
                     storage_pool_kinds=storage_pool_kinds,
@@ -630,6 +639,10 @@ class ClusterDetailsProvider(object):
     @domains.setter
     def domains(self, values):
         self.__cluster_description["domains"] = values
+
+    @property
+    def domains_config_as_dict(self):
+        return self.__cluster_description["domains_config"]
 
     @property
     def domains_config(self):

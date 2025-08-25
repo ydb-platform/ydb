@@ -12,6 +12,7 @@ struct TExprContext;
 class TExprNode;
 typedef TIntrusivePtr<TExprNode> TExprNodePtr;
 typedef std::vector<TExprNodePtr> TExprNodeList;
+typedef std::span<const TExprNodePtr> TExprNodeSpan;
 
 class TExprNodeReplaceBuilder;
 
@@ -43,6 +44,7 @@ public:
     TExprNodeBuilder& Add(ui32 index, TExprNodePtr&& child);
     TExprNodeBuilder& Add(ui32 index, const TExprNodePtr& child);
     TExprNodeBuilder& Add(TExprNodeList&& children);
+
     // only for lambda bodies
     TExprNodeBuilder& Set(TExprNodePtr&& body);
     TExprNodeBuilder& Set(const TExprNodePtr& body);
@@ -95,13 +97,13 @@ private:
     TExprNodePtr FindArgument(const TStringBuf& name);
 
 private:
-    TExprContext& Ctx;
-    TExprNodeBuilder* Parent;
-    TExprNodeReplaceBuilder* ParentReplacer;
-    TExprNodePtr Container;
-    TPositionHandle Pos;
-    TExprNodePtr CurrentNode;
-    ExtArgsFuncType ExtArgsFunc;
+    TExprContext& Ctx_;
+    TExprNodeBuilder* Parent_;
+    TExprNodeReplaceBuilder* ParentReplacer_;
+    TExprNodePtr Container_;
+    TPositionHandle Pos_;
+    TExprNodePtr CurrentNode_;
+    ExtArgsFuncType ExtArgsFunc_;
 };
 
 namespace NNodes {
@@ -136,6 +138,7 @@ public:
     TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName);
+    TExprNodeReplaceBuilder& WithArguments(TExprNodeSpan nodes);
     TExprNodeBuilder With(ui32 argIndex);
     TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
 
@@ -143,13 +146,13 @@ public:
     NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) {
         TBuildAdapter adapter(*this);
 
-        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner->Ctx, Owner->Pos,
+        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner_->Ctx_, Owner_->Pos_,
             [adapter, argIndex](const TNode& node) mutable -> TBuildAdapter& {
                 adapter.Builder = adapter.Builder.With(argIndex, node.Get());
                 return adapter;
             },
             [adapter] (const TStringBuf& argName) {
-                return adapter.Builder.Owner->FindArgument(argName);
+                return adapter.Builder.Owner_->FindArgument(argName);
             });
 
         return builder;
@@ -163,12 +166,12 @@ public:
     }
 
 private:
-    TExprNodeBuilder* Owner;
-    TExprNodePtr Container;
-    TExprNodePtr Args;
-    TExprNodeList Body;
-    ui32 CurrentIndex;
-    TExprNodePtr CurrentNode;
+    TExprNodeBuilder* Owner_;
+    TExprNodePtr Container_;
+    TExprNodePtr Args_;
+    TExprNodeList Body_;
+    ui32 CurrentIndex_;
+    TExprNodePtr CurrentNode_;
 };
 
 } // namespace NYql

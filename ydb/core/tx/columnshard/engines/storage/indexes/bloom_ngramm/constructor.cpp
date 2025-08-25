@@ -16,7 +16,7 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount, TBase::GetBitsStorageConstructor());
+        GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount, TBase::GetBitsStorageConstructor(), CaseSensitive);
 }
 
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -61,7 +61,15 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         return TConclusionStatus::Fail(
             "hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
     }
+
+    if (jsonInfo.Has("case_sensitive")) {
+        if (!jsonInfo["case_sensitive"].IsBoolean()) {
+            return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
+        }
+        CaseSensitive = jsonInfo["case_sensitive"].GetBoolean();
+    }
     return TConclusionStatus::Success();
+
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
@@ -76,6 +84,9 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         if (conclusion.IsFail()) {
             return conclusion;
         }
+    }
+    if (bFilter.HasCaseSensitive()) {
+        CaseSensitive = bFilter.GetCaseSensitive();
     }
     RecordsCount = bFilter.GetRecordsCount();
     if (!TConstants::CheckRecordsCount(RecordsCount)) {
@@ -107,6 +118,7 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     auto* filterProto = proto.MutableBloomNGrammFilter();
     TBase::SerializeToProtoBitsStorageOnly(*filterProto);
     filterProto->SetColumnName(GetColumnName());
+    filterProto->SetCaseSensitive(CaseSensitive);
     filterProto->SetRecordsCount(RecordsCount);
     filterProto->SetNGrammSize(NGrammSize);
     filterProto->SetFilterSizeBytes(FilterSizeBytes);

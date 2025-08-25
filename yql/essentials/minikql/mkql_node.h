@@ -26,19 +26,19 @@ public:
     TTaggedPointer() {}
     TTaggedPointer(T* ptr, bool mark) {
         Y_DEBUG_ABORT_UNLESS((uintptr_t(ptr) & 1) == 0);
-        Raw = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
+        Raw_ = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
     }
 
     T* GetPtr() const {
-        return (T*)(uintptr_t(Raw) & ~uintptr_t(1));
+        return (T*)(uintptr_t(Raw_) & ~uintptr_t(1));
     }
 
     bool GetMark() const {
-        return (uintptr_t(Raw) & 1) != 0;
+        return (uintptr_t(Raw_) & 1) != 0;
     }
 
 private:
-    void* Raw;
+    void* Raw_;
 };
 
 struct TRuntimeNode {
@@ -90,20 +90,20 @@ class TNode : private TNonCopyable {
 friend class TTypeEnvironment;
 public:
     TType* GetType() const {
-        return Type;
+        return Type_;
     }
 
     TType* GetGenericType() const {
-        return Type;
+        return Type_;
     }
 
     // may be used only as temporary storage, should be zero before visitation
     ui64 GetCookie() const {
-        return Cookie;
+        return Cookie_;
     }
 
     void SetCookie(ui64 cookie) {
-        Cookie = cookie;
+        Cookie_ = cookie;
     }
 
     void Accept(INodeVisitor& visitor);
@@ -116,12 +116,12 @@ public:
 
 protected:
     TNode(TType* type)
-        : Type(type)
-        , Cookie(0)
+        : Type_(type)
+        , Cookie_(0)
     {}
 
-    TType* Type;
-    ui64 Cookie;
+    TType* Type_;
+    ui64 Cookie_;
 };
 
 class TTypeType;
@@ -166,9 +166,9 @@ public:
     size_t CalcHash() const;
 
     TTypeBase(const TTypeBase& other)
-        : TNode(other.Type)
+        : TNode(other.Type_)
         , Kind(other.Kind)
-        , SupportsPresort(other.SupportsPresort)
+        , SupportsPresort_(other.SupportsPresort_)
     {}
 
 protected:
@@ -176,11 +176,11 @@ protected:
     TTypeBase()
         : TNode(nullptr)
         , Kind(EKind::Type)
-        , SupportsPresort(false)
+        , SupportsPresort_(false)
     {}
 
     const EKind Kind;
-    const bool SupportsPresort;
+    const bool SupportsPresort_;
 };
 
 class TType: public TTypeBase {
@@ -212,7 +212,7 @@ public:
     TNode* CloneOnCallableWrite(const TTypeEnvironment& env) const;
     void Freeze(const TTypeEnvironment& env);
     bool IsPresortSupported() const {
-        return SupportsPresort;
+        return SupportsPresort_;
     }
 };
 
@@ -322,31 +322,31 @@ public:
     {}
 
     TInternName(const TInternName& other)
-        : StrBuf(other.StrBuf)
+        : StrBuf_(other.StrBuf_)
     {}
 
     const TInternName& operator = (const TInternName& other) {
-        StrBuf = other.StrBuf;
+        StrBuf_ = other.StrBuf_;
         return *this;
     }
 
     size_t Hash() const {
-        return (size_t)StrBuf.data();
+        return (size_t)StrBuf_.data();
     }
 
     operator bool() const {
-        return (bool)StrBuf;
+        return (bool)StrBuf_;
     }
 
     const TStringBuf& Str() const {
-        return StrBuf;
+        return StrBuf_;
     }
 
     // Optimized comparison (only by pointer)
     bool operator == (const TInternName& other) const {
-        Y_DEBUG_ABORT_UNLESS(StrBuf.data() != other.StrBuf.data() || StrBuf.size() == other.StrBuf.size(),
+        Y_DEBUG_ABORT_UNLESS(StrBuf_.data() != other.StrBuf_.data() || StrBuf_.size() == other.StrBuf_.size(),
                        "Lengths must be equal if pointers are equal");
-        return StrBuf.data() == other.StrBuf.data();
+        return StrBuf_.data() == other.StrBuf_.data();
     }
 
     bool operator != (const TInternName& other) const {
@@ -355,7 +355,7 @@ public:
 
     // Regular comparison (by content)
     bool operator == (const TStringBuf& other) const {
-        return StrBuf == other;
+        return StrBuf_ == other;
     }
 
     bool operator != (const TStringBuf& other) const {
@@ -366,11 +366,11 @@ private:
     friend class TTypeEnvironment;
 
     explicit TInternName(const TStringBuf& strBuf)
-        : StrBuf(strBuf)
+        : StrBuf_(strBuf)
     {}
 
 private:
-    TStringBuf StrBuf;
+    TStringBuf StrBuf_;
 };
 
 }} // namespaces
@@ -393,11 +393,11 @@ public:
 
     template <typename T>
     T* Allocate() const {
-        return (T*)Arena.Alloc(sizeof(T));
+        return (T*)Arena_.Alloc(sizeof(T));
     }
 
     void* AllocateBuffer(ui64 size) const {
-        return Arena.Alloc(size);
+        return Arena_.Alloc(size);
     }
 
     TInternName InternName(const TStringBuf& name) const;
@@ -424,8 +424,8 @@ public:
 
     NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const {
         Y_DEBUG_ABORT_UNLESS(TlsAllocState);
-        Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
-            << "typeEnv's: " << Alloc.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
+        Y_DEBUG_ABORT_UNLESS(&Alloc_.Ref() == TlsAllocState, "%s", (TStringBuilder()
+            << "typeEnv's: " << Alloc_.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
         ).data());
         if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) {
             auto value = NewString(data.Size());
@@ -437,42 +437,42 @@ public:
     }
 
     TGuard<TScopedAlloc> BindAllocator() const {
-        return Guard(Alloc);
+        return Guard(Alloc_);
     }
 
-    TScopedAlloc& GetAllocator() const { return Alloc; }
+    TScopedAlloc& GetAllocator() const { return Alloc_; }
 
     const NUdf::TStringValue& NewString(ui32 size) const {
         Y_DEBUG_ABORT_UNLESS(TlsAllocState);
-        Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
-            << "typeEnv's: " << Alloc.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
+        Y_DEBUG_ABORT_UNLESS(&Alloc_.Ref() == TlsAllocState, "%s", (TStringBuilder()
+            << "typeEnv's: " << Alloc_.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
         ).data());
-        Strings.emplace(size);
-        return Strings.top();
+        Strings_.emplace(size);
+        return Strings_.top();
     }
 
 private:
-    TScopedAlloc& Alloc;
-    mutable TPagedArena Arena;
-    mutable std::stack<NUdf::TStringValue> Strings;
-    mutable THashSet<TStringBuf> NamesPool;
-    mutable std::vector<TNode*> Stack;
+    TScopedAlloc& Alloc_;
+    mutable TPagedArena Arena_;
+    mutable std::stack<NUdf::TStringValue> Strings_;
+    mutable THashSet<TStringBuf> NamesPool_;
+    mutable std::vector<TNode*> Stack_;
 
-    mutable TTypeType* TypeOfType = nullptr;
-    mutable TVoidType* TypeOfVoid = nullptr;
-    mutable TVoid* Void = nullptr;
-    mutable TNullType* TypeOfNull = nullptr;
-    mutable TNull* Null = nullptr;
-    mutable TEmptyListType* TypeOfEmptyList = nullptr;
-    mutable TEmptyList* EmptyList = nullptr;
-    mutable TEmptyDictType* TypeOfEmptyDict = nullptr;
-    mutable TEmptyDict* EmptyDict = nullptr;
-    mutable TDataType* Ui32 = nullptr;
-    mutable TDataType* Ui64 = nullptr;
-    mutable TAnyType* AnyType = nullptr;
-    mutable TStructLiteral* EmptyStruct = nullptr;
-    mutable TTupleLiteral* EmptyTuple = nullptr;
-    mutable TListLiteral* ListOfVoid = nullptr;
+    mutable TTypeType* TypeOfType_ = nullptr;
+    mutable TVoidType* TypeOfVoid_ = nullptr;
+    mutable TVoid* Void_ = nullptr;
+    mutable TNullType* TypeOfNull_ = nullptr;
+    mutable TNull* Null_ = nullptr;
+    mutable TEmptyListType* TypeOfEmptyList_ = nullptr;
+    mutable TEmptyList* EmptyList_ = nullptr;
+    mutable TEmptyDictType* TypeOfEmptyDict_ = nullptr;
+    mutable TEmptyDict* EmptyDict_ = nullptr;
+    mutable TDataType* Ui32_ = nullptr;
+    mutable TDataType* Ui64_ = nullptr;
+    mutable TAnyType* AnyType_ = nullptr;
+    mutable TStructLiteral* EmptyStruct_ = nullptr;
+    mutable TTupleLiteral* EmptyTuple_ = nullptr;
+    mutable TListLiteral* ListOfVoid_ = nullptr;
 };
 
 template <>
@@ -513,11 +513,11 @@ public:
     bool IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged = false) const;
 
     NUdf::TDataTypeId GetSchemeType() const {
-        return SchemeType;
+        return SchemeType_;
     }
 
     TMaybe<NUdf::EDataSlot> GetDataSlot() const {
-        return DataSlot;
+        return DataSlot_;
     }
 
 protected:
@@ -528,8 +528,8 @@ protected:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    const NUdf::TDataTypeId SchemeType;
-    const TMaybe<NUdf::EDataSlot> DataSlot;
+    const NUdf::TDataTypeId SchemeType_;
+    const TMaybe<NUdf::EDataSlot> DataSlot_;
 };
 
 class TDataDecimalType : public TDataType {
@@ -546,8 +546,8 @@ public:
 private:
     TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env);
 
-    const ui8 Precision;
-    const ui8 Scale;
+    const ui8 Precision_;
+    const ui8 Scale_;
 };
 
 class TDataLiteral : public TNode, private NUdf::TUnboxedValuePod {
@@ -586,7 +586,7 @@ public:
     bool IsConvertableTo(const TPgType& typeToCompare, bool ignoreTagged = false) const;
 
     ui32 GetTypeId() const {
-        return TypeId;
+        return TypeId_;
     }
 
     const TString& GetName() const;
@@ -599,7 +599,7 @@ protected:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    const ui32 TypeId;
+    const ui32 TypeId_;
 };
 
 struct TStructMember {
@@ -639,22 +639,22 @@ public:
     bool IsConvertableTo(const TStructType& typeToCompare, bool ignoreTagged = false) const;
 
     ui32 GetMembersCount() const {
-        return MembersCount;
+        return MembersCount_;
     }
 
     TStringBuf GetMemberName(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
-        return Members[index].first.Str();
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount_);
+        return Members_[index].first.Str();
     }
 
     TInternName GetMemberNameStr(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
-        return Members[index].first;
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount_);
+        return Members_[index].first;
     }
 
     TType* GetMemberType(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
-        return Members[index].second;
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount_);
+        return Members_[index].second;
     }
 
     ui32 GetMemberIndex(const TStringBuf& name) const;
@@ -669,8 +669,8 @@ private:
     static bool CalculatePresortSupport(ui32 membersCount, std::pair<TInternName, TType*>* members);
 
 private:
-    ui32 MembersCount;
-    std::pair<TInternName, TType*>* Members;
+    ui32 MembersCount_;
+    std::pair<TInternName, TType*>* Members_;
 };
 
 class TStructLiteral : public TNode {
@@ -689,7 +689,7 @@ public:
 
     TRuntimeNode GetValue(ui32 index) const {
         Y_DEBUG_ABORT_UNLESS(index < GetValuesCount());
-        return Values[index];
+        return Values_[index];
     }
 
 private:
@@ -702,7 +702,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TRuntimeNode* Values;
+    TRuntimeNode* Values_;
 };
 
 class TListType : public TType {
@@ -718,11 +718,11 @@ public:
     bool IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data_;
     }
 
     TDataType* IndexDictKeyType() const {
-        return IndexDictKey;
+        return IndexDictKey_;
     }
 
 private:
@@ -733,8 +733,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
-    TDataType* IndexDictKey;
+    TType* Data_;
+    TDataType* IndexDictKey_;
 };
 
 class TListLiteral : public TNode {
@@ -746,11 +746,11 @@ public:
     }
 
     ui32 GetItemsCount() const {
-        return Count;
+        return Count_;
     }
 
     TRuntimeNode* GetItems() const {
-        return Items;
+        return Items_;
     }
 
 private:
@@ -764,8 +764,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TRuntimeNode* Items;
-    ui32 Count;
+    TRuntimeNode* Items_;
+    ui32 Count_;
 };
 
 class TStreamType : public TType {
@@ -781,7 +781,7 @@ public:
     bool IsConvertableTo(const TStreamType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data_;
     }
 
 private:
@@ -792,7 +792,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data_;
 };
 
 class TFlowType : public TType {
@@ -808,7 +808,7 @@ public:
     bool IsConvertableTo(const TFlowType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data_;
     }
 
 private:
@@ -819,7 +819,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data_;
 };
 
 class TOptionalType : public TType {
@@ -835,7 +835,7 @@ public:
     bool IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data_;
     }
 
 private:
@@ -846,7 +846,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data_;
 };
 
 class TOptionalLiteral : public TNode {
@@ -860,12 +860,12 @@ public:
     }
 
     bool HasItem() const {
-        return !!Item.GetNode();
+        return !!Item_.GetNode();
     }
 
     TRuntimeNode GetItem() const {
-        Y_DEBUG_ABORT_UNLESS(Item.GetNode());
-        return Item;
+        Y_DEBUG_ABORT_UNLESS(Item_.GetNode());
+        return Item_;
     }
 
 private:
@@ -879,7 +879,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TRuntimeNode Item;
+    TRuntimeNode Item_;
 };
 
 class TDictType : public TType {
@@ -895,11 +895,11 @@ public:
     bool IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetKeyType() const {
-        return KeyType;
+        return KeyType_;
     }
 
     TType* GetPayloadType() const {
-        return PayloadType;
+        return PayloadType_;
     }
 
     static void EnsureValidDictKey(TType* keyType);
@@ -912,8 +912,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* KeyType;
-    TType* PayloadType;
+    TType* KeyType_;
+    TType* PayloadType_;
 };
 
 class TDictLiteral : public TNode {
@@ -925,12 +925,12 @@ public:
     }
 
     ui32 GetItemsCount() const {
-        return ItemsCount;
+        return ItemsCount_;
     }
 
     std::pair<TRuntimeNode, TRuntimeNode> GetItem(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < ItemsCount);
-        return Items[index];
+        Y_DEBUG_ABORT_UNLESS(index < ItemsCount_);
+        return Items_[index];
     }
 
 private:
@@ -943,8 +943,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    ui32 ItemsCount;
-    std::pair<TRuntimeNode, TRuntimeNode>* Items;
+    ui32 ItemsCount_;
+    std::pair<TRuntimeNode, TRuntimeNode>* Items_;
 };
 
 class TCallableType : public TType {
@@ -956,7 +956,7 @@ public:
         TType** arguments, TNode* payload, const TTypeEnvironment& env);
     void SetOptionalArgumentsCount(ui32 count);
     ui32 GetOptionalArgumentsCount() const {
-        return OptionalArgs;
+        return OptionalArgs_;
     }
 
     using TType::IsSameType;
@@ -967,36 +967,36 @@ public:
     bool IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged = false) const;
 
     TStringBuf GetName() const {
-        return Name.Str();
+        return Name_.Str();
     }
 
     TInternName GetNameStr() const {
-        return Name;
+        return Name_;
     }
 
     TType* GetReturnType() const {
-        return ReturnType;
+        return ReturnType_;
     }
 
     ui32 GetArgumentsCount() const {
-        return ArgumentsCount;
+        return ArgumentsCount_;
     }
 
     TType* GetArgumentType(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < ArgumentsCount);
-        return Arguments[index];
+        Y_DEBUG_ABORT_UNLESS(index < ArgumentsCount_);
+        return Arguments_[index];
     }
 
     void DisableMerge() {
-        IsMergeDisabled0 = true;
+        IsMergeDisabled0_ = true;
     }
 
     bool IsMergeDisabled() const {
-        return IsMergeDisabled0;
+        return IsMergeDisabled0_;
     }
 
     TNode* GetPayload() const {
-        return Payload;
+        return Payload_;
     }
 
 private:
@@ -1008,13 +1008,13 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    bool IsMergeDisabled0;
-    ui32 ArgumentsCount;
-    TInternName Name;
-    TType* ReturnType;
-    TType** Arguments;
-    TNode* Payload;
-    ui32 OptionalArgs;
+    bool IsMergeDisabled0_;
+    ui32 ArgumentsCount_;
+    TInternName Name_;
+    TType* ReturnType_;
+    TType** Arguments_;
+    TNode* Payload_;
+    ui32 OptionalArgs_;
 };
 
 class TCallablePayload : public NUdf::ICallablePayload {
@@ -1049,30 +1049,30 @@ public:
     }
 
     ui32 GetInputsCount() const {
-        return InputsCount;
+        return InputsCount_;
     }
 
     TRuntimeNode GetInput(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < InputsCount);
-        return Inputs[index];
+        Y_DEBUG_ABORT_UNLESS(index < InputsCount_);
+        return Inputs_[index];
     }
 
     bool HasResult() const {
-        return !!Result.GetNode();
+        return !!Result_.GetNode();
     }
 
     TRuntimeNode GetResult() const {
-        Y_DEBUG_ABORT_UNLESS(!!Result.GetNode());
-        return Result;
+        Y_DEBUG_ABORT_UNLESS(!!Result_.GetNode());
+        return Result_;
     }
 
     void SetResult(TRuntimeNode result, const TTypeEnvironment& env);
     ui32 GetUniqueId() const {
-        return UniqueId;
+        return UniqueId_;
     }
 
     void SetUniqueId(ui32 uniqueId) {
-        UniqueId = uniqueId;
+        UniqueId_ = uniqueId;
     }
 
 private:
@@ -1086,16 +1086,16 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    ui32 InputsCount;
-    ui32 UniqueId;
-    TRuntimeNode* Inputs;
-    TRuntimeNode Result;
+    ui32 InputsCount_;
+    ui32 UniqueId_;
+    TRuntimeNode* Inputs_;
+    TRuntimeNode Result_;
 };
 
 inline TTypeBase::TTypeBase(EKind kind, TTypeType* type, bool supportsPresort)
     : TNode(type)
     , Kind(kind)
-    , SupportsPresort(supportsPresort)
+    , SupportsPresort_(supportsPresort)
 {
     Y_DEBUG_ABORT_UNLESS(kind != EKind::Type);
 }
@@ -1146,12 +1146,12 @@ public:
     }
 
     bool HasItem() const {
-        return !!Item.GetNode();
+        return !!Item_.GetNode();
     }
 
     TRuntimeNode GetItem() const {
-        Y_DEBUG_ABORT_UNLESS(Item.GetNode());
-        return Item;
+        Y_DEBUG_ABORT_UNLESS(Item_.GetNode());
+        return Item_;
     }
 
     void SetItem(TRuntimeNode newItem);
@@ -1167,7 +1167,7 @@ private:
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 private:
-    TRuntimeNode Item;
+    TRuntimeNode Item_;
 };
 
 template<typename TDerived, TType::EKind DerivedKind>
@@ -1193,12 +1193,12 @@ public:
             return true;
         }
 
-        if (ElementsCount != typeToCompare.ElementsCount) {
+        if (ElementsCount_ != typeToCompare.ElementsCount_) {
             return false;
         }
 
-        for (size_t index = 0; index < ElementsCount; ++index) {
-            if (!Elements[index]->IsSameType(*typeToCompare.Elements[index])) {
+        for (size_t index = 0; index < ElementsCount_; ++index) {
+            if (!Elements_[index]->IsSameType(*typeToCompare.Elements_[index])) {
                 return false;
             }
         }
@@ -1208,8 +1208,8 @@ public:
 
     size_t CalcHash() const {
         size_t hash = 0;
-        for (size_t index = 0; index < ElementsCount; ++index) {
-            hash = CombineHashes(hash, Elements[index]->CalcHash());
+        for (size_t index = 0; index < ElementsCount_; ++index) {
+            hash = CombineHashes(hash, Elements_[index]->CalcHash());
         }
         return hash;
     }
@@ -1220,12 +1220,12 @@ public:
             return true;
         }
 
-        if (ElementsCount != typeToCompare.GetElementsCount()) {
+        if (ElementsCount_ != typeToCompare.GetElementsCount()) {
             return false;
         }
 
-        for (size_t index = 0; index < ElementsCount; ++index) {
-            if (!Elements[index]->IsConvertableTo(*typeToCompare.GetElementType(index), ignoreTagged)) {
+        for (size_t index = 0; index < ElementsCount_; ++index) {
+            if (!Elements_[index]->IsConvertableTo(*typeToCompare.GetElementType(index), ignoreTagged)) {
                 return false;
             }
         }
@@ -1234,30 +1234,30 @@ public:
     }
 
     ui32 GetElementsCount() const {
-        return ElementsCount;
+        return ElementsCount_;
     }
 
     TType* GetElementType(ui32 index) const {
-        Y_DEBUG_ABORT_UNLESS(index < ElementsCount);
-        return Elements[index];
+        Y_DEBUG_ABORT_UNLESS(index < ElementsCount_);
+        return Elements_[index];
     }
 
     TArrayRef<TType* const> GetElements() const {
-        return TArrayRef<TType* const>(Elements, ElementsCount);
+        return TArrayRef<TType* const>(Elements_, ElementsCount_);
     }
 
   protected:
     TTupleLikeType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
         : TType(DerivedKind, env.GetTypeOfTypeLazy(), CalculatePresortSupport(elementsCount, elements))
-        , ElementsCount(elementsCount)
-        , Elements(elements)
+        , ElementsCount_(elementsCount)
+        , Elements_(elements)
     {
     }
 
 private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
-        for (ui32 i = 0; i < ElementsCount; ++i) {
-            auto &element = Elements[i];
+        for (ui32 i = 0; i < ElementsCount_; ++i) {
+            auto &element = Elements_[i];
             auto elementIt = links.find(element);
             if (elementIt != links.end()) {
                 TNode* newNode = elementIt->second;
@@ -1269,8 +1269,8 @@ private:
 
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         bool needClone = false;
-        for (ui32 i = 0; i < ElementsCount; ++i) {
-            if (Elements[i]->GetCookie()) {
+        for (ui32 i = 0; i < ElementsCount_; ++i) {
+            if (Elements_[i]->GetCookie()) {
                 needClone = true;
                 break;
             }
@@ -1281,18 +1281,18 @@ private:
         }
 
         TType** allocatedElements = nullptr;
-        if (ElementsCount) {
-            allocatedElements = static_cast<TType**>(env.AllocateBuffer(ElementsCount * sizeof(*allocatedElements)));
-            for (ui32 i = 0; i < ElementsCount; ++i) {
-                allocatedElements[i] = Elements[i];
-                auto newNode = (TNode *)Elements[i]->GetCookie();
+        if (ElementsCount_) {
+            allocatedElements = static_cast<TType**>(env.AllocateBuffer(ElementsCount_ * sizeof(*allocatedElements)));
+            for (ui32 i = 0; i < ElementsCount_; ++i) {
+                allocatedElements[i] = Elements_[i];
+                auto newNode = (TNode *)Elements_[i]->GetCookie();
                 if (newNode) {
                   allocatedElements[i] = static_cast<TType*>(newNode);
                 }
             }
         }
 
-        return ::new (env.Allocate<TDerived>()) TDerived(ElementsCount, allocatedElements, env);
+        return ::new (env.Allocate<TDerived>()) TDerived(ElementsCount_, allocatedElements, env);
     }
 
     void DoFreeze(const TTypeEnvironment& env) {
@@ -1309,8 +1309,8 @@ private:
     }
 
 private:
-    ui32 ElementsCount;
-    TType** Elements;
+    ui32 ElementsCount_;
+    TType** Elements_;
 };
 
 class TTupleType : public TTupleLikeType<TTupleType, TType::EKind::Tuple> {
@@ -1354,7 +1354,7 @@ public:
 
     TRuntimeNode GetValue(ui32 index) const {
         Y_DEBUG_ABORT_UNLESS(index < GetValuesCount());
-        return Values[index];
+        return Values_[index];
     }
 
 private:
@@ -1367,7 +1367,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TRuntimeNode* Values;
+    TRuntimeNode* Values_;
 };
 
 class TResourceType : public TType {
@@ -1382,11 +1382,11 @@ public:
     bool IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged = false) const;
 
     TStringBuf GetTag() const {
-        return Tag.Str();
+        return Tag_.Str();
     }
 
     TInternName GetTagStr() const {
-        return Tag;
+        return Tag_;
     }
 
     static TResourceType* Create(const TStringBuf& tag, const TTypeEnvironment& env);
@@ -1394,7 +1394,7 @@ public:
 private:
     TResourceType(TTypeType* type, TInternName tag)
         : TType(EKind::Resource, type, false)
-        , Tag(tag)
+        , Tag_(tag)
     {}
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
@@ -1402,7 +1402,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TInternName const Tag;
+    TInternName const Tag_;
 };
 
 class TTaggedType : public TType {
@@ -1418,15 +1418,15 @@ public:
     bool IsConvertableTo(const TTaggedType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetBaseType() const {
-        return BaseType;
+        return BaseType_;
     }
 
     TStringBuf GetTag() const {
-        return Tag.Str();
+        return Tag_.Str();
     }
 
     TInternName GetTagStr() const {
-        return Tag;
+        return Tag_;
     }
 
 private:
@@ -1437,8 +1437,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* BaseType;
-    TInternName const Tag;
+    TType* BaseType_;
+    TInternName const Tag_;
 };
 
 class TVariantType : public TType {
@@ -1454,23 +1454,23 @@ public:
     bool IsConvertableTo(const TVariantType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetUnderlyingType() const {
-        return Data;
+        return Data_;
     }
 
     ui32 GetAlternativesCount() const {
-        if (Data->IsStruct()) {
-            return static_cast<TStructType*>(Data)->GetMembersCount();
+        if (Data_->IsStruct()) {
+            return static_cast<TStructType*>(Data_)->GetMembersCount();
         } else {
-            return static_cast<TTupleType*>(Data)->GetElementsCount();
+            return static_cast<TTupleType*>(Data_)->GetElementsCount();
         }
     }
 
     TType* GetAlternativeType(ui32 index) const {
         MKQL_ENSURE(index < GetAlternativesCount(), "Wrong index");
-        if (Data->IsStruct()) {
-            return static_cast<TStructType*>(Data)->GetMemberType(index);
+        if (Data_->IsStruct()) {
+            return static_cast<TStructType*>(Data_)->GetMemberType(index);
         } else {
-            return static_cast<TTupleType*>(Data)->GetElementType(index);
+            return static_cast<TTupleType*>(Data_)->GetElementType(index);
         }
     }
 
@@ -1482,7 +1482,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data_;
 };
 
 class TVariantLiteral : public TNode {
@@ -1495,11 +1495,11 @@ public:
     }
 
     ui32 GetIndex() const {
-        return Index;
+        return Index_;
     }
 
     TRuntimeNode GetItem() const {
-        return Item;
+        return Item_;
     }
 
 private:
@@ -1512,8 +1512,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TRuntimeNode Item;
-    ui32 Index;
+    TRuntimeNode Item_;
+    ui32 Index_;
 };
 
 class TBlockType : public TType {
@@ -1536,11 +1536,11 @@ public:
     bool IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged = false) const;
 
     inline TType* GetItemType() const noexcept {
-        return ItemType;
+        return ItemType_;
     }
 
     inline EShape GetShape() const noexcept {
-        return Shape;
+        return Shape_;
     }
 
 private:
@@ -1551,8 +1551,8 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* ItemType;
-    EShape Shape;
+    TType* ItemType_;
+    EShape Shape_;
 };
 
 inline bool TRuntimeNode::operator==(const TRuntimeNode& other) const {

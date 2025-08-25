@@ -62,8 +62,9 @@ namespace NKikimr {
                     ui64 firstLogLsn = 0;
 
                     if (!e->MemLogEmpty && !e->DiskLogEmpty) {
-                        Y_VERIFY_S(e->FirstDiskLsn <= e->FirstMemLsn, logPrefix << reportInternals());
-                        firstLogLsn = e->FirstDiskLsn;
+                        // In some weird cases DiskRecLog may be a subset of MemRecLog, so when
+                        // deciding first known lsn, take minimum of two
+                        firstLogLsn = std::min(e->FirstDiskLsn, e->FirstMemLsn);
                     } else if (e->MemLogEmpty) {
                         firstLogLsn = e->FirstDiskLsn;
                     } else if (e->DiskLogEmpty) {

@@ -381,7 +381,7 @@ private:
     const bool AllowNotNull;
 };
 
-class TReadTableScan : public TActor<TReadTableScan>, public NTable::IScan {
+class TReadTableScan : public TActor<TReadTableScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_READ_TABLE_SCAN;
@@ -695,13 +695,14 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override
+    TAutoPtr<IDestructable> Finish(EStatus status) override
     {
         auto ctx = ActorContext();
 
         if (!SchemaChanged) {
-            if (abort != EAbort::None)
-                Error = "Aborted by scan host env";
+            if (status != EStatus::Done) {
+                Error = TStringBuilder() << "Scan finished unsuccessfully with status " << status;
+            }
 
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request
                 = new TEvTxProcessing::TEvStreamQuotaRelease;
@@ -720,6 +721,14 @@ private:
 
         Die(ctx);
         return new TReadTableProd(Error, IsFatalError, SchemaChanged);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
 private:

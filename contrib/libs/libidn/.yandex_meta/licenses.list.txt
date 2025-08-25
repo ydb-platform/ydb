@@ -1,171 +1,174 @@
+====================Apache-2.0====================
+the Apache License Version 2.0, see the file
+
+
 ====================COPYRIGHT====================
-   Copyright (C) 1990, 1998-2001, 2003-2006, 2009-2024 Free Software
+   Copyright (C) 1990, 1998-2001, 2003-2006, 2009-2025 Free Software
    Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1990-2000, 2003-2004, 2006-2024 Free Software Foundation, Inc.
+   Copyright (C) 1990-2000, 2003-2004, 2006-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1995, 1999, 2001-2004, 2006-2024 Free Software Foundation,
+   Copyright (C) 1995, 1999, 2001-2004, 2006-2025 Free Software Foundation,
    Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1995-1996, 2001, 2003, 2005, 2009-2024 Free Software
+   Copyright (C) 1995-1996, 2001, 2003, 2005, 2009-2025 Free Software
    Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1995-1998, 2000-2002, 2004-2006, 2009-2024 Free Software
-   Foundation, Inc.
+   Copyright (C) 1995-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1997-2024 Free Software Foundation, Inc.
+   Copyright (C) 1997-2025 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Jean-François Bignolles <bignolle@ecoledoc.ibp.fr>, 1997.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1998, 2001, 2003-2006, 2009-2024 Free Software Foundation,
+   Copyright (C) 1998, 2001, 2003-2006, 2009-2025 Free Software Foundation,
    Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1998-1999, 2005-2006, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 1998-1999, 2005-2006, 2009-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1999-2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 1999-2002, 2006-2007, 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2001.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2000-2003, 2006, 2008-2024 Free Software Foundation, Inc.
+   Copyright (C) 2000-2003, 2006, 2008-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2005-2024 Free Software Foundation, Inc.
+   Copyright (C) 2001-2002, 2005-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2004, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2001-2004, 2006-2007, 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible and Simon Josefsson.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2007, 2010-2024 Free Software Foundation, Inc.
+   Copyright (C) 2001-2007, 2010-2025 Free Software Foundation, Inc.
    Written by Bruno Haible and Simon Josefsson.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2025 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2024 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2005-2006, 2009-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2002, 2005-2006, 2009-2024 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2006-2007, 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2002.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2003, 2006-2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2006-2007, 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2003, 2018.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2003-2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2003-2007, 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2003.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2004, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2009-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2004-2024 Simon Josefsson
+   Copyright (C) 2004-2025 Simon Josefsson
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2004-2024 Simon Josefsson.
-   Copyright (C) 2003-2024 Free Software Foundation, Inc.
+   Copyright (C) 2004-2025 Simon Josefsson.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2005, 2007, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2009-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2007-2024 Free Software Foundation, Inc.
+   Copyright (C) 2007-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2009-2025 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2009.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2010-2024 Free Software Foundation, Inc.
+   Copyright (C) 2010-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2016-2024 Free Software Foundation, Inc.
+   Copyright (C) 2016-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2020-2024 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
 
 ====================COPYRIGHT====================
-   Copyright 2017-2024 Free Software Foundation, Inc.
+   Copyright (C) 2024-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright 2020-2024 Free Software Foundation, Inc.
+   Copyright 2017-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright 2022-2024 Free Software Foundation, Inc.
+   Copyright 2020-2025 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright © 1994–1996, 1999–2002, 2004–2017, 2020–2023 Free Software
+   Copyright 2022-2025 Free Software Foundation, Inc.
+
+
+====================COPYRIGHT====================
+   Copyright © 1994–1996, 1999–2002, 2004–2017, 2020–2024 Free Software
 Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-/* Copyright (C) 1992-2024 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2025 Free Software Foundation, Inc.
    Copyright The GNU Toolchain Authors.
    This file is part of the GNU C Library.
 
 
 ====================COPYRIGHT====================
-Copyright (c) 2009-2024 Simon Josefsson
+Copyright (c) 2009-2025 Simon Josefsson
 
 ====================COPYRIGHT====================
 Libidn AUTHORS -- Information about the authors.
-Copyright (C) 2002-2024 Simon Josefsson
+Copyright (C) 2002-2025 Simon Josefsson
 See the end for copying conditions.
 
 
 ====================File: AUTHORS====================
 Libidn AUTHORS -- Information about the authors.
-Copyright (C) 2002-2024 Simon Josefsson
+Copyright (C) 2002-2025 Simon Josefsson
 See the end for copying conditions.
 
 Simon Josefsson <simon@josefsson.org>
@@ -198,15 +201,46 @@ are permitted in any medium without royalty provided the copyright
 notice and this notice are preserved.
 
 
-====================LGPL-2.0-or-later====================
-internationalize it you are welcome to use GNU 'gettext' in your
-package.  Of course you have to respect the GNU Lesser General Public
-License which covers the use of the GNU 'gettext' library.  This means
-in particular that even non-free programs can use 'libintl' as a shared
-library, whereas only free software can use 'libintl' as a static
-library or use modified versions of 'libintl'.
+====================GFDL-1.2-only AND GFDL-1.3-or-later====================
+The manual is licensed under the GNU Free Documentation License,
+Version 1.3 or any later, see the file
+
+
+====================GPL-2.0-or-later AND LGPL-3.0-or-later====================
+dual-licensed under the terms of either the GNU General Public License
+version 2.0 or later - see the file [COPYINGv2](COPYINGv2) - or the
+GNU Lesser General Public License version 3.0 or later - see the file
+[COPYING.LESSERv3](COPYING.LESSERv3) - or both in parallel as here.
+
+
+====================GPL-2.0-or-later AND LGPL-3.0-or-later AND GPL-3.0-or-later====================
+files, are licensed under the GNU General Public License version 3.0
+or later, see the file [COPYING](COPYING).
 
 
 ====================LGPL-2.1-or-later====================
-package.  Of course you have to respect the GNU Lesser General Public
-License which covers the use of the GNU 'gettext' library.  This means
+ * The Gnome Library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * The Gnome Library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+
+
+====================LGPL-2.1-or-later AND LGPL-2.1-or-later====================
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
+ * Lesser General Public License for more details.
+
+
+====================LicenseRef-scancode-unknown-license-reference====================
+Other files are licensed as indicated in each file.  There may be

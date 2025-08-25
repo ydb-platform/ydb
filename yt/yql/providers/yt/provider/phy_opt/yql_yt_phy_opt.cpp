@@ -31,6 +31,8 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoTopSort::Match, HNDL(Sort<true>));
     AddHandler(0, &TCoTop::Match, HNDL(Sort<true>));
     AddHandler(0, &TYtSort::Match, HNDL(YtSortOverAlreadySorted));
+    AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
+    AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
     AddHandler(0, &TCoPartitionByKeyBase::Match, HNDL(PartitionByKey));
     AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMap));
     AddHandler(0, &TCoCombineByKey::Match, HNDL(CombineByKey));
@@ -60,6 +62,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
+    AddHandler(0, &TYtEquiJoin::Match, HNDL(AddPruneKeys));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
 
@@ -99,6 +102,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
     AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
     AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
+    AddHandler(2, &TYtMap::Match, HNDL(UnessentialFilter));
 #undef HNDL
 }
 

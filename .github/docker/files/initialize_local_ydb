@@ -7,6 +7,7 @@ export YDB_GRPC_ENABLE_TLS="true"
 export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 export GRPC_PORT=${GRPC_PORT:-2136}
 export YDB_GRPC_TLS_DATA_PATH="/ydb_certs"
+export YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
 
 # Start local_ydb tool. Pass additional arguments for local_ydb
 /local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports --dont-use-log-files "$@";

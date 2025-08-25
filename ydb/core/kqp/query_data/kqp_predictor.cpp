@@ -16,9 +16,7 @@ using namespace NActors;
 
 void TStagePredictor::Prepare() {
     InputDataPrediction = 1;
-    if (HasLookupFlag) {
-        InputDataPrediction = 0.5;
-    } else if (HasRangeScanFlag) {
+    if (HasRangeScanFlag) {
         InputDataPrediction = 1;
     } else if (InputDataVolumes.size()) {
         InputDataPrediction = 0;
@@ -48,8 +46,6 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasCondenseFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
-        } else if (node.Maybe<NYql::NNodes::TKqpLookupTable>()) {
-            HasLookupFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
         } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
 
@@ -97,7 +93,6 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetHasTop(HasTopFlag);
     kqpProto.SetHasRangeScan(HasRangeScanFlag);
     kqpProto.SetHasCondense(HasCondenseFlag);
-    kqpProto.SetHasLookup(HasLookupFlag);
     kqpProto.SetNodesCount(NodesCount);
     kqpProto.SetInputDataPrediction(InputDataPrediction);
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
@@ -116,7 +111,6 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     HasTopFlag = kqpProto.GetHasTop();
     HasRangeScanFlag = kqpProto.GetHasRangeScan();
     HasCondenseFlag = kqpProto.GetHasCondense();
-    HasLookupFlag = kqpProto.GetHasLookup();
     NodesCount = kqpProto.GetNodesCount();
     InputDataPrediction = kqpProto.GetInputDataPrediction();
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
@@ -127,7 +121,7 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
 
 ui32 TStagePredictor::GetUsableThreads() {
     std::optional<ui32> userPoolSize;
-    if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
@@ -137,16 +131,26 @@ ui32 TStagePredictor::GetUsableThreads() {
     return Max<ui32>(1, *userPoolSize);
 }
 
-ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {
+ui32 TStagePredictor::CalcTasksOptimalCount(
+    const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount,
+    TVector<TString>& intros) const
+{
     ui32 result = 0;
     if (!LevelDataPrediction || *LevelDataPrediction == 0) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "level difficult not defined for correct calculation";
+        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "level difficulty not defined for correct calculation";
         result = availableThreadsCount;
+        intros.push_back("Level difficulty not defined for correct calculation");
     } else {
         result = (availableThreadsCount - previousStageTasksCount.value_or(0) * 0.25) * (InputDataPrediction / *LevelDataPrediction);
+        intros.push_back("Using level data prediction: (availableThreadsCount - previousStageTasksCount * 0.25) * (InputDataPrediction / LevelDataPrediction) = " + ToString(result));
+        intros.push_back("(availableThreadsCount = " + ToString(availableThreadsCount) + ")");
+        intros.push_back("(previousStageTasksCount = " + ToString(previousStageTasksCount.value_or(0)) + ")");
+        intros.push_back("(InputDataPrediction = " + ToString(InputDataPrediction) + ")");
+        intros.push_back("(LevelDataPrediction = " + ToString(*LevelDataPrediction) + ")");
     }
     if (previousStageTasksCount) {
         result = std::min<ui32>(result, *previousStageTasksCount);
+        intros.push_back("Shrinking result to previous stage tasks count - " + ToString(result));
     }
     return std::max<ui32>(1, result);
 }

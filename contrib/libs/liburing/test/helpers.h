@@ -13,6 +13,7 @@ extern "C" {
 #include "../src/setup.h"
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <stdlib.h>
 
 enum t_setup_ret {
 	T_SETUP_OK	= 0,
@@ -24,6 +25,13 @@ enum t_test_result {
 	T_EXIT_FAIL   = 1,
 	T_EXIT_SKIP   = 77,
 };
+
+/*
+ * Some Android versions lack aligned_alloc in stdlib.h.
+ * To avoid making large changes in tests, define a helper
+ * function that wraps posix_memalign as our own aligned_alloc.
+ */
+void *t_aligned_alloc(size_t alignment, size_t size);
 
 /*
  * Helper for binding socket to an ephemeral port.
@@ -72,6 +80,11 @@ struct iovec *t_create_buffers(size_t buf_num, size_t buf_size);
  * Helper for creating connected socket pairs
  */
 int t_create_socket_pair(int fd[2], bool stream);
+
+int t_create_socketpair_ip(struct sockaddr_storage *addr,
+				int *sock_client, int *sock_server,
+				bool ipv6, bool client_connect,
+				bool msg_zc, bool tcp, const char *name);
 
 /*
  * Helper for setting up a ring and checking for user privs

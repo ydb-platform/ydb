@@ -79,6 +79,12 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         UNKNOWN = std::numeric_limits<int>::max(),
     };
 
+    struct TEncryptionAlgorithm {
+        static const std::string AES_128_GCM;
+        static const std::string AES_256_GCM;
+        static const std::string CHACHA_20_POLY_1305;
+    };
+
     struct TItem {
         std::string Src;
         std::string Dst;
@@ -89,6 +95,17 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
+    FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
+
+    TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
+        EncryptionAlgorithm_ = algorithm;
+        SymmetricKey_ = key;
+        return *this;
+    }
+
+    std::string EncryptionAlgorithm_;
+    std::string SymmetricKey_;
 };
 
 class TExportToS3Response : public TOperation {

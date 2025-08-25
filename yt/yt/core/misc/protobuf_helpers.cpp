@@ -182,7 +182,9 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
+    TEnvelopeFixedHeader fixedHeaderStorage;
+    ::memcpy(&fixedHeaderStorage, data.Begin(), sizeof(fixedHeaderStorage));
+    const auto* fixedHeader = &fixedHeaderStorage;
     const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
     if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
@@ -332,7 +334,7 @@ public:
         return it == ExtensionTagToExtensionDescriptor_.end() ? nullptr : &it->second;
     }
 
-    const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) override
+    const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) override
     {
         EnsureInitialized();
 
@@ -454,8 +456,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
 {
     auto mapNode = node->AsMap();
     for (const auto& [name, value] : mapNode->GetChildren()) {
-        // TODO(babenko): migrate to std::string
-        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(TString(name));
+        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(name);
         // Do not parse unknown extensions.
         if (!extensionDescriptor) {
             continue;
@@ -556,7 +557,7 @@ THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source)
     return tags;
 }
 
-std::optional<TString> FindExtensionName(int tag)
+std::optional<std::string> FindExtensionName(int tag)
 {
     const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByTag(tag);
     if (!extensionDescriptor) {

@@ -8,30 +8,30 @@ namespace NPython {
 struct TPyGilLocker
 {
     TPyGilLocker()
-        : Gil(PyGILState_Ensure())
+        : Gil_(PyGILState_Ensure())
     {
     }
 
     ~TPyGilLocker() {
-        PyGILState_Release(Gil);
+        PyGILState_Release(Gil_);
     }
 
 private:
-    PyGILState_STATE Gil;
+    PyGILState_STATE Gil_;
 };
 
 struct TPyGilUnlocker {
     TPyGilUnlocker()
-        : ThreadState(PyEval_SaveThread())
+        : ThreadState_(PyEval_SaveThread())
     {
     }
 
     ~TPyGilUnlocker() {
-        PyEval_RestoreThread(ThreadState);
+        PyEval_RestoreThread(ThreadState_);
     }
 
 private:
-    PyThreadState* ThreadState;
+    PyThreadState* ThreadState_;
 };
 
 } // namespace NPython

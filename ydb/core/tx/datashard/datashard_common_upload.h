@@ -21,8 +21,7 @@ public:
     explicit TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges);
 
 protected:
-    bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion,
-        const TRowVersion& writeVersion, ui64 globalTxId,
+    bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& mvccVersion, ui64 globalTxId,
         absl::flat_hash_set<ui64>* volatileReadDependencies);
     void GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie);
     const TEvRequest* GetRequest() const;

@@ -63,16 +63,18 @@ namespace NYT::NYTree {
  *    Filter = {.Keys = {}; .Paths = {}, .Universal = true}
  *    Result depends on implementation.
  */
-struct TAttributeFilter
+class TAttributeFilter
 {
+public:
     //! Whitelist of top-level keys to be returned.
-    std::vector<IAttributeDictionary::TKey> Keys;
-    std::vector<NYPath::TYPath> Paths;
+    DEFINE_BYREF_RO_PROPERTY(std::vector<IAttributeDictionary::TKey>, Keys);
+    DEFINE_BYREF_RO_PROPERTY(std::vector<NYPath::TYPath>, Paths);
 
     //! If true, filter is universal, i.e. behavior depends on service's own policy;
     //! in such case #Keys and #Paths are always empty.
-    bool Universal = true;
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Universal, true);
 
+public:
     //! Creates a universal filter.
     TAttributeFilter() = default;
 
@@ -169,12 +171,12 @@ void FormatValue(
 struct TShrunkAttributeFilterView
 {
     const TAttributeFilter& AttributeFilter;
-    const size_t Limit;
+    const i64 Limit;
 };
 
 TShrunkAttributeFilterView MakeShrunkFormattableView(
     const TAttributeFilter& attributeFilter,
-    size_t limit);
+    i64 limit);
 
 void FormatValue(
     TStringBuilderBase* builder,

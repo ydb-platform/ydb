@@ -8,6 +8,7 @@
 #include <yt/yt/core/misc/collection_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -400,17 +401,21 @@ void ToProto(
     const TReplicationCard& replicationCard,
     const TReplicationCardFetchOptions& options)
 {
+    protoReplicationCard->mutable_replicas()->Reserve(replicationCard.Replicas.size());
     for (const auto& [replicaId, replicaInfo] : SortHashMapByKeys(replicationCard.Replicas)) {
         auto* protoReplicaEntry = protoReplicationCard->add_replicas();
         ToProto(protoReplicaEntry->mutable_id(), replicaId);
         ToProto(protoReplicaEntry->mutable_info(), replicaInfo, options);
     }
+
     if (options.IncludeCoordinators) {
         ToProto(protoReplicationCard->mutable_coordinator_cell_ids(), replicationCard.CoordinatorCellIds);
     }
+
     if (options.IncludeReplicatedTableOptions && replicationCard.ReplicatedTableOptions) {
-        protoReplicationCard->set_replicated_table_options(ConvertToYsonString(replicationCard.ReplicatedTableOptions).ToString());
+        protoReplicationCard->set_replicated_table_options(ToProto(ConvertToYsonString(replicationCard.ReplicatedTableOptions)));
     }
+
     protoReplicationCard->set_era(replicationCard.Era);
     ToProto(protoReplicationCard->mutable_table_id(), replicationCard.TableId);
     protoReplicationCard->set_table_path(replicationCard.TablePath);
@@ -421,11 +426,13 @@ void ToProto(
 
 void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TReplicationCard& protoReplicationCard)
 {
+    replicationCard->Replicas.reserve(protoReplicationCard.replicas().size());
     for (const auto& protoEntry : protoReplicationCard.replicas()) {
         auto replicaId = FromProto<TReplicaId>(protoEntry.id());
         auto& replicaInfo = EmplaceOrCrash(replicationCard->Replicas, replicaId, TReplicaInfo())->second;
         FromProto(&replicaInfo, protoEntry.info());
     }
+
     FromProto(&replicationCard->CoordinatorCellIds, protoReplicationCard.coordinator_cell_ids());
     replicationCard->Era = protoReplicationCard.era();
     replicationCard->TableId = FromProto<TTableId>(protoReplicationCard.table_id());
@@ -435,6 +442,7 @@ void FromProto(TReplicationCard* replicationCard, const NChaosClient::NProto::TR
     if (protoReplicationCard.has_replicated_table_options()) {
         replicationCard->ReplicatedTableOptions = ConvertTo<TReplicatedTableOptionsPtr>(TYsonString(protoReplicationCard.replicated_table_options()));
     }
+
     if (protoReplicationCard.has_replication_card_collocation_id()) {
         FromProto(&replicationCard->ReplicationCardCollocationId, protoReplicationCard.replication_card_collocation_id());
     }

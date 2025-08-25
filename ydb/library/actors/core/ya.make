@@ -129,6 +129,7 @@ END()
 
 RECURSE(
     harmonizer
+    manual_test
 )
 
 RECURSE_FOR_TESTS(

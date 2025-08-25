@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yt/client/election/public.h>
+
 #include <yt/yt/client/job_tracker_client/public.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -18,6 +19,7 @@ namespace NYT::NObjectClient {
 
 namespace NProto {
 
+class TPrerequisiteRevision;
 class TUserDirectory;
 
 } // namespace NProto
@@ -70,7 +72,7 @@ using NElection::NullCellId;
 
 //! Identifies a particular cell of YT cluster.
 //! Must be globally unique to prevent object ids from colliding.
-YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16)
+YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16);
 
 //! The minimum valid cell tag.
 constexpr auto MinValidCellTag = TCellTag(0x0001);
@@ -153,7 +155,9 @@ DEFINE_ENUM(EObjectType,
     ((OverreplicatedChunkMap)                       (404))
     ((UnderreplicatedChunkMap)                      (405))
     ((DataMissingChunkMap)                          (419))
+    ((DataMissingChunksSampleMap)                   (466))
     ((ParityMissingChunkMap)                        (420))
+    ((ParityMissingChunksSampleMap)                 (467))
     ((OldestPartMissingChunkMap)                    (428))
     ((QuorumMissingChunkMap)                        (424))
     ((UnsafelyPlacedChunkMap)                       (120))
@@ -342,6 +346,7 @@ DEFINE_ENUM(EObjectType,
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
+    ((ChaosLease)                                  (1209))
 
     // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))

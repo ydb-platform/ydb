@@ -12,7 +12,7 @@ namespace NYT::NApi {
 
 struct TQueryTrackerOptions
 {
-    TString QueryTrackerStage = "production";
+    std::string QueryTrackerStage = NQueryTrackerClient::ProductionStage;
 };
 
 DEFINE_ENUM(EContentType,
@@ -57,8 +57,8 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
     std::vector<TQuerySecretPtr> Secrets;
 };
 
@@ -99,7 +99,7 @@ struct TListQueriesOptions
     std::optional<TInstant> ToTime;
     std::optional<TInstant> CursorTime;
     EOperationSortDirection CursorDirection = EOperationSortDirection::Past;
-    std::optional<TString> UserFilter;
+    std::optional<std::string> UserFilter;
 
     std::optional<NQueryTrackerClient::EQueryState> StateFilter;
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
@@ -118,7 +118,7 @@ struct TQuery
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
-    std::optional<TString> User;
+    std::optional<std::string> User;
     std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<NYson::TYsonString> AccessControlObjects;
     std::optional<NQueryTrackerClient::EQueryState> State;
@@ -157,8 +157,8 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
 };
 
 struct TGetQueryTrackerInfoOptions
@@ -166,15 +166,17 @@ struct TGetQueryTrackerInfoOptions
     , public TQueryTrackerOptions
 {
     NYTree::TAttributeFilter Attributes;
+    NYTree::INodePtr Settings;
 };
 
 struct TGetQueryTrackerInfoResult
 {
-    TString QueryTrackerStage;
+    std::string QueryTrackerStage;
     std::string ClusterName;
     NYson::TYsonString SupportedFeatures;
-    std::vector<TString> AccessControlObjects;
+    std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
+    NYson::TYsonString EnginesInfo;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

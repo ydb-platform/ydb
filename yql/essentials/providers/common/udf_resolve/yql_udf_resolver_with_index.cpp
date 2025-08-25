@@ -29,15 +29,16 @@ class TUdfResolverWithIndex : public IUdfResolver {
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
-            : Link_(std::move(link))
+            : Link(std::move(link))
         {
-            Import_.FileAlias = alias;
-            Import_.Block = &Block_;
-            Import_.Modules = MakeMaybe(modules);
+            Import.FileAlias = alias;
+            Import.Block = &Block;
+            Import.Modules = MakeMaybe(modules);
 
-            Block_.Type = EUserDataType::PATH;
-            Block_.Data = Link_->GetPath();
-            Block_.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.Type = EUserDataType::PATH;
+            Block.Data = Link->GetPath();
+            Block.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.FrozenFile = Link;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
@@ -49,9 +50,9 @@ class TUdfResolverWithIndex : public IUdfResolver {
         }
 
     public:
-        TFileLinkPtr Link_;
-        TUserDataBlock Block_;
-        TImport Import_;
+        TFileLinkPtr Link;
+        TUserDataBlock Block;
+        TImport Import;
     };
 
 public:
@@ -74,12 +75,12 @@ public:
             }
 
             auto file = DownloadFileWithModule(moduleNameStr);
-            return MakeMaybe<TFilePathWithMd5>(file->Link_->GetPath(), file->Link_->GetMd5());
+            return MakeMaybe<TFilePathWithMd5>(file->Link->GetPath(), file->Link->GetMd5());
         }
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
+        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         with_lock(Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
@@ -106,12 +107,12 @@ public:
 
             fallbackImports.insert(fallbackImports.end(), additionalImports.begin(), additionalImports.end());
 
-            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel) && !hasErrors;
+            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel, storage) && !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
-        return Fallback_->LoadRichMetadata(imports, logLevel);
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        return Fallback_->LoadRichMetadata(imports, logLevel, storage);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const override {
@@ -171,7 +172,7 @@ private:
             return false;
         }
 
-        additionalImport = &file->Import_;
+        additionalImport = &file->Import;
 
         if (info.IsTypeAwareness) {
             function.Name = info.Name;
@@ -205,6 +206,8 @@ private:
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
         function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 
@@ -243,7 +246,7 @@ private:
             auto p = DownloadedFiles_.emplace(d, file);
             if (!p.second) {
                 // should not happen because UdfIndex handles conflicts
-                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
+                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link->GetPath();
             }
         }
 

@@ -316,7 +316,7 @@ SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
 
-## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference
+## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference {#struct-combining}
 
 Combine two structures using one of the four methods (using the provided lambda to merge fields with the same name):
 

@@ -108,6 +108,8 @@ public:
         }
         if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
             TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+        } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
+            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
         } else if (Database || SharedDatabase) {
             RequestStateStorageEndpointsLookup(SharedDatabase ? SharedDatabase : Database);
             Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
@@ -123,7 +125,11 @@ public:
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
-            RequestTxProxyDescribe(params.Get("path"));
+            NKikimrSchemeOp::TDescribeOptions options;
+            options.SetReturnBoundaries(true);
+            options.SetReturnIndexTableBoundaries(true);
+            options.SetShowPrivateTable(true);
+            RequestTxProxyDescribe(params.Get("path"), options);
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();

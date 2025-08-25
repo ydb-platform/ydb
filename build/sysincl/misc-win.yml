@@ -1,7 +1,15 @@
-- source_filter: "^contrib/libs/(ImageMagick|ffmpeg-3|pthreads_win32)"
+- source_filter: "^contrib/libs/pthreads_win32"
   includes:
   - pthread.h:     contrib/libs/pthreads_win32/include/pthread.h
   - sched.h:       contrib/libs/pthreads_win32/include/sched.h
+
+- source_filter: "^contrib/libs/ImageMagick"
+  includes:
+  - pthread.h:     contrib/libs/pthreads_win32/include/pthread.h
+
+- source_filter: "^contrib/restricted/ImageMagickMDS"
+  includes:
+  - pthread.h:     contrib/libs/pthreads_win32/include/pthread.h
 
 - source_filter: "^contrib/libs/jemalloc"
   includes:
@@ -95,6 +103,11 @@
   - dirent.h:      contrib/libs/libpq/src/include/port/win32_msvc/dirent.h
   - sys/wait.h:    contrib/libs/libpq/src/include/port/win32/sys/wait.h
   - win32.h:       contrib/libs/libpq/src/include/port/win32.h
+
+- source_filter: "contrib/libs/librsvg"
+  includes:
+  - cairo.h
+  - gdk-pixbuf/gdk-pixbuf.h
 
 - includes:
     - sys/queue.h:   contrib/libs/libc_compat/include/windows/sys/queue.h

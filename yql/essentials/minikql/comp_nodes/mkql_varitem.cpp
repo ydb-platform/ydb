@@ -66,7 +66,7 @@ public:
         const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
         const auto clean = BinaryOperator::CreateAnd(var, mask, "clean",  block);
         new StoreInst(clean, pointer, block);
-        ValueAddRef(this->RepresentationKind, pointer, ctx, block);
+        ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
         BranchInst::Create(done, block);
 
         block = box;

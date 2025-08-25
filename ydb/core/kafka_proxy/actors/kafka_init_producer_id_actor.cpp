@@ -1,7 +1,8 @@
 #include "kafka_init_producer_id_actor.h"
 #include "kafka_init_producer_id_actor_sql.cpp"
-#include "../kafka_transactional_producers_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <util/random/random.h>
 #include <ydb/public/sdk/cpp/src/client/params/impl.h>
@@ -23,7 +24,9 @@
 namespace NKafka {
 
     NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message) {
-        return new TKafkaInitProducerIdActor(context, correlationId, message->TransactionalId.value_or(""));
+        std::optional<i32> transactionTimeoutMs = message->TransactionTimeoutMs == 0 ? std::nullopt : std::optional(message->TransactionTimeoutMs);
+
+        return new TKafkaInitProducerIdActor(context, correlationId, message->TransactionalId, transactionTimeoutMs);
     }
 
     // for non-transactional INIT_PRODUCER_ID request - just return random producer.id and 0 as epoch
@@ -41,15 +44,23 @@ namespace NKafka {
     //          b. Then send Insert in Handle(TEvQueryResponse) when LastSentToKqpRequest == DELETE
     //       case (RowExistsAndEpochWillNotOverflow): Update epoch in table and return in to the client
     // 6. Send reponse in Handle(TEvQueryResponse) with new (if insert) producer.id and epoch
-    TKafkaInitProducerIdActor::TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TString& transactionalId)
+    TKafkaInitProducerIdActor::TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const std::optional<TString>& transactionalId, std::optional<i32> transactionTimeoutMs)
         : Context(context)
         , CorrelationId(correlationId)
-        , TransactionalId(std::move(transactionalId)) {
+        , TransactionalId(transactionalId)
+        , TransactionTimeoutMs(transactionTimeoutMs) {
     }
         
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
+            if (!TxnTimeoutIsValid()) {
+                TString error = TStringBuilder() << "Transactional producer initialization failed. Invalid transaction timeout: " << TransactionTimeoutMs.value() << ". Maximum allowed: " << GetMaxAllowedTransactionTimeoutMs();
+                SendResponseFail(EKafkaErrors::INVALID_TRANSACTION_TIMEOUT, error);
+                Die(ctx);
+                return;
+            }
             Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+            KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             Become(&TKafkaInitProducerIdActor::StateWork);
         } else {
@@ -71,6 +82,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
+        KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
         Kqp->SendCreateSessionRequest(ctx);
     }
 
@@ -119,6 +131,14 @@ namespace NKafka {
         HandleQueryResponseFromKqp(ev, ctx);
     }
 
+    void TKafkaInitProducerIdActor::Handle(NKafka::TEvKafka::TEvSaveTxnProducerResponse::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status == NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::PRODUCER_FENCED) {
+            SendResponseFail(EKafkaErrors::PRODUCER_FENCED, TStringBuilder() << "Failed to save producer state. Reason: " << ev->Get()->Message << ".");
+        } else {
+            SendSuccessfullResponseForTxProducer(PersistedProducerState, ctx);
+        }
+    }
+
     void TKafkaInitProducerIdActor::RequestFullRetry(const TActorContext& ctx) {
         CurrentTxAbortRetryNumber++;
         Kqp->ResetTxId();
@@ -134,12 +154,13 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::StartTxProducerInitCycle(const TActorContext& ctx) {
+        KAFKA_LOG_D("Beginning transaction");
         Kqp->BeginTransaction(++KqpReqCookie, ctx);
         LastSentToKqpRequest = EInitProducerIdKqpRequests::BEGIN_TRANSACTION;
     }
 
     void TKafkaInitProducerIdActor::HandleQueryResponseFromKqp(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
+        KAFKA_LOG_D("Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
 
         try {
             switch (LastSentToKqpRequest) {
@@ -153,7 +174,7 @@ namespace NKafka {
                     break;
                 case INSERT:
                 case UPDATE:
-                    OnSuccessfullProducerStateUpdate(ev, ctx);
+                    OnSuccessfullProducerStateUpdate(ev);
                     break;
                 case DELETE_REQ:
                     SendInsertRequest(ctx);
@@ -186,10 +207,12 @@ namespace NKafka {
         }
     }
 
-    void TKafkaInitProducerIdActor::OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    void TKafkaInitProducerIdActor::OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
         auto producerState = ParseProducerState(ev).value();
 
-        SendSuccessfullResponseForTxProducer(producerState, ctx);
+        SendSaveTxnProducerStateRequest(producerState);
+        
+        PersistedProducerState = std::move(producerState);
     }
 
     // requests to producer_state table
@@ -221,7 +244,7 @@ namespace NKafka {
     NYdb::TParams TKafkaInitProducerIdActor::BuildSelectOrDeleteByTransactionalIdParams() {
         NYdb::TParamsBuilder params;
         params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-        params.AddParam("$TransactionalId").Utf8(TransactionalId).Build();
+        params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
 
         return params.Build();
     }
@@ -229,7 +252,7 @@ namespace NKafka {
     NYdb::TParams TKafkaInitProducerIdActor::BuildInsertNewProducerStateParams() {
         NYdb::TParamsBuilder params;
         params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-        params.AddParam("$TransactionalId").Utf8(TransactionalId).Build();
+        params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(0).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();
 
@@ -239,7 +262,7 @@ namespace NKafka {
     NYdb::TParams TKafkaInitProducerIdActor::BuildUpdateProducerStateParams(ui16 newProducerEpoch) {
         NYdb::TParamsBuilder params;
         params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-        params.AddParam("$TransactionalId").Utf8(TransactionalId).Build();
+        params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(newProducerEpoch).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();
 
@@ -265,9 +288,34 @@ namespace NKafka {
         Die(ctx);
     }
 
+    void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
+        KAFKA_LOG_D("Sending save txn producer state request");
+
+        Send(NKafka::MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvSaveTxnProducerRequest(
+            producerState.TransactionalId,
+            {
+                producerState.ProducerId, 
+                producerState.ProducerEpoch
+            },
+            static_cast<ui64>(*TransactionTimeoutMs)
+        ));
+    }
+
     // helper methods
     bool TKafkaInitProducerIdActor::IsTransactionalProducerInitialization() {
-        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaTransactions() && !TransactionalId.empty();
+        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaTransactions() && TransactionalId.has_value();
+    }
+
+    ui64 TKafkaInitProducerIdActor::GetMaxAllowedTransactionTimeoutMs() {
+        return AppData()->KafkaProxyConfig.GetTransactionTimeoutMs();
+    }
+
+    bool TKafkaInitProducerIdActor::TxnTimeoutIsValid() {
+        if (!IsTransactionalProducerInitialization()) {
+            return true;
+        }
+
+        return TransactionTimeoutMs < GetMaxAllowedTransactionTimeoutMs();
     }
 
     EKafkaErrors TKafkaInitProducerIdActor::KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {

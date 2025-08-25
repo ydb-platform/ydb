@@ -11,6 +11,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
@@ -60,6 +61,11 @@ enum EColumnCache {
     ColumnCacheNone = 0;
     ColumnCacheOnce = 1;
     ColumnCacheEver = 2;
+}
+
+enum EColumnCacheMode {
+    ColumnCacheModeRegular = 0;
+    ColumnCacheModeTryKeepInMemory = 1;
 }
 
 enum EColumnStorage {
@@ -135,6 +141,7 @@ message TFamilyDescription {
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
+    optional EColumnCacheMode ColumnCacheMode = 11;
 }
 
 message TFastSplitSettings {
@@ -329,6 +336,7 @@ message TTableDescription {
         TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
     }
 
+    // For kqp internal use only
     optional bool Temporary = 41;
 
     // This flag is create-only, and has to be set up
@@ -336,6 +344,8 @@ message TTableDescription {
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
     optional bool AllowUnderSameOperation = 44 [default = false];
+    // Create only as-well. Used for CopyTable to create table in desired state instead of default
+    optional EPathState PathState = 46;
 }
 
 message TDictionaryEncodingSettings {
@@ -431,6 +441,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TRequestedMaxIndex {
@@ -472,6 +483,7 @@ message TBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TMaxIndex {
@@ -518,21 +530,60 @@ message TStorageTierConfig {
 
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
+    optional string DefaultSelectorName = 2;
 
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
+        optional uint64 PortionsCountLimit = 4;
+        optional uint64 PortionsSizeLimit = 5;
+    }
+
+    message TOneLayer {
+        optional uint32 ExpectedPortionSize = 1;
+        optional float BytesLimitFraction = 2;
+        optional uint64 SizeLimitGuarantee = 3;
     }
 
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
+        TOneLayer OneLayer = 11;
+    }
+
+}
+
+message TCompactionSelectorConstructorContainer {
+    optional string ClassName = 1;
+    optional string Name = 2;
+
+    message TTransparentSelector {
+    }
+
+    message TEmptySelector {
+    }
+
+    message TDataSnapshotInterval {
+        optional uint32 StartSecondsUTC = 1;
+        optional uint32 FinishSecondsUTC = 2;
+    }
+
+    message TSnapshotSelector {
+        optional TDataSnapshotInterval Interval = 1;
+    }
+
+    oneof Implementation {
+        TEmptySelector Empty = 10;
+        TTransparentSelector Transparent = 11;
+        TSnapshotSelector Snapshot = 12;
     }
 
 }
 
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
+    optional uint64 NodePortionsCountLimit = 2;
+    optional double WeightKff = 3 [default = 1.0];
 
     message TLOptimizer {
 
@@ -545,12 +596,18 @@ message TCompactionPlannerConstructorContainer {
 
     message TLCOptimizer {
         repeated TCompactionLevelConstructorContainer Levels = 1;
+        repeated TCompactionSelectorConstructorContainer Selectors = 2;
+    }
+
+    message TTilingOptimizer {
+        optional string Json = 1;
     }
 
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
         TLCOptimizer LCBuckets = 22;
+        TTilingOptimizer Tiling = 23;
     }
 }
 
@@ -865,6 +922,9 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    // For kqp internal use only
+    optional bool Temporary = 14;
 }
 
 message TAlterColumnTable {
@@ -984,6 +1044,7 @@ message TCdcStreamDescription {
     // Set to '0' to disable resolved timestamps
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
+    optional bool SchemaChanges = 12;
 }
 
 message TCreateCdcStream {
@@ -1016,10 +1077,17 @@ message TAlterCdcStream {
 
 message TDropCdcStream {
     optional string TableName = 1;
-    optional string StreamName = 2;
+    repeated string StreamName = 2;
+}
+
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+    optional TCreateCdcStream NewStream = 3;
 }
 
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1035,6 +1103,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1061,6 +1130,26 @@ message TRestoreMultipleIncrementalBackups {
 
     optional string DstTablePath = 2; // Absolute path
     optional NKikimrProto.TPathID DstPathId = 4;
+}
+
+message TIncrementalRestoreFinalize {
+    optional uint64 OriginalOperationId = 1;
+    optional uint64 BackupCollectionPathId = 2;
+    repeated string TargetTablePaths = 3;
+    repeated string BackupTablePaths = 4;
+}
+
+message TIncrementalRestoreOperationId {
+    optional uint64 TxId = 1;
+    optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreOperationsList {
+    repeated TIncrementalRestoreOperationId Operations = 1;
+}
+
+message TCreateLongIncrementalBackupOp {
+    repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
 enum EIndexType {
@@ -1121,6 +1210,7 @@ message TIndexCreationConfig {
 message TGenericTxInFlyExtraData {
     message TTxCopyTableExtraData {
         optional NKikimrProto.TPathID CdcPathId = 1;
+        optional NKikimrSchemeOp.EPathState TargetPathTargetState = 2;
     }
 
     // we do not use oneof here as far as we want to combine some subops rarely
@@ -1180,6 +1270,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
     optional bool AllowUnderSameOperation = 7 [default = false];
+
+    optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1268,6 +1360,15 @@ message TRestoreTask {
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3
+
+    message TEncryptionSettings {
+        optional bytes IV = 1;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 2;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 8;
 }
 
 message TPersQueueGroupAllocate {
@@ -1465,6 +1566,7 @@ message TSplitMergeTablePartitions {
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
+    optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
 }
 
 message TUserAttribute {
@@ -1527,6 +1629,7 @@ message TReplicationDescription {
         optional string TransformLambda = 1;
         optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
         optional uint64 BatchSizeBytes = 3 [default = 8388608];
+        optional string DirectoryPath = 4;
     }
 
     optional TAlterTransfer AlterTransfer = 10;
@@ -1574,6 +1677,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional uint64 LockTxId = 2; // if missing, current tx id is used
 }
 
 message TLockGuard {
@@ -1625,6 +1729,12 @@ message TAlterShards {
         TShardingModification Modification = 20;
         TShardingTransfers Transfer = 21;
     }
+}
+
+message TDropColumnBuild {
+    optional NKikimrIndexBuilder.TColumnBuildSettings Settings = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
 }
 
 // Request for scheme modification
@@ -1680,6 +1790,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
@@ -1698,6 +1809,7 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+    optional TDropColumnBuild DropColumnBuild = 86;
 
     optional bool SuccessOnNotExist = 62;
 
@@ -1731,6 +1843,14 @@ message TModifyScheme {
     optional TBackupBackupCollection RestoreBackupCollection = 80;
 
     optional TMove MoveSequence = 77;
+
+    optional TSysViewDescription CreateSysView = 81;
+
+    optional TChangePathState ChangePathState = 82;
+
+    optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
+
+    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -1800,6 +1920,7 @@ enum EPathType {
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
+    EPathTypeSysView = 24;
 }
 
 enum EPathSubType {
@@ -1823,6 +1944,8 @@ enum EPathState {
     EPathStateRestore = 10;
     EPathStateMoving = 11;
     EPathStateOutgoingIncrementalRestore = 12;
+    EPathStateAwaitingOutgoingIncrementalRestore = 13;
+    EPathStateIncomingIncrementalRestore = 14;
 }
 
 message TPathVersion {
@@ -1857,6 +1980,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
+    optional uint64 SysViewVersion = 32;
 }
 
 // Describes single path
@@ -1878,7 +2002,7 @@ message TDirEntry {
     optional TPathVersion Version = 15;
     optional bool ChildrenExist = 16;
 
-    optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
+    reserved 999;
 }
 
 // Describes single partition (range or point) of a table
@@ -1948,6 +2072,7 @@ message TPathDescription {
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
+    optional TSysViewDescription SysViewDescription = 32;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2068,6 +2193,7 @@ message TExternalDataSourceDescription {
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
     optional bool ReplaceIfExists = 9;
+    optional TExternalTableReferences References = 10;
 }
 
 message TViewDescription {
@@ -2158,4 +2284,25 @@ message TExportMetadata {
     optional string CompressionAlgorithm = 2;
     optional string EncryptionAlgorithm = 3;
     optional bytes IV = 4;
+}
+
+message TSysViewDescription {
+    optional string Name = 1;
+    optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
+}
+
+message TLongIncrementalRestoreOp {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID BackupCollectionPathId = 2;
+    optional string Id = 3;
+    repeated string TablePathList = 4;
+    optional string FullBackupTrimmedName = 5;
+    repeated string IncrementalBackupTrimmedNames = 6;
+    repeated uint64 InvolvedShards = 7;
+}
+
+message TChangePathState {
+    optional string Path = 1;
+    optional EPathState TargetState = 2;
 }

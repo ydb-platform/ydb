@@ -59,12 +59,27 @@ struct TMappingLeaf
     friend TDerived EnumToDerivedMethod(TFactoryTag<Value>, TMappingLeaf*);
 };
 
-template <class TEnum, class... TLeafTags>
+template <class T, T... Value>
+struct TOptionalValue;
+
+template <class T>
+struct TOptionalValue<T>
+{
+    static constexpr std::optional<T> OptionalValue;
+};
+
+template <class T, T Value>
+struct TOptionalValue<T, Value>
+{
+    static constexpr std::optional<T> OptionalValue = Value;
+};
+
+template <class TEnum, class TDefaultEnumValue, class... TLeafTags>
 struct TPolymorphicMapping;
 
-template <class TEnum, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+template <class TEnum, TEnum... DefaultValue, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
     requires (CHierarchy<TBase, TDerived...>)
-struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>
+struct TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>
     : public TMappingLeaf<TEnum, BaseValue, TBase, TBase>
     , public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
@@ -77,6 +92,8 @@ struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, T
     using TKey = TEnum;
     using TBaseClass = TBase;
 
+    static constexpr auto DefaultEnumValue = TOptionalValue<TEnum, DefaultValue...>::OptionalValue;
+
     static TIntrusivePtr<TBase> CreateInstance(TEnum value);
 };
 
@@ -84,7 +101,7 @@ struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, T
 
 template <class T>
 constexpr bool IsMapping = requires (T t) {
-    [] <class TEnum, class... TLeafTags> (TPolymorphicMapping<TEnum, TLeafTags...>) {
+    [] <class TEnum, class TDefaultEnumValue, class... TLeafTags> (TPolymorphicMapping<TEnum, TDefaultEnumValue, TLeafTags...>) {
     } (t);
 };
 
@@ -97,8 +114,8 @@ constexpr bool IsMapping = requires (T t) {
 template <class TBase, class... TDerived>
 concept CHierarchy = NDetail::CHierarchy<TBase, TDerived...>;
 
-template <class TEnum, class... TLeafTags>
-using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TLeafTags...>;
+template <class TEnum, class TDefaultEnumValue, class... TLeafTags>
+using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TDefaultEnumValue, TLeafTags...>;
 
 template <class T>
 concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
@@ -153,7 +170,7 @@ public:
         TSource source,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {},
+        const std::function<NYPath::TYPath()>& pathGetter = {},
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy = {});
 
     void Save(NYson::IYsonConsumer* consumer) const;
@@ -182,6 +199,8 @@ private:
     INodePtr SerializedStorage_;
     TKey HeldType_;
 
+    static constexpr auto DefaultType_ = TMapping::DefaultEnumValue;
+
     void PrepareInstance(INodePtr& node);
 };
 
@@ -202,6 +221,13 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
         ((Derived1) (TDerivedStruct1))
         ((Derived2) (TDerivedStruct2))
     );
+    or
+    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(Struct, Derived1,
+        ((Base)     (TBaseStruct))
+        ((Derived1) (TDerivedStruct1))
+        ((Derived2) (TDerivedStruct2))
+    );
+
     .....TypeName.....ActualTypeName
 
     Macro generates two names:
@@ -211,6 +237,7 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     hierarchy members. They are keys in serialization.
 */
 #define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, seq)
 
 //! Usage:
 /*
@@ -220,6 +247,11 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     );
 
     DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+        ((Pear)  (TPearClass))
+        ((Apple) (TAppleClass))
+    )
+    or
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(Struct, EMyEnum, Apple,
         ((Pear)  (TPearClass))
         ((Apple) (TAppleClass))
     )
@@ -234,6 +266,7 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     Will not compile
 */
 #define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, seq)
 
 ////////////////////////////////////////////////////////////////////////////////
 

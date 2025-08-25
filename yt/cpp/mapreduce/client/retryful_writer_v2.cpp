@@ -389,6 +389,9 @@ void TRetryfulWriterV2::DoStartBatch()
 
 void TRetryfulWriterV2::DoWrite(const void* buf, size_t len)
 {
+    if (!Sender_) {
+        throw TApiUsageError() << "Cannot use table writer that is finished";
+    }
     Current_->Buffer.Append(buf, len);
     auto currentSize = Current_->Buffer.Size();
     if (currentSize >= NextSizeToSend_) {

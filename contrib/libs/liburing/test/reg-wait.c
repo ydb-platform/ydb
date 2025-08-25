@@ -112,6 +112,7 @@ static int test_offsets(struct io_uring *ring, struct io_uring_reg_wait *base,
 	struct io_uring_reg_wait *rw;
 	unsigned long offset;
 	int copy_size;
+	void *rw_ptr;
 	int ret;
 
 	rw = base;
@@ -159,8 +160,8 @@ static int test_offsets(struct io_uring *ring, struct io_uring_reg_wait *base,
 	}
 
 	offset = 1;
-	rw = (void *)base + offset;
-	memcpy(rw, &brief_wait, sizeof(brief_wait));
+	rw_ptr = (void *) base + offset;
+	memcpy(rw_ptr, &brief_wait, sizeof(brief_wait));
 	/* undefined behaviour, check the kernel doesn't crash */
 	(void)test_wait_reg_offset(ring, 1, offset);
 
@@ -213,7 +214,7 @@ static int test_wait_arg(void)
 		return T_EXIT_FAIL;
 	}
 
-	buffer = aligned_alloc(page_size, page_size * 4);
+	buffer = t_aligned_alloc(page_size, page_size * 4);
 	if (!buffer) {
 		fprintf(stderr, "allocation failed\n");
 		return T_EXIT_FAIL;
@@ -281,7 +282,7 @@ static int test_regions(void)
 	void *buffer;
 	int ret;
 
-	buffer = aligned_alloc(page_size, page_size * 4);
+	buffer = t_aligned_alloc(page_size, page_size * 4);
 	if (!buffer) {
 		fprintf(stderr, "allocation failed\n");
 		return T_EXIT_FAIL;
@@ -295,8 +296,10 @@ static int test_regions(void)
 	mr.flags = IORING_MEM_REGION_REG_WAIT_ARG;
 
 	ret = test_try_register_region(&mr, true);
-	if (ret == -EINVAL)
+	if (ret == -EINVAL) {
+		free(buffer);
 		return T_EXIT_SKIP;
+	}
 	if (ret) {
 		fprintf(stderr, "region: register normal fail %i\n", ret);
 		return T_EXIT_FAIL;

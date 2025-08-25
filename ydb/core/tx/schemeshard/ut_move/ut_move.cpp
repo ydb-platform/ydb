@@ -1,7 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -9,6 +9,7 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
 
 void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard, bool value) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
@@ -27,7 +28,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Reject) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -266,8 +267,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(TwoTables) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime,
-                     TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Replace) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Chain) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(OneTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -703,7 +703,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(Index) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -840,7 +840,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexSameDst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -905,7 +905,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
     Y_UNIT_TEST(MoveIndexDoesNonExisted) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1021,6 +1021,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
     }
+
+    Y_UNIT_TEST(ReplaceVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index2", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::PathVersionEqual(9), NLs::IndexesCount(2)});
+
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "index2", "index1", true);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/index2"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::IndexesCount(1)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPrefixTable"),
+            { NLs::PathExist, NLs::CheckColumns(PrefixTable, {"prefix", IdColumn}, {}, {"prefix", IdColumn}, true) });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplLevelTable"),
+            { NLs::PathExist, NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPostingTable"),
+            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key"}, {}, {ParentColumn, "key"}, true) });
+
+        // Replace again - it previously crashed here when Dec/IncAliveChildren were incorrect
+
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index2", {"embedding"});
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "index2", "index1", true);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/index2"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::IndexesCount(1)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPrefixTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplLevelTable"),
+            { NLs::PathExist, NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPostingTable"),
+            { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key"}, {}, {ParentColumn, "key"}, true) });
+    }
+
 
     Y_UNIT_TEST(AsyncIndexWithSyncInFly) {
         TTestBasicRuntime runtime;

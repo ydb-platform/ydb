@@ -151,23 +151,67 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         tableId.LocalPathId = pathId.GetLocalId();
     }
 
-    TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    auto oldInfo = DataShard.FindUserTable(tableId);
+    auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
-    DataShard.AddUserTable(tableId, info, &locksDb);
+    DataShard.AddUserTable(tableId, newInfo, &locksDb);
 
-    if (info->NeedSchemaSnapshots()) {
+    if (newInfo->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
+
+    bool schemaChanged = false;
+    if (alterTableTx.DropColumnsSize()) {
+        schemaChanged = true;
+    } else {
+        for (const auto& [tag, column] : newInfo->Columns) {
+            if (!oldInfo->Columns.contains(tag)) {
+                schemaChanged = true;
+                break;
+            }
+        }
+    }
+
+    if (schemaChanged) {
+        NIceDb::TNiceDb db(txc.DB);
+
+        for (const auto& streamPathId : newInfo->GetSchemaChangesCdcStreams()) {
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
+                .WithOrder(DataShard.AllocateChangeRecordOrder(db))
+                .WithGroup(0)
+                .WithStep(op->GetStep())
+                .WithTxId(op->GetTxId())
+                .WithPathId(streamPathId)
+                .WithTableId(tableId)
+                .WithSchemaVersion(newInfo->GetTableSchemaVersion())
+                .Build();
+
+            const auto& record = *recordPtr;
+            DataShard.PersistChangeRecord(db, record);
+
+            op->ChangeRecords().push_back(IDataShardChangeCollector::TChange{
+                .Order = record.GetOrder(),
+                .Group = record.GetGroup(),
+                .Step = record.GetStep(),
+                .TxId = record.GetTxId(),
+                .PathId = record.GetPathId(),
+                .BodySize = 0,
+                .TableId = record.GetTableId(),
+                .SchemaVersion = record.GetSchemaVersion(),
+            });
+        }
     }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    return EExecutionStatus::ExecutedNoMoreRestarts;
+    return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TAlterTableUnit::Complete(TOperation::TPtr,
+void TAlterTableUnit::Complete(TOperation::TPtr op,
                                const TActorContext &)
 {
+    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,

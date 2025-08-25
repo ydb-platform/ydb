@@ -76,6 +76,38 @@ public:
     bool IsColumnKey() const {
         return IsColumnKeyFlag;
     }
+
+    bool SkipRecordTo(const ui32 recordIndex) {
+        struct TVisitor {
+        private:
+            TGeneralIterator& Owner;
+            const ui32 RecordIndex;
+        public:
+            TVisitor(TGeneralIterator& owner, const ui32 recordIndex)
+                : Owner(owner)
+                , RecordIndex(recordIndex)
+            {
+            }
+            bool operator()(TOthersData::TIterator& iterator) {
+                if (iterator.SkipRecordTo(RecordIndex)) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+            bool operator()(TColumnsData::TIterator& iterator) {
+                if (iterator.SkipRecordTo(RecordIndex)) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+        };
+        return std::visit(TVisitor(*this, recordIndex), Iterator);
+    }
+
     bool Next() {
         struct TVisitor {
         private:
@@ -181,6 +213,18 @@ public:
             }
         }
         finishRecordActor();
+    }
+
+    void SkipRecordTo(const ui32 recordIndex) {
+        for (ui32 iIter = 0; iIter < SortedIterators.size();) {
+            if (!SortedIterators[iIter]->SkipRecordTo(recordIndex)) {
+                std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
+                SortedIterators.pop_back();
+            } else {
+                AFL_VERIFY(recordIndex <= SortedIterators[iIter]->GetRecordIndex());
+                ++iIter;
+            }
+        }
     }
 };
 

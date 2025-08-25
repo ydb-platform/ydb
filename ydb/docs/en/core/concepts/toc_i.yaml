@@ -1,9 +1,11 @@
 items:
 - name: Glossary
   href: glossary.md
+- name: Architecture
+  href: architecture.md
 - name: Connecting to a database
   href: connect.md
-- name: Data model and schema
+- name: Cluster structure
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
@@ -14,6 +16,8 @@ items:
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
+- name: Vector search
+  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

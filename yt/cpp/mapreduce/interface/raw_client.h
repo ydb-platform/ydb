@@ -206,6 +206,11 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) = 0;
+
     // File cache
 
     virtual TMaybe<TYPath> GetFileFromCache(
@@ -281,6 +286,11 @@ public:
         const TRichYPath& path,
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,

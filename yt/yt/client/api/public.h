@@ -1,10 +1,14 @@
 #pragma once
 
+#include <yt/yt/client/chaos_client/public.h>
+
 #include <yt/yt/client/object_client/public.h>
 
 #include <yt/yt/client/table_client/public.h>
 
 #include <yt/yt/client/transaction_client/public.h>
+
+#include <yt/yt/client/prerequisite_client/public.h>
 
 #include <yt/yt/client/bundle_controller_client/public.h>
 
@@ -24,17 +28,17 @@ namespace NYT::NApi {
 using TClusterTag = NObjectClient::TCellTag;
 
 // Keep in sync with NRpcProxy::NProto::EMasterReadKind.
-// On cache miss request is redirected to next level cache:
-// Local cache -> (node) cache -> master cache
+// On cache miss request is redirected to next level as follows:
+// Client-side cache -> cache -> master-side cache
 DEFINE_ENUM(EMasterChannelKind,
+    // These options cover the majority of cases.
     ((Leader)                (0))
     ((Follower)              (1))
-    // Use local (per-connection) cache.
-    ((LocalCache)            (4))
-    // Use cache located on nodes.
-    ((Cache)                 (2))
-    // Use cache located on masters (if caching on masters is enabled).
-    ((MasterCache)           (3))
+    ((Cache)                 (2)) // cluster-wide cache
+
+    // These are advanced options. Typically you don't need these.
+    ((MasterSideCache)       (3)) // cache located on masters
+    ((ClientSideCache)       (4)) // local (per-connection) cache
 );
 
 DEFINE_ENUM(EUserWorkloadCategory,
@@ -53,6 +57,8 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchAttribute)                                   (1920))
     ((FormatDisabled)                                    (1925))
     ((ClusterLivenessCheckFailed)                        (1926))
+    ((UnsupportedArchiveVersion)                         (1927))
+    ((SignatureGenerationIsUnsupported)                  (1928))
 );
 
 DEFINE_ENUM(ERowModificationType,
@@ -117,7 +123,7 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
 
 struct TConnectionOptions;
 
-using TClientOptions = NAuth::TAuthenticationOptions;
+struct TClientOptions;
 
 struct TTransactionParticipantOptions;
 
@@ -133,11 +139,15 @@ struct TTabletRangeOptions;
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
+struct TGetCurrentUserOptions;
+
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
+DECLARE_REFCOUNTED_STRUCT(IDynamicTableTransaction)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
+DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
 DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)
@@ -169,8 +179,9 @@ DECLARE_REFCOUNTED_STRUCT(TJournalReaderConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TJournalWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TDynamicJournalWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterOptions)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TSerializableMasterReadOptions)
 
@@ -192,8 +203,11 @@ DECLARE_REFCOUNTED_STRUCT(TTableBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
+DECLARE_REFCOUNTED_STRUCT(TListOperationsContext)
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
+
+DECLARE_REFCOUNTED_STRUCT(TGetCurrentUserResult);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -201,15 +215,15 @@ inline const NYPath::TYPath ClusterNamePath("//sys/@cluster_name");
 inline const NYPath::TYPath HttpProxiesPath("//sys/http_proxies");
 inline const NYPath::TYPath RpcProxiesPath("//sys/rpc_proxies");
 inline const NYPath::TYPath GrpcProxiesPath("//sys/grpc_proxies");
-inline const TString AliveNodeName("alive");
-inline const TString BannedAttributeName("banned");
-inline const TString RoleAttributeName("role");
-inline const TString AddressesAttributeName("addresses");
-inline const TString BalancersAttributeName("balancers");
+inline const std::string AliveNodeName("alive");
+inline const std::string BannedAttributeName("banned");
+inline const std::string RoleAttributeName("role");
+inline const std::string AddressesAttributeName("addresses");
+inline const std::string BalancersAttributeName("balancers");
 inline const std::string DefaultRpcProxyRole("default");
 inline const std::string DefaultHttpProxyRole("data");
-inline const TString JournalPayloadKey("payload");
-inline const TString HunkPayloadKey("payload");
+inline const std::string JournalPayloadKey("payload");
+inline const std::string HunkPayloadKey("payload");
 
 ////////////////////////////////////////////////////////////////////////////////
 

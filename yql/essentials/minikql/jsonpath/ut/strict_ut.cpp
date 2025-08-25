@@ -61,7 +61,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : STRICT_MODES) {
+            for (const auto mode : StrictModes_) {
                 RunRuntimeErrorTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Error);
             }
         }
@@ -80,7 +80,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : STRICT_MODES) {
+            for (const auto mode : StrictModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -93,7 +93,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : STRICT_MODES) {
+            for (const auto mode : StrictModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -108,7 +108,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : STRICT_MODES) {
+            for (const auto mode : StrictModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -116,3 +116,4 @@ public:
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TJsonPathStrictTest);
+

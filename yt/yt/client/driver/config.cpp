@@ -49,8 +49,14 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("token", &TThis::Token)
         .Optional();
 
+    registrar.Parameter("multiproxy_target_cluster", &TThis::MultiproxyTargetCluster)
+        .Optional();
+
     registrar.Parameter("proxy_discovery_cache", &TThis::ProxyDiscoveryCache)
         .DefaultNew();
+
+    registrar.Parameter("default_rpc_proxy_address_type", &TThis::DefaultRpcProxyAddressType)
+        .Default(NApi::NRpcProxy::EAddressType::InternalRpc);
 
     registrar.Parameter("enable_internal_commands", &TThis::EnableInternalCommands)
         .Default(false);

@@ -195,10 +195,10 @@ const TVector<TYtError>& TYtError::InnerErrors() const
     return InnerErrors_;
 }
 
-void TYtError::ParseFrom(const TString& jsonError)
+void TYtError::ParseFrom(TStringBuf jsonError)
 {
     TJsonValue value;
-    TStringInput input(jsonError);
+    TMemoryInput input(jsonError);
     ReadJsonTree(&input, &value);
     *this = TYtError(value);
 }

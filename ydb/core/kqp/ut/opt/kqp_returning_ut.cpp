@@ -12,8 +12,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpReturning) {
 
 Y_UNIT_TEST(ReturningTwice) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings;
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -117,8 +116,7 @@ Y_UNIT_TEST(ReturningTwice) {
 }
 
 Y_UNIT_TEST(ReplaceSerial) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings;
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -173,8 +171,7 @@ Y_UNIT_TEST(ReplaceSerial) {
 }
 
 Y_UNIT_TEST(ReturningSerial) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -294,7 +291,7 @@ Y_UNIT_TEST(ReturningSerial) {
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(!result.IsSuccess());
         Cerr << result.GetIssues().ToString(true) << Endl;
-        UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:3:25: Error: At function: DataQueryBlocks, At function: TKiDataQueryBlock, At function: KiReturningList! subissue: { <main>:3:25: Error: Column not found: fake } } }");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(true), "Column not found: fake");
     }
 
     {

@@ -48,6 +48,7 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
+        const bool WithProgressStats;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -64,7 +65,9 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
+        const TMaybe<size_t> BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -110,6 +113,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool WithProgressStats;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -138,7 +142,9 @@ private:
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const TMaybe<size_t> BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

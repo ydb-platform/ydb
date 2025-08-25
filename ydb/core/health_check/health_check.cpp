@@ -1393,7 +1393,7 @@ public:
                 if (PDisks) {
                     PDisks->Error(error);
                 }
-                if (FilterDatabase.empty() || FilterDatabase == DomainPath) {
+                if (!IsSpecificDatabaseFilter() || IsBridgeMode(TActivationContext::AsActorContext())) {
                     if (!NodeWardenStorageConfig) {
                         NodeWardenStorageConfig = RequestStorageConfig();
                     }
@@ -1421,7 +1421,7 @@ public:
             case TimeoutBSC:
                 Span.Event("TimeoutBSC");
                 if (!HaveAllBSControllerInfo()) {
-                    if (FilterDatabase.empty() || FilterDatabase == DomainPath) {
+                    if (!IsSpecificDatabaseFilter() || IsBridgeMode(TActivationContext::AsActorContext())) {
                         if (!NodeWardenStorageConfig) {
                             NodeWardenStorageConfig = RequestStorageConfig();
                         }

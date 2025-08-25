@@ -1,4 +1,4 @@
-* Removed the `decimal_ydb` value from `--float-mode` option from the `ydb workload tpch init` and `ydb workload tpcds init` commands.
+* Removed the `decimal_ydb` value from `--float-mode` option in the `ydb workload tpch init` and `ydb workload tpcds init` commands.
 * Removed the `--float-mode` option from the `ydb workload tpch run` and `ydb workload tpcds run` commands. Float mode is now inferred automatically from the table schema created during the `init` phase.
 * Added final execute statistics to `ydb workload * run` commands.
 * Fixed a bug where the `ydb import file csv command` with the `--newline-delimited` option could get stuck if the input had incorrect data.

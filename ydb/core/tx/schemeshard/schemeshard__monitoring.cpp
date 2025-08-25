@@ -818,6 +818,7 @@ private:
                     << "CancelRequested:               " << (info.CancelRequested ? "YES" : "NO") << Endl
 
                     << "State:                         " << info.State << Endl
+                    << "SubState:                      " << info.SubState << Endl
                     << "IsBroken:                      " << info.IsBroken << Endl
                     << "Issue:                         " << info.GetIssue() << Endl
 

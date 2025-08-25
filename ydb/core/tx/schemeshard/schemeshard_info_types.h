@@ -3055,6 +3055,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Rejected = 550
     };
 
+    enum class ESubState: ui32 {
+        // Common
+        None = 0,
+
+        // Filling
+        UniqIndexValidation = 100,
+    };
+
     struct TColumnBuildInfo {
         TString ColumnName;
         Ydb::TypedValue DefaultFromLiteral;
@@ -3090,6 +3098,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildSecondaryIndex = 10,
         BuildVectorIndex = 11,
         BuildPrefixedVectorIndex = 12,
+        BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
     };
 
@@ -3306,6 +3315,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
+    ESubState SubState = ESubState::None;
 private:
     TString Issue;
 public:
@@ -3538,6 +3548,8 @@ public:
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
 
@@ -3668,6 +3680,9 @@ public:
                     break;
             }
         }
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
     }
 
     template<class TRow>
@@ -3721,11 +3736,15 @@ public:
     }
 
     bool IsFillBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildColumns();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildColumns();
     }
 
     bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
+    }
+
+    bool IsBuildSecondaryUniqueIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -3737,7 +3756,7 @@ public:
     }
 
     bool IsBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildVectorIndex();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex();
     }
 
     bool IsBuildColumns() const {
@@ -3754,6 +3773,10 @@ public:
 
     bool IsFinished() const {
         return IsDone() || IsCancelled();
+    }
+
+    bool IsValidatingUniqueIndex() const {
+        return SubState == ESubState::UniqIndexValidation;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {
@@ -3921,6 +3944,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     }
 
     o << ", State: " << info.State;
+    o << ", SubState: " << info.SubState;
     o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 

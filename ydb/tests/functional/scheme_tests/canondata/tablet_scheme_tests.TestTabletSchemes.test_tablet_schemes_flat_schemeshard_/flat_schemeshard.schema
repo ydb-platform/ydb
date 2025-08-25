@@ -5135,6 +5135,11 @@
                 "ColumnId": 43,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 49,
+                "ColumnName": "SubState",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -5183,7 +5188,8 @@
                     40,
                     41,
                     42,
-                    43
+                    43,
+                    49
                 ],
                 "RoomID": 0,
                 "Codec": 0,

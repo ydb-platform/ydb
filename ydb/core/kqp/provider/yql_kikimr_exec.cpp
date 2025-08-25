@@ -1805,6 +1805,8 @@ public:
                             const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
                             if (type == "syncGlobal") {
                                 add_index->mutable_global_index();
+                            } else if (type == "syncGlobalUnique") {
+                                add_index->mutable_global_unique_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {

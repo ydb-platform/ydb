@@ -261,10 +261,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         LOG_N("Starting TSampleKScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()

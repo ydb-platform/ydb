@@ -2341,3 +2341,34 @@ message TEvForceDataCleanupResult {
     optional uint64 TabletId = 2;
     optional EStatus Status = 3;
 }
+
+message TEvValidateUniqueIndexRequest {
+    optional uint64 Id = 1; // unique id of build index process
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    repeated string IndexColumns = 5; // key columns that is needed to transfer in terms of target table
+
+    optional uint64 SeqNoGeneration = 6; // monotonically increasing sequence, first part
+    optional uint64 SeqNoRound = 7; // monotonically increasing sequence, second part
+}
+
+message TEvValidateUniqueIndexResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
+
+    optional uint64 RequestSeqNoGeneration = 5;
+    optional uint64 RequestSeqNoRound = 6;
+
+    // Rows that are required to perform cross shard validation
+    optional bytes FirstIndexKey = 7; // absent if no data in shard
+    optional bytes LastIndexKey = 8; // absent if no data in shard
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 9;
+}

@@ -94,6 +94,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     TVector<ISubOperation::TPtr> result;
+    const NKikimrSchemeOp::EIndexType indexType = indexDesc.HasType() ? indexDesc.GetType() : NKikimrSchemeOp::EIndexTypeGlobal;
 
     {
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -101,10 +102,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
-
-        if (!indexDesc.HasType()) {
-            outTx.MutableCreateTableIndex()->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
-        }
+        outTx.MutableCreateTableIndex()->SetType(indexType);
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
     }
@@ -121,7 +119,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        }
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);

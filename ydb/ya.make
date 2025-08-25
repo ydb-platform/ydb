@@ -8,6 +8,9 @@ RECURSE(
     tools
 )
 
+RECURSE(check)
+
+
 IF(NOT EXPORT_CMAKE)
   RECURSE(
     tests

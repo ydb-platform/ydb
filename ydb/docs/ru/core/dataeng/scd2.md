@@ -38,7 +38,7 @@ CREATE TABLE dimension_scd_changes (
 )
 ```
 
-**Финальная SCD2 таблица:**
+**Финальная SCD2-таблица:**
 
 ```sql
 CREATE TABLE dimension_scd2_final (

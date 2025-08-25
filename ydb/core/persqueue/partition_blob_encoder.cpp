@@ -180,8 +180,8 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
                     break;
                 }
             }
-            size += blobs[i].GetBlobSize();
-            lastBlobSize += blobs[i].GetBlobSize();
+            size += blobs[i].GetSerializedSize();
+            lastBlobSize += blobs[i].GetSerializedSize();
             res.push_back(blobs[i]);
 
             if (!firstAddedBlobOffset)

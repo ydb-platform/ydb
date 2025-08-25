@@ -120,7 +120,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
             Y_ABORT_UNLESS(!CompactionBlobEncoder.NewHead.GetLastBatch().Packed);
             CompactionBlobEncoder.NewHead.AddBlob(x);
-            CompactionBlobEncoder.NewHead.PackedSize += x.GetBlobSize();
+            CompactionBlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (CompactionBlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
                 CompactionBlobEncoder.PackLastBatch();
             }

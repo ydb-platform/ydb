@@ -146,7 +146,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (const auto& p : blob.GetClientBlobs()) {
         real.push_back(p);
         c++;
-        s += p.GetBlobSize();
+        s += p.GetSerializedSize();
     }
 
     UNIT_ASSERT(c == leftInHead);

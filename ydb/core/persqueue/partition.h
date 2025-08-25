@@ -497,6 +497,10 @@ private:
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
+    ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
+    void SetupPerPartitionCounters();
+    void ResetPerPartitionCounters();
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -901,6 +905,15 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+
+    // Per partition counters
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr PartitionWriteQuotaUsagePerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
+
     TInstant LastCountersUpdate;
 
     TSubscriber Subscriber;

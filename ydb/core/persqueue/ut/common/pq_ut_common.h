@@ -261,6 +261,7 @@ struct TTabletPreparationParameters {
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
     bool enableCompactificationByKey{false};
+    bool enablePerPartitionCounters{false};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
@@ -586,6 +587,23 @@ void CmdWrite(
     bool treatWrongCookieAsError = false,
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
+
+struct TCmdWriteOptions {
+    ui32 Partition;
+    TString SourceId;
+    TVector<std::pair<ui64, TString>> Data;
+    TTestContext& TestContext;
+    bool Error = false;
+    const THashSet<ui32>& AlreadyWrittenSeqNo = {};
+    bool IsFirst = false;
+    const TString& OwnerCookie = "";
+    i32 MessageNo = -1;
+    i64 Offset = -1;
+    bool TreatWrongCookieAsError = false;
+    bool TreatBadOffsetAsError = true;
+    bool DisableDeduplication = false;
+};
+void CmdWrite(const TCmdWriteOptions&);
 
 THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 

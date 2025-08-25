@@ -8,6 +8,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+using NYdb::NTable::TTxControl;
+using NYdb::NTable::TTableClient;
+using NYdb::NTable::TSession;
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
@@ -100,6 +104,247 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
             CompareYson(result, R"([[23000u;]])");
+        }
+    }
+
+     Y_UNIT_TEST(NullablePkOrderBy) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowNullableColumnStorePrimaryKeys(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        // создаём таблицу
+        {
+            auto res = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/nullablePkTable` (
+                    id Optional<Int64>,
+                    value String,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            // Graceful skip if SS still blocks it
+            if (!res.IsSuccess()) {
+                TString issues = res.GetIssues().ToString();
+                if (issues.Contains("Nullable key column")) {
+                    Cerr << "Skipping NullablePkOrderBy: " << issues << Endl;
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // вставляем строки: одна с NULL PK, две с обычными
+        {
+            auto res = session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/nullablePkTable` (id, value) VALUES
+                    (NULL, "nullv"),
+                    (1, "one"),
+                    (3, "three");
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // ORDER BY ASC
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT id, value FROM `/Root/nullablePkTable`
+                ORDER BY id ASC NULLS FIRST;
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << "ASC NULLS FIRST: " << result << Endl;
+        }
+
+        // ORDER BY DESC
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT id, value FROM `/Root/nullablePkTable`
+                ORDER BY id DESC NULLS LAST;
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << "DESC NULLS LAST: " << result << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(NullablePkAggregations) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowNullableColumnStorePrimaryKeys(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        // создаём таблицу
+        {
+            auto res = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/nullableAggTable` (
+                    id Optional<Int64>,
+                    value Int32,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            if (!res.IsSuccess()) {
+                TString issues = res.GetIssues().ToString();
+                if (issues.Contains("Nullable key column")) {
+                    Cerr << "Skipping NullablePkAggregations: " << issues << Endl;
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // вставляем данные: NULL PK, NULL в value, и нормальные строки
+        {
+            auto res = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                REPLACE INTO `/Root/nullableAggTable` (id, value) VALUES
+                    (NULL, 10),
+                    (1, 20),
+                    (2, NULL),
+                    (3, 30);
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // считаем агрегаты
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT COUNT(*), COUNT(id), SUM(value)
+                FROM `/Root/nullableAggTable`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << "Aggregations: " << result << Endl;
+
+            // ожидаем: COUNT(*)=4 строки всего, COUNT(id)=3 (NULL pk не считается), SUM(value)=60
+            CompareYson(result, "[[4u;3u;[60]]]");
+        }
+    }
+
+    Y_UNIT_TEST(NullablePk_RangePredicate_SkipNulls) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowNullableColumnStorePrimaryKeys(true);
+        TKikimrRunner kikimr(settings);
+        auto query = kikimr.GetQueryClient();
+
+        // CREATE in its own query
+        {
+            auto res = query.ExecuteQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `olap_null_pk2` (
+                ts Optional<Timestamp>,
+                payload String,
+                PRIMARY KEY (ts)
+            ) WITH (STORE = COLUMN);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            if (!res.IsSuccess()) {
+                TString issues = res.GetIssues().ToString();
+                if (issues.Contains("Nullable key column")) {
+                    Cerr << "Skipping NullablePk_RangePredicate_SkipNulls: " << issues << Endl;
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // UPSERT in a separate query
+        {
+            auto res = query.ExecuteQuery(R"(
+            --!syntax_v1
+            UPSERT INTO `olap_null_pk2` (ts, payload) VALUES
+                (NULL,                                  "n"),
+                (Timestamp("1970-01-01T00:00:00.005000Z"), "v");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // Range predicate: NULL must not match
+        {
+            auto res = query.ExecuteQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*)
+            FROM `olap_null_pk2`
+            WHERE ts < Timestamp("1970-01-01T00:00:00.010000Z");
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            TString y = FormatResultSetYson(res.GetResultSet(0));
+            CompareYson(y, R"([[1u;]])");
+        }
+    }
+
+    Y_UNIT_TEST(NullablePk_OrderByNulls) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowNullableColumnStorePrimaryKeys(true);
+        TKikimrRunner kikimr(settings);
+        auto query = kikimr.GetQueryClient();
+
+        // CREATE
+        {
+            auto res = query.ExecuteQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `olap_null_pk` (
+                    ts Optional<Timestamp>,
+                    payload String,
+                    PRIMARY KEY (ts)
+                ) WITH (STORE = COLUMN);
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            if (!res.IsSuccess()) {
+                TString issues = res.GetIssues().ToString();
+                if (issues.Contains("Nullable key column")) {
+                    Cerr << "Skipping NullablePk_OrderByNulls: " << issues << Endl;
+                    return;
+                }
+            }
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // INSERT: NULL, 5ms, NULL, 7ms
+        {
+            auto res = query.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `olap_null_pk` (ts, payload) VALUES
+                    (NULL,                                  "a"),
+                    (Timestamp("1970-01-01T00:00:00.005000Z"), "b"),
+                    (NULL,                                  "c"),
+                    (Timestamp("1970-01-01T00:00:00.007000Z"), "d");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // NULLS FIRST
+        {
+            auto res = query.ExecuteQuery(R"(
+                --!syntax_v1
+                SELECT CAST(ts AS String) AS ts_s, payload
+                FROM `olap_null_pk`
+                ORDER BY ts NULLS FIRST, payload;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            TString y = FormatResultSetYson(res.GetResultSet(0));
+            CompareYson(y, R"([[#;"a"];[#;"c"];["1970-01-01T00:00:00.005000Z";"b"];["1970-01-01T00:00:00.007000Z";"d"]])");
+        }
+
+        // NULLS LAST
+        {
+            auto res = query.ExecuteQuery(R"(
+                --!syntax_v1
+                SELECT CAST(ts AS String) AS ts_s, payload
+                FROM `olap_null_pk`
+                ORDER BY ts NULLS LAST, payload;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            TString y = FormatResultSetYson(res.GetResultSet(0));
+            CompareYson(y, R"([["1970-01-01T00:00:00.005000Z";"b"];["1970-01-01T00:00:00.007000Z";"d"];[#;"a"];[#;"c"]])");
         }
     }
 

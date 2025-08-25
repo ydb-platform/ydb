@@ -405,4 +405,5 @@ message TTableServiceConfig {
     optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
+    optional bool AllowNullableColumnStorePrimaryKeys = 95 [default = false];
 };

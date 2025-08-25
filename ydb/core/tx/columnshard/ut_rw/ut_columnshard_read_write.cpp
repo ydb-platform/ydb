@@ -1754,6 +1754,56 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
+    Y_UNIT_TEST(NullablePkGroupBy) {
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        pk[0].SetType(TTypeInfo(NTypeIds::Int64)); // первый ключ nullable
+
+        TestTableDescription table{ .Schema = schema, .Pk = pk };
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+            &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 tableId = 1;
+        auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+        // Вставляем строки с NULL и без него
+        {
+            std::vector<ui64> writeIds;
+            {
+                TTestBlobOptions opts;
+                opts.NullColumns.emplace("timestamp");
+                TString data = MakeTestBlob({0, 1}, schema, opts);
+                UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, data, schema, true, &writeIds));
+            }
+            {
+                TString data = MakeTestBlob({5, 6}, schema);
+                UNIT_ASSERT(WriteData(runtime, sender, 2, tableId, data, schema, true, &writeIds));
+            }
+            auto txId = 100;
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Читаем через группировку (NULL должна считаться отдельной группой)
+        {
+            using TBorder = TTabletReadPredicateTest::TBorder;
+            TTabletReadPredicateTest tester(runtime, planStep, 100, pk);
+
+            tester.Test("Group by PK with NULL should create distinct group")
+                  .SetExpectedCount(2); // одна группа NULL, одна — со значением
+        }
+    }
+
+
     Y_UNIT_TEST(Write) {
         TestTableDescription table;
         TestWrite(table);

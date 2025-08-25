@@ -4,14 +4,18 @@
 
 namespace NYdb::NConsoleClient {
 
-bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
-    if (entry.Type != NScheme::ESchemeEntryType::Directory) {
+bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
+    if (entry.Type == NScheme::ESchemeEntryType::Directory) {
+        return entry.Name.starts_with("~")
+            || entry.Name.starts_with(".sys")
+            || entry.Name.starts_with(".metadata");
+    } else {
         return false;
     }
+}
 
-    return entry.Name.starts_with("~")
-        || entry.Name.starts_with(".sys")
-        || entry.Name.starts_with(".metadata");
+bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
+    return IsSystemDir(entry) || entry.Type == NScheme::ESchemeEntryType::SysView;
 }
 
 }

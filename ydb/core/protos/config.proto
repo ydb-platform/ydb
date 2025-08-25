@@ -1949,6 +1949,7 @@ message TColumnShardConfig {
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
+    optional bool DisableBulkUpsertRequireAllColumns = 47 [default = false];
 }
 
 message TSchemeShardConfig {

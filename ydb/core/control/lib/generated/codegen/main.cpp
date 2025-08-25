@@ -136,7 +136,7 @@ const TImmediateControlsClass* CodeGenClassImpl(
         const auto* innerField = protoClassDescriptor.field(fieldIndex);
         if (innerField->is_map()) {
             mapHandler(innerField);
-        } else if (innerField->type() == ::google::protobuf::FieldDescriptor::TYPE_UINT64) {
+        } else if (EqualToOneOf(innerField->type(), ::google::protobuf::FieldDescriptor::TYPE_UINT64, ::google::protobuf::FieldDescriptor::TYPE_INT64)) {
             controlClass.Controls.emplace_back(CodeGenControl(*innerField, fullPathInHierarchy, context));
         } else if (innerField->type() == ::google::protobuf::FieldDescriptor::TYPE_MESSAGE) {
             controlClass.InnerClasses.emplace_back(codeGenClass(*innerField, fullPathInHierarchy, context));

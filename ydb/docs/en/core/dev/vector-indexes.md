@@ -1,7 +1,5 @@
 # Vector Indexes
 
-{% include [limitations](../_includes/vector_index_limitations.md) %}
-
 [Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
 
 Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
@@ -134,3 +132,23 @@ It is recommended to check the optimality of the written query using [query stat
 
 {% endnote %}
 
+## Behaviour of Vector Index Updates {#update}
+
+When a table with a vector index is updated, its internal structure — a tree of clusters (groups of similar vectors) — **is not recalculated**. New or modified records are simply assigned to existing clusters.
+
+Over time, this can lead to **index degradation** and:
+
+1. **Reduced search accuracy** — the index may return less relevant results because clusters no longer reflect the actual data structure.
+2. **Reduced performance** — if clusters become unbalanced (for example, one cluster contains too many records), search queries slow down and may, in the worst case, scan the whole table.
+
+The degradation depends on the nature of updates:
+
+- If the index was built on a **representative sample** (e.g., a random 50% of the data) and the remaining records were added later, the structure remains relevant and degradation is minimal.
+- If **entire groups of similar vectors** were missing from the initial dataset, the clusters may not divide the space correctly, and search quality may drop significantly.
+
+The corner case is when the index is created on an empty table: in this case, it consists of only one cluster, and all new records are placed into it. Searches on such index are equivalent to full table scans.
+
+To prevent degradation:
+
+- Do not create a vector index on an empty table.
+- If the table has accumulated a large amount of new data, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md?version=main#rename) the old index with the new one.

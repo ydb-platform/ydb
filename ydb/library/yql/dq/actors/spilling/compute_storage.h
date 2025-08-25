@@ -1,7 +1,7 @@
 #pragma once
 
 #include "compute_storage_actor.h"
-#include "dq_spiller.h"
+#include <ydb/library/yql/dq/runtime/dq_spiller.h>
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>

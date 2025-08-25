@@ -10,6 +10,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/stream/mem.h>
 
 
 namespace NYql::NDq {
@@ -65,18 +66,20 @@ public:
         Y_ENSURE(keyIt != StoredBlobsKeysMapping_.end());
 
         const auto it = LoadingBlobs_.find(blobId);
-        // If we didn't request loading blob from spilling -> request it
         if (it == LoadingBlobs_.end()) {
-
             auto future = Spiller_->Extract(keyIt->second);
 
             LoadingBlobs_.emplace(blobId, std::move(future));
             return false;
         }
-        // If we requested loading blob, but it's not loaded -> wait
         if (!it->second.HasValue()) return false;
 
-        blob = std::move(it->second.ExtractValue());
+        auto tmp = it->second.ExtractValue();
+        blob.Resize(tmp->Size());
+        TMemoryOutput output(blob.Data(), blob.Size());
+        // TODO: get rid of redundant Copy
+        // Add interface that returns TBuffer
+        tmp->CopyTo(output);
         LoadingBlobs_.erase(it);
         StoredBlobsKeysMapping_.erase(keyIt);
         --StoredBlobsCount_;
@@ -101,9 +104,7 @@ private:
 private:
     IDqSpiller::TPtr Spiller_;
 
-    // BlobId -> future with requested blob
-    std::unordered_map<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
-    // BlobId -> future with some additional info
+    std::unordered_map<ui64, NThreading::TFuture<std::optional<TChunkedBuffer>>> LoadingBlobs_;
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
     std::unordered_map<ui64, ui64> StoredBlobsKeysMapping_;
     ui64 WritingBlobsTotalSize_ = 0;

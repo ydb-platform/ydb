@@ -226,9 +226,9 @@ class AsyncHealthcheckRunner:
                 map(lambda issue: issue['location']['storage']['pool']['group']['pile']['name'], failed_groups)
             )
             return (this_pile, failed_piles)
-        except Exception:
+        except Exception as e:
             # Swallow errors; caller treats as no update from this endpoint
-            logger.debug("Healthcheck request failed for %s", endpoint)
+            logger.debug(f"Healthcheck request failed for {endpoint}: {e}")
             return None
 
     def _process_future(self, endpoint, future):

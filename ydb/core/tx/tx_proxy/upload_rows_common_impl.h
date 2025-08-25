@@ -587,7 +587,12 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
-        return TConclusionStatus::Success();
+        TConclusionStatus res = TConclusionStatus::Success();
+        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetDisableBulkUpsertRequireAllColumns()) {
+            res = CheckRequiredColumns(entry, *reqColumns);
+        }
+
+        return res;
     }
 
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {

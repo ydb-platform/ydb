@@ -5310,10 +5310,28 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
 {
+    const NKikimrPQ::TEvPartitionScaleStatusChanged& record = ev->Get()->Record;
+    if (MirroringEnabled(Config) && record.HasParticipatingPartitions()) {
+        PQ_LOG_I("Got mirrorer split merge request" << ev->ToString());
+    }
+
     if (ReadBalancerActorId) {
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }
 }
+
+void TPersQueue::Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx) {
+    const TEvPQ::TBroadcastPartitionError& event = *ev->Get();
+    for (auto& [partitionId, partitionInfo] : Partitions) {
+        if (partitionId.IsSupportivePartition()) {
+            continue;
+        }
+        THolder error = MakeHolder<TEvPQ::TBroadcastPartitionError>();
+        error->Record.CopyFrom(event.Record);
+        ctx.Send(partitionInfo.Actor, std::move(error));
+    }
+}
+
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);
@@ -5483,6 +5501,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+        HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
         hFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);

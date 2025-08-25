@@ -244,6 +244,7 @@ private:
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
+    void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -480,6 +481,7 @@ private:
 
     NKikimrPQ::EScaleStatus CheckScaleStatus(const TActorContext& ctx);
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
+    void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
 
@@ -571,6 +573,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
+            HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
@@ -624,6 +627,7 @@ private:
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
+            HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
@@ -635,6 +639,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
+            HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
@@ -938,6 +943,7 @@ private:
 
     std::unique_ptr<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> SplitMergeAvgWriteBytes;
     TInstant LastScaleRequestTime = TInstant::Zero();
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
     NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;

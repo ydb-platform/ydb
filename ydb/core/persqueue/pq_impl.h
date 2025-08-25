@@ -178,6 +178,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
 
@@ -598,6 +599,7 @@ private:
     void BeginDeleteTransaction(const TActorContext& ctx,
                                 TDistributedTransaction& tx,
                                 NKikimrPQ::TTransaction::EState state);
+    void ResendSplitMergeRequests(const TActorContext& ctx);
 };
 
 

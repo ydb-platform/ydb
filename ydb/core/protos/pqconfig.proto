@@ -815,6 +815,7 @@ message TStatusResponse {
         optional uint64 Cookie = 34;
 
         optional EScaleStatus ScaleStatus = 35;
+        optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
     }
 
     message TConsumerResult {
@@ -839,6 +840,15 @@ message TStatusResponse {
     optional uint64 TabletId = 1;
     repeated TPartResult PartResult = 2;
 }
+
+
+message TBroadcastPartitionError {
+    message TMessageGroup {
+        repeated TStatusResponse.TErrorMessage Errors = 1;
+    }
+    repeated TMessageGroup MessageGroups = 1;
+};
+
 
 message THasDataInfo {
     optional int32 Partition = 1;
@@ -1078,9 +1088,15 @@ message TEvReadingPartitionStartedRequest {
     optional uint32 PartitionId = 2;
 };
 
+message TPartitionScaleParticipants {
+    repeated uint32 ChildPartitionIds = 1;
+    repeated uint32 AdjacentPartitionIds = 2;
+};
+
 message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;
+    optional TPartitionScaleParticipants ParticipatingPartitions = 3;
 };
 
 message TPartitions {

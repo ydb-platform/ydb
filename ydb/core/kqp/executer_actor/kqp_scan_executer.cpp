@@ -134,7 +134,7 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+        for (auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
             if (stageInfo.Meta.ShardKey) {
                 for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     shardIds.insert(partition.ShardId);
@@ -170,63 +170,17 @@ private:
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
-            auto& tx = Request.Transactions[txIdx];
+            const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
-
+                const auto& stage = tx.Body->GetStages(stageIdx);
                 Y_DEBUG_ABORT_UNLESS(!stage.GetIsEffectsStage());
-
-                if (stage.SourcesSize() > 0) {
-                    switch (stage.GetSources(0).GetTypeCase()) {
-                        case NKqpProto::TKqpSource::kReadRangesSource:
-                            BuildScanTasksFromSource(
-                                stageInfo,
-                                /* limitTasksPerNode */ false);
-                            break;
-                        default:
-                            YQL_ENSURE(false, "unknown source type");
-                    }
-                } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo, ShardsOnNode.size());
-                } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo);
-                } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
-                    HasOlapTable = true;
-                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
-                } else {
-                    YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
-                }
-
-                {
-                    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                    const bool useLlvm = PreparedQuery ? PreparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
-                    for (auto& taskId : stageInfo.Tasks) {
-                        auto& task = TasksGraph.GetTask(taskId);
-                        task.SetUseLlvm(useLlvm);
-                    }
-                    if (Stats && CollectProfileStats(Request.StatsMode)) {
-                        Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
-                    }
-
-                }
-
-                if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
-                }
-
-                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
             }
-
-            ResponseEv->InitTxResult(tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
         }
 
+        BuildAllTasks<true>(false, PreparedQuery);
+
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Scan, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
+        if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
         }
@@ -235,8 +189,8 @@ private:
         TVector<ui64> computeTasks;
 
         // calc stats
-        for (auto& task : TasksGraph.GetTasks()) {
-            auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        for (const auto& task : GetTasksGraph().GetTasks()) {
+            const auto& stageInfo = GetTasksGraph().GetStageInfo(task.StageId);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // Task with source
@@ -254,12 +208,12 @@ private:
             }
         }
 
-        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
+        if (GetTasksGraph().GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            LOG_N("Too many compute actors: totalTasks=" << TasksGraph.GetTasks().size());
+            LOG_N("Too many compute actors: totalTasks=" << GetTasksGraph().GetTasks().size());
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
+                    << "Requested too many execution units: " << GetTasksGraph().GetTasks().size()));
             return;
         }
 

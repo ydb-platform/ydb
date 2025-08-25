@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
                 auto progress = tabletTxs[1];
                 CheckTxHasWriteLog(progress);
-                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 6 : 11);
+                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
             }
 
             std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                             Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
                             ExpectedSpan("Tablet.Transaction",
                                 ExpectedSpan("Tablet.Transaction.Execute",
-                                    Repeat("Datashard.Unit", usesVolatileTxs ? 6 : 11)),
+                                    Repeat("Datashard.Unit", usesVolatileTxs ? 7 : 12)),
                                 ExpectedSpan("Tablet.WriteLog",
                                     "Tablet.WriteLog.LogEntry"),
                                 "Tablet.Transaction.Complete"),
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
                 auto progress = tabletTxs[1];
                 CheckTxHasWriteLog(progress);
-                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 6 : 11);
+                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
             }
 
             std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                                 Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
                                 ExpectedSpan("Tablet.Transaction",
                                     ExpectedSpan("Tablet.Transaction.Execute",
-                                        Repeat("Datashard.Unit", usesVolatileTxs ? 6 : 11)),
+                                        Repeat("Datashard.Unit", usesVolatileTxs ? 7 : 12)),
                                     ExpectedSpan("Tablet.WriteLog",
                                         "Tablet.WriteLog.LogEntry"),
                                     "Tablet.Transaction.Complete"),
@@ -552,12 +552,12 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto writeTx = tabletTxs[0];
 
         CheckTxHasWriteLog(writeTx);
-        CheckTxHasDatashardUnits(writeTx, 5);
+        CheckTxHasDatashardUnits(writeTx, 6);
 
         std::string canon = ExpectedSpan("Datashard.WriteTransaction",
             ExpectedSpan("Tablet.Transaction",
                 ExpectedSpan("Tablet.Transaction.Execute",
-                    Repeat("Datashard.Unit", 5)),
+                    Repeat("Datashard.Unit", 6)),
                 ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
                 "Tablet.Transaction.Complete"),
             "Datashard.SendImmediateWriteResult")

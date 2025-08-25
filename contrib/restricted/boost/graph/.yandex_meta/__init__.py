@@ -20,7 +20,7 @@ def post_install(self):
 boost_graph = NixSourceProject(
     nixattr="boost_graph",
     arcdir=boost.make_arcdir("graph"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/**/*.hpp",
         "src/",

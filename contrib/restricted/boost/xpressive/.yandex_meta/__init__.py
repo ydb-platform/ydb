@@ -9,7 +9,7 @@ def post_install(self):
 boost_xpressive = NixSourceProject(
     nixattr="boost_xpressive",
     arcdir=boost.make_arcdir("xpressive"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

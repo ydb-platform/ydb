@@ -406,7 +406,7 @@ void TSensorSet::InitializeType(ESensorType type)
     }
 }
 
-void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
+void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extraProjections) const
 {
     cube->set_sparse(Options_.Sparse);
     cube->set_global(Options_.Global);
@@ -414,14 +414,14 @@ void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraT
     cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
     cube->set_summary_policy(ToProto(Options_.SummaryPolicy));
 
-    CountersCube_.DumpCube(cube, extraTags);
-    TimeCountersCube_.DumpCube(cube, extraTags);
-    GaugesCube_.DumpCube(cube, extraTags);
-    SummariesCube_.DumpCube(cube, extraTags);
-    TimersCube_.DumpCube(cube, extraTags);
-    TimeHistogramsCube_.DumpCube(cube, extraTags);
-    GaugeHistogramsCube_.DumpCube(cube, extraTags);
-    RateHistogramsCube_.DumpCube(cube, extraTags);
+    CountersCube_.DumpCube(cube, extraProjections);
+    TimeCountersCube_.DumpCube(cube, extraProjections);
+    GaugesCube_.DumpCube(cube, extraProjections);
+    SummariesCube_.DumpCube(cube, extraProjections);
+    TimersCube_.DumpCube(cube, extraProjections);
+    TimeHistogramsCube_.DumpCube(cube, extraProjections);
+    GaugeHistogramsCube_.DumpCube(cube, extraProjections);
+    RateHistogramsCube_.DumpCube(cube, extraProjections);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

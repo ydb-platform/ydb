@@ -224,7 +224,7 @@ namespace NKikimr {
                     return MakeErrorFrom(self, ev.get());
                 }
                 if (pile.IsPrimary) {
-                    return std::move(ev);
+                    return ev;
                 }
                 Y_ABORT_UNLESS(ResponsesPending);
                 return nullptr;
@@ -336,7 +336,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
 
                 if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
-                    return std::move(ev);
+                    return ev;
                 }
 
                 if (!state.Responses) {
@@ -523,7 +523,7 @@ namespace NKikimr {
                 auto& state = std::get<TRangeState>(State);
 
                 if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
-                    return std::move(ev);
+                    return ev;
                 }
 
                 auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
@@ -816,6 +816,8 @@ namespace NKikimr {
                     request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
 
                     if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
+                        FixGroupId(*response);
+
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
                         Y_DEBUG_ABORT_UNLESS(common->Status != NKikimrProto::RACE);
@@ -871,7 +873,26 @@ namespace NKikimr {
                 }
                 PendingByGeneration.erase(it);
             }
+        }
 
+        void FixGroupId(IEventBase& ev) {
+            switch (ev.Type()) {
+                case TEvBlobStorage::EvPutResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvPutResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvGetResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvGetResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvRangeResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvRangeResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvPatchResult:
+                    const_cast<TGroupId&>(static_cast<TEvBlobStorage::TEvPatchResult&>(ev).GroupId) = GroupId;
+                    break;
+            }
         }
 
 #define HANDLE_REQUEST(NAME) hFunc(NAME, HandleProxyRequest)

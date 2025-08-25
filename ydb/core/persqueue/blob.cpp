@@ -51,23 +51,6 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
     Y_ENSURE(PartitionKey.size() <= 256);
 }
 
-ui32 TClientBlob::GetPartDataSize() const {
-    if (PartData) {
-        return 1 + sizeof(ui16) + sizeof(ui16) + sizeof(ui32);
-    }
-    return 1;
-}
-
-ui32 TClientBlob::GetKinesisSize() const {
-    if (PartitionKey.size() > 0) {
-        return 2 + PartitionKey.size() + ExplicitHashKey.size();
-    }
-    return 0;
-}
-
-ui32 TClientBlob::GetBlobSize() const {
-    return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
-}
 
 ui16 TClientBlob::GetPartNo() const {
     return PartData ? PartData->PartNo : 0;
@@ -153,7 +136,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
     ui32 unpackedSize = GetUnpackedSize();
     ui32 i = Blobs.size();
     Blobs.push_back(b);
-    unpackedSize += b.GetBlobSize();
+    unpackedSize += b.GetSerializedSize();
     if (b.IsLastPart())
         ++count;
     else {
@@ -551,7 +534,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset,
                    "Head.Offset=%" PRIu64 ", NewHead.Offset=%" PRIu64,
                    Head.Offset, NewHead.Offset);
-    ui32 size = blob.GetBlobSize();
+    ui32 size = blob.GetSerializedSize();
     Y_ABORT_UNLESS(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;

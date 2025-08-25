@@ -753,29 +753,31 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         return false;
     }
 
-    TOperation::TPtr op = GetActiveOp(txId);
-    bool active = true;
-    if (!op) {
-        op = GetVolatileOp(txId);
-        active = false;
-    }
-    if (op) {
-        if (!op->GetStep() && !op->GetPredictedStep() && !active) {
+    TOperation::TPtr op = Self->TransQueue.FindTxInFly(txId);
+    Y_ENSURE(op);
+
+    bool isActive = op->IsCompleted() || op->IsExecuting() || op->IsWaitingDependencies();
+    bool isVolatile = op->HasVolatilePrepareFlag();
+
+    // Avoid persisting small readsets and keep them delayed in memory instead
+    // Note: readsets are usually 2 bytes with a single decision proto field
+    if (isActive || isVolatile || rs.Record.GetReadSet().size() <= 8) {
+        if (isVolatile && !op->GetStep() && !op->GetPredictedStep()) {
             op->SetPredictedStep(step);
             AddPredictedPlan(step, txId, ctx);
         }
-        // If input read sets are not loaded yet then
-        // it will be added at load.
+
         if (op->HasLoadedInRSFlag()) {
             op->AddInReadSet(rs.Record);
         } else {
             op->AddDelayedInReadSet(rs.Record);
         }
+
         if (ack) {
             op->AddDelayedAck(THolder(ack.Release()));
         }
 
-        if (active) {
+        if (isActive && !isVolatile) {
             AddCandidateOp(op);
             Self->PlanQueue.Progress(ctx);
         }

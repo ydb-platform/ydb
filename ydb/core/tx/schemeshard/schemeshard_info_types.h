@@ -51,6 +51,7 @@
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -998,8 +999,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         // Split and merge operations form the partitions graph. Each partition created in this way has a parent
         // partition. In turn, the parent partition knows about the partitions formed after the split and merge
         // operations.
-        THashSet<ui32> ParentPartitionIds;
-        THashSet<ui32> ChildPartitionIds;
+        TSet<ui32> ParentPartitionIds;
+        TSet<ui32> ChildPartitionIds;
 
         TShardIdx ShardIdx;
 

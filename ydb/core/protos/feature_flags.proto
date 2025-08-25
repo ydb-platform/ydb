@@ -222,5 +222,6 @@ message TFeatureFlags {
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
     optional bool DisableColumnShardBulkUpsertRequireAllColumns = 198 [default = false];
-    optional bool EnableMirroredTopicSplitMerge = 199 [default = false];
+    optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
+    optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
 }

@@ -682,12 +682,14 @@ void TActiveTransaction::FinalizeDataTxPlan()
         plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
         plan.push_back(EExecutionUnitKind::PrepareKqpDataTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
     } else {
         plan.push_back(EExecutionUnitKind::BuildDataTxOutRS);
         plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
         plan.push_back(EExecutionUnitKind::PrepareDataTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteDataTx);
     }
     plan.push_back(EExecutionUnitKind::CompleteOperation);
@@ -708,6 +710,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             Y_ENSURE(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+            plan.push_back(EExecutionUnitKind::BlockFailPoint);
             if (IsKqpDataTransaction()) {
                 plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             } else {
@@ -727,6 +730,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             Y_ENSURE(IsKqpDataTransaction());
             // Note: execute will also prepare and send readsets
+            plan.push_back(EExecutionUnitKind::BlockFailPoint);
             plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             // Note: it is important that plan here is the same as regular
             // distributed tx, since normal tx may decide to commit in a

@@ -156,6 +156,7 @@ private:
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
             hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
+            hFunc(TEvDqCompute::TEvRun, OnRun);
             hFunc(NKikimr::TEvQuota::TEvClearance, OnCpuQuotaGiven);
             hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
             default:
@@ -797,6 +798,10 @@ private:
         if (DeferredRestoreFromCheckpointEvent) {
             ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
         }
+        if (DeferredRunEvent) {
+            HandleExecuteBase(DeferredRunEvent);
+            DeferredRunEvent.Reset();
+        }
 
         ContinueExecute(EResumeSource::CATaskRunnerCreated);
     }
@@ -1152,6 +1157,15 @@ private:
         }
     }
 
+    void OnRun(TEvDqCompute::TEvRun::TPtr& ev) {
+        if (TypeEnv) {
+            HandleExecuteBase(ev);
+        } else {
+            Y_ABORT_UNLESS(!DeferredRunEvent);
+            DeferredRunEvent = std::move(ev);
+        }
+    }
+
     bool UseCpuQuota() const {
         return QuoterServiceActorId && Task.GetRateLimiter() && Task.GetRateLimiterResource();
     }
@@ -1259,6 +1273,7 @@ private:
     NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
     TEvDqCompute::TEvInjectCheckpoint::TPtr DeferredInjectCheckpointEvent;
     TEvDqCompute::TEvRestoreFromCheckpoint::TPtr DeferredRestoreFromCheckpointEvent;
+    TEvDqCompute::TEvRun::TPtr DeferredRunEvent;
 
     THashSet<ui64> FinishedOutputChannels;
     THashSet<ui64> FinishedSinks;

@@ -1114,6 +1114,7 @@ namespace NKikimr {
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }
+        Y_VERIFY_S(!Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
         return true;
     }
 

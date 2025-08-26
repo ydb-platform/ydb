@@ -19,10 +19,10 @@ class YdbClient:
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement, is_ddl):
+    def query(self, statement, is_ddl, retry_settings=None):
         if self.use_query_service:
             try:
-                return self.session_pool.execute_with_retries(statement)
+                return self.session_pool.execute_with_retries(query=statement, retry_settings=retry_settings)
             except Exception as e:
                 logger.error(f"Error: {e} while executing query: {statement}")
                 raise e

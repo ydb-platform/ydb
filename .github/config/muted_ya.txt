@@ -41,6 +41,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/proxy_service/ut TestScriptExecutionsUtils.TestRetryLimiter
+ydb/core/kqp/ut/batch_operations KqpBatchDelete.Large_3
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService+isOlap-useOltpSink
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap+useOltpSink
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap-useOltpSink
@@ -371,5 +372,6 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/stress/mixedpy py3test.sole chunk
 ydb/tests/stress/mixedpy test_mixed.py.TestYdbWorkload.test[column]
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

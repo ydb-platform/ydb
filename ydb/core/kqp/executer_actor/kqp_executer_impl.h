@@ -922,7 +922,7 @@ protected:
     }
 
     template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode, TPreparedQueryHolder::TConstPtr preparedQuery) {
+    auto BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings) {
         size_t sourceScanPartitionsCount = 0;
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -993,11 +993,10 @@ protected:
                     }
                 }
 
-                if constexpr (isScan) {
-                    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                    const bool useLlvm = preparedQuery ? preparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
+                if (llvmSettings) {
+                    const bool useLlvm = llvmSettings->GetUseLlvm(stage.GetProgram().GetSettings());
                     for (auto& taskId : stageInfo.Tasks) {
-                        GetTask(taskId).SetUseLlvm(useLlvm);
+                        TasksGraph.GetTask(taskId).SetUseLlvm(useLlvm);
                     }
                     if (Stats && CollectProfileStats(Request.StatsMode)) {
                         Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
@@ -1005,11 +1004,7 @@ protected:
                 }
 
                 if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(isScan
-                        ? stageInfo.Tasks.size() == 1
-                        : stageInfo.Tasks.size() <= 1
-                        , "Unexpected multiple tasks in single-partition stage"
-                    );
+                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
                 // Not task-related
@@ -2710,9 +2705,9 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const std::optional<TLlvmSettings>& llvmSettings);
 
 } // namespace NKqp
 } // namespace NKikimr

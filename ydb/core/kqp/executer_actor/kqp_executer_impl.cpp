@@ -78,13 +78,12 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
-    const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
+    const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings)
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -123,8 +122,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(
                 std::move(request), database, userToken, std::move(resultSetFormatSettings), counters,
-                executerConfig, std::move(asyncIoFactory), preparedQuery, userRequestContext,
-                statementResultIndex, federatedQuerySetup, nullptr
+                executerConfig, std::move(asyncIoFactory), userRequestContext,
+                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:

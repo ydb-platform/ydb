@@ -211,12 +211,6 @@ message TFeatureFlags {
     optional bool EnableMoveColumnTable = 193 [default = false];
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
-<<<<<<< HEAD
     optional bool EnableCompactionOverloadDetection = 197 [default = false];
-=======
-    optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
-    optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
-    optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
->>>>>>> dcb6051d350 (reserve flag (#23546))
 }

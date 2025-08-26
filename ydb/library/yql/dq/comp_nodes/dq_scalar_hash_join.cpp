@@ -10,9 +10,9 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TScalarHashJoinWrapper : public TStatelessWideFlowCodegeneratorNode<TScalarHashJoinWrapper> {
+class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper> {
 private:
-    using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TScalarHashJoinWrapper>;
+    using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
 
 public:
     TScalarHashJoinWrapper(
@@ -25,7 +25,7 @@ public:
         const TVector<TType*>&&     rightItemTypes,
         const TVector<ui32>&&       rightKeyColumns
     )
-        : TBaseComputation(GetCommonSource(leftFlow, rightFlow))
+        : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)
         , ResultItemTypes_(std::move(resultItemTypes))
@@ -37,7 +37,8 @@ public:
         , RightWideFieldsIndex_(mutables.IncrementWideFieldsIndex(rightItemTypes.size()))
     {}
 
-    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
+        Y_UNUSED(state);
         // Простая логика: сначала читаем все данные из левого потока, потом из правого
         if (!LeftFinished_) {
             auto** leftFields = ctx.WideFields.data() + LeftWideFieldsIndex_;
@@ -93,8 +94,7 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(LeftFlow_);
-        this->DependsOn(RightFlow_);
+        FlowDependsOnBoth(LeftFlow_, RightFlow_);
     }
 
 private:

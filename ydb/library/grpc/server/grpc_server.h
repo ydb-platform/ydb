@@ -78,7 +78,7 @@ struct TServerOptions {
     DECLARE_FIELD(GRpcShutdownDeadline, TDuration, TDuration::Seconds(30));
 
     //! In/Out message size limit
-    DECLARE_FIELD(MaxMessageSize, size_t, DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+    DECLARE_FIELD(MaxMessageSize, size_t, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
 
     //! Use GRpc keepalive
     DECLARE_FIELD(KeepAliveEnable, TMaybe<bool>, TMaybe<bool>());

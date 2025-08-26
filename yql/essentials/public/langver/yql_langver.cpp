@@ -9,7 +9,7 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 2);
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 3);
 
 const std::pair<ui32,ui32> Versions[] = {
 #include "yql_langver_list.inc"

@@ -1,10 +1,15 @@
 #pragma once
 
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/filters_set.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
+
+namespace NFq::NConfig {
+    class TRowDispatcherConfig;
+} // namespace NFq::NConfig
 
 namespace NFq::NRowDispatcher {
 
@@ -15,7 +20,9 @@ public:
     using TPtr = TIntrusivePtr<IClientDataConsumer>;
 
 public:
+    virtual bool IsStarted() const = 0;
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
+    virtual const TString& GetWatermarkExpr() const = 0;
     virtual const TString& GetWhereFilter() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
@@ -24,8 +31,14 @@ public:
     virtual void OnClientError(TStatus status) = 0;
 
     virtual void StartClientSession() = 0;
-    virtual void AddDataToClient(ui64 offset, ui64 rowSize) = 0;
+    virtual void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) = 0;
     virtual void UpdateClientOffset(ui64 offset) = 0;
+};
+
+struct TDataBatch {
+    TRope SerializedData;
+    TSet<ui64> Offsets;
+    TVector<ui64> WatermarksUs;
 };
 
 class ITopicFormatHandler : public TNonCopyable {
@@ -47,8 +60,7 @@ public:
 public:
     virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
 
-    // vector of (messages batch, [offsets])
-    virtual TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData(NActors::TActorId clientId) = 0;
+    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) = 0;
 
     virtual TStatus AddClient(IClientDataConsumer::TPtr client) = 0;
     virtual void RemoveClient(NActors::TActorId clientId) = 0;

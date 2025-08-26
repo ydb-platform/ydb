@@ -19,19 +19,26 @@ class TJsonTenantInfo : public TViewerPipeClient {
     using TThis = TJsonTenantInfo;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    using TPDiskId = std::pair<TNodeId, ui32>;
+    using TGroupId = ui32;
+    using TStoragePoolId = ui64;
+
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::unordered_map<TString, TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse>> TenantStatusResponses;
     std::unordered_map<TString, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
     std::unordered_map<TString, TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeSchemeResult;
     std::unordered_map<TTabletId, std::vector<TString>> DescribesBySchemeShard;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
-    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedSystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedTabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<NHealthCheck::TEvSelfCheckResultProto>> SelfCheckResults;
     std::unordered_map<TString, TRequestResponse<TEvStateStorage::TEvBoardInfo>> MetadataCacheEndpointsLookup;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> PoolsResponse;
 
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -41,7 +48,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     THashSet<TString> OffloadTenantsRequested;
     THashSet<TString> MetadataCacheRequested;
     THashMap<TNodeId, TString> NodeIdsToTenant; // for tablet info
-    TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString User;
     TString DomainPath;
@@ -115,8 +121,6 @@ public:
             return;
         }
         const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Followers = false;
         Metrics = true;
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
@@ -158,12 +162,39 @@ public:
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
         if (Storage) {
-            HiveStorageStats[RootHiveId] = MakeRequestHiveStorageStats(RootHiveId);
             DescribeSchemeResult[DomainPath] = MakeRequestSchemeShardDescribe(RootSchemeShardId, DomainPath);
             DescribesBySchemeShard[RootSchemeShardId].emplace_back(DomainPath);
+            PDisksResponse = MakeCachedRequestBSControllerPDisks();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
+            GroupsResponse = MakeCachedRequestBSControllerGroups();
+            PoolsResponse = MakeCachedRequestBSControllerPools();
         }
 
         Become(&TThis::StateCollectingInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
+        if (PDisksResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+        if (VSlotsResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+        if (GroupsResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (PoolsResponse->Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void PassAway() override {
@@ -180,7 +211,6 @@ public:
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, Handle);
             hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
-            hFunc(TEvHive::TEvResponseHiveStorageStats, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
@@ -191,13 +221,34 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
+    }
+
+    bool OnBscError(const TString& error) {
+        bool result = false;
+        if (PDisksResponse && PDisksResponse->Error(error)) {
+            result = true;
+        }
+        if (VSlotsResponse && VSlotsResponse->Error(error)) {
+            result = true;
+        }
+        if (GroupsResponse && GroupsResponse->Error(error)) {
+            result = true;
+        }
+        return result;
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             TString error = TStringBuilder() << "Failed to establish pipe: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status);
+            if (ev->Get()->TabletId == GetBSControllerId()) {
+                OnBscError(error);
+            }
             if (ev->Get()->TabletId == GetConsoleId()) {
                 if (ListTenantsResponse) {
                     ListTenantsResponse->Error(error);
@@ -209,12 +260,6 @@ public:
             {
                 auto it = HiveDomainStats.find(ev->Get()->TabletId);
                 if (it != HiveDomainStats.end()) {
-                    it->second.Error(error);
-                }
-            }
-            {
-                auto it = HiveStorageStats.find(ev->Get()->TabletId);
-                if (it != HiveStorageStats.end()) {
                     it->second.Error(error);
                 }
             }
@@ -407,12 +452,6 @@ public:
         }
     }
 
-    void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
-        if (HiveStorageStats[ev->Cookie].Set(std::move(ev))) {
-            RequestDone();
-        }
-    }
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
@@ -427,9 +466,6 @@ public:
                     }
                 }
                 if (Storage) {
-                    if (hiveId && HiveStorageStats.count(hiveId) == 0) {
-                        HiveStorageStats[hiveId] = MakeRequestHiveStorageStats(hiveId);
-                    }
                     if (schemeShardId && DescribeSchemeResult.count(path) == 0) {
                         DescribeSchemeResult[path] = MakeRequestSchemeShardDescribe(schemeShardId, path);
                         DescribesBySchemeShard[schemeShardId].emplace_back(path);
@@ -608,6 +644,37 @@ public:
         return type;
     }
 
+    std::vector<TString> Problems;
+
+    void AddProblem(const TString& problem) {
+        for (const auto& p : Problems) {
+            if (p == problem) {
+                return;
+            }
+        }
+        Problems.push_back(problem);
+    }
+
+    static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo) {
+        if (pdiskInfo.GetExpectedSlotCount()) {
+            return pdiskInfo.GetTotalSize() / pdiskInfo.GetExpectedSlotCount();
+        } else {
+            return pdiskInfo.GetTotalSize() / 16;
+        }
+    }
+
+    struct TStoragePoolStats {
+        NKikimrViewer::TStorageUsage::EType Kind;
+        ui64 Size = 0;
+        ui64 Limit = 0;
+        ui64 Groups = 0;
+    };
+
+    struct TDatabaseStorageStats {
+        ui64 Size = 0;
+        ui64 Limit = 0;
+    };
+
     void ReplyAndPassAway() override {
         Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/tenantinfo"));
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
@@ -626,6 +693,73 @@ public:
                 nodeSystemStateInfo[nodeId] = &(request.Get()->Record.GetSystemStateInfo(0));
             }
         }
+
+        std::unordered_map<TString, TStoragePoolStats> poolByName;
+
+        if (Storage) {
+            std::unordered_map<TPDiskId, const NKikimrSysView::TPDiskInfo&> pDisksIndex;
+            std::unordered_map<TStoragePoolId, TString> poolIdToName;
+            std::unordered_map<TGroupId, TStoragePoolId> groupToPoolId;
+
+            if (PDisksResponse && PDisksResponse->IsOk()) {
+                for (const NKikimrSysView::TPDiskEntry& entry : PDisksResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TPDiskKey& key = entry.GetKey();
+                    const NKikimrSysView::TPDiskInfo& info = entry.GetInfo();
+                    pDisksIndex.emplace(std::make_pair(key.GetNodeId(), key.GetPDiskId()), info);
+                }
+            } else {
+                AddProblem("no-pdisks-info");
+            }
+
+            if (PoolsResponse && PoolsResponse->IsOk()) {
+                for (const NKikimrSysView::TStoragePoolEntry& entry : PoolsResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TStoragePoolKey& key = entry.GetKey();
+                    const NKikimrSysView::TStoragePoolInfo& info = entry.GetInfo();
+                    poolIdToName.emplace(key.GetStoragePoolId(), info.GetName());
+                    poolByName[info.GetName()].Kind = GetStorageType(info.GetKind());
+                }
+            } else {
+                AddProblem("no-pools-info");
+            }
+
+            if (GroupsResponse && GroupsResponse->IsOk()) {
+                for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TGroupKey& key = entry.GetKey();
+                    const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                    groupToPoolId.emplace(key.GetGroupId(), info.GetStoragePoolId());
+                    auto itPoolName = poolIdToName.find(info.GetStoragePoolId());
+                    if (itPoolName != poolIdToName.end()) {
+                        poolByName[itPoolName->second].Groups++;
+                    }
+                }
+            } else {
+                AddProblem("no-groups-info");
+            }
+
+            if (VSlotsResponse && VSlotsResponse->IsOk()) {
+                for (const NKikimrSysView::TVSlotEntry& entry : VSlotsResponse->Get()->Record.GetEntries()) {
+                    const NKikimrSysView::TVSlotKey& key = entry.GetKey();
+                    const NKikimrSysView::TVSlotInfo& info = entry.GetInfo();
+                    auto itPDisk = pDisksIndex.find(std::make_pair(key.GetNodeId(), key.GetPDiskId()));
+                    if (itPDisk != pDisksIndex.end()) {
+                        ui64 allocated = info.GetAllocatedSize();
+                        ui64 slotSize = GetSlotSize(itPDisk->second);
+                        auto itPoolId = groupToPoolId.find(info.GetGroupId());
+                        if (itPoolId != groupToPoolId.end()) {
+                            auto itPoolName = poolIdToName.find(itPoolId->second);
+                            if (itPoolName != poolIdToName.end()) {
+                                auto& poolStats = poolByName[itPoolName->second];
+                                poolStats.Size += allocated;
+                                poolStats.Limit += slotSize;
+                            }
+                        }
+                    }
+                }
+            } else {
+                AddProblem("no-vslots-info");
+            }
+        }
+
         for (const auto& [subDomainKey, tenantBySubDomainKey] : TenantBySubDomainKey) {
             TString name(tenantBySubDomainKey.GetName());
             if (!IsValidTenant(name)) {
@@ -763,53 +897,42 @@ public:
                 }
 
                 if (Storage) {
-                    THashMap<NKikimrViewer::TStorageUsage::EType, std::pair<ui64, ui64>> databaseStorageByType;
-                    auto itHiveStorageStats = HiveStorageStats.find(hiveId);
-                    if (itHiveStorageStats != HiveStorageStats.end() && itHiveStorageStats->second.IsOk()) {
-                        const NKikimrHive::TEvResponseHiveStorageStats& record = itHiveStorageStats->second.Get()->Record;
-                        if (entry.DomainDescription) {
-                            uint64 storageAllocatedSize = 0;
-                            uint64 storageAvailableSize = 0;
-                            uint64 storageMinAvailableSize = std::numeric_limits<ui64>::max();
-                            uint64 storageGroups = 0;
-                            std::unordered_map<TString, NKikimrViewer::TStorageUsage::EType> storagePoolType;
-                            for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
-                                storagePoolType[storagePool.GetName()] = GetStorageType(storagePool.GetKind());
-                            }
-                            for (const NKikimrHive::THiveStoragePoolStats& poolStat : record.GetPools()) {
-                                if (storagePoolType.count(poolStat.GetName())) {
-                                    NKikimrViewer::TStorageUsage::EType storageType = storagePoolType[poolStat.GetName()];
-                                    for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
-                                        storageAllocatedSize += groupStat.GetAllocatedSize();
-                                        storageAvailableSize += groupStat.GetAvailableSize();
-                                        databaseStorageByType[storageType].first += groupStat.GetAllocatedSize();
-                                        databaseStorageByType[storageType].second += groupStat.GetAvailableSize();
-                                        storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
-                                        ++storageGroups;
-                                    }
-                                }
-                            }
-                            uint64 storageAllocatedLimit = storageAllocatedSize + storageAvailableSize;
-                            tenant.SetStorageAllocatedSize(storageAllocatedSize);
-                            tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
-                            tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
-                            tenant.SetStorageGroups(storageGroups);
-                        }
-                    }
-
+                    THashMap<NKikimrViewer::TStorageUsage::EType, TDatabaseStorageStats> databaseStorageByType;
                     THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
-
-                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
-                        auto type = GetStorageType(quota.unit_kind());
-                        auto& usage = storageQuotasByType[type];
-                        usage.SoftQuota += quota.data_size_soft_quota();
-                        usage.HardQuota += quota.data_size_hard_quota();
-                    }
 
                     auto itDescribeScheme = DescribeSchemeResult.find(name);
                     if (itDescribeScheme != DescribeSchemeResult.end() && itDescribeScheme->second.IsOk()) {
                         const auto& record = itDescribeScheme->second.Get()->GetRecord();
                         const auto& domainDescription(record.GetPathDescription().GetDomainDescription());
+                        ui64 storageSize = 0;
+                        ui64 storageLimit = 0;
+                        ui64 storageGroups = 0;
+
+                        for (const auto& pool : domainDescription.GetStoragePools()) {
+                            auto poolType = GetStorageType(pool.GetKind());
+                            auto itPoolStats = poolByName.find(pool.GetName());
+                            if (itPoolStats != poolByName.end()) {
+                                const auto& poolStats = itPoolStats->second;
+                                auto& databaseStats = databaseStorageByType[poolType];
+                                databaseStats.Size += poolStats.Size;
+                                databaseStats.Limit += poolStats.Limit;
+                                storageGroups += poolStats.Groups;
+                                storageSize += poolStats.Size;
+                                storageLimit += poolStats.Limit;
+                            }
+                        }
+
+                        tenant.SetStorageGroups(storageGroups);
+                        tenant.SetStorageAllocatedSize(storageSize);
+                        tenant.SetStorageAllocatedLimit(storageLimit);
+
+                        for (const auto& [type, ds] : databaseStorageByType) {
+                            auto& databaseStorage = *tenant.AddDatabaseStorage();
+                            databaseStorage.SetType(type);
+                            databaseStorage.SetSize(ds.Size);
+                            databaseStorage.SetLimit(ds.Limit);
+                        }
+
                         THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
 
                         for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
@@ -819,7 +942,7 @@ public:
 
                         if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
                             tablesStorageByType[GuessStorageType(domainDescription)] =
-                            domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
+                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
                                 + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
@@ -840,13 +963,13 @@ public:
                                 tablesStorage.SetHardQuota(it->second.HardQuota);
                             }
                         }
+                    }
 
-                        for (const auto& [type, pr] : databaseStorageByType) {
-                            auto& databaseStorage = *tenant.AddDatabaseStorage();
-                            databaseStorage.SetType(type);
-                            databaseStorage.SetSize(pr.first);
-                            databaseStorage.SetLimit(pr.first + pr.second);
-                        }
+                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
+                        auto type = GetStorageType(quota.unit_kind());
+                        auto& usage = storageQuotasByType[type];
+                        usage.SoftQuota += quota.data_size_soft_quota();
+                        usage.HardQuota += quota.data_size_hard_quota();
                     }
                 }
 
@@ -986,9 +1109,10 @@ public:
             [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
                 return a.name() < b.name();
             });
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-        ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        for (auto problem : Problems) {
+            Result.AddProblems(problem);
+        }
+        ReplyAndPassAway(GetHTTPOKJSON(Result));
     }
 
     void HandleTimeout() {
@@ -1006,9 +1130,6 @@ public:
             request.Error(error);
         }
         for (auto& [_, request] : HiveDomainStats) {
-            request.Error(error);
-        }
-        for (auto& [_, request] : HiveStorageStats) {
             request.Error(error);
         }
         for (auto& [_, request] : SystemStateResponse) {

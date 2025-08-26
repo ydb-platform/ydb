@@ -417,4 +417,6 @@ message TTableServiceConfig {
     optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
 
     optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
+
+    optional bool EnableOlapPushdownAggregate = 98  [ default = false ];
 };

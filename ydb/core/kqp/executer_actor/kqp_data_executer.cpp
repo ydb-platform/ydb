@@ -2883,7 +2883,7 @@ private:
         const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
 
         FederatedQuery::StreamingDisposition streamingDisposition;
-        TString executionId = TasksGraph.GetMeta().UserRequestContext->CurrentExecutionId;
+        TString executionId = GetTasksGraph().GetMeta().UserRequestContext->CurrentExecutionId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(executionId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),

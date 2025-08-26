@@ -52,7 +52,7 @@ class TllTieringTestBase(object):
                     "alter_object_enabled": True,
                     "periodic_wakeup_activation_period_ms": 5000,
                     "gcinterval_ms": 5000,
-                    "disable_bulk_upsert_require_all_columns": True,
+                    "bulk_upsert_require_all_columns": False,
                 },
                 additional_log_configs={
                     "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,

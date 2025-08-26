@@ -106,9 +106,13 @@ jobs:
         echo "=== Which clang ==="
         which clang || echo "clang not found in PATH"
         which clang++ || echo "clang++ not found in PATH"
+        which clang-cl || echo "clang-cl not found in PATH"
         echo ""
         echo "=== Clang version ==="
         clang --version || echo "clang --version failed"
+        echo ""
+        echo "=== Clang-cl version ==="
+        clang-cl --version || echo "clang-cl --version failed"
         echo ""
         echo "=== LLVM directory contents ==="
         ls -la "C:/Program Files/LLVM/bin/" || echo "LLVM bin directory not found"
@@ -117,7 +121,7 @@ jobs:
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang++.exe" -o ./
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

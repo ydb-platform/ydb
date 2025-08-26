@@ -2978,7 +2978,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString userPassword = "UsErPassword";
             client.AuthenticateToKafka(userName, userPassword);
             TVector<TString> nonExistentTopics = {nonExistedTopicName1};
-            auto msg = client.Metadata(nonExistentTopics, true);
+            auto msg = client.Metadata(nonExistentTopics);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), defaultPartitionsCount);
             for (const auto &partitionInfo : msg->Topics[0].Partitions) {
@@ -2993,7 +2993,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString userPassword = "dummyPass";
             client.AuthenticateToKafka(userName, userPassword);
             TVector<TString> nonExistentTopic = {nonExistedTopicName2};
-            auto msg = client.Metadata(nonExistentTopic, true);
+            auto msg = client.Metadata(nonExistentTopic);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
@@ -3005,7 +3005,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString userPassword = "UsErPassword";
             client.AuthenticateToKafka(userName, userPassword);
             TVector<TString> nonExistentTopics = {nonExistedTopicName2, existedTopicName};
-            auto msg = client.Metadata(nonExistentTopics, true);
+            auto msg = client.Metadata(nonExistentTopics);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), defaultPartitionsCount);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Partitions.size(), existedTopicPartitionsNum);

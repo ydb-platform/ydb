@@ -219,12 +219,13 @@ namespace NKafka::NTests {
             runtime->EnableScheduleForActor(actorId);
         }
 
-        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false, ui64 expectedCount = 1) {
+        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false, ui64 expectedTopicCount = 1, ui64 expectedBrokersCount = 1,
+                                                                const std::vector<ui32>& expectedNodeIds = {}) {
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
             UNIT_ASSERT(ev);
             auto response = dynamic_cast<TMetadataResponseData*>(ev->Response.get());
-            UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), expectedCount);
+            UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), expectedTopicCount);
             if (!error) {
                 for (const auto& topic : response->Topics) {
                     UNIT_ASSERT(topic.ErrorCode == EKafkaErrors::NONE_ERROR);
@@ -234,9 +235,26 @@ namespace NKafka::NTests {
                 UNIT_ASSERT(ev->ErrorCode == EKafkaErrors::LISTENER_NOT_FOUND);
                 return;
             }
-            UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), 1);
-            Cerr << "Broker " << response->Brokers[0].NodeId << " - " << response->Brokers[0].Host << ":" << response->Brokers[0].Port  << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].Port, kafkaPort);
+            UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), expectedBrokersCount);
+            for (size_t i = 0; i < response->Topics[0].Partitions.size(); i++) {
+                i64 lastNodeId = -1;
+                for (const auto& nodeId : response->Topics[0].Partitions[i].ReplicaNodes) {
+                    if (lastNodeId != -1) {
+                        UNIT_ASSERT(lastNodeId < nodeId);
+                    }
+                    lastNodeId = nodeId;
+                }
+            }
+            if (!expectedNodeIds.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions[0].ReplicaNodes.size(), expectedNodeIds.size());
+                for (size_t i = 0; i < response->Topics[0].Partitions[0].ReplicaNodes.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions[0].ReplicaNodes[i], expectedNodeIds[i]);
+                }
+            }
+            if (expectedBrokersCount == 1) {
+                Cerr << "Broker " << response->Brokers[0].NodeId << " - " << response->Brokers[0].Host << ":" << response->Brokers[0].Port  << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].Port, kafkaPort);
+            }
         }
 
         Y_UNIT_TEST(MetadataActorGetsEndpoint) {
@@ -271,7 +289,7 @@ namespace NKafka::NTests {
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
-            CheckKafkaMetaResponse(runtime, kafkaPort);
+            CheckKafkaMetaResponse(runtime, kafkaPort, false, 1, 3);
         }
 
         Y_UNIT_TEST(DiscoveryResponsesWithError) {
@@ -306,6 +324,125 @@ namespace NKafka::NTests {
                                    config, fakeCache);
 
             CheckKafkaMetaResponse(runtime, 12345);
+        }
+
+        Y_UNIT_TEST(TopicMetadataOnlyThreeReplicaNodesReturnedFromMany) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+            auto* ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(12345);
+            ep->set_node_id(100);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(2);
+            ep->set_node_id(200);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(3);
+            ep->set_node_id(25);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(2495);
+            ep->set_node_id(8888);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(1395);
+            ep->set_node_id(9999);
+
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
+                                   config, fakeCache);
+
+            std::vector<ui32> allNodeIds ={runtime->GetNodeId(0), 25, 100, 200, 8888, 9999};
+            std::sort(allNodeIds.begin(), allNodeIds.end());
+            auto nodeIter = std::find(allNodeIds.begin(), allNodeIds.end(), runtime->GetNodeId(0));
+            std::vector<ui32> expectedNodeIds;
+            expectedNodeIds.push_back(runtime->GetNodeId(0));
+            for (size_t i = 0; i < 2; i++) {
+                nodeIter++;
+                if (nodeIter == allNodeIds.end()) {
+                    nodeIter = allNodeIds.begin();
+                }
+                expectedNodeIds.push_back(*nodeIter);
+            }
+            CheckKafkaMetaResponse(runtime, 12345, false, 1, 3, expectedNodeIds);
+        }
+
+        Y_UNIT_TEST(TopicMetadataOnlyTwoReplicaNodeReturned) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+            auto* ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(12345);
+            ep->set_node_id(1000);
+
+            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0), 1000};
+            std::sort(expectedNodeIds.begin(), expectedNodeIds.end());
+
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
+                                   config, fakeCache);
+
+            CheckKafkaMetaResponse(runtime, 12345, false, 1, 2, expectedNodeIds);
+        }
+
+        Y_UNIT_TEST(TopicMetadataOnlyOneReplicaNodeReturned) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
+                                   config, fakeCache);
+
+            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0)};
+            CheckKafkaMetaResponse(runtime, kafkaPort, false, 1, 1, expectedNodeIds);
+        }
+
+        Y_UNIT_TEST(TopicMetadataNodesCorrectOrderReturned) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+            auto* ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(12345);
+            ep->set_node_id(0);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(1999);
+            ep->set_node_id(1000);
+
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
+                                   config, fakeCache);
+
+            std::vector<ui32> expectedNodeIds = {0, runtime->GetNodeId(0), 1000};
+            std::sort(expectedNodeIds.begin(), expectedNodeIds.end());
+            CheckKafkaMetaResponse(runtime, 12345, false, 1, 3, expectedNodeIds);
         }
 
 

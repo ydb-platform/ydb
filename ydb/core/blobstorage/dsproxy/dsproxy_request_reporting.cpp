@@ -5,6 +5,10 @@ namespace NKikimr {
 struct TReportLeakBucket {
     std::atomic<i64> Level;
     TInstant LastUpdate;
+
+    // Usually there is only 1 TRequestReportingThrottler actor that can update values,
+    // but in tests there are can be used more then 1 actor
+    TMutex UpdateLock;
 };
 
 static std::array<TReportLeakBucket, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
@@ -79,9 +83,11 @@ private:
     void HandleWakeup(const TActorContext& ctx) {
         TInstant now = ctx.Now();
         for (auto& permission : ReportPutPermissions) {
+            TGuard<TMutex> guard(permission.UpdateLock);
             Update(now, permission.LastUpdate, permission.Level);
         }
         for (auto& permission : ReportGetPermissions) {
+            TGuard<TMutex> guard(permission.UpdateLock);
             Update(now, permission.LastUpdate, permission.Level);
         }
         Schedule(TDuration::MilliSeconds(LeakDurationMs.Update(now)), new TEvents::TEvWakeup);

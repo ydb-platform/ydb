@@ -662,10 +662,12 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (Request, originalRequest.ToString()));
+                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
+                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
+                (Request, originalRequest.ToString()));
 
-            Y_ABORT_UNLESS(Info->Group);
-            const auto& state = Info->Group->GetBridgeGroupState();
+            Y_ABORT_UNLESS(request->Info->Group);
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             for (size_t i = 0; i < state.PileSize(); ++i) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
@@ -685,7 +687,7 @@ namespace NKikimr {
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
-            const auto& state = Info->Group->GetBridgeGroupState();
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
             const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
 
@@ -793,8 +795,10 @@ namespace NKikimr {
                     ++common->RestartCounter;
                     Y_DEBUG_ABORT_UNLESS(common->RestartCounter < 100); // too often restarts do not make sense
                     auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
-                    if (Info->Group->GetBridgeGroupState().GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration() <
-                            msg->RacingGeneration) {
+
+                    // evaluate _current_ group state, not the request's one
+                    const auto& currentGroupState = Info->Group->GetBridgeGroupState();
+                    if (currentGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration() < msg->RacingGeneration) {
                         PendingByGeneration[Info->GroupGeneration + 1].push_back(std::move(handle));
                     } else {
                         TActivationContext::Send(handle.release());

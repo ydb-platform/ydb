@@ -886,6 +886,11 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
+        if (ForceGroupGeneration) {
+            if (auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(event.get())) {
+                common->ForceGroupGeneration = ForceGroupGeneration;
+            }
+        }
         Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
     }
 
@@ -1109,6 +1114,7 @@ namespace NKikimr {
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }
+        Y_VERIFY_S(!Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
         return true;
     }
 

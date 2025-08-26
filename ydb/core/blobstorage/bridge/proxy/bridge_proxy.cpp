@@ -673,10 +673,12 @@ namespace NKikimr {
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (Request, originalRequest.ToString()));
+                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
+                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
+                (Request, originalRequest.ToString()));
 
-            Y_ABORT_UNLESS(Info->Group);
-            const auto& state = Info->Group->GetBridgeGroupState();
+            Y_ABORT_UNLESS(request->Info->Group);
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             for (size_t i = 0; i < state.PileSize(); ++i) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
@@ -696,7 +698,7 @@ namespace NKikimr {
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
-            const auto& state = Info->Group->GetBridgeGroupState();
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
             const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
 

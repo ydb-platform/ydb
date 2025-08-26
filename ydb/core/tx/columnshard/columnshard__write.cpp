@@ -199,26 +199,28 @@ public:
                     return TConclusionStatus::Fail("arbiter is absent in receiving lists");
                 }
             } else {
-                if (ReceivingShards.size() != 1) {
+                auto validateShards = [this](const std::set<ui64>& shards) -> bool {
+                    //shards must contain either arbiter only or arbiter and current tablet_id
+                    if (!shards.contains(ArbiterColumnShard)) {
+                        return false;
+                    }
+                    if (shards.size() == 1) {
+                        return true;
+                    }
+                    if ((shards.size() != 2) || !shards.contains(TabletId)) {
+                        return false;
+                    }
+                    return true;
+                };
+                if (!validateShards(ReceivingShards)) {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect receiving shards list")(
                         "arbiter_id", ArbiterColumnShard)("receiving", JoinSeq(", ", ReceivingShards));
                     return TConclusionStatus::Fail("incorrect receiving shards list");
                 }
-                if (!ReceivingShards.contains(ArbiterColumnShard)) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                        "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                    return TConclusionStatus::Fail("arbiter is absent in receiving lists");
-                }
-
-                if (SendingShards.size() != 1) {
+                if (!validateShards(SendingShards)) {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect sending shards list")("arbiter_id", ArbiterColumnShard)(
-                        "receiving", JoinSeq(", ", SendingShards));
+                        "sending", JoinSeq(", ", SendingShards));
                     return TConclusionStatus::Fail("incorrect sending shards list");
-                }
-                if (!SendingShards.contains(ArbiterColumnShard)) {
-                        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                            "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                        return TConclusionStatus::Fail("arbiter is absent in sending lists");
                 }
             }
     }

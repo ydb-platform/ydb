@@ -246,30 +246,6 @@ void DoReadRows(TMyEnvBase& env, TTxReadRows* read, bool retry = false) {
     WakeupSharedCache(env);
 }
 
-auto MakeSharedCacheRequestsDeterministic(TTestActorRuntime& runtime) {
-    // keep page ordered because their order doesn't matter
-    // but may effect cache policies
-    return std::make_tuple(
-        MakeHolder<TBlockEvents<NSharedCache::TEvTouch>>(runtime, [&](const auto& ev) {
-            auto &msg = *ev->Get();
-
-            TVector<std::pair<TLogoBlobID, TVector<TPageId>>> touched;
-            for (const auto& [pageCollectionId, pages] : msg.Touched) {
-                touched.emplace_back(pageCollectionId, TVector<TPageId>(pages.begin(), pages.end()));
-                Sort(touched.back().second);
-            }
-            Sort(touched);
-
-            msg.Touched = {};
-            for (const auto& [pageCollectionId, pages] : touched) {
-                msg.Touched.emplace(pageCollectionId, THashSet<TPageId>(pages.begin(), pages.end()));
-            }
-
-            return false;
-        })
-    );
-}
-
 Y_UNIT_TEST_SUITE(TSharedPageCache) {
 
 Y_UNIT_TEST(Limits) {
@@ -278,7 +254,6 @@ Y_UNIT_TEST(Limits) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 139 : 7772;
@@ -347,7 +322,6 @@ Y_UNIT_TEST(Limits_Config) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 139 : 7772;
@@ -415,7 +389,6 @@ Y_UNIT_TEST(S3FIFO) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -435,7 +408,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 139);
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
@@ -461,7 +434,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 38}));
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
@@ -469,7 +442,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 23, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 59, 2}));
 
     RestartAndClearCache(env);
 
@@ -505,7 +478,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 100, 14, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 101, 14, 2}));
 
     retried = {};
     for (i64 key = 0; key < 100; ++key) {
@@ -522,7 +495,6 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -590,7 +562,6 @@ Y_UNIT_TEST(BigCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -658,7 +629,6 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -679,9 +649,9 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 97);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -726,7 +696,6 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -747,9 +716,9 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 83);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 81);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -762,9 +731,9 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 82);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 81);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
@@ -794,7 +763,6 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -862,7 +830,6 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -1229,7 +1196,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 124);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 125);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1332,7 +1299,6 @@ void ManyPartsSetup(TMyEnvBase& env) {
 Y_UNIT_TEST(One_Transaction_One_Key) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     BasicSetup(env);
 
@@ -1347,7 +1313,6 @@ Y_UNIT_TEST(One_Transaction_One_Key) {
 Y_UNIT_TEST(One_Transaction_Two_Keys) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     BasicSetup(env);
 
@@ -1362,7 +1327,6 @@ Y_UNIT_TEST(One_Transaction_Two_Keys) {
 Y_UNIT_TEST(One_Transaction_Two_Keys_Many_Parts) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     ManyPartsSetup(env);
     
@@ -1379,7 +1343,6 @@ Y_UNIT_TEST(One_Transaction_Two_Keys_Many_Parts) {
 Y_UNIT_TEST(Two_Transactions_One_Key) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     BasicSetup(env);
 
@@ -1439,7 +1402,6 @@ Y_UNIT_TEST(Two_Transactions_One_Key) {
 Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     BasicSetup(env);
 
@@ -1500,7 +1462,6 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
 Y_UNIT_TEST(Compaction) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
-    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     BasicSetup(env);
 

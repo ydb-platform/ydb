@@ -23,7 +23,8 @@ using namespace NYdb::NScheme;
 namespace NKikimr {
 namespace NStat {
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
+    std::function<void(Tests::TServerSettings&)> modifySettings)
     : CSController(NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>())
 {
     auto mbusPort = PortManager.GetPort();
@@ -37,11 +38,15 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
     Settings->SetFeatureFlags(featureFlags);
+
+    modifySettings(*Settings);
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

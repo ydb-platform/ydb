@@ -12,6 +12,9 @@ class TestYdbWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
+            extra_feature_flags={
+                "enable_move_column_table": True
+            },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
                 "generate_internal_path_id": True

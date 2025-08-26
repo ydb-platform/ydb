@@ -337,7 +337,26 @@ private:
         return ok;
     }
 
-    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema) {
+    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
+                                         const TVector<std::pair<TString, Ydb::Type>>& reqColumns) {
+        THashSet<TString> allColumnsLeft;
+        for (auto&& [_, colInfo] : entry.Columns) {
+            allColumnsLeft.insert(colInfo.Name);
+        }
+
+        for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
+            auto& name = reqColumns[pos].first;
+            allColumnsLeft.erase(name);
+        }
+
+        if (!allColumnsLeft.empty()) {
+            return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
+        }
+        
+        return TConclusionStatus::Success();
+    }
+
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
         AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
@@ -549,7 +568,12 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
-        return TConclusionStatus::Success();
+        TConclusionStatus res = TConclusionStatus::Success();
+        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetDisableBulkUpsertRequireAllColumns()) {
+            res = CheckRequiredColumns(entry, *reqColumns);
+        }
+
+        return res;
     }
 
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
@@ -651,7 +675,7 @@ private:
 
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
-            auto conclusion = BuildSchema(ctx, makeYdbSchema);
+            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable);
             if (conclusion.IsFail()) {
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
             }
@@ -825,6 +849,10 @@ private:
     std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) {
         Y_ABORT_UNLESS(ResolveNamesResult);
 
+        if (!ResolveNamesResult->ResultSet.empty() && ResolveNamesResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
+            return {};
+        }
         if (ResolveNamesResult->ErrorCount > 0) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "failed to get table schema", ctx);
             return {};
@@ -1004,6 +1032,9 @@ private:
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
         ResolvePartitionsResult = msg->Request;
 
+        if (!ResolvePartitionsResult->ResultSet.empty() && ResolvePartitionsResult->ResultSet.front().Status == NSchemeCache::TSchemeCacheRequest::EStatus::LookupError) {
+            return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "table lookup failed, try again later", ctx);
+        }
         if (ResolvePartitionsResult->ErrorCount > 0) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "unknown table", ctx);
         }

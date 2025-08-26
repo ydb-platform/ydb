@@ -6,6 +6,8 @@ pkgs: attrs: with pkgs; rec {
     sha256 = "0s92986cv0p692icqlw1j42y9nld8zd83qwhzbqd61p1dqbh6nmb";
   };
 
-  nativeBuildInputs = [];
   patches = [];
+  postPatch = "";
+
+  nativeBuildInputs = [];
 }

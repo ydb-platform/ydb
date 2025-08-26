@@ -1,13 +1,8 @@
 ## Typing stubs for protobuf
 
-This is a [PEP 561](https://peps.python.org/pep-0561/)
-type stub package for the [`protobuf`](https://github.com/protocolbuffers/protobuf) package.
-It can be used by type-checking tools like
-[mypy](https://github.com/python/mypy/),
-[pyright](https://github.com/microsoft/pyright),
-[pytype](https://github.com/google/pytype/),
-[Pyre](https://pyre-check.org/),
-PyCharm, etc. to check code that uses `protobuf`. This version of
+This is a [PEP 561](https://peps.python.org/pep-0561/) type stub package for
+the [`protobuf`](https://github.com/protocolbuffers/protobuf) package. It can be used by type checkers
+to check code that uses `protobuf`. This version of
 `types-protobuf` aims to provide accurate annotations for
 `protobuf~=6.30.2`.
 
@@ -24,9 +19,9 @@ for more details. The source for this package can be found in the
 [`stubs/protobuf`](https://github.com/python/typeshed/tree/main/stubs/protobuf)
 directory.
 
-This package was tested with
-mypy 1.16.1,
-pyright 1.1.400,
-and pytype 2024.10.11.
+This package was tested with the following type checkers:
+* [mypy](https://github.com/python/mypy/) 1.16.1
+* [pyright](https://github.com/microsoft/pyright) 1.1.403
+
 It was generated from typeshed commit
-[`dbd3ad356ef3bceae506fb71a29a48b6192213ba`](https://github.com/python/typeshed/commit/dbd3ad356ef3bceae506fb71a29a48b6192213ba).
+[`91ba0da4aad754c912a82b9e052cb4f8191ce520`](https://github.com/python/typeshed/commit/91ba0da4aad754c912a82b9e052cb4f8191ce520).

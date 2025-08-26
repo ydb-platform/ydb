@@ -414,6 +414,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetDisableBulkUpsertRequireAllColumns(true);
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -428,6 +429,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         writeGuard.Finalize();
         {
             auto selectQuery = TString(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT
                     field, count(*) as count,
                 FROM `/Root/olapStore/olapTable`

@@ -81,11 +81,10 @@ namespace NKikimr::NStorage {
         ConnectToConsole();
 
         // switch to correct state
-        Y_ABORT_UNLESS(InvokeQ.empty());
         Y_VERIFY_S(RootState == ERootState::INITIAL, "RootState# " << RootState);
         RootState = ERootState::RELAX;
 
-        // start config collection even if we are doing it as a local leader
+        // start config collection
         Invoke(TCollectConfigsAndPropose{});
         CollectConfigsBackoffTimer.Reset();
     }
@@ -124,6 +123,10 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(InvokeQ.empty());
         RootState = ERootState::INITIAL;
         ErrorReason = {};
+        InvokeQ = std::exchange(InvokePending, {});
+        if (!InvokeQ.empty()) {
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {}, nullptr, 0));
+        }
     }
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {

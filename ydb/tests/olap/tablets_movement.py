@@ -92,9 +92,6 @@ class TestTabletsMovement(object):
 
     @pytest.mark.parametrize("store", ["ROW", "COLUMN"])
     def test(self, store):
-        if store == "COLUMN":
-            pytest.skip("COLUMN store is not working yet")
-
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
 

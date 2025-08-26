@@ -1,77 +1,82 @@
 {
     "test.test_async_replication_describe": {
-        "connection_params": {
-            "connection_string": "text",
-            "database": "/Root/dedicated_db",
-            "endpoint": "text",
-            "oauth": {}
+        "create_result": {
+            "version": 9
         },
-        "error": {
-            "issues": [
-                {
-                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
-                    "severity": 1
-                }
-            ]
-        },
-        "row_consistency": {},
-        "self": {
-            "created_at": {
-                "plan_step": "not-zero-number-text",
-                "tx_id": "not-zero-number-text"
+        "describe_result": {
+            "connection_params": {
+                "connection_string": "text",
+                "database": "/Root/dedicated_db",
+                "endpoint": "text",
+                "oauth": {}
             },
-            "effective_permissions": [
-                {
-                    "permission_names": [
-                        "ydb.database.connect"
-                    ],
-                    "subject": "USERS"
+            "error": {
+                "issues": [
+                    {
+                        "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                        "severity": 1
+                    }
+                ]
+            },
+            "row_consistency": {},
+            "self": {
+                "created_at": {
+                    "plan_step": "not-zero-number-text",
+                    "tx_id": "not-zero-number-text"
                 },
-                {
-                    "permission_names": [
-                        "ydb.generic.list"
-                    ],
-                    "subject": "METADATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.select_row"
-                    ],
-                    "subject": "DATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.tables.modify"
-                    ],
-                    "subject": "DATA-WRITERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.create_directory",
-                        "ydb.granular.write_attributes",
-                        "ydb.granular.create_table",
-                        "ydb.granular.remove_schema",
-                        "ydb.granular.create_queue",
-                        "ydb.granular.alter_schema"
-                    ],
-                    "subject": "DDL-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.access.grant"
-                    ],
-                    "subject": "ACCESS-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.generic.manage"
-                    ],
-                    "subject": "DATABASE-ADMINS"
-                }
-            ],
-            "name": "TestAsyncReplication",
-            "owner": "root@builtin",
-            "type": "REPLICATION"
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "TestAsyncReplication",
+                "owner": "root@builtin",
+                "type": "REPLICATION"
+            }
         }
     },
     "test.test_counter": {
@@ -1277,6 +1282,34 @@
             ],
             "StartOffset": 0,
             "Truncated": true
+        }
+    },
+    "test.test_topic_data_cdc": {
+        "alter": null,
+        "data": {
+            "EndOffset": 1,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
+                    "Offset": 0,
+                    "OriginalSize": 40,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 40,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "insert": {
+            "version": 9
+        },
+        "update": {
+            "version": 9
         }
     },
     "test.test_transfer_describe": {

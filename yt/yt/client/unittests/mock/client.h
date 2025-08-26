@@ -882,6 +882,11 @@ public:
         const TDistributedWriteSessionStartOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),

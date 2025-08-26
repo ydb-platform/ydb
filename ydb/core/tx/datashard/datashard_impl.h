@@ -316,6 +316,8 @@ class TDataShard
     class TSendVolatileWriteResult;
     class TSendArbiterReadSets;
 
+    friend class TBlockFailPointUnit;
+
     struct TEvPrivate {
         enum EEv {
             EvProgressTransaction = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), // WARNING: tests use ES_PRIVATE + 0
@@ -352,6 +354,7 @@ class TDataShard
             EvStatisticsScanFinished,
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
+            EvBlockFailPointUnblock,
             EvEnd
         };
 
@@ -575,6 +578,14 @@ class TDataShard
         struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
+
+        struct TEvBlockFailPointUnblock : public TEventLocal<TEvBlockFailPointUnblock, EvBlockFailPointUnblock> {
+            explicit TEvBlockFailPointUnblock(ui64 txId)
+                : TxId(txId)
+            {}
+
+            const ui64 TxId;
+        };
     };
 
     struct Schema : NIceDb::Schema {
@@ -1336,6 +1347,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
@@ -3216,6 +3228,7 @@ protected:
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
+            HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);

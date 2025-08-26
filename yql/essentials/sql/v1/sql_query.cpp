@@ -2360,7 +2360,7 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
     const TRule_family_setting_value& value = node.GetRule_family_setting_value6();
     if (to_lower(settingName.Name) == "data") {
         if (entry->Data) {
-            Ctx_.Error() << "Redefinition of 'data' setting for column family '" << name.Name
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '" << name.Name
                 << "' in one alter";
             return false;
         }
@@ -2370,7 +2370,7 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
         }
     } else if (to_lower(settingName.Name) == "compression") {
         if (entry->Compression) {
-            Ctx_.Error() << "Redefinition of 'compression' setting for column family '" << name.Name
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '" << name.Name
                 << "' in one alter";
             return false;
         }
@@ -2380,11 +2380,21 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
         }
     } else if (to_lower(settingName.Name) == "compression_level") {
         if (entry->CompressionLevel) {
-            Ctx_.Error() << "Redefinition of 'compression_level' setting for column family '" << name.Name << "' in one alter";
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '" << name.Name << "' in one alter";
             return false;
         }
         if (!StoreInt(value, entry->CompressionLevel, Ctx_)) {
             Ctx_.Error() << to_upper(settingName.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(settingName.Name) == "cache_mode") {
+        if (entry->CacheMode) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '" << name.Name
+                << "' in one alter";
+            return false;
+        }
+        if (!StoreString(value, entry->CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be a string literal";
             return false;
         }
     } else {

@@ -598,6 +598,15 @@ class Linter:
         return {cls.KEY: spec_args['LINTER'][0]}
 
 
+class LintWrapperScript:
+    KEY = 'LINT-WRAPPER-SCRIPT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if spec_args.get('WRAPPER_SCRIPT'):
+            return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
+
+
 class LintConfigs:
     KEY = 'LINT-CONFIGS'
 
@@ -615,7 +624,11 @@ class LintConfigs:
             raise DartValueError()
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
             config = os.path.join(common_configs_dir, config_type)
-            path = unit.resolve(config)
+            if config.startswith(SOURCE_ROOT_SHORT):
+                # TODO: (alevitskii) Delete when ymake starts cutting source root in devtools/ymake/makefile_loader.cpp
+                path = unit.resolve(config)
+            else:
+                path = unit.resolve(unit.resolve_arc_path(config))
             if os.path.exists(path):
                 return _common.strip_roots(config)
             message = "File not found: {}".format(path)
@@ -1050,6 +1063,21 @@ class DockerImage:
 
 class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
+
+    DEFAULT_VALUE = "tsconfig.json"
+
+    @classmethod
+    def from_unit(cls, unit, flat_args, spec_args):
+        ts_config_paths = get_values_list(unit, cls.KEY)
+
+        # Special case: resolve path, relative to test dir
+        if unit.get("TS_TEST_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
+            tsconfig_path_test = os.path.join(unit.get("MODDIR"), ts_config_paths[0])
+            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_TEST_FOR_PATH"))
+
+            return {cls.KEY: tsconfig_path_for}
+
+        return {cls.KEY: ts_config_paths[0]}
 
 
 class TsStylelintConfig:

@@ -63,6 +63,9 @@ struct IsReadSet {
 };
 
 Y_UNIT_TEST_SUITE(TDataShardRSTest) {
+
+    // Note: we no longer store small readsets in InReadSets
+    // This test now only checks unnecessary InReadSets are removed on restart
     Y_UNIT_TEST_TWIN(TestCleanupInRS, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -115,40 +118,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), 0);
         }
 
-        // Run multishard tx but drop RS to pause it on the first shard.
-        {
-            auto captureRS = [shard=shards[1]](TAutoPtr<IEventHandle> &event) -> auto {
-                if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-                    auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
-                    if (rec.GetTabletSource() == shard)
-                        return TTestActorRuntime::EEventAction::DROP;
-                }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            };
-            runtime.SetObserverFunc(captureRS);
-
-            auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = 0x50000000");
-            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
-            // Wait until both parts of tx are finished on the second shard.
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(IsTxResultComplete(), 2);
-            runtime.DispatchEvents(options);
-        }
-
-        // Run more txs and wait until RSs are in local db.
-        {
-            for (auto i = 1; i < 10; ++i) {
-                auto request = MakeSQLRequest(Sprintf("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = %" PRIu32, i + 0x80000000));
-                runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
-            }
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTxProcessing::EvReadSetAck, 9);
-            runtime.DispatchEvents(options);
-        }
-
         // Now restart the first shard and wait for RS cleanup events.
         {
-            UNIT_ASSERT_VALUES_EQUAL(GetRSCount(runtime, sender, shards[0]), 450009);
+            UNIT_ASSERT_VALUES_EQUAL(GetRSCount(runtime, sender, shards[0]), 450000);
 
             runtime.Register(CreateTabletKiller(shards[0]));
 
@@ -159,43 +131,6 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
             // We can't be sure RS are cleaned up because shared event number
             // is used to track cleanup txs. So make a check loop.
-            while (GetRSCount(runtime, sender, shards[0]) != 9)
-                runtime.DispatchEvents(options, TDuration::Seconds(1));
-        }
-
-        // Check all remained RS are for existing txs
-        {
-            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
-            TString miniKQL =   R"___((
-                (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
-                (let select '('TxId))
-                (let options '())
-                (let pgmReturn (AsList
-                    (SetResult 'myRes (SelectRange 'InReadSets range select options))))
-                (return pgmReturn)
-            ))___";
-
-            request->Record.MutableProgram()->MutableProgram()->SetText(miniKQL);
-            runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), 0);
-            for (auto &row : reply->Record.GetExecutionEngineEvaluatedResponse()
-                     .GetValue().GetStruct(0).GetOptional().GetStruct(0).GetList()) {
-                UNIT_ASSERT(row.GetStruct(0).GetOptional().GetUint64() > 450000);
-            }
-        }
-
-        // Now let all other txs finish and check we have no more RS stored.
-        {
-            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-            runtime.Register(CreateTabletKiller(shards[0]));
-
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(IsTxResultComplete(), 10);
-            runtime.DispatchEvents(options);
-
             while (GetRSCount(runtime, sender, shards[0]) != 0)
                 runtime.DispatchEvents(options, TDuration::Seconds(1));
         }
@@ -264,7 +199,8 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             // transactions both upserts have already executed, one of them is
             // just waiting for confirmation before making changes visible.
             // Since acks are not delayed they are just gone when dropped.
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetEnableDataShardWriteAlwaysVolatile(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -466,6 +402,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 3)
             )"),
             "ERROR: ABORTED");
+        runtime.SimulateSleep(TDuration::MilliSeconds(1)); // allow abort readset to arrive
         UNIT_ASSERT(readSets > 0);
     }
 }

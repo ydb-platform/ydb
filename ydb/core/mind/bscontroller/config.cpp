@@ -1147,7 +1147,7 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
-                const TGroupInfo::TGroupFinder& finder) {
+                const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
@@ -1159,7 +1159,7 @@ namespace NKikimr::NBsController {
             pb->SetSeenOperational(group.SeenOperational);
             pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
 
-            const auto& status = group.GetStatus(finder);
+            const auto& status = group.GetStatus(finder, bridgeInfo);
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 

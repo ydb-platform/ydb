@@ -77,6 +77,27 @@ sudo useradd ydb -g ydb
 sudo usermod -aG disk ydb
 ```
 
+## Настройте лимиты файловых дескрипторов {#file-descriptors}
+
+Для корректной работы {{ ydb-short-name }}, особенно при использовании [спиллинга](../../../concepts/spilling.md) в многоузловых кластерах, рекомендуется увеличить лимит на количество одновременно открытых файловых дескрипторов.
+
+Для изменения лимита файловых дескрипторов добавьте следующие строки в файл `/etc/security/limits.conf`:
+
+```bash
+ydb soft nofile 10000
+ydb hard nofile 10000
+```
+
+Где `ydb` — имя пользователя, под которым запускается `ydbd`.
+
+После изменения файла необходимо перезагрузить систему или заново залогиниться для применения новых лимитов.
+
+{% note info %}
+
+Для получения дополнительной информации о конфигурации спиллинга и его связи с файловыми дескрипторами см. раздел [«Конфигурация спиллинга»](../../../reference/configuration/table_service_config.md#file-system-requirements).
+
+{% endnote %}
+
 ## Установите программное обеспечение {{ ydb-short-name }} на каждом сервере {#install-binaries}
 
 1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
@@ -167,6 +188,7 @@ vdb    252:16   0   186G  0 disk
     * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml) - для однодатацентрового кластера.
     * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для cross-DC кластера из 9 нод.
     * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 3 нод.
+    * [bridge-mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/bridge-mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 6 нод в режиме bridge.
 
 1. В секции `host_configs` укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
 
@@ -187,19 +209,19 @@ vdb    252:16   0   186G  0 disk
     hosts:
     - host: node1.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 1
         data_center: 'zone-a'
         rack: '1'
     - host: node2.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 2
         data_center: 'zone-b'
         rack: '1'
     - host: node3.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 3
         data_center: 'zone-c'
         rack: '1'
@@ -501,6 +523,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
   В примере файла выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
+  {% note info %}
+
+  При использовании [режима bridge](../../../concepts/bridge.md) добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
+
+  {% endnote %}
+  
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
   ```bash

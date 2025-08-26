@@ -86,6 +86,5 @@ class WorkloadRenameTables(WorkloadBase):
             return f"Renames: {self.renames}, Writes: {self.writes}"
 
     def get_workload_thread_funcs(self):
-        r = [self._rename_table_loop for x in range(0, 3)]
-        # + [self._write_loop for x in range(0, 3)]  # TODO fix me https://github.com/ydb-platform/ydb/issues/23230
+        r = [self._rename_table_loop for x in range(0, 3)] + [self._write_loop for x in range(0, 3)]
         return r

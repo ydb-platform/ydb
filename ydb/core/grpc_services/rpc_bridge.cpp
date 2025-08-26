@@ -49,6 +49,7 @@ void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, cons
         state->set_pile_name(pile->Name);
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
+    to.set_generation(from.GetGeneration());
 }
 
 class TUpdateClusterStateRequest : public TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest,

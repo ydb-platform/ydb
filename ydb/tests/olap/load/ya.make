@@ -17,6 +17,7 @@ PY3TEST()
         test_tpcds.py
         test_tpch.py
         test_upload.py
+        test_workload_manager.py
         test_workload_simple_queue.py
         test_workload_oltp.py
         test_workload_topic.py

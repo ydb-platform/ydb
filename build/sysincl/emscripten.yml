@@ -216,6 +216,7 @@
   - sys/dir.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/dir.h
   - sys/epoll.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/epoll.h
   - sys/errno.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/errno.h
+  - sys/eventfd.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/eventfd.h
   - sysexits.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sysexits.h
   - sys/fcntl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/fcntl.h
   - sys/file.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/file.h
@@ -277,6 +278,7 @@
   - sys/vfs.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/vfs.h
   - sys/wait.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/wait.h
   - sys/xattr.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/xattr.h
+  - sys/queue.h:            contrib/libs/libc_compat/include/windows/sys/queue.h
   - tar.h:                  contrib/restricted/emscripten/system/lib/libc/musl/include/tar.h
   - termios.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/termios.h
   - threads.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/threads.h

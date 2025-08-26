@@ -84,5 +84,5 @@ TFls* SwapCurrentFls(TFls* newFls)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConcurrency::NDetail
+} // namespace NYT::NConcurrency
 

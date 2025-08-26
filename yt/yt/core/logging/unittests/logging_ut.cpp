@@ -3,6 +3,8 @@
 #include "yt/yt/core/misc/string_builder.h"
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/async_semaphore.h>
+
 #include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/log_manager.h>
 #include <yt/yt/core/logging/log_writer.h>
@@ -28,6 +30,10 @@
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/range_formatters.h>
 
+#include <yt/yt/library/coredumper/coredumper.h>
+
+#include <yt/yt/library/safe_assert/safe_assert.h>
+
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <library/cpp/yt/misc/global.h>
@@ -51,6 +57,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NYson;
 using namespace NJson;
+using namespace NCoreDump;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1208,6 +1215,67 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
 
     YT_LOG_INFO("Info message");
     YT_LOG_FATAL("FATAL");
+}
+
+TEST_F(TLoggingTest, LogFatalIsSafe)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Info message");
+
+    struct TCoreDumper
+        : public ICoreDumper
+    {
+        bool SafeCoreDumped = false;
+
+        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        {
+            SafeCoreDumped = true;
+            return TCoreDump{
+                .Path = "",
+                .WrittenEvent = VoidFuture,
+            };
+        }
+        const NYTree::IYPathServicePtr& CreateOrchidService() const override
+        {
+            YT_UNIMPLEMENTED();
+        }
+    };
+
+    auto coreDumper = New<TCoreDumper>();
+    auto guard = CreateSafeAssertionGuard(
+        coreDumper,
+        New<TAsyncSemaphore>(100),
+        /*coreNotes*/ {}
+    );
+
+    std::optional<TString> exceptionExpression;
+
+    try {
+        YT_LOG_FATAL("Fatal message");
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
+    EXPECT_TRUE(coreDumper->SafeCoreDumped);
 }
 
 // Windows does not support request tracing for now.

@@ -2,7 +2,6 @@ from devtools.yamaker.project import NixProject
 
 
 http_parser = NixProject(
-    owners=["g:mds", "g:cpp-contrib"],
     arcdir="contrib/deprecated/http-parser",
     nixattr="http-parser",
     # By default maximium header size allowed is 80Kb. To remove the effective limit

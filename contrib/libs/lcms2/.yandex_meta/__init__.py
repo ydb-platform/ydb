@@ -22,7 +22,7 @@ def post_install(self):
 
 
 lcms2 = NixProject(
-    owners=["shindo", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/lcms2",
     nixattr="lcms2",
     post_build=post_build,

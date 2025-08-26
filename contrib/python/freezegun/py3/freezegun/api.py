@@ -916,7 +916,13 @@ class _freeze_time:
     def decorate_coroutine(self, coroutine: "Callable[P, Awaitable[T]]") -> "Callable[P, Awaitable[T]]":
         return wrap_coroutine(self, coroutine)
 
-    def _call_with_time_factory(self, time_factory: Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory], func: "Callable[P, T]", *args: "P.args", **kwargs: "P.kwargs") -> T:
+    def _call_with_time_factory(self, time_factory: Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory], func: "Callable[P, T]", args: Any, kwargs: Any) -> T:
+        """
+        Invoke a function and pass in the TimeFactory if necessary
+
+        :args: Original arguments to the function.
+        :kwargs: Original keyword arguments. Passed in as a dict in case the keys conflict with the other arguments to this function ('time_factory' or 'func')
+        """
         if self.as_arg and self.as_kwarg:
             assert False, "You can't specify both as_arg and as_kwarg at the same time. Pick one."
         if self.as_arg:
@@ -933,7 +939,7 @@ class _freeze_time:
         @functools.wraps(func)
         def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> Iterator[T]:
             with self as time_factory:
-                yield from self._call_with_time_factory(time_factory, func, *args, **kwargs)
+                yield from self._call_with_time_factory(time_factory, func=func, args=args, kwargs=kwargs)
 
         return wrapper
 
@@ -942,7 +948,7 @@ class _freeze_time:
         @functools.wraps(func)
         def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> T:
             with self as time_factory:
-                return self._call_with_time_factory(time_factory, func, *args, **kwargs)
+                return self._call_with_time_factory(time_factory, func=func, args=args, kwargs=kwargs)
 
         return wrapper
 

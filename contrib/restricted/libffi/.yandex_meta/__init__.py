@@ -11,7 +11,7 @@ from devtools.yamaker.project import GNUMakeNixProject
 def libffi_post_build(self):
     configs_dir = self.dstdir + "/configs"
     shutil.copytree(self.nix_spec_dir + '/files/configs', configs_dir)
-    os.rename(self.dstdir + "/x86_64-pc-linux-gnu", configs_dir + "/x86_64-pc-linux-gnu")
+    os.rename(self.dstdir + "/x86_64-unknown-linux-gnu", configs_dir + "/x86_64-unknown-linux-gnu")
 
     os.unlink(self.dstdir + "/libffi.map.in")
 
@@ -52,7 +52,7 @@ def libffi_post_install(self):
         # Provide compatibility for MFD_CLOEXEC constant.
         m.PEERDIR.add("contrib/libs/libc_compat")
 
-        m.ADDINCL = [path for path in m.ADDINCL if "/x86_64-pc-linux-gnu" not in path] + [
+        m.ADDINCL = [path for path in m.ADDINCL if "/x86_64-unknown-linux-gnu" not in path] + [
             GLOBAL(self.arcdir + "/include")
         ]
 
@@ -98,8 +98,8 @@ def libffi_post_install(self):
                                 "ARCH_X86_64 AND OS_LINUX",
                                 Linkable(
                                     ADDINCL=[
-                                        configs_dir + "/x86_64-pc-linux-gnu",
-                                        GLOBAL(configs_dir + "/x86_64-pc-linux-gnu/include"),
+                                        configs_dir + "/x86_64-unknown-linux-gnu",
+                                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
                                     ],
                                     SRCS=[
                                         "src/x86/ffi64.c",
@@ -286,8 +286,8 @@ def libffi_post_install(self):
                                 "OS_NONE",
                                 Linkable(
                                     ADDINCL=[
-                                        configs_dir + "/x86_64-pc-linux-gnu",
-                                        GLOBAL(configs_dir + "/x86_64-pc-linux-gnu/include"),
+                                        configs_dir + "/x86_64-unknown-linux-gnu",
+                                        GLOBAL(configs_dir + "/x86_64-unknown-linux-gnu/include"),
                                     ],
                                 ),
                             ),

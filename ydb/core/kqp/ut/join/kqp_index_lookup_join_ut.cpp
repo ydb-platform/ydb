@@ -40,6 +40,16 @@ void PrepareTables(TSession session) {
             primary key(b, a)
         );
 
+        create table C (
+            a int32, b int32,
+            primary key(a)
+        );
+
+        create table D (
+            a int32, b int16,
+            primary key(a)
+        );
+
         CREATE TABLE `/Root/LaunchByProcessIdAndPinned` (
             idx_processId Utf8,
             idx_pinned Bool,
@@ -120,6 +130,15 @@ void PrepareTables(TSession session) {
             AsStruct(4 as a, 2 as b),
         );
 
+        $c = AsList(
+            AsStruct(1 as a, 5 as b),
+            AsStruct(2 as a, 2 as b),
+            AsStruct(3 as a, 5 as b),
+            AsStruct(4 as a, 2 as b),
+        );
+
+        insert into D select a, CAST(b as Int16) as b from AS_TABLE($c);
+        insert into C select * from AS_TABLE($c);
         insert into B select * from AS_TABLE($b);
         insert into A select * from AS_TABLE($a);
         insert into B (a, b) values (5, null);
@@ -128,7 +147,6 @@ void PrepareTables(TSession session) {
 }
 
 void ValidateStats(const auto& result, bool isIdxLookupJoinEnabled, size_t rightTableReads,  size_t leftTableReads = 7) {
-    Cerr << result.GetStats()->GetAst() << Endl;
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     if (isIdxLookupJoinEnabled) {
@@ -193,6 +211,7 @@ public:
             auto result = sessionQuery.ExecuteQuery(Q_(Query), NYdb::NQuery::TTxControl::BeginTx(txSettings).CommitTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
+            Cerr << result.GetStats()->GetAst() << Endl;
             if (DoValidateStats) {
                 ValidateStats(
                     result, settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin(),
@@ -207,6 +226,7 @@ public:
             auto result = session.ExecuteDataQuery(Q_(Query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
+            Cerr << result.GetStats()->GetAst() << Endl;
             if (DoValidateStats) {
                 ValidateStats(result, settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin(), RightTableReads, LeftTableReads);
             }
@@ -331,7 +351,7 @@ Y_UNIT_TEST_TWIN(LeftOnly, StreamLookup) {
         ])", 2, StreamLookup);
 }
 
-Y_UNIT_TEST(LeftSemi) {
+Y_UNIT_TEST_TWIN(LeftSemi, StreamLookup) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
@@ -344,10 +364,10 @@ Y_UNIT_TEST(LeftSemi) {
         R"([
             [[3];[103];["Value2"]];
             [[4];[104];["Value2"]]
-        ])", 2);
+        ])", 2, StreamLookup);
 }
 
-Y_UNIT_TEST(RightSemi) {
+Y_UNIT_TEST_TWIN(RightSemi, StreamLookup) {
     Test(
         R"(
             SELECT r.Key, r.Value
@@ -360,7 +380,7 @@ Y_UNIT_TEST(RightSemi) {
         R"([
             [[101];["Value21"]];
             [[103];["Value23"]]
-        ])", 4);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
@@ -1077,6 +1097,41 @@ Y_UNIT_TEST_TWIN(JoinInclusionTestSemiJoin, StreamLookupJoin) {
     };
     tester.Run();
 }
+
+Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditions, StreamLookupJoin) {
+    auto tester = TTester{
+        .Query=R"(
+            select A.a, A.b, C.a, C.b from A
+            left join (select * from C) as C
+            ON A.a = C.a and A.b = C.b
+            ORDER BY A.a , A.b
+        )",
+        .Answer=R"([
+            [[1];[2];#;#];[[2];[2];[2];[2]];[[3];[2];#;#];[[4];[2];[4];[2]]
+        ])",
+        .StreamLookup=StreamLookupJoin,
+        .DoValidateStats=false,
+    };
+    tester.Run();
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
+    auto tester = TTester{
+        .Query=R"(
+            select A.a, A.b, D.a, D.b from A
+            left join (select * from D) as D
+            ON A.a = D.a and A.b = D.b
+            ORDER BY A.a, A.b
+        )",
+        .Answer=R"([
+            [[1];[2];#;#];[[2];[2];[2];[2]];[[3];[2];#;#];[[4];[2];[4];[2]]
+        ])",
+        .StreamLookup=StreamLookupJoin,
+        .DoValidateStats=false,
+    };
+    tester.Run();
+}
+
 
 
 Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {

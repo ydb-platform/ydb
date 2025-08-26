@@ -546,9 +546,7 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
             leftRowIt->second.PendingReads.erase(prevReadId);
 
-            const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                && leftRowIt->second.RightRowExist;
-            if (leftRowProcessed) {
+            if (leftRowIt->second.Completed()) {
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                 ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
                 PendingLeftRowsByKey.erase(leftRowIt);
@@ -698,7 +696,7 @@ public:
                 }
             }
 
-            PendingLeftRowsByKey.insert(std::make_pair(std::move(joinKey), TLeftRowInfo{std::move(leftData), InputRowSeqNo++}));
+            PendingLeftRowsByKey.insert(std::make_pair(std::move(joinKey), TLeftRowInfo(std::move(leftData), InputRowSeqNo++, GetLeftRowType())));
         }
 
         std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> requests;
@@ -766,10 +764,11 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
             TReadResultStats rowStats;
-            bool lastRow = (result.UnprocessedResultRow + 1 == result.ReadResult->Get()->GetRowsCount()) && record.GetFinished();
-            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, lastRow, result.ShardId);
-            YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-            ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
+            auto resultRow = leftRowIt->second.TryBuildResultRow(HolderFactory, Settings, ReadColumns, row, rowStats, false, result.ShardId);
+            if (resultRow.HasValue()) {
+                YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+                ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
+            }
         }
 
         if (record.GetFinished()) {
@@ -780,9 +779,7 @@ public:
 
                 // row is considered processed when all reads are finished
                 // and at least one right row is found
-                const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                    && leftRowIt->second.RightRowExist;
-                if (leftRowProcessed) {
+                if (leftRowIt->second.Completed()) {
                     YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                     ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
                     PendingLeftRowsByKey.erase(leftRowIt);
@@ -845,12 +842,11 @@ public:
         TReadResultStats resultStats;
         batch.clear();
 
-        // we should process left rows that haven't matches on the right
+        // we should process left rows that haven't received last row flags.
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
             if (leftRowIt->second.PendingReads.empty()) {
-                YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
-                auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats, true);
+                auto resultRow = leftRowIt->second.TryBuildResultRow(HolderFactory, Settings, ReadColumns, {}, rowStats, true);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                 auto& result = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
                 result.Rows.emplace_back(std::move(resultRow), std::move(rowStats));
@@ -917,20 +913,90 @@ public:
     }
 private:
     struct TLeftRowInfo {
-        TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo)
+        explicit TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo, NMiniKQL::TStructType* leftRowType)
         : Row(std::move(row))
         , SeqNo(seqNo)
+        , LeftRowType(leftRowType)
+        , LeftRowSize(NYql::NDq::TDqDataSerializer::EstimateSize(Row, leftRowType))
         {
         }
 
         NUdf::TUnboxedValue Row;
         std::unordered_set<ui64> PendingReads;
         bool RightRowExist = false;
+        bool LastRowReceived = false;
         const ui64 SeqNo;
         ui64 MatchedRows = 0;
+        NMiniKQL::TStructType* LeftRowType = nullptr;
+        ui64 LeftRowSize = 0;
+
+        NUdf::TUnboxedValue RightRow;
+        ui64 RightRowSize = 0;
+        i64 StorageReadBytes = 0;
+
+        NUdf::TUnboxedValue TryBuildResultRow(const NMiniKQL::THolderFactory& HolderFactory, const TLookupSettings& Settings,
+            const std::map<std::string, TSysTables::TTableColumnInfo>& ReadColumns, TConstArrayRef<TCell> rightRow,
+            TReadResultStats& rowStats, bool lastRow, TMaybe<ui64> shardId = {})
+        {
+            if (lastRow) {
+                LastRowReceived = lastRow;
+            }
+
+            NUdf::TUnboxedValue resultRow;
+
+            if (RightRow.HasValue() || lastRow) {
+                bool hasValue = RightRow.HasValue();
+                NUdf::TUnboxedValue* resultRowItems = nullptr;
+                resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
+                resultRowItems[0] = Row;
+                resultRowItems[1] = std::move(RightRow);
+                MatchedRows++;
+                auto rowCookie = TStreamLookupJoinRowCookie{.RowSeqNo=SeqNo, .LastRow=lastRow, .FirstRow=(MatchedRows == 1)};
+                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
+                rowStats.ReadRowsCount += (hasValue ? 1 : 0);
+                rowStats.ReadBytesCount += StorageReadBytes;
+                rowStats.ResultRowsCount += 1;
+                rowStats.ResultBytesCount += LeftRowSize + RightRowSize;
+            }
+
+            if (!rightRow.empty()) {
+                RightRowExist = true;
+                AttachRightRow(
+                    HolderFactory, Settings, ReadColumns, rightRow,
+                    shardId);
+            }
+
+            return resultRow;
+        }
+
+        void AttachRightRow(const NMiniKQL::THolderFactory& HolderFactory, const TLookupSettings& Settings,
+            const std::map<std::string, TSysTables::TTableColumnInfo>& ReadColumns,
+            TConstArrayRef<TCell> rightRow,
+            TMaybe<ui64> shardId = {})
+        {
+            NUdf::TUnboxedValue* rightRowItems = nullptr;
+            RightRow = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems);
+
+            for (size_t colIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
+                const auto& column = Settings.Columns[colIndex];
+                auto it = ReadColumns.find(column.Name);
+                YQL_ENSURE(it != ReadColumns.end());
+
+                if (IsSystemColumn(column.Name)) {
+                    YQL_ENSURE(shardId);
+                    NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
+                    RightRowSize += sizeof(NUdf::TUnboxedValue);
+                } else {
+                    StorageReadBytes += rightRow[std::distance(ReadColumns.begin(), it)].Size();
+                    rightRowItems[colIndex] = NMiniKQL::GetCellValue(rightRow[std::distance(ReadColumns.begin(), it)],
+                        column.PType);
+                    RightRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
+                }
+            }
+        }
 
         bool Completed() {
-            return PendingReads.empty() && RightRowExist;
+            return PendingReads.empty() && RightRowExist && LastRowReceived;
         }
     };
 
@@ -1023,67 +1089,6 @@ private:
 
         LeftRowType = AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
         return LeftRowType;
-    }
-
-    NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
-        TReadResultStats& rowStats, bool lastRow, TMaybe<ui64> shardId = {}) {
-
-        NUdf::TUnboxedValue* resultRowItems = nullptr;
-        auto resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
-
-        ui64 leftRowSize = 0;
-        ui64 rightRowSize = 0;
-
-        resultRowItems[0] = leftRowInfo.Row;
-        auto leftRowType = GetLeftRowType();
-        YQL_ENSURE(leftRowType);
-
-        i64 storageReadBytes = 0;
-
-        leftRowSize = NYql::NDq::TDqDataSerializer::EstimateSize(leftRowInfo.Row, leftRowType);
-
-        if (!rightRow.empty()) {
-            leftRowInfo.RightRowExist = true;
-
-            NUdf::TUnboxedValue* rightRowItems = nullptr;
-            resultRowItems[1] = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems);
-
-            for (size_t colIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
-                const auto& column = Settings.Columns[colIndex];
-                auto it = ReadColumns.find(column.Name);
-                YQL_ENSURE(it != ReadColumns.end());
-
-                if (IsSystemColumn(column.Name)) {
-                    YQL_ENSURE(shardId);
-                    NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
-                    rightRowSize += sizeof(NUdf::TUnboxedValue);
-                } else {
-                    storageReadBytes += rightRow[std::distance(ReadColumns.begin(), it)].Size();
-                    rightRowItems[colIndex] = NMiniKQL::GetCellValue(rightRow[std::distance(ReadColumns.begin(), it)],
-                        column.PType);
-                    rightRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
-                }
-            }
-        } else {
-            resultRowItems[1] = NUdf::TUnboxedValuePod();
-        }
-
-        leftRowInfo.MatchedRows++;
-        auto rowCookie = TStreamLookupJoinRowCookie{
-            .RowSeqNo=leftRowInfo.SeqNo,
-            .LastRow=lastRow,
-            .FirstRow=(leftRowInfo.MatchedRows == 1)
-        };
-
-        resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
-
-        rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
-        // TODO: use datashard statistics KIKIMR-16924
-        rowStats.ReadBytesCount += storageReadBytes;
-        rowStats.ResultRowsCount += 1;
-        rowStats.ResultBytesCount += leftRowSize + rightRowSize;
-
-        return resultRow;
     }
 
 private:

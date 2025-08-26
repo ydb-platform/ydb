@@ -658,7 +658,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
     auto applyOption = [&](const TIntrusivePtr<TClientCommandOption>& clientOption, const TString& value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource) {
         if (clientOption->HandlerImpl(value, isFileName, humanReadableFileName, valueSource)) { // returns false only when loading from default value from file
             Opts.emplace_back(clientOption, value, valueSource);
-            if (clientOption.Get()->IsMainAuthOption()) {
+            if (clientOption->IsMainAuthOption()) {
                 AuthMethodOpts.push_back(Opts.size() - 1);
             }
             if (clientOption->ValidatorHandler) {

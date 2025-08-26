@@ -524,14 +524,16 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
 
     config.StaticCredentials.User = UserName;
 
-    if (Password.has_value()) {
-        config.StaticCredentials.Password = Password.value();
-    } else if (!PassEmptyPassword) {
-        // Interactively ask for password
-        Cerr << "Enter password for user " << UserName << ": ";
-        config.StaticCredentials.Password = InputPassword();
-        if (IsVerbose()) {
-            config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
+    if (!PassEmptyPassword) {
+        if (Password.has_value()) {
+            config.StaticCredentials.Password = Password.value();
+        } else {
+            // Interactively ask for password
+            Cerr << "Enter password for user " << UserName << ": ";
+            config.StaticCredentials.Password = InputPassword();
+            if (IsVerbose()) {
+                config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
+            }
         }
     }
 }

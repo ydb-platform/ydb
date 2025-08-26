@@ -704,7 +704,7 @@ public:
 
                     if (!outputChannelDesc.GetInMemory()) {
                         if (spiller && outputChannelDesc.GetEnableSpilling()) {
-                            settings.ChannelStorage = CreateDqChannelStorage(spiller);
+                            settings.ChannelStorage = CreateDqChannelStorage({}, 0, spiller);
                         } else {
                             settings.ChannelStorage = nullptr;
                         }

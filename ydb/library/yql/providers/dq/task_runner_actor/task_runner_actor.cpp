@@ -740,7 +740,7 @@ private:
 
     void CreateSpillingStorage(ui64 channelId, IDqSpiller::TPtr spiller) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = CreateDqChannelStorage(spiller);
+        auto channelStorage = CreateDqChannelStorage({}, channelId, spiller);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);

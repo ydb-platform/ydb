@@ -12,6 +12,6 @@ namespace NActors {
 
 namespace NYql::NDq {
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(IDqSpiller::TPtr spiller);
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqSpiller::TPtr spiller);
 
 } // namespace NYql::NDq

@@ -1,6 +1,6 @@
-# CREATE TABLE ... AS SELECT ...
+# CREATE TABLE AS SELECT
 
-## Синтаксис CREATE TABLE AS
+## Синтаксис CREATE TABLE AS SELECT
 
 Вызов `CREATE TABLE AS` создает новую {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %}, которая заполнена данными из результатов запроса.
 
@@ -45,27 +45,27 @@ AS SELECT ...
 
 - Создание строковой таблицы с одной строкой
 
-```yql
-CREATE TABLE my_table (
-    PRIMARY KEY (key)
-) AS SELECT 
-    1 AS key,
-    "test" AS value;
-```
+    ```yql
+    CREATE TABLE my_table (
+        PRIMARY KEY (key)
+    ) AS SELECT 
+        1 AS key,
+        "test" AS value;
+    ```
 
 - Создание колоночной таблицы из результатов запроса
 
-```yql
-CREATE TABLE my_table (
-    PRIMARY KEY (key1, key2)
-) WITH (
-    STORE=COLUMN
-) AS SELECT 
-    key AS key1,
-    Unwrap(other_key) AS key2,
-    value,
-    String::Contains(value, "test") AS has_test
-FROM other_table;
-```
+    ```yql
+    CREATE TABLE my_table (
+        PRIMARY KEY (key1, key2)
+    ) WITH (
+        STORE=COLUMN
+    ) AS SELECT 
+        key AS key1,
+        Unwrap(other_key) AS key2,
+        value,
+        String::Contains(value, "test") AS has_test
+    FROM other_table;
+    ```
 
 {% endlist %}

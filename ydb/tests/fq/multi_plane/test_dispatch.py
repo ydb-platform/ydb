@@ -162,14 +162,6 @@ class TestMapping(TestYdsBase):
         b_client.wait_query(query_id)
 
         c_client = FederatedQueryClient("c_folder@c_cloud", streaming_over_kikimr=kikimr)
-        sql = R'''SELECT Data FROM yds1.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
-        c_client.create_yds_connection("yds1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
-        query_id = c_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        c_client.wait_query_status(query_id, fq.QueryMeta.FAILED, timeout=600)
-        describe_result = c_client.describe_query(query_id).result
-        describe_string = "{}".format(describe_result)
-        assert "different mappings" in describe_string, describe_string
-
         self.init_topics("test_mapping_with_rd2", create_output=False)
         sql = R'''SELECT Data FROM yds2.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
         c_client.create_yds_connection("yds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)

@@ -92,7 +92,7 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       uses: KyleMayes/install-llvm-action@v2
       with:
-        version: "18"
+        version: "18.1.8"
         cached: true
 
     - name: Debug clang installation for Windows
@@ -120,7 +120,7 @@ jobs:
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "CC=C:\Program Files\LLVM\bin\clang.exe" && set "CXX=C:\Program Files\LLVM\bin\clang++.exe" && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang++.exe" -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

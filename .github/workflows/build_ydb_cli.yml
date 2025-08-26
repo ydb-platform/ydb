@@ -93,7 +93,7 @@ jobs:
       uses: KyleMayes/install-llvm-action@v2
       with:
         version: "18.1.8"
-        cached: true
+        cached: false
 
     - name: Debug clang installation for Windows
       if: ${{ matrix.os == 'windows-amd' }}
@@ -112,9 +112,6 @@ jobs:
         echo ""
         echo "=== LLVM directory contents ==="
         ls -la "C:/Program Files/LLVM/bin/" || echo "LLVM bin directory not found"
-        echo ""
-        echo "=== All clang executables in system ==="
-        find /c/ -name "clang.exe" 2>/dev/null || echo "No clang.exe found"
 
     # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
     - name: Prepare Visual Studio environment and build windows binary with ya make

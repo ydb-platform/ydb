@@ -610,9 +610,7 @@ public:
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        YQL_ENSURE(metadata);
-
-        if (seqNo + 1 == metadata->NextOverloadSeqNo) {
+        if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
             SendDataToShard(shardId);
         }

@@ -4142,35 +4142,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Cout << "a is null and b = 3 result: " << output5 << Endl;
             CompareYson(output5, R"([[#;[3]]])");
 
-            // Cerr << "Starting select\n";
-            // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null");
-            // it = client.StreamExecuteQuery(R"(
-            //     SELECT
-            //         a, b
-            //     FROM `/Root/ColumnShard`
-            //     WHERE a IS NOT NULL;
-            // )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            // Cerr << "Finished select\n";
-            // UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            // TString output6 = StreamResultToYson(it);
-            // Cerr << "Finished convert\n";
-            // Cout << output6 << Endl;
-            // CompareYson(output6, R"([[[2u];[5]];[[3u];#]])");
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output6 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << "a is not null result: " << output6 << Endl;
+            CompareYson(output6, R"([[[2u];[5]];[[3u];#]])");
 
-            // Cerr << "Starting select\n";
-            // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null and b = 5");
-            // it = client.StreamExecuteQuery(R"(
-            //     SELECT
-            //         a, b
-            //     FROM `/Root/ColumnShard`
-            //     WHERE a IS NOT NULL AND b = 5;
-            // )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            // Cerr << "Finished select\n";
-            // UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            // TString output7 = StreamResultToYson(it);
-            // Cerr << "Finished convert\n";
-            // Cout << output7 << Endl;
-            // CompareYson(output7, R"([[[2u];[5]]])");
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null and b = 5");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL AND b = 5;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output7 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << "a is not null and b = 5 result: " << output7 << Endl;
+            CompareYson(output7, R"([[[2u];[5]]])");
 
             // Cerr << "Starting select a!=2\n";
             // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a != 2");
@@ -4184,7 +4184,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             // TString output8 = StreamResultToYson(it);
             // Cerr << "Finished convert\n";
-            // Cout << output8 << Endl;
+            // Cout << "a != 2 result: " << output8 << Endl;
             // CompareYson(output8, R"([[[3u];#]])");
 
             Cerr << "Starting select\n";
@@ -4199,7 +4199,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output9 = StreamResultToYson(it);
             Cerr << "Finished convert\n";
-            Cout << output9 << Endl;
+            Cout << "a < 3 result: " << output9 << Endl;
             CompareYson(output9, R"([[[2u];[5]]])");
 
             Cerr << "Starting select a < 2\n";
@@ -4217,20 +4217,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Cout << "a < 2 result: " << output10 << Endl;
             CompareYson(output10, R"([])");
 
-            // Cerr << "Starting select a > 2\n";
-            // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a > 2");
-            // it = client.StreamExecuteQuery(R"(
-            //     SELECT
-            //         a, b
-            //     FROM `/Root/ColumnShard`
-            //     WHERE a > 2;
-            // )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            // Cerr << "Finished select\n";
-            // UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            // TString output11 = StreamResultToYson(it);
-            // Cerr << "Finished convert\n";
-            // Cout << "a > 2 result: " << output11 << Endl;
-            // CompareYson(output11, R"([[#;#];[#;[3]];[[3u];#]])");
+            Cerr << "Starting select a > 2\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a > 2");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a > 2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output11 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << "a > 2 result: " << output11 << Endl;
+            CompareYson(output11, R"([[#;#];[#;[3]];[[3u];#]])");
             
         }
     }

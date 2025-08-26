@@ -65,74 +65,11 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
-// std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
-//     const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-//     std::vector<TCell> leftCells;
-//     std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
-
-//     Cerr << "From" << Endl;
-//     for (auto& cell: range.From.GetCells()) {
-//         Cerr << cell.IsNull() << " ";
-//     }
-//     Cerr << "\nInclusive: " << range.FromInclusive << Endl;
-//     Cerr << "From end" << Endl;
-
-//     Cerr << "To" << Endl;
-//     for (auto& cell: range.To.GetCells()) {
-//         Cerr << cell.IsNull() << " ";
-//     }
-//     Cerr << "\nInclusive: " << range.ToInclusive << Endl;
-//     Cerr << "To end" << Endl;
-
-//     {
-//         TConstArrayRef<TCell> cells = range.From.GetCells();
-//         const size_t size = cells.size();
-//         Y_ASSERT(size <= columns.size());
-//         leftCells.reserve(size);
-//         leftColumns.reserve(size);
-//         for (size_t i = 0; i < size; ++i) {
-//             leftCells.push_back(cells[i]);
-//             leftColumns.push_back(columns[i]);
-//         }
-//     }
-
-//     std::vector<TCell> rightCells;
-//     std::vector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
-//     {
-//         TConstArrayRef<TCell> cells = range.To.GetCells();
-//         const size_t size = cells.size();
-//         Y_ASSERT(size <= columns.size());
-//         rightCells.reserve(size);
-//         rightColumns.reserve(size);
-//         for (size_t i = 0; i < size; ++i) {
-//             rightCells.push_back(cells[i]);
-//             rightColumns.push_back(columns[i]);
-//         }
-//     }
-
-//     const bool fromInclusive = range.FromInclusive; //|| leftTrailingNull;
-//     const bool toInclusive = range.ToInclusive;// && !rightTrailingNull;
-
-//     TString leftBorder = FromCells(leftCells, leftColumns);
-//     TString rightBorder = FromCells(rightCells, rightColumns);
-//     auto leftSchema = NArrow::MakeArrowSchema(leftColumns);
-//     Y_ASSERT(leftSchema.ok());
-//     auto rightSchema = NArrow::MakeArrowSchema(rightColumns);
-//     Y_ASSERT(rightSchema.ok());
-//     auto result = std::make_pair(
-//         TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
-//         TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
-//     Cerr << "R1: " << result.first << Endl;
-//     Cerr << "R2: " << result.second << Endl;
-
-//     return result;
-// }
-
 std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
     const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<TCell> leftCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
-    bool leftTrailingNull = false;
+
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
         const size_t size = cells.size();
@@ -140,19 +77,13 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
         leftCells.reserve(size);
         leftColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
-            if (!cells[i].IsNull()) {
-                leftCells.push_back(cells[i]);
-                leftColumns.push_back(columns[i]);
-                leftTrailingNull = false;
-            } else {
-                leftTrailingNull = true;
-            }
+            leftCells.push_back(cells[i]);
+            leftColumns.push_back(columns[i]);
         }
     }
 
     std::vector<TCell> rightCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
-    bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();
         const size_t size = cells.size();
@@ -160,18 +91,13 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
         rightCells.reserve(size);
         rightColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
-            if (!cells[i].IsNull()) {
-                rightCells.push_back(cells[i]);
-                rightColumns.push_back(columns[i]);
-                rightTrailingNull = false;
-            } else {
-                rightTrailingNull = true;
-            }
+            rightCells.push_back(cells[i]);
+            rightColumns.push_back(columns[i]);
         }
     }
 
-    const bool fromInclusive = range.FromInclusive || leftTrailingNull;
-    const bool toInclusive = range.ToInclusive && !rightTrailingNull;
+    const bool fromInclusive = range.FromInclusive;
+    const bool toInclusive = range.ToInclusive;
 
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);

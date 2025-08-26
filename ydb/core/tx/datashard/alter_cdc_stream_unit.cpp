@@ -82,6 +82,7 @@ public:
             scanManager.Complete(streamPathId);
         }
 
+        std::cerr << "RESULT\n";
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 

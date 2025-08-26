@@ -33,7 +33,9 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        //std::cerr << "TTxCdcStreamEmitHeartbeats::Execute\n";
         if (Self->State != TShardState::Ready) {
+            //std::cerr << "TTxCdcStreamEmitHeartbeats::Execute return\n";
             return true;
         }
 
@@ -74,8 +76,10 @@ public:
     }
 
     void Complete(const TActorContext&) override {
+        //std::cerr << "TTxCdcStreamEmitHeartbeats::Complete\n";
         LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
             << ": at tablet# " << Self->TabletID());
+        //std::cerr << "TTxCdcStreamEmitHeartbeats::Complete Self->EnqueueChangeRecords\n";
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();
     }

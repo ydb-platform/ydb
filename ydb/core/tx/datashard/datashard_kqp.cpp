@@ -219,10 +219,14 @@ bool NeedEraseLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
 bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
         case NKikimrDataEvents::TKqpLocks::Commit:
+            std::cerr << "Commit\n";
             return true;
 
         case NKikimrDataEvents::TKqpLocks::Rollback:
+            std::cerr << "Rollback\n";
+            return false;
         case NKikimrDataEvents::TKqpLocks::Unspecified:
+            std::cerr << "Unspecified\n";
             return false;
     }
 }
@@ -250,9 +254,11 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
 // returns list of broken locks
 TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
 {
+    std::cerr << "ValidateLocks\n";
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
     if (!NeedValidateLocks(txLocks.GetOp())) {
+        std::cerr << "!NeedValidateLocks(txLocks.GetOp())\n";
         return {};
     }
 
@@ -264,8 +270,9 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lockKey = MakeLockKey(lockProto);
 
         auto lock = sysLocks.GetLock(lockKey);
+        std::cerr << "lock.Generation " << lock.Generation << " lockProto.GetGeneration " << lockProto.GetGeneration() << "\n";
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
             brokenLocks.push_back(lockProto);
         }
     }
@@ -634,6 +641,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
 }
 
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
+    std::cerr << "KqpValidateLocks\n";
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
@@ -645,6 +653,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin
         auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
+            std::cerr << "!brokenLocks.empty()\n";
             return {false, std::move(brokenLocks)};
         }
     }
@@ -658,6 +667,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin
 
                 if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                     // Note: we don't know details on what failed at that shard
+                    std::cerr << "(genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT)\n";
                     return {false, {}};
                 }
             } else {
@@ -670,6 +680,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin
                         TVector<NKikimrDataEvents::TLock> brokenLocks;
                         brokenLocks.reserve(validateResult.GetBrokenLocks().size());
                         std::copy(validateResult.GetBrokenLocks().begin(), validateResult.GetBrokenLocks().end(), std::back_inserter(brokenLocks));
+                        std::cerr << "!validateResult.GetSuccess()\n";
                         return {false, std::move(brokenLocks)};
                     }
                 }
@@ -828,28 +839,34 @@ void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TS
 }
 
 void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+    std::cerr << "KqpCommitLocks\n";
     if (kqpLocks == nullptr) {
         return;
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
+        std::cerr << "NeedCommitLocks(kqpLocks->GetOp())\n";
         // We assume locks have been validated earlier
         for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
+                std::cerr << "lockProto.GetDataShard() != origin\n";
                 continue;
             }
 
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLock " << lockProto.ShortDebugString());
 
             auto lockKey = MakeLockKey(lockProto);
+            std::cerr << "CommitLock\n";
             sysLocks.CommitLock(lockKey);
 
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
+            std::cerr << "userDb.CommitChanges(tableId, txId, writeVersion);\n";
             userDb.CommitChanges(tableId, txId, writeVersion);
         }
     } else {
+        std::cerr << "!NeedCommitLocks(kqpLocks->GetOp())\n";
         KqpEraseLocks(origin, kqpLocks, sysLocks);
     }
 }

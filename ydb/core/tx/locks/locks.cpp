@@ -452,12 +452,18 @@ void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
 }
 
 TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+    std::cerr << "TLockLocker::GetLock\n";
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
         TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at))
+        if (!lock->IsBroken(at)) {
+            std::cerr << "lock is not broken\n";
             return lock;
+        } else {
+            std::cerr << "lock is broken\n";
+        }
     }
+    std::cerr << "return nullptr\n";
     return nullptr;
 }
 
@@ -521,8 +527,10 @@ void TLockLocker::RemoveBrokenRanges() {
 }
 
 TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
+    std::cerr << "GetOrAddLock " << lockId << "\n";
     auto it = Locks.find(lockId);
     if (it != Locks.end()) {
+        std::cerr << "Lock exist " << it->second->GetGeneration() << "\n";
         if (it->second->IsInList<TLockInfoExpireListTag>()) {
             ExpireQueue.PushBack(it->second.Get());
         }
@@ -554,6 +562,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 
     TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId));
     Y_ABORT_UNLESS(!lock->IsPersistent());
+    std::cerr << "Lock created " << lock->GetGeneration() << "\n";
     Locks[lockId] = lock;
     if (lockNodeId) {
         PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
@@ -563,6 +572,7 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
 }
 
 TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
+    std::cerr << "AddLock " << row.LockId << "\n";
     Y_ABORT_UNLESS(Locks.find(row.LockId) == Locks.end());
 
     TLockInfo::TPtr lock(new TLockInfo(this, row));
@@ -619,6 +629,7 @@ void TLockLocker::RemoveLock(ui64 lockId, ILocksDb* db) {
 }
 
 void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+    std::cerr << "UpdateSchema\n";
     TTableLocks::TPtr& table = Tables[tableId];
     if (!table)
         table.Reset(new TTableLocks(tableId));
@@ -627,6 +638,7 @@ void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TT
 
 void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     // Make sure all persistent locks are removed from the database
+    std::cerr << "RemoveSchema\n";
     for (auto& pr : Locks) {
         if (pr.second->IsPersistent()) {
             pr.second->PersistRemoveLock(db);
@@ -636,6 +648,9 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
 
     Tables.erase(tableId);
     Y_ABORT_UNLESS(Tables.empty());
+    if (Locks.size()) {
+        std::cerr << "locks became empty\n";
+    }
     Locks.clear();
     ShardLocks.clear();
     ExpireQueue.Clear();
@@ -879,6 +894,7 @@ ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
 }
 
 TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
+    std::cerr << "TSysLocks::GetLock\n";
     ui64 lockTxId, tabletId;
     bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
     ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
@@ -888,7 +904,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         auto it = Cache->Locks.find(lockTxId);
         if (it != Cache->Locks.end())
             return it->second;
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
+        LOG_ERROR_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
         return TLock();
     }
 
@@ -897,6 +913,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     auto &checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
+        std::cerr << "fond lock " << lockTxId << " generation " << txLock->GetGeneration() << "\n";
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ABORT_UNLESS(tableIds.size() == 1);
@@ -910,16 +927,16 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
                     return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock());
                 } else {
-                    LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
+                    LOG_ERROR_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
                             "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
                 }
             } else {
-                LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
+                LOG_ERROR_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
                         "TSysLocks::GetLock: bad request for lock " << lockTxId);
             }
         }
     } else {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
+        LOG_ERROR_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
     }
 
     Self->IncCounter(COUNTER_LOCKS_LOST);

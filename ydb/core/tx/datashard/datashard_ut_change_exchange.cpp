@@ -28,6 +28,7 @@ namespace NKikimr {
 using namespace NDataShard;
 using namespace NDataShard::NKqpHelpers;
 using namespace Tests;
+using namespace NSchemeShard;
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     void SenderShouldBeActivated(const TString& path, const TShardedTableOptions& opts) {
@@ -813,10 +814,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     static void SetupLogging(TTestActorRuntime& runtime) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
     }
 
     template <typename TDerived, typename TClient>
@@ -3767,8 +3770,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
         MustNotLoseSchemaSnapshot(true);
     }
 
+    void ExecSQLA(Tests::TServer::TPtr server,
+                TActorId sender,
+                const TString &sql)
+    {
+        auto &runtime = *server->GetRuntime();
+        auto request = MakeSQLRequest(sql, false);
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+    }
+
     template <typename TPrepareFunc, typename TTestFunc>
-    void ShouldBreakLocksOnConcurrentSchemeTx(TPrepareFunc prepare, TTestFunc test, Ydb::StatusIds::StatusCode finalCode = Ydb::StatusIds::ABORTED) {
+    void ShouldBreakLocksOnConcurrentSchemeTx(TPrepareFunc prepare, TTestFunc, Ydb::StatusIds::StatusCode finalCode = Ydb::StatusIds::ABORTED) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -3780,35 +3793,298 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
+        std::cerr << "\n--------------CreateShardedTable--------------\n";
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
+        std::cerr << "\n--------------AddStream--------------\n";
         WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
             Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
 
+        std::cerr << "\n--------------Prepare--------------\n";
         prepare(server, edgeActor);
+
+        //std::cerr << "\n--------------UPSERT--------------\n";
+        int i = 0;
+        int k = 0;
+        //int o = 0;
+        auto lk = [&](const NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr&) {
+            ++k;
+            std::cerr << "CCCCCCCCCCCC " << k << "\n";
+            return k > 0;
+        };
+        //TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime, lk);
+        //TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRecords> blockRecordsA(runtime);
+
+        /*TString sessionId;
+        TString txId;
+        KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+        ;*/
+
+        /*UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+        */
+
+        //test(server, edgeActor);
+        std::cerr << "\n--------------Try to start AddIndex--------------\n";
+        auto a = AsyncAlterAddIndex(server, "/Root", "/Root/Table",
+            TShardedTableOptions::TIndex{"Index", {"value"}});
+        //WaitTxNotification(server, edgeActor, a);
+        auto &settings = server->GetSettings();
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        request->Record.SetTxId(a);
+        auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
+        runtime.SendToPipe(tid, edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+        //runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+        TString sessionId;
+        TString txId;
+        
+
+        int p = 0;
+        TBlockEvents<IEventHandle> pol(runtime,
+        [&](const TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0) {
+                ++p;
+                //std::cerr << "DDDDDD " << p << "\n";
+                if (p == 94) {
+                    return false;
+                }
+            }
+            return false;
+        });
+
+        auto tableShards = GetTableShards(server, edgeActor, "/Root/Table");
+
+        int j = 0;
+        int l = 0;
+        auto lc = [&](const TEvTxProcessing::TEvPlanStepAccepted::TPtr&) {
+            j++;
+            std::cerr << "BBBBBBBBBBBBBBB " << j << "\n";
+            //if (j > 7) {
+                //std::cerr << "\n--------------Commit tx--------------\n";
+                /*auto ld = [&](const TEvPrivate::TEvProgressTransaction::TPtr&) {
+                    std::cerr << "DDDD\n";
+                };*/
+                if (j == 3) {
+                    TBlockEvents<IEventHandle> blockedProgress(runtime,
+                    [&](const TAutoPtr<IEventHandle>&) {
+                        std::cerr << "PPPPP " << l << "\n";
+                        return false;
+                        //return ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+                    });
+                }
+                //TBlockEvents<TEvPrivate::TEvProgressTransaction> d(runtime, ld);
+                //blockRecords.Unblock().Stop();
+                //blockRecordsA.Unblock().Stop();
+                if (j == 5) {
+                    //blockRecords.Unblock().Stop();
+                    std::cerr << "\n--------------REBOOT TABLET 1--------------\n";
+                    std::cerr << "shard " << tableShards[0] << "\n";
+                    RebootTablet(runtime, tableShards[0], edgeActor);
+                    //std::cerr << "\n--------------REBOOT TABLET 2--------------\n";
+                    //std::cerr << "shard " << tableShards[1] << "\n";
+                    //RebootTablet(runtime, 72075186224037891, edgeActor);
+
+                    //std::cerr << "\n--------------Wait first event in CDC--------------\n";
+                    //blockRecords.Unblock().Stop();
+                    /*WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+                        R"({"update":{"value":10},"key":[1]})",
+                    });*/
+                }
+                if (j == 8) {
+                    //blockRecords.Unblock().Stop();
+                    blockRecords.Unblock().Stop();
+                    SimulateSleep(server, TDuration::Seconds(10));
+                    std::cerr << "\n--------------Commit tx--------------\n";
+                    //KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;");
+
+                    //std::cerr << "\n--------------Wait first event in CDC--------------\n";
+                    //blockRecords.Unblock().Stop();
+                    /*WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+                        R"({"update":{"value":10},"key":[1]})",
+                    });*/
+                }
+                //Y_UNUSED(finalCode);
+
+                //return false;
+                //blockedProgress.Unblock().Stop();
+            //}
+            return false;
+        };
+        TBlockEvents<TEvTxProcessing::TEvPlanStepAccepted> c(runtime, lc);
+
+        auto la = [&](const TEvDataShard::TEvSchemaChanged::TPtr&) {
+            i++;
+            std::cerr << "AAAAAAAAAAAAAAAAAA " << i << "\n";
+            if (i == 1) {
+                //sleep(5);
+                //SimulateSleep(server, TDuration::Seconds(5));
+                std::cerr << "\n--------------UPSERT--------------\n";
+                ExecSQLA(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+                ExecSQLA(server, edgeActor, "SELECT key, value FROM `/Root/Table`;");
+                c.Unblock().Stop();
+                //SimulateSleep(server, TDuration::Seconds(10));
+                k++;
+
+                /*std::cerr << "\n--------------Start tx with UPSERT--------------\n";
+                KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");*/
+
+                /*std::cerr << "\n--------------Continue tx with SELECT--------------\n";
+                auto fa = KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;");
+                std::cerr << fa << "\n";*/
+                /*auto lo = [&](const TEvTxProcessing::TEvReadSet::TPtr&) {
+                    o++;
+                    std::cerr << "OOOOOOOOO " << o << "\n";
+                    return o > 2;
+                };
+                TBlockEvents<TEvTxProcessing::TEvReadSet> blo(runtime, lo);*/
+                return false;
+            }
+            return i > 1;
+        };
+        TBlockEvents<TEvDataShard::TEvSchemaChanged> b(runtime, la);
+
+        SimulateSleep(server, TDuration::Seconds(10));
+
+        /*WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":1},"key":[1]})",
+        });*/
+
+        //ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        //TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
+        
+
+        /*std::cerr << "\n--------------Continue ADD INDEX--------------\n";
+        b.Unblock().Stop();
+        SimulateSleep(server, TDuration::Seconds(1));*/
+        b.Unblock().Stop();
+        //c.Unblock().Stop();
+        runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(edgeActor);
+
+        Y_UNUSED(finalCode);
+        UNIT_ASSERT_VALUES_EQUAL(false, true);
+    }
+
+    template <typename TPrepareFunc, typename TTestFunc>
+    void ShouldBreakLocksOnConcurrentSchemeTxBBB(TPrepareFunc prepare, TTestFunc, Ydb::StatusIds::StatusCode finalCode = Ydb::StatusIds::ABORTED) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        std::cerr << "\n--------------CreateShardedTable--------------\n";
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        std::cerr << "\n--------------AddStream--------------\n";
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        std::cerr << "\n--------------Prepare--------------\n";
+        prepare(server, edgeActor);
+
+        int k = 0;
+        auto lk = [&](const NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr&) {
+            std::cerr << "CCCCCCCCCCCC " << k << "\n";
+            return k == 0;
+        };
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime, lk);
+
+        std::cerr << "\n--------------UPSERT--------------\n";
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+
+        auto tableShards = GetTableShards(server, edgeActor, "/Root/Table");
+        std::cerr << "\n--------------REBOOT TABLET--------------\n";
+        RebootTablet(runtime, tableShards[0], edgeActor);
+
+        std::cerr << "\n--------------Try to start AddIndex--------------\n";
+        auto a = AsyncAlterAddIndex(server, "/Root", "/Root/Table",
+            TShardedTableOptions::TIndex{"Index", {"value"}});
+        auto &settings = server->GetSettings();
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        request->Record.SetTxId(a);
+        auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
+        runtime.SendToPipe(tid, edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+        TString sessionId;
+        TString txId;
+
+        int j = 0;
+        auto lc = [&](const TEvTxProcessing::TEvPlanStepAccepted::TPtr&) {
+            j++;
+            std::cerr << "BBBBBBBBBBBBBBB " << j << "\n";
+            if (j == 8) {
+                ++k;
+            }
+            return false;
+        };
+        TBlockEvents<TEvTxProcessing::TEvPlanStepAccepted> c(runtime, lc);
+
+        SimulateSleep(server, TDuration::Seconds(10));
+
+        //c.Unblock().Stop();
+        runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(edgeActor);
+
+        Y_UNUSED(finalCode);
+        UNIT_ASSERT_VALUES_EQUAL(false, true);
+    }
+
+    template <typename TPrepareFunc, typename TTestFunc>
+    void BBShouldBreakLocksOnConcurrentSchemeTx(TPrepareFunc prepare, TTestFunc test, Ydb::StatusIds::StatusCode finalCode = Ydb::StatusIds::ABORTED) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        std::cerr << "\n--------------CreateShardedTable--------------\n";
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        std::cerr << "\n--------------AddStream--------------\n";
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        std::cerr << "\n--------------Prepare--------------\n";
+
+        prepare(server, edgeActor);
+        std::cerr << "\n--------------UPSERT--------------\n";
 
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
         TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockRecords(runtime);
+        std::cerr << "\n--------------Start tx with UPSERT--------------\n";
 
         TString sessionId;
         TString txId;
         KqpSimpleBegin(runtime, sessionId, txId, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11);");
+        std::cerr << "\n--------------Continue tx with SELECT--------------\n";
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleContinue(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;"),
             "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+        std::cerr << "777\n";
 
         test(server, edgeActor);
-        blockRecords.Unblock().Stop();
-
-        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+        //blockRecords.Unblock().Stop();
+        std::cerr << "\n--------------Commit tx--------------\n";
 
         KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;");
         Y_UNUSED(finalCode);
+        std::cerr << "\n--------------Wait first event in CDC--------------\n";
+        blockRecords.Unblock().Stop();
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",
         });
+        UNIT_ASSERT_VALUES_EQUAL(false, true);
     }
 
     void Nop(TServer::TPtr, const TActorId&) {
@@ -3868,7 +4144,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST(AAAShouldBreakLocksOnConcurrentAddStream) {
-        ShouldBreakLocksOnConcurrentSchemeTx(&Nop, &AddStream);
+        BBShouldBreakLocksOnConcurrentSchemeTx(&Nop, &AddStream);
     }
 
     Y_UNIT_TEST(AAAShouldBreakLocksOnConcurrentAlterStream) {

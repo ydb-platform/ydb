@@ -1748,6 +1748,7 @@ ui64 AsyncAlterAddStream(
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
+    //desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(1000);
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
     }

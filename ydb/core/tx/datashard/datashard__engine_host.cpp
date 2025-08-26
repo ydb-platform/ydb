@@ -277,6 +277,7 @@ public:
     }
 
     void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) override {
+        std::cerr << "hhhzzz\n";
         UserDb.CommitChanges(tableId, lockId, writeVersion);
     }
 

@@ -981,49 +981,6 @@ namespace {
     }
 }
 
-class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
-public:
-    TKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : QueryExecutor(queryExecutor) {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final {
-        output = input;
-        VisitExpr(input, [](const TExprNode::TPtr& node) {
-            if (auto maybeExec = TMaybeNode<TKiExecDataQuery>(node)) {
-                auto exec = maybeExec.Cast();
-                if (exec.Ast().Maybe<TCoVoid>()) {
-                    YQL_ENSURE(false);
-                }
-            }
-
-            return true;
-        });
-
-        return TStatus::Ok;
-    }
-
-    TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input);
-        return MakeFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
-        output = input;
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-private:
-    struct TExecInfo {
-        TKiExecDataQuery Node;
-        TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult> Result;
-    };
-
-private:
-    TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
-};
-
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
 private:
     IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
@@ -3180,10 +3137,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
     return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
-}
-
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor) {
-    return new TKiSinkPlanInfoTransformer(queryExecutor);
 }
 
 } // namespace NYql

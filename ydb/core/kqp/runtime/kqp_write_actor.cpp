@@ -453,6 +453,7 @@ public:
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
                 hFunc(TEvDataShard::TEvOverloadReady, Handle);
+                hFunc(TEvColumnShard::TEvOverloadReady, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             default:
@@ -607,11 +608,7 @@ public:
         Prepare();
     }
 
-    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        const ui64 shardId = record.GetTabletID();
-        const ui64 seqNo = record.GetSeqNo();
-
+    void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
 
@@ -619,6 +616,23 @@ public:
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
             SendDataToShard(shardId);
         }
+    }
+
+    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
+    }
+
+    void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
+
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -2160,6 +2174,7 @@ public:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
+                hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
@@ -3159,15 +3174,27 @@ public:
         }
     }
 
+    void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
+        if (seqNo == ExternalShardIdToOverloadSeqNo.at(shardId)) {
+            CA_LOG_D("Retry Overloaded ShardID=" << shardId);
+            SendToExternalShard(shardId, false);
+        }
+    }
+
     void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletID();
         const ui64 seqNo = record.GetSeqNo();
 
-        if (seqNo == ExternalShardIdToOverloadSeqNo.at(shardId)) {
-            CA_LOG_D("Retry Overloaded ShardID=" << shardId);
-            SendToExternalShard(shardId, false);
-        }
+        OnOverloadReady(shardId, seqNo);
+    }
+
+    void HandlePrepare(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
     }
 
     void HandleError(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {

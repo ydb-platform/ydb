@@ -480,6 +480,7 @@ private:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
+                hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
@@ -669,11 +670,7 @@ private:
         }
     }
 
-    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        const ui64 shardId = record.GetTabletID();
-        const ui64 seqNo = record.GetSeqNo();
-
+    void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected overload ready from unknown tabletId " << shardId);
         YQL_ENSURE(EvWriteTxs.contains(shardId), "Unexpected overload ready from unknown tabletId " << shardId);
@@ -681,6 +678,22 @@ private:
         if (seqNo == shardState->OverloadSeqNo) {
             ExecuteEvWriteTransaction(shardId, *EvWriteTxs.at(shardId));
         }
+    }
+
+    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
+    }
+
+    void HandlePrepare(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
     }
 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {

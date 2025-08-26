@@ -1444,12 +1444,15 @@ message TPersQueueGroupDescription {
     message TPartitionSplit {
         required uint32 Partition = 1;
         required bytes SplitBoundary = 2;
+        repeated uint32 ChildPartitionIds = 3; // use the prescribed ids instead of auto generating new ones
+        optional bool CreateRootLevelSibling = 4; // create a new child partition at the root level if its sibling already exists
     }
     repeated TPartitionSplit Split = 15;
 
     message TPartitionMerge {
         required uint32 Partition = 1;
         required uint32 AdjacentPartition = 2;
+        optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
 }

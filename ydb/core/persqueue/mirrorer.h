@@ -137,6 +137,7 @@ public:
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
+    void TryToSplitMerge(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -164,6 +165,7 @@ private:
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
     TInstant WriteRequestTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;

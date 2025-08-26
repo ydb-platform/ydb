@@ -183,47 +183,49 @@ message FulltextIndexSettings {
     // Example:
     //   Token: "Quick"
     //   Output: "quick"
-    bool use_filter_lowercase = 100 [default = false];
+    bool use_filter_lowercase = 100;
 
     // Whether to remove common stopwords like "the", "a", "is"
     // Example: language = "english"
     //   Tokens: ["the", "quick", "brown"]
     //   Output: ["quick", "brown"]
-    bool use_filter_stopwords = 101 [default = false];
+    bool use_filter_stopwords = 101;
 
     // Whether to apply character n-gram indexing to each token
     // Must be used with filter_ngram_min_length and filter_ngram_max_length
     // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
     //   Token: "search"
     //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
-    bool use_filter_ngram = 102 [default = false];
+    bool use_filter_ngram = 102;
 
     // Whether to apply edge n-gram indexing (prefix-based) to each token
     // Must be used with filter_ngram_min_length and filter_ngram_max_length
     // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
     //   Token: "search"
     //   Output: ["sea", "sear"]
-    bool use_filter_edge_ngram = 103 [default = false];
+    bool use_filter_edge_ngram = 103;
 
     // Minimum token length to keep (inclusive)
     // Example: filter_length_min = 4
     //   Tokens: ["foo", "foobar"]
     //   Output: ["foobar"]
-    uint32 filter_length_min = 200 [default = 0];
+    uint32 filter_length_min = 200;
 
     // Maximum token length to keep (inclusive)
     // Example: filter_length_max = 6
     //   Tokens: ["foo", "foobar", "foobarbaz"]
     //   Output: ["foo", "foobar"]
-    uint32 filter_length_max = 201 [default = 4294967295];
+    uint32 filter_length_max = 201;
 
     // Minimum length of n-grams to generate (inclusive)
     // Used with use_filter_ngram or use_filter_edge_ngram
-    uint32 filter_ngram_min_length = 202 [default = 3];
+    // Default value is 3
+    uint32 filter_ngram_min_length = 202;
 
     // Maximum length of n-grams to generate (inclusive)
     // Used with use_filter_ngram or use_filter_edge_ngram
-    uint32 filter_ngram_max_length = 203 [default = 4];
+    // Default value is 4
+    uint32 filter_ngram_max_length = 203;
 }
 
 message GlobalFulltextIndex {

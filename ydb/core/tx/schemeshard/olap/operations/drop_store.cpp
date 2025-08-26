@@ -23,7 +23,8 @@ public:
     TDropParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages(DebugHint(),
+            {TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {

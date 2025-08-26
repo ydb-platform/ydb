@@ -9,11 +9,10 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
-
 TPredicate::TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch) noexcept
     : Operation(op)
     , Batch(std::move(batch)) {
-    Y_ABORT_UNLESS(IsFrom() || IsTo());
+    Y_ABORT_UNLESS(IsFrom() || IsTo() || op == EOperation::Unspecified);
 }
 
 TPredicate::TPredicate(EOperation op, const TString& serializedBatch, const std::shared_ptr<arrow::Schema>& schema)
@@ -110,6 +109,13 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     const bool fromInclusive = range.FromInclusive || leftTrailingNull;
     const bool toInclusive = range.ToInclusive && !rightTrailingNull;
 
+    if (leftTrailingNull || rightTrailingNull) {
+        return {
+           TPredicate::MakeEmpty(),
+           TPredicate::MakeEmpty()
+        };
+    }
+
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);
     auto leftSchema = NArrow::MakeArrowSchema(leftColumns);
@@ -201,6 +207,21 @@ IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     }
 
     return out;
+}
+bool TPredicate::HasNulls() const {
+    if (!Batch) {
+        return false;
+    }
+    for (const auto& column : Batch->columns()) {
+        if (column->IsNull(0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TPredicate TPredicate::MakeEmpty() {
+    return TPredicate(EOperation::Unspecified, std::shared_ptr<arrow::RecordBatch>());
 }
 
 }   // namespace NKikimr::NOlap

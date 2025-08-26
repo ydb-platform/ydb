@@ -329,7 +329,7 @@ public:
             auto rowDispatcher = NFq::NewRowDispatcherService(
                 QueryServiceConfig.GetSharedReading(),
                 NKikimr::CreateYdbCredentialsProviderFactory,
-                nullptr, //credentialsFactory, todo
+                FederatedQuerySetup->CredentialsFactory,
                 "tenant",
                 Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
                 FederatedQuerySetup->PqGateway,

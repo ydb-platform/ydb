@@ -1666,42 +1666,6 @@ namespace Tests {
             NFq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }
 
-        if (Settings->EnableSharedReading) {
-            auto config = Settings->AppConfig->GetQueryServiceConfig().GetSharedReading();
-            NFq::NConfig::TConfig protoConfig;
-            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters));
-
-            const auto& database = config.GetCoordinator().GetDatabase();
-            config.MutableCoordinator()->MutableDatabase()->SetEndpoint(database.HasEndpoint() ? database.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
-            config.MutableCoordinator()->MutableDatabase()->SetDatabase(database.HasDatabase() ? database.GetDatabase() : GetEnv("YDB_DATABASE"));
-
-            NYql::TPqGatewayServices pqServices(
-                yqSharedResources->UserSpaceYdbDriver,
-                nullptr,
-                nullptr,
-                std::make_shared<NYql::TPqGatewayConfig>(),
-                nullptr,
-                nullptr
-               // commonTopicClientSettings
-            );
-            auto actor = NFq::NewRowDispatcherService(
-                config,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                nullptr, //credentialsFactory, todo
-                "tenant",
-                counters->GetSubgroup("subsystem", "row_dispatcher"),
-                CreatePqNativeGateway(pqServices),
-                yqSharedResources->UserSpaceYdbDriver,
-                NActors::TActorId{},
-                nullptr,
-                counters);
-
-            TActorId actorId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NFq::RowDispatcherServiceActorId(), actorId, nodeIdx);
-        }
-
         {
             using namespace NViewer;
             if (Settings->KikimrRunConfig) {

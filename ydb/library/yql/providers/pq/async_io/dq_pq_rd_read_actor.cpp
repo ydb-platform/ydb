@@ -730,7 +730,6 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
     Counters.GetAsyncInputData++;
-    Cerr << "GetAsyncInputData freeSpace = " << freeSpace << Endl;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
     Metrics.InFlyAsyncInputData->Set(0);
@@ -1468,14 +1467,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     i64 bufferSize,
     const IPqGateway::TPtr& pqGateway)
 {
-    // auto taskParamsIt = taskParams.find("pq");
-    // YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
-
-    // TVector<NPq::NProto::TDqReadTaskParams> params;
-    // NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
-    // YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
-    // params.emplace_back(std::move(readTaskParamsMsg));
-
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();

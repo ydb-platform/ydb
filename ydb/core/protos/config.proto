@@ -2073,7 +2073,8 @@ message TColumnShardConfig {
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
-    optional bool BulkUpsertRequireAllColumns = 47 [default = true];
+    reserved 47; // DisableBulkUpsertRequireAllColumns
+    optional bool BulkUpsertRequireAllColumns = 48 [default = true];
 }
 
 message TSchemeShardConfig {

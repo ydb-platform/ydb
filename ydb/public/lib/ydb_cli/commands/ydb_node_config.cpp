@@ -11,7 +11,7 @@ constexpr const char* STORAGE_CONFIG_FILE_NAME = "storage.yaml";
 TCommandNodeConfig::TCommandNodeConfig()
     : TClientCommandTree("config", {}, "Node-wide configuration")
 {
-    AddLocalCommand(std::make_unique<TCommandNodeConfigInit>());
+    AddCommand(std::make_unique<TCommandNodeConfigInit>());
 }
 
 TCommandNodeConfigInit::TCommandNodeConfigInit()

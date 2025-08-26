@@ -4,6 +4,7 @@
 #include "logging.h"
 #include "scheme.h"
 
+#include <ydb/core/tx/replication/common/backoff.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NReplication::NTransfer {
@@ -13,9 +14,8 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TThis = TTableUploader<TData>;
     using TBase = TActorBootstrapped<TTableUploader<TData>>;
 
-    static constexpr size_t MaxRetries = 9;
+protected:
     static constexpr size_t MaxSchemeRetries = 3;
-    static constexpr size_t BaseTimeoutMs = 1000;
 
 public:
     TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<TData>>&& data)
@@ -74,13 +74,13 @@ private:
         const auto schemeError = ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR;
 
         auto& retry = Retries[tablePath];
-        auto withRetry = schemeError ? retry.SchemeCount < MaxSchemeRetries && retry.Count < MaxRetries : retry.Count < MaxRetries;
+        auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            size_t timeout = BaseTimeoutMs << retry.Count;
-            TThis::Schedule(TDuration::MilliSeconds(timeout + RandomNumber<size_t>(timeout >> 2)), new NTransferPrivate::TEvRetryTable(tablePath));
-            ++retry.Count;
+            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath));
             if (schemeError) {
                 ++retry.SchemeCount;
+            } else {
+                retry.SchemeCount = 0;
             }
             CookieMapping.erase(ev->Cookie);
             return;
@@ -145,7 +145,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        size_t Count = 0;
+        TBackoff Backoff;
         size_t SchemeCount = 0;
     };
     std::unordered_map<TString, Retry> Retries;

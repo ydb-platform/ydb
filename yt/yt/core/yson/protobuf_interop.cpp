@@ -934,9 +934,10 @@ public:
     {
         BuildYsonFluently(consumer)
             .BeginMap()
-                .Item("type_name").Value("enum")
-                .Item("enum_name").Value(Underlying_->name())
-                .Item("values").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
+                .Item("type_name").Value("tagged")
+                .Item("tag").Value(Format("enum/%v", Underlying_->name()))
+                .Item("item").Value("string")
+                .Item("enum").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
                     fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
                 })
             .EndMap();

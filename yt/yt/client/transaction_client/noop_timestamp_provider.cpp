@@ -31,4 +31,4 @@ ITimestampProviderPtr CreateNoopTimestampProvider()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NNTransactionClient
+} // namespace NYT::NTransactionClient

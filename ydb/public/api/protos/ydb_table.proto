@@ -189,43 +189,46 @@ message FulltextIndexSettings {
     // Example: language = "english"
     //   Tokens: ["the", "quick", "brown"]
     //   Output: ["quick", "brown"]
-    bool use_filter_stopwords = 101;
+    bool use_filter_stopwords = 110;
 
     // Whether to apply character n-gram indexing to each token
     // Must be used with filter_ngram_min_length and filter_ngram_max_length
     // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
     //   Token: "search"
     //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
-    bool use_filter_ngram = 102;
+    bool use_filter_ngram = 120;
 
     // Whether to apply edge n-gram indexing (prefix-based) to each token
-    // Must be used with filter_ngram_min_length and filter_ngram_max_length
+    // Used with filter_ngram_min_length and filter_ngram_max_length
     // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
     //   Token: "search"
     //   Output: ["sea", "sear"]
-    bool use_filter_edge_ngram = 103;
-
-    // Minimum token length to keep (inclusive)
-    // Example: filter_length_min = 4
-    //   Tokens: ["foo", "foobar"]
-    //   Output: ["foobar"]
-    uint32 filter_length_min = 200;
-
-    // Maximum token length to keep (inclusive)
-    // Example: filter_length_max = 6
-    //   Tokens: ["foo", "foobar", "foobarbaz"]
-    //   Output: ["foo", "foobar"]
-    uint32 filter_length_max = 201;
+    bool use_filter_edge_ngram = 121;
 
     // Minimum length of n-grams to generate (inclusive)
-    // Used with use_filter_ngram or use_filter_edge_ngram
+    // Must be used with use_filter_ngram or use_filter_edge_ngram
     // Default value is 3
-    uint32 filter_ngram_min_length = 202;
+    uint32 filter_ngram_min_length = 122;
 
     // Maximum length of n-grams to generate (inclusive)
-    // Used with use_filter_ngram or use_filter_edge_ngram
+    // Must be used with use_filter_ngram or use_filter_edge_ngram
     // Default value is 4
-    uint32 filter_ngram_max_length = 203;
+    uint32 filter_ngram_max_length = 123;
+
+    // Whether to filter tokens by their length
+    // Must be used with filter_length_min or filter_length_max
+    // Example: filter_length_min = 4, filter_length_max = 6
+    //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
+    //   Output: ["fooba", "foobar"]
+    bool use_filter_length = 130;
+
+    // Minimum token length to keep (inclusive)
+    // Must be used with use_filter_length
+    uint32 filter_length_min = 131;
+
+    // Maximum token length to keep (inclusive)
+    // Must be used with use_filter_length
+    uint32 filter_length_max = 132;
 }
 
 message GlobalFulltextIndex {

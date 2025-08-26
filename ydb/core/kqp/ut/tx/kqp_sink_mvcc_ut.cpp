@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST_TWIN(InsertDuplicatePkInDifferentTxs, ComminOnInsert) {
+    Y_UNIT_TEST_TWIN(InsertDuplicatePkInDifferentTxs, CommitOnInsert) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         auto tx2 = readResult2.GetTransaction();
         UNIT_ASSERT(tx2);
 
-        if (ComminOnInsert) {
+        if (CommitOnInsert) {
             auto insertResult1 = session1
                                      .ExecuteQuery(R"(
                         INSERT INTO `/Root/table` (id) VALUES (1)

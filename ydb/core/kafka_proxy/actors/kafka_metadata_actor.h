@@ -101,7 +101,7 @@ private:
     void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx);
 
-    THashMap<ui64, TNodeInfo> Nodes;
+    TMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
     THashSet<ui64> HaveBrokers;
 

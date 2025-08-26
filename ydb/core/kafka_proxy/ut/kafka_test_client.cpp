@@ -34,7 +34,7 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent)
 // YDB ignores AllowAutoTopicCreation, i.e. it never creates a new topic implicitly.
 // But in Apache Kafka the default behavior is to create a new topic, if there is no one at the moment of the request.
 // With this flag, allowAutoTopicCreation, you can stop this behavior in Apache Kafka.
-TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
+TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation = true) {
     Cerr << ">>>>> MetadataRequest\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 12);

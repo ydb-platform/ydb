@@ -173,7 +173,6 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     };
 
     NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
-    TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
     NActors::TActorId NodesManagerId;
     const TString LogPrefix;
@@ -190,7 +189,6 @@ public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
         const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
-        const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         NActors::TActorId nodesManagerId);
@@ -237,12 +235,10 @@ private:
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
-    const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     NActors::TActorId nodesManagerId)
     : Config(config)
-    , YqSharedResources(yqSharedResources)
     , LocalRowDispatcherId(localRowDispatcherId)
     , NodesManagerId(nodesManagerId)
     , LogPrefix("Coordinator: ")
@@ -550,12 +546,11 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
-    const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     NActors::TActorId nodesManagerId)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters, nodesManagerId));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nodesManagerId));
 }
 
 } // namespace NFq

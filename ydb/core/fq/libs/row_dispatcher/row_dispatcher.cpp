@@ -326,7 +326,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     const NKikimrConfig::TSharedReadingConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    TYqSharedResources::TPtr YqSharedResources;
     TActorId CompileServiceActorId;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
@@ -341,6 +340,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
+    NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     NActors::TActorId NodesManagerId;
     TNodesTracker NodesTracker;
@@ -418,13 +418,13 @@ public:
     explicit TRowDispatcher(
         const NKikimrConfig::TSharedReadingConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
+        NYdb::TDriver driver,
         NActors::TActorId nodesManagerId,
         NActors::TMon* monitoring = nullptr);
 
@@ -500,18 +500,17 @@ public:
 TRowDispatcher::TRowDispatcher(
     const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NYdb::TDriver driver,
     NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
@@ -521,6 +520,7 @@ TRowDispatcher::TRowDispatcher(
     , Metrics(counters)
     , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
+    , Driver(driver)
     , Monitoring(monitoring)
     , NodesManagerId(nodesManagerId)
 {
@@ -531,8 +531,8 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters, NodesManagerId).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
+    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -885,7 +885,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 SelfId(),
                 CompileServiceActorId,
                 partitionId,
-                YqSharedResources->UserSpaceYdbDriver,
+                Driver,
                 CreateCredentialsProviderFactoryForStructuredToken(
                     CredentialsFactory,
                     ev->Get()->Record.GetToken(),
@@ -1289,26 +1289,26 @@ void TRowDispatcher::UpdateCpuTime() {
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NYdb::TDriver driver,
     NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
         credentialsProviderFactory,
-        yqSharedResources,
         credentialsFactory,
         tenant,
         actorFactory,
         counters,
         countersRoot,
         pqGateway,
+        driver,
         nodesManagerId,
         monitoring));
 }

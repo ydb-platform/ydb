@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 namespace {
 
@@ -92,7 +93,7 @@ public:
         ReadActorId2 = Runtime.AllocateEdgeActor();
         ReadActorId3 = Runtime.AllocateEdgeActor(1);
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
-        
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -110,6 +111,7 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
+            yqSharedResources->UserSpaceYdbDriver,
             NActors::TActorId()
             ).release());
 

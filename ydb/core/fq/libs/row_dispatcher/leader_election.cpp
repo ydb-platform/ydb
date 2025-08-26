@@ -98,7 +98,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     };
     NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
-    TYqSharedResources::TPtr YqSharedResources;
+    NYdb::TDriver Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;
     TString CoordinationNodePath;
@@ -128,7 +128,7 @@ public:
         NActors::TActorId coordinatorId,
         const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources,
+        NYdb::TDriver driver,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
@@ -176,13 +176,13 @@ TLeaderElection::TLeaderElection(
     NActors::TActorId coordinatorId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources)
-    , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
+    , Driver(driver)
+    , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
     , CoordinationNodePath(JoinPath(TablePathPrefix, tenant))
     , ParentId(parentId)
@@ -480,11 +480,11 @@ std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId coordinatorId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, yqSharedResources, tenant, counters));
+    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, coordinatorId, config, credentialsProviderFactory, driver, tenant, counters));
 }
 
 } // namespace NFq

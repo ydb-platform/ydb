@@ -1689,11 +1689,11 @@ namespace Tests {
             auto actor = NFq::NewRowDispatcherService(
                 config,
                 NKikimr::CreateYdbCredentialsProviderFactory,
-                yqSharedResources,
                 nullptr, //credentialsFactory, todo
                 "tenant",
                 counters->GetSubgroup("subsystem", "row_dispatcher"),
                 CreatePqNativeGateway(pqServices),
+                yqSharedResources->UserSpaceYdbDriver,
                 NActors::TActorId{},
                 nullptr,
                 counters);

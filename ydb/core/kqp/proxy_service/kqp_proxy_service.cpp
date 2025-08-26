@@ -32,6 +32,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -323,6 +324,25 @@ public:
 
         KqpTempTablesAgentActor = Register(new TKqpTempTablesAgentActor());
 
+        const auto& sharedReading = QueryServiceConfig.GetSharedReading();
+        if (sharedReading.GetEnabled()) {
+            auto rowDispatcher = NFq::NewRowDispatcherService(
+                QueryServiceConfig.GetSharedReading(),
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                nullptr, //credentialsFactory, todo
+                "tenant",
+                Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+                FederatedQuerySetup->PqGateway,
+                *FederatedQuerySetup->Driver,
+                NActors::TActorId{},
+                mon,
+                Counters->GetKqpCounters());
+
+            RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
+            TActivationContext::ActorSystem()->RegisterLocalService(
+                NFq::RowDispatcherServiceActorId(), RowDispatcherService);
+        }
+
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
         AskSelfNodeInfo();
@@ -408,6 +428,9 @@ public:
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
         Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
+        if (RowDispatcherService) {
+            Send(RowDispatcherService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -1789,6 +1812,7 @@ private:
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
     TActorId KqpComputeSchedulerService;
+    TActorId RowDispatcherService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

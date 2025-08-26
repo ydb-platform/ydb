@@ -268,11 +268,11 @@ void Init(
         auto rowDispatcher = NFq::NewRowDispatcherService(
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
             credentialsFactory,
             tenant,
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
             pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+            yqSharedResources->UserSpaceYdbDriver,
             MakeNodesManagerId(),
             appData->Mon,
             appData->Counters);

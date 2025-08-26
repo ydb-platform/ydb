@@ -5,6 +5,8 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
@@ -25,13 +27,13 @@ namespace NFq {
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NYdb::TDriver driver,
     NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring = nullptr);
 

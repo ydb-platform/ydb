@@ -19,6 +19,9 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/purecalc_compilation
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
+
+    ydb/core/kqp/federated_query
+
     ydb/core/mon
 
     ydb/library/actors/core

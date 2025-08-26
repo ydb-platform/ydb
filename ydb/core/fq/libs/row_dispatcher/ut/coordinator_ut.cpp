@@ -26,9 +26,7 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
-        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+
         LocalRowDispatcherId = Runtime.AllocateEdgeActor(0);
         RowDispatcher1Id = Runtime.AllocateEdgeActor(1);
         RowDispatcher2Id = Runtime.AllocateEdgeActor(2);
@@ -46,7 +44,6 @@ public:
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,
             config,
-            yqSharedResources,
             "Tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             NodesManager

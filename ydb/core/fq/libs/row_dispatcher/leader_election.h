@@ -14,7 +14,7 @@ std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId coordinatorId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters);
 

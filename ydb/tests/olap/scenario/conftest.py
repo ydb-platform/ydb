@@ -119,7 +119,7 @@ class BaseTestSet:
             },
             column_shard_config={
                 "disabled_on_scheme_shard": False,
-                "disable_bulk_upsert_require_all_columns": True,
+                "bulk_upsert_require_all_columns": False,
             }
         )
 

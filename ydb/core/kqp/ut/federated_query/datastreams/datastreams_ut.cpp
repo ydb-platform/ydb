@@ -801,9 +801,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(writeBucket), 0);
     }
 
-
-    Y_UNIT_TEST(RestoreScriptPhysicalGraphOnRetryWithCheckpoints) {
-        const auto pqGateway = CreateMockPqGateway();
+    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
 
         TString inputTopicName = "inputTopicName";
         TString outputTopicName = "outputTopicName";
@@ -841,22 +840,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        TString executionId;
         TOperation::TOperationId operationId;
-
-        constexpr TDuration backoffDuration = TDuration::Seconds(5);
         {
-            NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
-            retryMapping.AddStatusCode(Ydb::StatusIds::BAD_REQUEST);
-            auto& policy = *retryMapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
-            policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
-            policy.SetRetryRateLimit(1);
-
-            const TScriptQuerySettings settings = {
-                .Query = fmt::format(R"(
-                  $input = SELECT key, value FROM `{source}`.`{input_topic}`
+            const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+                    $input = SELECT key, value FROM `{source}`.`{input_topic}`
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(
@@ -868,12 +855,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     "source"_a = pqSourceName,
                     "input_topic"_a = inputTopicName,
                     "output_topic"_a = outputTopicName
-                ),
-                .SaveState = true,
-                .RetryMapping = retryMapping
-            };
-
-            std::tie(executionId, operationId) = StartScriptQuery(runtime, settings);
+                ), {
+                    .SaveState = true,
+                    .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
+                }, false);
+            
         }
         Sleep(TDuration::MilliSeconds(3000));
 

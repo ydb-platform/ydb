@@ -175,7 +175,8 @@ struct TContext : public TThrRefBase {
     TMaybe<TSession> Session;
     size_t CurrentProcessingTaskIndex = 0;
     std::vector<TaskInfo> Tasks;
-    std::function<void(TFuture<TStatus>)> Callback;    
+    std::function<void(TFuture<TStatus>)> Callback;
+    const std::optional<TInstant> ExpireAt;
 
     TContext(
         const NActors::TActorSystem* actorSystem,
@@ -183,12 +184,14 @@ struct TContext : public TThrRefBase {
         const std::vector<ui64>& taskIds,
         TString graphId,
         const TCheckpointId& checkpointId,
+        std::optional<TInstant> expireAt,
         TMaybe<TSession> session = {})
         : ActorSystem(actorSystem)
         , TablePathPrefix(tablePathPrefix)
         , GraphId(std::move(graphId))
         , CheckpointId(checkpointId)
         , Session(session)
+        , ExpireAt(expireAt)
     {
         for (auto taskId : taskIds) {
             Tasks.emplace_back(taskId);
@@ -201,10 +204,11 @@ struct TContext : public TThrRefBase {
         ui64 taskId,
         TString graphId,
         const TCheckpointId& checkpointId,
+        std::optional<TInstant> expireAt,
         TMaybe<TSession> session = {},
         const std::list<TString>& rows = {},
         EStateType type = EStateType::Snapshot)
-        : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
+        : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, expireAt, std::move(session))
     {
         Tasks[0].Rows = rows;
         Tasks[0].Type = type;
@@ -286,6 +290,7 @@ class TStateStorage : public IStateStorage {
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig StorageConfig;
     const NConfig::TCheckpointCoordinatorConfig Config;
+    TMaybe<TDuration> CheckpointsTtl;
 
 public:
     explicit TStateStorage(
@@ -350,6 +355,7 @@ private:
         const TContextPtr& context,
         NYql::TIssues& issues);
 
+    std::optional<TInstant> GetExpireAt() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -361,6 +367,12 @@ TStateStorage::TStateStorage(
     , StorageConfig(config.GetStorage())
     , Config(config)
 {
+    TDuration ttl;
+    if (!TDuration::TryParse(Config.GetCheckpointsTtl(), ttl)) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to parse CheckpointsTtl: '" << Config.GetCheckpointsTtl() << "'");
+    } else {
+        CheckpointsTtl = ttl;
+    }
 }
 
 TFuture<TIssues> TStateStorage::Init() {
@@ -393,7 +405,9 @@ TFuture<TIssues> TStateStorage::Init() {
         .AddNullableColumn("blob", EPrimitiveType::String)
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
+        .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .SetTtlSettings("expire_at")
         .Build();
 
     auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
@@ -476,6 +490,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
         taskId,
         graphId,
         checkpointId,
+        GetExpireAt(),
         TMaybe<TSession>(), 
         serializedState,
         type);
@@ -527,7 +542,8 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         YdbConnection->TablePathPrefix,
         taskIds,
         graphId,
-        checkpointId);
+        checkpointId,
+        GetExpireAt());
 
     LOG_STORAGE_DEBUG(context, "GetState, tasks: " << JoinSeq(", ", taskIds));
 
@@ -862,6 +878,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
             paramsBuilder.AddParam("$blob").String(taskInfo.Rows.front()).Build();
             paramsBuilder.AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
             paramsBuilder.AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
+            paramsBuilder.AddParam("$expire_at").OptionalTimestamp(context->ExpireAt).Build();
 
             auto params = paramsBuilder.Build();
 
@@ -876,9 +893,10 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                 declare $blob as string;
                 declare $blob_seq_num as Uint64;
                 declare $type as Uint8;
+                DECLARE $expire_at AS Optional<Timestamp>;
 
-                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type) VALUES
-                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type);
+                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type, expire_at) VALUES
+                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type, $expire_at);
             )", context->TablePathPrefix.c_str(), StatesTable);
 
             Y_ENSURE(context->Session, "Session is empty");
@@ -993,6 +1011,10 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
         issues.AddIssue(CurrentExceptionMessage());
     } 
     return states;
+}
+
+std::optional<TInstant> TStateStorage::GetExpireAt() const {
+    return CheckpointsTtl ? TInstant::Now() + *CheckpointsTtl : std::optional<TInstant>();
 }
 
 } // namespace

@@ -191,6 +191,24 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             continue;
         }
 
+        if (syncer.HasBytesDone() || syncer.HasBytesTotal() || syncer.HasBytesError() ||
+                syncer.HasBlobsDone() || syncer.HasBlobsTotal() || syncer.HasBlobsError()) {
+            auto& state = SyncerProgress[std::tie(targetGroupId, nodeId)];
+#define FETCH_METRIC(NAME) \
+            if (syncer.Has##NAME()) { \
+                state.NAME = syncer.Get##NAME(); \
+            }
+
+            FETCH_METRIC(BytesDone)
+            FETCH_METRIC(BytesTotal)
+            FETCH_METRIC(BytesError)
+            FETCH_METRIC(BlobsDone)
+            FETCH_METRIC(BlobsTotal)
+            FETCH_METRIC(BlobsError)
+
+#undef FETCH_METRIC
+        }
+
         if (syncer.GetFinished()) {
             if (syncer.HasErrorReason() || TargetGroupsInCommit.contains(targetGroupId)) {
                 continue;
@@ -242,6 +260,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
     for (const auto& [targetGroupId, sourceGroupId] : targetSourceToDelete) {
         SyncersNodeTargetSource.erase(std::make_tuple(nodeId, targetGroupId, sourceGroupId));
         SyncersTargetNodeSource.erase(std::make_tuple(targetGroupId, nodeId, sourceGroupId));
+        SyncerProgress.erase(std::make_tuple(targetGroupId, nodeId));
     }
 }
 
@@ -259,6 +278,7 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
                 const auto& [nodeId, targetGroupId, sourceGroupId] = *it++;
                 const size_t n = SyncersTargetNodeSource.erase(std::make_tuple(targetGroupId, nodeId, sourceGroupId));
                 Y_ABORT_UNLESS(n == 1);
+                SyncerProgress.erase(std::make_tuple(targetGroupId, nodeId));
             }
             SyncersNodeTargetSource.erase(first, it);
         } else {
@@ -484,6 +504,97 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerSta
         ReadGroups(groupIdsToRead, false, update.get(), nodeId);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR05, "TEvControllerUpdateSyncerState: sending update", (Msg, update->Record));
         SendToWarden(nodeId, std::move(update), 0);
+    }
+}
+
+void TBlobStorageController::RenderBridge(IOutputStream& out) {
+    RenderHeader(out);
+
+    HTML(out) {
+        TAG(TH3) {
+            out << "Working syncers";
+        }
+
+        TABLE_CLASS("table") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() { out << "Bridge proxy group id"; }
+                    TABLEH() { out << "Target group id"; }
+                    TABLEH() { out << "Source group id"; }
+                    TABLEH() { out << "State"; }
+                    TABLEH() { out << "Node id"; }
+                    TABLEH() { out << "Progress"; }
+                    TABLEH() { out << "Bytes"; }
+                    TABLEH() { out << "Blobs"; }
+                }
+            }
+            TABLEBODY() {
+                for (auto& [targetGroupId, nodeId, sourceGroupId] : SyncersTargetNodeSource) {
+                    TABLER() {
+                        TGroupId bridgeProxyGroupId;
+                        TString state;
+                        auto scanPiles = [&](auto& info) {
+                            if (!info) {
+                                return;
+                            }
+                            for (const auto& pile : info->GetBridgeGroupState().GetPile()) {
+                                if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId) {
+                                    state = NKikimrBridge::TGroupState::EStage_Name(pile.GetStage());
+                                    break;
+                                }
+                            }
+                        };
+                        if (const TGroupInfo *group = FindGroup(targetGroupId)) {
+                            if (group->BridgeProxyGroupId) {
+                                bridgeProxyGroupId = *group->BridgeProxyGroupId;
+                                if (const TGroupInfo *bridgeProxyGroup = FindGroup(bridgeProxyGroupId)) {
+                                    scanPiles(bridgeProxyGroup->BridgeGroupInfo);
+                                }
+                            }
+                        } else if (const auto it = StaticGroups.find(targetGroupId); it != StaticGroups.end()) {
+                            if (const auto& group = it->second.Info->Group) {
+                                bridgeProxyGroupId = TGroupId::FromProto(&group.value(),
+                                    &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId);
+                                scanPiles(group);
+                            }
+                        }
+                        TABLED() { out << bridgeProxyGroupId; }
+                        TABLED() { out << targetGroupId; }
+                        TABLED() { out << sourceGroupId; }
+                        TABLED() { out << state; }
+                        TABLED() {
+                            out << "<a href='/node/" << nodeId << "/actors/nodewarden#syncer-" << targetGroupId << "'>" << nodeId << "</a>";
+                        }
+
+                        auto& progress = SyncerProgress[std::tie(targetGroupId, nodeId)];
+                        TABLED() {
+                            if (progress.BytesTotal) {
+                                const int percent = 10'000 * progress.BytesDone / progress.BytesTotal;
+                                out << Sprintf("%d.%02d%%", percent / 100, percent % 100);
+                            }
+                        }
+                        TABLED() {
+                            static const char *bytesSuffixes[] = {"B", "KiB", "MiB", "GiB", nullptr};
+                            FormatHumanReadable(out, progress.BytesDone, 1024, 1, bytesSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, progress.BytesTotal, 1024, 1, bytesSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, progress.BytesError, 1024, 1, bytesSuffixes);
+                            out << ')';
+                        }
+                        TABLED() {
+                            static const char *blobsSuffixes[] = {"", "K", "M", nullptr};
+                            FormatHumanReadable(out, progress.BlobsDone, 1000, 1, blobsSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, progress.BlobsTotal, 1000, 1, blobsSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, progress.BlobsError, 1000, 1, blobsSuffixes);
+                            out << ')';
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

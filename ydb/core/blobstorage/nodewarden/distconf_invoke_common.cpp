@@ -44,6 +44,7 @@ namespace NKikimr::NStorage {
             } else {
                 Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
                 Y_ABORT_UNLESS(!Self->Scepter); // this operation is invoked without a scepter
+                InvokedWithoutScepter = true;
             }
             ExecuteQuery();
         } else {
@@ -377,7 +378,7 @@ namespace NKikimr::NStorage {
         PassAway();
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
-        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition && !InvokedWithoutScepter) {
             if (Self->RootState == ERootState::IN_PROGRESS) {
                 Self->RootState = ERootState::RELAX;
             } else {
@@ -453,9 +454,13 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {
         const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query)));
-        InvokeQ.push_back(TInvokeOperation{actorId});
-        if (InvokeQ.size() == 1) {
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
+        if (RootState != ERootState::ERROR_TIMEOUT) {
+            InvokeQ.push_back(TInvokeOperation{actorId});
+            if (InvokeQ.size() == 1) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
+            }
+        } else {
+            InvokePending.push_back(TInvokeOperation{actorId});
         }
     }
 

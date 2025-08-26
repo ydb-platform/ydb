@@ -462,13 +462,32 @@ public:
 
 private:
     std::optional<TErrorOr<T>> Result_;
-#ifndef NDEBUG
-    mutable std::atomic<bool> ResultMovedOut_ = false;
-#endif
-
     TResultHandlers ResultHandlers_;
     TUniqueResultHandler UniqueResultHandler_;
 
+#ifndef NDEBUG
+    static constexpr ui8 GetInvokedFlag = 0x1;
+    static constexpr ui8 GetUniqueInvokedFlag = 0x2;
+    mutable std::atomic<ui8> ResultFlags_;
+#endif
+
+    void BeforeGetResult() const
+    {
+#ifndef NDEBUG
+        auto prevFlags = ResultFlags_.fetch_or(GetInvokedFlag);
+        // Check that no GetUnique calls were previously made.
+        YT_ASSERT((prevFlags & GetUniqueInvokedFlag) == 0);
+#endif
+    }
+
+    void BeforeGetUniqueResult() const
+    {
+#ifndef NDEBUG
+        auto prevFlags = ResultFlags_.fetch_or(GetUniqueInvokedFlag);
+        // Check that no Get or GetUnique calls were previously made.
+        YT_ASSERT(prevFlags == 0);
+#endif
+    }
 
     template <bool MustSet, class U>
     bool DoTrySet(U&& value) noexcept
@@ -503,29 +522,21 @@ private:
 
     const NYT::TErrorOr<T>& GetResult() const
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_);
-#endif
+        BeforeGetResult();
         YT_ASSERT(Result_);
         return *Result_;
     }
 
     const std::optional<TErrorOr<T>>& GetOptionalResult() const
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_);
-#endif
+        BeforeGetResult();
         return Result_;
     }
 
     NYT::TErrorOr<T> GetUniqueResult()
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_.exchange(true));
-#endif
-        auto result = std::move(*Result_);
-        Result_.reset();
-        return result;
+        BeforeGetUniqueResult();
+        return std::move(*Result_);
     }
 
 

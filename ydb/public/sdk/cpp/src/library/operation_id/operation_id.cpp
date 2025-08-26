@@ -69,6 +69,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::INCREMENTAL_BACKUP:
             res << "ydb://incbackup";
             break;
+        case Ydb::TOperationId::RESTORE:
+            res << "ydb://restore";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }
@@ -310,6 +313,10 @@ TOperationId::EKind ParseKind(const std::string_view value) {
 
     if (value.starts_with("incbackup")) {
         return TOperationId::INCREMENTAL_BACKUP;
+    }
+
+    if (value.starts_with("restore")) {
+        return TOperationId::RESTORE;
     }
 
     return TOperationId::UNUSED;

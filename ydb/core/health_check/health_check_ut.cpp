@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+    void CheckHcResultHasIssuesWithStatus(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
                                           const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total,
                                           TLocationFilter locationFilter = {}) {
         int issuesCount = 0;
@@ -2190,6 +2190,80 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
+    }
+
+    Y_UNIT_TEST(BridgeNoBscResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            auto type = ev->GetTypeRewrite();
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == TEvBlobStorage::EvNodeWardenStorageConfig) {
+                auto* x = reinterpret_cast<TEvNodeWardenStorageConfig::TPtr*>(&ev);
+                (*x)->Get()->BridgeInfo = bridgeInfo;
+            }
+            if (type == NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateResponse) {
+                auto* x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                for (auto& group : *(*x)->Get()->Record.mutable_bsgroupstateinfo()) {
+                    group.set_bridgepileid(1);
+                }
+            }
+            if (type == NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse) {
+                auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                (*x)->Get()->Record.mutable_vdiskstateinfo(0)->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+
+        bool bscTabletIssueFoundInResult = false;
+        for (const auto &issue_log : result.issue_log()) {
+            if (issue_log.level() == 3 && issue_log.type() == "SYSTEM_TABLET") {
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().id().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().id()[0], ToString(MakeBSControllerID()));
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().compute().tablet().type(), "BSController");
+                bscTabletIssueFoundInResult = true;
+            }
+        }
+        UNIT_ASSERT(bscTabletIssueFoundInResult);
+        
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("1"));
     }
 
     Y_UNIT_TEST(ShardsLimit999) {

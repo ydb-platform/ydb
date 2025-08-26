@@ -45,6 +45,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 uid Utf8,
                 level Int32,
                 message Utf8,
+                new_column1 Uint64,
                 PRIMARY KEY (timestamp, uid)
             )
             PARTITION BY HASH(timestamp)
@@ -804,6 +805,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 CompareYson(result, R"([[
                     [0];
                     ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
+                    [5000u];
                     ["5"];
                     1000005u;
                     "uid_1000005"
@@ -1630,8 +1632,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         std::vector<TString> queries = {
             R"(
-                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "false";
-
                 SELECT count(*) FROM `/Root/foo`
                 where b > a
                 GROUP BY a;
@@ -3912,7 +3912,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            CompareYson(result, R"([[#;#;["0"];0u;"a"];[#;#;["t"];1000000u;"b"];[#;#;["test"];2000000u;"c"]])");
+            CompareYson(result, R"([[#;#;#;["0"];0u;"a"];[#;#;#;["t"];1000000u;"b"];[#;#;#;["test"];2000000u;"c"]])");
         }
     }
 

@@ -1882,6 +1882,12 @@ namespace NSchemeShardUT_Private {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
+            auto& settings = *index.mutable_global_unique_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
             auto& settings = *index.mutable_global_async_index()->mutable_settings();
             if (cfg.GlobalIndexSettings) {
@@ -1956,6 +1962,14 @@ namespace NSchemeShardUT_Private {
         });
     }
 
+    void AsyncBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                       const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
+    {
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns
+        });
+    }
+
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                               const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
@@ -2004,6 +2018,15 @@ namespace NSchemeShardUT_Private {
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+        }, expectedStatus);
+    }
+
+    void TestBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                           const TString &src, const TString &name, TVector<TString> columns,
+                           Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}
         }, expectedStatus);
     }
 
@@ -2983,5 +3006,35 @@ namespace NSchemeShardUT_Private {
             UNIT_ASSERT(it != rightLabels.end());
             UNIT_ASSERT_VALUES_EQUAL(value, it->second);
         }
+    }
+
+    NKikimrBackup::TEvGetBackupCollectionRestoreResponse TestGetBackupCollectionRestore(TTestActorRuntime& runtime, ui64 id, const TString& dbName, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetBackupCollectionRestoreRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvGetBackupCollectionRestoreResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetBackupCollectionRestore().GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrBackup::TEvForgetBackupCollectionRestoreResponse TestForgetBackupCollectionRestore(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 restoreId, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvForgetBackupCollectionRestoreRequest(txId, dbName, restoreId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetBackupCollectionRestoreResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrBackup::TEvListBackupCollectionRestoresResponse TestListBackupCollectionRestores(TTestActorRuntime& runtime, const TString& dbName, ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvListBackupCollectionRestoresRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvListBackupCollectionRestoresResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
+
+        return ev->Record;
     }
 }

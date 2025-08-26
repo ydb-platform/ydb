@@ -59,7 +59,7 @@ ui64 PutUnitsSize(const ui64 size) {
 }
 
 bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    for (const auto& i : config.GetPartitionConfig().GetImportantClientId()) {
+    for (const auto& i : config.GetPartitionConfig().GetImportantClientId_Deprecated()) {
         if (consumerName == i) {
             return true;
         }
@@ -71,42 +71,43 @@ bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
     // if ReadRules isn`t empty than it is old configuration format
     // when modify new format (add or alter a consumer) readRules is cleared
-    if (config.ReadRulesSize()) {
+    if (config.ReadRules_DeprecatedSize()) {
         config.ClearConsumers();
 
-        for(size_t i = 0; i < config.ReadRulesSize(); ++i) {
+        for(size_t i = 0; i < config.ReadRules_DeprecatedSize(); ++i) {
             auto* consumer = config.AddConsumers();
 
-            consumer->SetName(config.GetReadRules(i));
-            if (i < config.ReadFromTimestampsMsSize()) {
-                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
+            consumer->SetName(config.GetReadRules_Deprecated(i));
+            if (i < config.ReadFromTimestampsMs_DeprecatedSize()) {
+                consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs_Deprecated(i));
             }
-            if (i < config.ConsumerFormatVersionsSize()) {
-                consumer->SetFormatVersion(config.GetConsumerFormatVersions(i));
+            if (i < config.ConsumerFormatVersions_DeprecatedSize()) {
+                consumer->SetFormatVersion(config.GetConsumerFormatVersions_Deprecated(i));
             }
-            if (i < config.ConsumerCodecsSize()) {
-                auto& src = config.GetConsumerCodecs(i);
+            if (i < config.ConsumerCodecs_DeprecatedSize()) {
+                auto& src = config.GetConsumerCodecs_Deprecated(i);
                 auto* dst = consumer->MutableCodec();
                 dst->CopyFrom(src);
             }
-            if (i < config.ReadRuleServiceTypesSize()) {
-                consumer->SetServiceType(config.GetReadRuleServiceTypes(i));
+            if (i < config.ReadRuleServiceTypes_DeprecatedSize()) {
+                consumer->SetServiceType(config.GetReadRuleServiceTypes_Deprecated(i));
             }
-            if (i < config.ReadRuleVersionsSize()) {
-                consumer->SetVersion(config.GetReadRuleVersions(i));
+            if (i < config.ReadRuleVersions_DeprecatedSize()) {
+                consumer->SetVersion(config.GetReadRuleVersions_Deprecated(i));
             }
-            if (i < config.ReadRuleGenerationsSize()) {
-                consumer->SetGeneration(config.GetReadRuleGenerations(i));
+            if (i < config.ReadRuleGenerations_DeprecatedSize()) {
+                consumer->SetGeneration(config.GetReadRuleGenerations_Deprecated(i));
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
-        config.ClearReadRules();
-        config.ClearReadFromTimestampsMs();
-        config.ClearConsumerFormatVersions();
-        config.ClearConsumerCodecs();
-        config.ClearReadRuleServiceTypes();
-        config.ClearReadRuleVersions();
-        config.ClearReadRuleGenerations();
+        config.ClearReadRules_Deprecated();
+        config.ClearReadFromTimestampsMs_Deprecated();
+        config.ClearConsumerFormatVersions_Deprecated();
+        config.ClearConsumerCodecs_Deprecated();
+        config.ClearReadRuleServiceTypes_Deprecated();
+        config.ClearReadRuleVersions_Deprecated();
+        config.ClearReadRuleGenerations_Deprecated();
+        config.MutablePartitionConfig()->ClearImportantClientId_Deprecated();
     }
 
     if (!config.PartitionsSize()) {
@@ -133,13 +134,21 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    for (auto& cons : config.GetConsumers()) {
-        if (cons.GetName() == consumerName) {
-            return true;
-        }
-    }
+    return AnyOf(config.GetConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
+}
 
-    return false;
+const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    return FindIfPtr(config.GetConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
+}
+
+NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
+    return FindIfPtr(*config.MutableConsumers(), [&](const auto& consumer) {
+        return consumer.GetName() == consumerName;
+    });
 }
 
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config) {

@@ -1139,6 +1139,15 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
+message TIncrementalRestoreOperationId {
+    optional uint64 TxId = 1;
+    optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreOperationsList {
+    repeated TIncrementalRestoreOperationId Operations = 1;
+}
+
 message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
@@ -1435,12 +1444,15 @@ message TPersQueueGroupDescription {
     message TPartitionSplit {
         required uint32 Partition = 1;
         required bytes SplitBoundary = 2;
+        repeated uint32 ChildPartitionIds = 3; // use the prescribed ids instead of auto generating new ones
+        optional bool CreateRootLevelSibling = 4; // create a new child partition at the root level if its sibling already exists
     }
     repeated TPartitionSplit Split = 15;
 
     message TPartitionMerge {
         required uint32 Partition = 1;
         required uint32 AdjacentPartition = 2;
+        optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
 }
@@ -1840,7 +1852,7 @@ message TModifyScheme {
     optional TChangePathState ChangePathState = 82;
 
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
-    
+
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order
@@ -2290,6 +2302,7 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
+    repeated uint64 InvolvedShards = 7;
 }
 
 message TChangePathState {

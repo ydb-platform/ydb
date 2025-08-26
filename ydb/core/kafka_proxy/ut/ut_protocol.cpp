@@ -60,7 +60,7 @@ public:
     TIpPort Port;
 
     TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
-                bool enableAutoTopicCreation = true, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
+                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -91,8 +91,8 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        if (!enableAutoTopicCreation) {
-            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(false);
+        if (enableAutoTopicCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
         if (!enableAutoConsumerCreation) {
@@ -2284,7 +2284,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
 
         }
-        return; //ToDo: FixMe
         std::unordered_map<size_t, TString> messages;
         for (auto size : std::vector{100_KB, 500_KB, 9_MB, 20_MB, 3_MB}) {
             messages[size] = TString{size, 'a'};
@@ -2301,12 +2300,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         Cerr << ">>>>> BEGIN WRITE" << Endl;
 
-        ui32 totalWriteCycles = 15;
+        ui32 totalWriteCycles = 20;
         for (auto i = 0u; i < totalWriteCycles; i++) {
             writeMessage("key1", 100_KB);
             writeMessage("key2", 500_KB);
-            // writeMessage("key3", 9_MB);
-            // writeMessage("key4", 20_MB);
+            writeMessage("key3", 9_MB);
+            //writeMessage("key4", 20_MB);
+            //ToDo: return back after fix of big messages;
+            //LOGBROKER-9700
             writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
             Cerr << "Wrote message " << i << Endl;
         }
@@ -2366,8 +2367,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
         Cerr << "Total messages: " << totalMessages << Endl;
-        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2")); //&& keysFound.contains("key3") && keysFound.contains("key4"));
-        UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 2 + totalWriteCycles); //4 + 15
+        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3")); //LOGBROKER-9700: && keysFound.contains("key4"));
+        UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 3 + totalWriteCycles); //4 + 15
         UNIT_ASSERT(totalMessages < totalWritten);
     }
 
@@ -2956,7 +2957,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(MetadataTopicAutocreationEnabledScenario) {
-        TInsecureTestServer testServer("1", false, false, true);
+        TInsecureTestServer testServer("1", false, false, true, true);
 
         TString nonExistedTopicName1 = "non-existent-topic-1";
         TString nonExistedTopicName2 = "non-existent-topic-2";

@@ -1099,7 +1099,7 @@ namespace NActors {
                 .Utilization = Utilized,
                 .ConnectTime = LastHandshakeDone.MilliSeconds(),
                 .BytesWrittenToSocket = BytesWrittenToSocket,
-                .PeerBridgePileName = Proxy->Common->BridgePileName.value_or(""),
+                .PeerBridgePileName = Proxy->PeerBridgePileName.value_or(""),
             });
         }
 

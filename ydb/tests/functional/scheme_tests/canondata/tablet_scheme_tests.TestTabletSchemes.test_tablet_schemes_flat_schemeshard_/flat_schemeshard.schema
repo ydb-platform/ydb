@@ -5280,6 +5280,11 @@
                 "ColumnId": 48,
                 "ColumnName": "DropColumnsTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 49,
+                "ColumnName": "SubState",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -5333,7 +5338,8 @@
                     45,
                     46,
                     47,
-                    48
+                    48,
+                    49
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8816,6 +8822,11 @@
                 "ColumnId": 3,
                 "ColumnName": "CurrentIncrementalIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8824,7 +8835,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

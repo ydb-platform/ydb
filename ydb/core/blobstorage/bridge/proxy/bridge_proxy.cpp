@@ -30,7 +30,7 @@ namespace NKikimr {
         struct TRequest
             : std::enable_shared_from_this<TRequest>
         {
-            ui64 RequestId = RandomNumber<ui64>();
+            TString RequestId = Sprintf("%016" PRIx64, RandomNumber<ui64>());
             TActorId Sender;
             ui64 Cookie;
             TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -44,6 +44,8 @@ namespace NKikimr {
             THPTimer Timer;
             std::deque<std::tuple<TString, TDuration>> SubrequestTimings;
 
+            NWilson::TSpan Span;
+
             struct TDiscoverState {
                 TLogoBlobID Id;
                 TString Buffer;
@@ -55,7 +57,6 @@ namespace NKikimr {
             struct TGetState {
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
-                bool IsIndexOnly;
                 ui32 BlockedGeneration = 0;
             };
 
@@ -99,10 +100,11 @@ namespace NKikimr {
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                    TThis& self)
+                    TThis& self, ui32 requestType, NWilson::TTraceId&& traceId)
                 : Sender(sender)
                 , Cookie(cookie)
                 , Info(std::move(info))
+                , Span(TWilson::BlobStorage, std::forward<NWilson::TTraceId>(traceId), "BridgedRequest", NWilson::EFlags::AUTO_END)
             {
                 Y_ABORT_UNLESS(Info);
                 Y_ABORT_UNLESS(Info->Group);
@@ -113,7 +115,6 @@ namespace NKikimr {
 
                     State = TGetState{
                         .NumResponses = request->QuerySize,
-                        .IsIndexOnly = request->IsIndexOnly,
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst,
@@ -138,6 +139,13 @@ namespace NKikimr {
                 }
 
                 OriginalRequest = std::move(request);
+
+                if (Span) {
+                    Span.Attribute("GroupId", Info->GroupID.GetRawId());
+                    Span.Attribute("database", AppData()->TenantName);
+                    Span.Attribute("storagePool", Info->GetStoragePoolName());
+                    Span.Attribute("RequestType", TEvBlobStorage::TEvRequestCommon::GetRequestName(requestType));
+                }
             }
 
             template<typename TEvent, typename... TArgs>
@@ -216,7 +224,7 @@ namespace NKikimr {
                     return MakeErrorFrom(self, ev.get());
                 }
                 if (pile.IsPrimary) {
-                    return std::move(ev);
+                    return ev;
                 }
                 Y_ABORT_UNLESS(ResponsesPending);
                 return nullptr;
@@ -328,7 +336,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
 
                 if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
-                    return std::move(ev);
+                    return ev;
                 }
 
                 if (!state.Responses) {
@@ -515,7 +523,7 @@ namespace NKikimr {
                 auto& state = std::get<TRangeState>(State);
 
                 if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
-                    return std::move(ev);
+                    return ev;
                 }
 
                 auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
@@ -615,10 +623,6 @@ namespace NKikimr {
                 (void)self, (void)ev;
                 return nullptr;
             }
-
-            TString MakeRequestId() const {
-                return Sprintf("%016" PRIx64, RequestId);
-            }
         };
         struct TRequestInFlight {
             std::shared_ptr<TRequest> Request;
@@ -665,9 +669,10 @@ namespace NKikimr {
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;
-            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
+            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
+                    ev->GetTypeRewrite(), std::move(ev->TraceId));
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (Request, originalRequest.ToString()));
 
             Y_ABORT_UNLESS(Info->Group);
@@ -708,7 +713,7 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
             // send event
-            SendToBSProxy(SelfId(), groupId, ev.release(), cookie);
+            SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
             ++request->ResponsesPending;
         }
 
@@ -767,7 +772,7 @@ namespace NKikimr {
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
             STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->MakeRequestId()),
+                (RequestId, request->RequestId),
                 (GroupId, item.GroupId),
                 (Status, ev->Get()->Status),
                 (PileState, pile.State),
@@ -809,7 +814,10 @@ namespace NKikimr {
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
                     request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
+
                     if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
+                        FixGroupId(*response);
+
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
                         Y_DEBUG_ABORT_UNLESS(common->Status != NKikimrProto::RACE);
@@ -821,11 +829,19 @@ namespace NKikimr {
                                 return TStringBuilder() << name << ':' << duration;
                             }));
                         };
+
                         STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->MakeRequestId()),
+                            (RequestId, request->RequestId),
                             (Response, response->ToString()),
                             (Passed, TDuration::Seconds(request->Timer.Passed())),
                             (SubrequestTimings, makeSubrequestTimings()));
+
+                        if (success) {
+                            request->Span.EndOk();
+                        } else if (request->Span) {
+                            request->Span.EndError(common->ErrorReason);
+                        }
+
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }
@@ -857,7 +873,26 @@ namespace NKikimr {
                 }
                 PendingByGeneration.erase(it);
             }
+        }
 
+        void FixGroupId(IEventBase& ev) {
+            switch (ev.Type()) {
+                case TEvBlobStorage::EvPutResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvPutResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvGetResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvGetResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvRangeResult:
+                    const_cast<ui32&>(static_cast<TEvBlobStorage::TEvRangeResult&>(ev).GroupId) = GroupId.GetRawId();
+                    break;
+
+                case TEvBlobStorage::EvPatchResult:
+                    const_cast<TGroupId&>(static_cast<TEvBlobStorage::TEvPatchResult&>(ev).GroupId) = GroupId;
+                    break;
+            }
         }
 
 #define HANDLE_REQUEST(NAME) hFunc(NAME, HandleProxyRequest)

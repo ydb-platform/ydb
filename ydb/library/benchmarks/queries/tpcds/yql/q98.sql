@@ -5,8 +5,8 @@ select i.i_item_id
       ,i.i_category
       ,i.i_class
       ,i.i_current_price
-      ,sum($todecimal(ss.ss_ext_sales_price, 7, 2)) as itemrevenue
-      ,sum($todecimal(ss.ss_ext_sales_price, 7, 2))*100/sum(sum($todecimal(ss.ss_ext_sales_price, 7, 2))) over
+      ,sum(ss.ss_ext_sales_price) as itemrevenue
+      ,sum(ss.ss_ext_sales_price)*100/sum(sum(ss.ss_ext_sales_price)) over
           (partition by i.i_class) as revenueratio
 from {{store_sales}} as ss
 cross join {{item}} as i

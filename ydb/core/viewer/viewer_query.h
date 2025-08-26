@@ -61,6 +61,7 @@ class TJsonQuery : public TViewerPipeClient {
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    bool InternalCall = false;
     TString ContentType;
 
 private:
@@ -324,6 +325,7 @@ public:
             OutputChunkMaxSize = std::clamp<ui64>(OutputChunkMaxSize, 1, 500000000); // from 1 to 50 MB
         }
         CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
@@ -607,6 +609,7 @@ public:
                 event->SetProgressStatsPeriod(StatsPeriod);
             }
         }
+        request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }
@@ -677,13 +680,13 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32();
+                return std::format("{:%FT%TZ}", valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64();
+                return std::format("{:%FT%TZ}", valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64();
+                return std::format("{:%FT%TZ}", valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
-                return valueParser.GetInterval64();
+                return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:

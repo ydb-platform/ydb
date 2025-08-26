@@ -887,24 +887,7 @@ public:
             }
         }
 
-        TGroupStatus GetStatus(const TGroupFinder& finder) const {
-            if (BridgeGroupInfo) {
-                std::optional<TGroupStatus> res;
-                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    if (group) {
-                        if (const TGroupStatus& s = group->GetStatus(finder); res) {
-                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
-                        } else {
-                            res.emplace(s);
-                        }
-                    }
-                }
-                return res.value_or(TGroupStatus());
-            } else {
-                return Status;
-            }
-        }
+        TGroupStatus GetStatus(const TGroupFinder& finder, const TBridgeInfo *bridgeInfo) const;
 
         void OnCommit();
     };
@@ -1790,6 +1773,7 @@ private:
     void RenderHeader(IOutputStream& out);
     void RenderFooter(IOutputStream& out);
     void RenderMonPage(IOutputStream& out);
+    void RenderBridge(IOutputStream& out);
     void RenderInternalTables(IOutputStream& out, const TString& table);
     void RenderVirtualGroups(IOutputStream& out);
     void RenderGroupDetail(IOutputStream &out, TGroupId groupId);
@@ -2006,9 +1990,19 @@ private:
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
 
+    struct TSyncerProgress {
+        ui64 BytesDone = 0;
+        ui64 BytesTotal = 0;
+        ui64 BytesError = 0;
+        ui64 BlobsDone = 0;
+        ui64 BlobsTotal = 0;
+        ui64 BlobsError = 0;
+    };
+
     std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
     std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
     THashSet<TGroupId> TargetGroupsInCommit;
+    THashMap<std::tuple<TGroupId, TNodeId>, TSyncerProgress> SyncerProgress;
 
     void CheckUnsyncedBridgePiles();
 
@@ -2410,7 +2404,7 @@ public:
         void UpdateStatus(TMonotonic mono, TBlobStorageController *controller);
         void UpdateLayoutCorrect(TBlobStorageController *controller);
 
-        TGroupInfo::TGroupStatus GetStatus(const TStaticGroupFinder& finder) const;
+        TGroupInfo::TGroupStatus GetStatus(const TStaticGroupFinder& finder, const TBridgeInfo *bridgeInfo) const;
         bool IsLayoutCorrect(const TStaticGroupFinder& finder) const;
     };
 
@@ -2528,7 +2522,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
-        const TGroupInfo::TGroupFinder& finder);
+        const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo);
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,

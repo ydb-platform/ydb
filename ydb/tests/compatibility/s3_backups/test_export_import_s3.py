@@ -16,7 +16,6 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 from ydb.export import ExportClient
 from ydb.export import ExportToS3Settings
 from ydb.import_client import ImportClient, ImportFromS3Settings
-from ydb.scheme import BaseSchemeClient  # TODO: remove after fix: https://github.com/ydb-platform/ydb/issues/21745
 from ydb.topic import TopicClient
 
 
@@ -176,10 +175,6 @@ class TestExportImportS3(MixedClusterFixture):
 
             if self._is_current_version():
                 if "TOPIC" in scheme_objects:
-                    # TODO: remove after fix: https://github.com/ydb-platform/ydb/issues/21745
-                    if num == 1 and "TABLE" not in scheme_objects:
-                        BaseSchemeClient(self.driver).make_directory(f"/Root/{imported_prefix}")
-
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
                     import_settings = import_settings.with_source_and_destination(topic_name, imported_topic_name)

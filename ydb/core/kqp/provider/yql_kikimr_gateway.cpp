@@ -77,7 +77,9 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
 }
 
 void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
-    proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+    if (CommitInterval) {
+        proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+    }
 }
 
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
@@ -164,7 +166,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs;
+        || StoreExternalBlobs || ExternalDataChannelsCount;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {

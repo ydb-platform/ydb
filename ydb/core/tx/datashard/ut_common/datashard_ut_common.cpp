@@ -2263,6 +2263,12 @@ NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId se
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
 NKikimrDataEvents::TEvWriteResult UpsertOneKeyValue(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui64 key, ui64 value, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequestOneKeyValue(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columns, key, value);
@@ -2590,9 +2596,15 @@ namespace {
             PRINT_PRIMITIVE(Date);
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
-            PRINT_PRIMITIVE(Date32);
-            PRINT_PRIMITIVE(Datetime64);
-            PRINT_PRIMITIVE(Timestamp64);
+            case NYdb::EPrimitiveType::Date32:
+                out << parser.GetDate32().time_since_epoch().count();
+                break;
+            case NYdb::EPrimitiveType::Datetime64:
+                out << parser.GetDatetime64().time_since_epoch().count();
+                break;
+            case NYdb::EPrimitiveType::Timestamp64:
+                out << parser.GetTimestamp64().time_since_epoch().count();
+                break;
             PRINT_PRIMITIVE(String);
             PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);

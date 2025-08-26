@@ -44,7 +44,7 @@ def post_install(self):
 boost_atomic = NixSourceProject(
     nixattr="boost_atomic",
     arcdir=boost.make_arcdir("atomic"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

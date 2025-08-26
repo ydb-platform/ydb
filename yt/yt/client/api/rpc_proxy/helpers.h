@@ -329,6 +329,17 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options);
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options);

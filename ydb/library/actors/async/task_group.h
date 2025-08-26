@@ -278,8 +278,8 @@ namespace NActors {
         private:
             TTaskGroupSink<T>& Sink;
             const size_t Index;
-            [[no_unique_address]] std::decay_t<TCallback> Callback;
-            [[no_unique_address]] std::tuple<std::decay_t<TArgs>...> CallbackArgs;
+            Y_NO_UNIQUE_ADDRESS std::decay_t<TCallback> Callback;
+            Y_NO_UNIQUE_ADDRESS std::tuple<std::decay_t<TArgs>...> CallbackArgs;
             std::exception_ptr CallbackException;
             TCallbackCoroutine<TResumeCallback> ResumeProxy;
             async<T> Coroutine = async<T>::UnsafeEmpty();

@@ -1,4 +1,5 @@
 #include "kqp_stream_lookup_worker.h"
+#include "kqp_stream_lookup_join_helpers.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -102,11 +103,9 @@ void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TRe
 }  // !namespace
 
 TKqpStreamLookupWorker::TKqpStreamLookupWorker(TLookupSettings&& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    const NYql::NDqProto::TTaskInput& inputDesc)
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory)
     : TypeEnv(typeEnv)
     , HolderFactory(holderFactory)
-    , InputDesc(inputDesc)
     , Settings(std::move(settings)) {
     KeyColumnTypes.resize(Settings.KeyColumns.size());
     for (const auto& [_, columnInfo] : Settings.KeyColumns) {
@@ -129,8 +128,9 @@ TTableId TKqpStreamLookupWorker::GetTableId() const {
 class TKqpLookupRows : public TKqpStreamLookupWorker {
 public:
     TKqpLookupRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
-        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
+        const NMiniKQL::THolderFactory& holderFactory)
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
+    {
     }
 
     virtual ~TKqpLookupRows() {}
@@ -484,7 +484,8 @@ class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
     TKqpJoinRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
-        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
+        , InputDesc(inputDesc) {
 
         // read columns should contain join key and result columns
         for (auto joinKey : Settings.LookupKeyColumns) {
@@ -764,13 +765,9 @@ public:
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
-            if (Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN && leftRowIt->second.RightRowExist) {
-                // semi join should return one result row per key
-                continue;
-            }
-
             TReadResultStats rowStats;
-            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, result.ShardId);
+            bool lastRow = (result.UnprocessedResultRow + 1 == result.ReadResult->Get()->GetRowsCount()) && record.GetFinished();
+            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, lastRow, result.ShardId);
             YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
             ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
         }
@@ -853,7 +850,7 @@ public:
             if (leftRowIt->second.PendingReads.empty()) {
                 YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
-                auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats);
+                auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats, true);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                 auto& result = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
                 result.Rows.emplace_back(std::move(resultRow), std::move(rowStats));
@@ -920,13 +917,21 @@ public:
     }
 private:
     struct TLeftRowInfo {
-        TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo) : Row(std::move(row)), SeqNo(seqNo) {
+        TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo)
+        : Row(std::move(row))
+        , SeqNo(seqNo)
+        {
         }
 
         NUdf::TUnboxedValue Row;
         std::unordered_set<ui64> PendingReads;
         bool RightRowExist = false;
         const ui64 SeqNo;
+        ui64 MatchedRows = 0;
+
+        bool Completed() {
+            return PendingReads.empty() && RightRowExist;
+        }
     };
 
     struct TResultBatch {
@@ -1011,7 +1016,7 @@ private:
         YQL_ENSURE(outputType->GetKind() == NMiniKQL::TType::EKind::Tuple, "Unexpected stream lookup output type");
 
         const auto outputTupleType = AS_TYPE(NMiniKQL::TTupleType, outputType);
-        YQL_ENSURE(outputTupleType->GetElementsCount() == 2);
+        YQL_ENSURE(outputTupleType->GetElementsCount() == 3);
 
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
@@ -1021,10 +1026,10 @@ private:
     }
 
     NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
-        TReadResultStats& rowStats, TMaybe<ui64> shardId = {}) {
+        TReadResultStats& rowStats, bool lastRow, TMaybe<ui64> shardId = {}) {
 
         NUdf::TUnboxedValue* resultRowItems = nullptr;
-        auto resultRow = HolderFactory.CreateDirectArrayHolder(2, resultRowItems);
+        auto resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
 
         ui64 leftRowSize = 0;
         ui64 rightRowSize = 0;
@@ -1063,6 +1068,15 @@ private:
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
 
+        leftRowInfo.MatchedRows++;
+        auto rowCookie = TStreamLookupJoinRowCookie{
+            .RowSeqNo=leftRowInfo.SeqNo,
+            .LastRow=lastRow,
+            .FirstRow=(leftRowInfo.MatchedRows == 1)
+        };
+
+        resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
+
         rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
         // TODO: use datashard statistics KIKIMR-16924
         rowStats.ReadBytesCount += storageReadBytes;
@@ -1073,6 +1087,7 @@ private:
     }
 
 private:
+    const NYql::NDqProto::TTaskInput& InputDesc;
     std::map<std::string, TSysTables::TTableColumnInfo> ReadColumns;
     std::deque<std::pair<TOwnedCellVec, NUdf::TUnboxedValue>> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
@@ -1132,13 +1147,21 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
-            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
+            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }
+}
+
+std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory) {
+    AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP);
+    AFL_ENSURE(!settings.KeepRowsOrder);
+    AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
+    return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 
 } // namespace NKqp

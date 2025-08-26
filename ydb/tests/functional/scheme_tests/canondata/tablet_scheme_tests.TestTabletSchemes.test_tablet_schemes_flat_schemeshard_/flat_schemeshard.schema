@@ -5265,6 +5265,26 @@
                 "ColumnId": 45,
                 "ColumnName": "CpuTimeUsProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 46,
+                "ColumnName": "DropColumnsTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 47,
+                "ColumnName": "DropColumnsTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 48,
+                "ColumnName": "DropColumnsTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 49,
+                "ColumnName": "SubState",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -5315,7 +5335,11 @@
                     42,
                     43,
                     44,
-                    45
+                    45,
+                    46,
+                    47,
+                    48,
+                    49
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8798,6 +8822,11 @@
                 "ColumnId": 3,
                 "ColumnName": "CurrentIncrementalIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8806,7 +8835,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8854,6 +8884,176 @@
                 "ColumnId": 4,
                 "ColumnName": "LastKey",
                 "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 124,
+        "TableName": "SystemShardsToDelete",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "ShardIdx",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 125,
+        "TableName": "IncrementalBackups",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "DomainPathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "DomainPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    7,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 126,
+        "TableName": "IncrementalBackupItems",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "PathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "State",
+                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],

@@ -97,10 +97,30 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
+    REGISTER_SETTING(*this, UseDqHashCombine);
+
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
+    REGISTER_SETTING(*this, CostBasedOptimization)
+        .Parser(
+            [&](TString val) {
+                for (char& c: val) { c = ToLower(c); }
+
+                if (val == "on") {
+                    CostBasedOptimizationLevel = Max<ui32>();
+                } else if (val == "off") {
+                    CostBasedOptimizationLevel = 0;
+                } else if (val == "auto") {
+                    CostBasedOptimizationLevel = DefaultCostBasedOptimizationLevel;
+                } else {
+                    Y_ENSURE(false, "undefined cbo setting, available: [on, off, auto]");
+                }
+
+                return val;
+            }
+    );
     REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, MaxDPHypDPTableSize);
@@ -158,7 +178,7 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
 }
 
 bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
+    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {

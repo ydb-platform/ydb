@@ -63,6 +63,11 @@ enum EColumnCache {
     ColumnCacheEver = 2;
 }
 
+enum EColumnCacheMode {
+    ColumnCacheModeRegular = 0;
+    ColumnCacheModeTryKeepInMemory = 1;
+}
+
 enum EColumnStorage {
     ColumnStorage1 = 0;
     ColumnStorage2 = 1;
@@ -136,6 +141,7 @@ message TFamilyDescription {
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
+    optional EColumnCacheMode ColumnCacheMode = 11;
 }
 
 message TFastSplitSettings {
@@ -1126,6 +1132,26 @@ message TRestoreMultipleIncrementalBackups {
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
+message TIncrementalRestoreFinalize {
+    optional uint64 OriginalOperationId = 1;
+    optional uint64 BackupCollectionPathId = 2;
+    repeated string TargetTablePaths = 3;
+    repeated string BackupTablePaths = 4;
+}
+
+message TIncrementalRestoreOperationId {
+    optional uint64 TxId = 1;
+    optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreOperationsList {
+    repeated TIncrementalRestoreOperationId Operations = 1;
+}
+
+message TCreateLongIncrementalBackupOp {
+    repeated NKikimrProto.TPathID StreamPathIds = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
@@ -1603,6 +1629,7 @@ message TReplicationDescription {
         optional string TransformLambda = 1;
         optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
         optional uint64 BatchSizeBytes = 3 [default = 8388608];
+        optional string DirectoryPath = 4;
     }
 
     optional TAlterTransfer AlterTransfer = 10;
@@ -1704,6 +1731,12 @@ message TAlterShards {
     }
 }
 
+message TDropColumnBuild {
+    optional NKikimrIndexBuilder.TColumnBuildSettings Settings = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1776,6 +1809,7 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+    optional TDropColumnBuild DropColumnBuild = 86;
 
     optional bool SuccessOnNotExist = 62;
 
@@ -1813,6 +1847,10 @@ message TModifyScheme {
     optional TSysViewDescription CreateSysView = 81;
 
     optional TChangePathState ChangePathState = 82;
+
+    optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
+
+    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2261,6 +2299,7 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
+    repeated uint64 InvolvedShards = 7;
 }
 
 message TChangePathState {

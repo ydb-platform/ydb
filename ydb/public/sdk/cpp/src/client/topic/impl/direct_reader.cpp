@@ -731,16 +731,17 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sta
     auto partitionSessionId = response.partition_session_id();
 
     auto it = PartitionSessions.find(partitionSessionId);
-    if (it->second.Location.GetGeneration() != response.generation()) {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse for wrong generation "
-            << "(expected " << it->second.Location.GetGeneration()
-            << ", got " << response.generation() << ") partition_session_id=" << partitionSessionId);
-        return;
-    }
 
     if (it == PartitionSessions.end()) {
         // We could get a StopPartitionSessionRequest from server before processing this response.
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse for unknown partition session " << partitionSessionId);
+        return;
+    }
+
+    if (it->second.Location.GetGeneration() != response.generation()) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse for wrong generation "
+            << "(expected " << it->second.Location.GetGeneration()
+            << ", got " << response.generation() << ") partition_session_id=" << partitionSessionId);
         return;
     }
 

@@ -178,7 +178,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), *GetStageData().GetIndexes(), source);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -252,7 +252,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-        NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+        NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
         fetcher->OnDataCollected(fetchContext);
     }
 
@@ -277,7 +277,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
             GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(i.GetRecordsCount());
         }
     }
-    return filter.And(GetStageData().GetTable()->GetFilter());
+    return filter.And(context.GetResources().GetFilter());
 }
 
 void TPortionDataSource::DoAbort() {
@@ -286,7 +286,7 @@ void TPortionDataSource::DoAbort() {
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
-    if (context.GetResources()->GetAccessorOptional(fetchContext.GetColumnId())) {
+    if (context.GetResources().GetAccessorOptional(fetchContext.GetColumnId())) {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
@@ -307,7 +307,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     {
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
-            NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+            NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
             fetcher->OnDataCollected(fetchContext);
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
@@ -315,7 +315,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
         }
     }
 
-    auto acc = context.GetResources()->GetAccessorVerified(fetchContext.GetColumnId());
+    auto acc = context.GetResources().GetAccessorVerified(fetchContext.GetColumnId());
     NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(acc, [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arrData) {
         bool isAllowed = false;
         if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
@@ -357,7 +357,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 void TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
         fetcher->OnDataCollected(fetchContext);
     }
@@ -399,12 +399,21 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::Portion, portion->GetPortionId(), sourceIdx, context, TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()),
-          TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()), portion->RecordSnapshotMin(TSnapshot::Zero()),
+    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
-    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+    , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
+    if (context->GetReadMetadata()->IsDescSorted()) {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+    } else {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+    }
+    AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());
 }
 
 TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,

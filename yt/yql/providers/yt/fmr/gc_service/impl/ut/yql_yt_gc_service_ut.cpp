@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 #include <yt/yql/providers/yt/fmr/gc_service/impl/yql_yt_gc_service_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 
@@ -14,15 +15,15 @@ Y_UNIT_TEST_SUITE(GcServiceTests) {
         auto gcService = MakeGcService(tableDataService);
 
         for (ui64 i = 0; i < keysNum; ++i) {
-            TString key = group + ":" + ToString(i);
-            tableDataService->Put(key, content +  ToString(i)).GetValueSync();
+            TString chunkId = ToString(i);
+            tableDataService->Put(group, chunkId, content +  ToString(i)).GetValueSync();
         }
         gcService->ClearGarbage({group}).GetValueSync();
         Sleep(TDuration::Seconds(3)); // deleting by prefix, after reigster wait some time for actual deletion
 
         for (ui64 i = 0; i < keysNum; ++i) {
-            TString key = group + ":" + ToString(i);
-            UNIT_ASSERT(!tableDataService->Get(key).GetValueSync());
+            TString chunkId = ToString(i);
+            UNIT_ASSERT(!tableDataService->Get(group, chunkId).GetValueSync());
         }
     }
     Y_UNIT_TEST(MaxInflightGroupDeletionRequestsExceeded) {
@@ -44,6 +45,16 @@ Y_UNIT_TEST_SUITE(GcServiceTests) {
         auto totalDeletionFuture = NThreading::WaitExceptionOrAll(clearGarbageFutures);
         Sleep(TDuration::Seconds(10));
         UNIT_ASSERT(!totalDeletionFuture.HasValue());
+    }
+    Y_UNIT_TEST(ClearDataServiceAfterCoordinatorReload) {
+        auto tableDataService = MakeLocalTableDataService();
+        auto gcService = MakeGcService(tableDataService);
+        tableDataService->Put("first_group", "first_chunk_id", "first_val").GetValueSync();
+        tableDataService->Put("sec_group", "sec_chunk_id", "sec_val").GetValueSync();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeYtCoordinatorService(), gcService);
+
+        UNIT_ASSERT(!tableDataService->Get("first_group", "first_chunk_id").GetValueSync());
+        UNIT_ASSERT(!tableDataService->Get("sec_group", "sec_chunk_id").GetValueSync());
     }
 }
 

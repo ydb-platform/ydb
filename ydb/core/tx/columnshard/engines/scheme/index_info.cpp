@@ -4,7 +4,6 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
@@ -582,7 +581,8 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         Indexes = original.Indexes;
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
-                AFL_VERIFY(Indexes.erase(i.first));
+                // It is possible to have a non-existent element here after merging schemas
+                Indexes.erase(i.first);
             } else {
                 auto it = Indexes.find(i.first);
                 NIndexes::TIndexMetaContainer meta;

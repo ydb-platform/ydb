@@ -8,6 +8,7 @@ import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/sys_view_types.proto";
@@ -177,10 +178,6 @@ message TKqpPhyOpDeleteRows {
     TKqpPhyValue RowsValue = 1;
 }
 
-message TKqpPhyOpLookup {
-    TKqpPhyValue KeysValue = 1;
-}
-
 message TKqpPhyOpReadOlapRanges {
     enum EReadType {
         ROWS = 0;
@@ -237,7 +234,6 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadRange ReadRange = 3;
         TKqpPhyOpUpsertRows UpsertRows = 4;
         TKqpPhyOpDeleteRows DeleteRows = 5;
-        TKqpPhyOpLookup Lookup = 6;
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }
@@ -318,6 +314,18 @@ message TKqpPhyCnStreamLookup {
     bool IsTableImmutable = 10;
 }
 
+message TKqpPhyCnVectorResolve {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;
+    TKqpPhyTableId LevelTable = 3;
+    repeated string Columns = 4;
+    uint32 VectorColumnIndex = 5;
+    repeated uint32 CopyColumnIndexes = 6;
+    bytes InputType = 7;
+    bytes OutputType = 8;
+    uint32 ClusterColumnOutPos = 9;
+}
+
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated string Columns = 2;
@@ -344,6 +352,7 @@ message TKqpPhyConnection {
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
+        TKqpPhyCnVectorResolve VectorResolve = 16;
     };
 }
 
@@ -371,7 +380,7 @@ message TKqpExternalSource {
 
     // Partitioning
     string TaskParamKey = 3;
-    repeated string PartitionedTaskParams = 4;
+    repeated bytes PartitionedTaskParams = 4;
 
     string SourceName = 5;
     string AuthInfo = 6;

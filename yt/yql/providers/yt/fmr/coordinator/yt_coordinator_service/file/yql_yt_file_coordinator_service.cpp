@@ -35,10 +35,8 @@ public:
                 curYtTableTaskRef = TYtTableTaskRef{};
                 curFileLength = 0;
             }
-            TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
-            auto richPath = NYT::TRichYPath(ytPath).Append(true);
             // append RichPath just in case, TODO - figure out if we actually need to use it somewhere
-            curYtTableTaskRef.RichPaths.emplace_back(richPath);
+            curYtTableTaskRef.RichPaths.emplace_back(ytTable.RichPath);
             curYtTableTaskRef.FilePaths.emplace_back(*ytTable.FilePath);
             curFileLength += fileLength;
         }

@@ -570,6 +570,17 @@ class KtlintBaselineFile:
                 return {cls.KEY: baseline_path_relative}
 
 
+class KtlintRuleset:
+    KEY = 'KTLINT_RULESET'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if unit.get('_USE_KTLINT_OLD') != 'yes':
+            ruleset_rel_path = unit.get('_KTLINT_RULESET')
+            if ruleset_rel_path:
+                return {cls.KEY: ruleset_rel_path}
+
+
 class KtlintBinary:
     KEY = 'KTLINT_BINARY'
 
@@ -585,6 +596,15 @@ class Linter:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return {cls.KEY: spec_args['LINTER'][0]}
+
+
+class LintWrapperScript:
+    KEY = 'LINT-WRAPPER-SCRIPT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if spec_args.get('WRAPPER_SCRIPT'):
+            return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
 
 
 class LintConfigs:
@@ -604,7 +624,11 @@ class LintConfigs:
             raise DartValueError()
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
             config = os.path.join(common_configs_dir, config_type)
-            path = unit.resolve(config)
+            if config.startswith(SOURCE_ROOT_SHORT):
+                # TODO: (alevitskii) Delete when ymake starts cutting source root in devtools/ymake/makefile_loader.cpp
+                path = unit.resolve(config)
+            else:
+                path = unit.resolve(unit.resolve_arc_path(config))
             if os.path.exists(path):
                 return _common.strip_roots(config)
             message = "File not found: {}".format(path)
@@ -1040,6 +1064,21 @@ class DockerImage:
 class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
 
+    DEFAULT_VALUE = "tsconfig.json"
+
+    @classmethod
+    def from_unit(cls, unit, flat_args, spec_args):
+        ts_config_paths = get_values_list(unit, cls.KEY)
+
+        # Special case: resolve path, relative to test dir
+        if unit.get("TS_TEST_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
+            tsconfig_path_test = os.path.join(unit.get("MODDIR"), ts_config_paths[0])
+            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_TEST_FOR_PATH"))
+
+            return {cls.KEY: tsconfig_path_for}
+
+        return {cls.KEY: ts_config_paths[0]}
+
 
 class TsStylelintConfig:
     KEY = 'TS_STYLELINT_CONFIG'
@@ -1230,9 +1269,10 @@ class TestFiles:
         return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
-    def ts_input_files(cls, unit, flat_args, spec_args):
+    def tsc_typecheck_input_files(cls, unit, flat_args, spec_args):
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
-        test_files = [_common.resolve_common_const(f) for f in typecheck_files]
+        typecheck_test_files = get_values_list(unit, "TS_INPUT_TEST_FILES")
+        test_files = [_common.resolve_common_const(f) for f in typecheck_files + typecheck_test_files]
         value = serialize_list(test_files)
         return {cls.KEY: value, cls.KEY2: value}
 

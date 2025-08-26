@@ -3,6 +3,7 @@
 
 #include <ydb/core/client/flat_ut_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -160,22 +161,22 @@ struct TRequestCreatePQ {
         codec->AddIds(2);
         codec->AddCodecs("lzop");
 
-        for (auto& i : Important) {
-            config->MutablePartitionConfig()->AddImportantClientId(i);
-        }
-
         config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(WriteSpeed);
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
         for (auto& rr : ReadRules) {
-            config->AddReadRules(rr);
-            config->AddReadFromTimestampsMs(0);
-            config->AddConsumerFormatVersions(0);
-            config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs();
+            auto* consumer = config->AddConsumers();
+            consumer->SetName(rr);
+            consumer->SetReadFromTimestampsMs(0);
+            consumer->SetFormatVersion(0);
+            consumer->SetVersion(0);
         }
-//        if (!ReadRules.empty()) {
-//            config->SetRequireAuthRead(true);
-//        }
+
+        for (auto& i : Important) {
+            auto* consumer = NPQ::GetConsumer(*config, i);
+            UNIT_ASSERT(consumer);
+            consumer->SetImportant(true);
+        }
+
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -1118,9 +1119,13 @@ public:
         return "";
     }
 
-    void ChooseProxy() {
+    void ChooseProxy(const TString& securityToken = {}) {
         NKikimrClient::TChooseProxyRequest request;
         NKikimrClient::TResponse response;
+
+        if (!securityToken.empty()) {
+            request.SetSecurityToken(securityToken);
+        }
 
         Cerr << "ChooseProxy request to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
                 << PrintToString(request) << Endl;

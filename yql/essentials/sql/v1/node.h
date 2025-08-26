@@ -954,6 +954,7 @@ namespace NSQLTranslationV1 {
         const TUdfNode* GetUdfNode() const override;
         bool IsScript() const override;
         const TVector<TNodePtr>& GetScriptArgs() const;
+        const TVector<TNodePtr>& GetDepends() const;
         TNodePtr BuildOptions() const;
     private:
         TVector<TNodePtr> Args_;
@@ -966,6 +967,7 @@ namespace NSQLTranslationV1 {
         TDeferredAtom ExtraMem_;
         bool ScriptUdf_ = false;
         TVector<TNodePtr> ScriptArgs_;
+        TVector<TNodePtr> Depends_;
     };
 
     class IAggregation: public INode {
@@ -1159,6 +1161,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> StoreType;
         TNodePtr PartitionByHashFunction;
         TMaybe<TIdentifier> StoreExternalBlobs;
+        TNodePtr ExternalDataChannelsCount;
 
         TNodePtr DataSourcePath;
         NYql::TResetableSetting<TNodePtr, void> Location;
@@ -1168,7 +1171,7 @@ namespace NSQLTranslationV1 {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
                 || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction
-                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters;
+                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
         }
     };
 
@@ -1181,6 +1184,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Data;
         TNodePtr Compression;
         TNodePtr CompressionLevel;
+        TNodePtr CacheMode;
     };
 
     struct TVectorIndexSettings {
@@ -1530,7 +1534,7 @@ namespace NSQLTranslationV1 {
     // Implemented in builtin.cpp
     TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
         TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
-        TNodePtr options);
+        TNodePtr options, const TVector<TNodePtr>& depends);
     TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
         TNodePtr options);
 

@@ -9,9 +9,14 @@ SRCS(
 PEERDIR(
     yql/essentials/sql/v1/lexer/regex
     yql/essentials/sql/v1/reflect
+    library/cpp/resource
+    library/cpp/json
 )
 
-RESOURCE(yql/essentials/sql/v1/highlight/ut/suite.json suite.json)
+RESOURCE(
+    yql/essentials/sql/v1/highlight/ut/suite.json suite.json
+    yql/essentials/data/language/types.json types.json
+)
 
 END()
 

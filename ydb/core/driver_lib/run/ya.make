@@ -37,6 +37,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/actorlib_impl
     ydb/core/audit
+    ydb/core/audit/audit_config
     ydb/core/backup/controller
     ydb/core/base
     ydb/core/blob_depot
@@ -94,6 +95,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
     ydb/core/sys_view/processor
@@ -108,6 +110,7 @@ PEERDIR(
     ydb/core/tx/conveyor/service
     ydb/core/tx/general_cache
     ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
     ydb/core/tx/limiter/grouped_memory/usage

@@ -150,6 +150,7 @@ private:
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_ACCESSOR_DEF(TString, DeadlineName);
+    YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
 public:
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
@@ -240,6 +241,7 @@ public:
             ServerTiming += execStats->GetTotalDuration();
             QueryPlan = execStats->GetPlan().value_or("");
             PlanAst = execStats->GetAst().value_or("");
+            ExecStats = execStats->ToString();
         }
         return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
@@ -253,11 +255,12 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
             scaner->GetServerTiming(),
             scaner->GetQueryPlan(),
             scaner->GetPlanAst(),
+            scaner->GetExecStats(),
             expected
         );
     }
     TStringBuilder errorInfo;
-    TString plan, ast;
+    TString plan, ast, execStats;
     switch (status.GetStatus()) {
         case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
             errorInfo << becnhmarkSettings.Deadline.Name << " deadline expiried: " << status.GetIssues();
@@ -267,19 +270,20 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
                 errorInfo << scaner->GetErrorInfo();
                 plan = scaner->GetQueryPlan();
                 ast = scaner->GetPlanAst();
+                execStats = scaner->GetExecStats();
             } else {
                 errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
             }
             break;
     }
-    return TQueryBenchmarkResult::Error(errorInfo, plan, ast);
+    return TQueryBenchmarkResult::Error(errorInfo, plan, ast, execStats);
 }
 
 TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& settings, const TQueryBenchmarkDeadline& deadline) {
     if (deadline.Deadline != TInstant::Max()) {
         auto now = Now();
         if (now >= deadline.Deadline) {
-            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "");
+            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "", "");
         }
         settings.ClientTimeout(deadline.Deadline - now);
     }
@@ -397,15 +401,18 @@ bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vE
     TStringBuf precesionStr;
     vExpected.Split("+-", vExpected, precesionStr);
     auto expectedInt = NYql::NDecimal::FromString(vExpected, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-
-    if (precesionStr) {
+    auto relativePrecision = 0.0001;
+    if (precesionStr.ChopSuffix("%")) {
+        relativePrecision = FromString<double>(precesionStr) / 100;
+    } else if (precesionStr) {
         auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
-    const auto from = NYql::NDecimal::FromString("0.9999", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-    const auto to = NYql::NDecimal::FromString("1.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-    const auto devider = NYql::NDecimal::GetDivider(valResult.DecimalType_.Scale);
-    return resInt > NYql::NDecimal::MulAndDivNormalDivider(from, expectedInt, devider) && resInt < NYql::NDecimal::MulAndDivNormalDivider(to, expectedInt, devider);
+    NYql::NDecimal::TInt128 precInt = i64(double(expectedInt) * relativePrecision);
+    if (precInt < 0) {
+        precInt = -precInt;
+    }
+    return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
 }
 
 bool CompareValueImplDatetime(IOutputStream& errStream, const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -510,13 +517,13 @@ bool CompareValuePrimitive(IOutputStream& errStream, const TValueParser& vp, TSt
     case EPrimitiveType::Interval:
         return CompareValueImpl(errStream, vp.GetInterval(), vExpected);
     case EPrimitiveType::Date32:
-        return CompareValueImplDatetime64(errStream, vp.GetDate32(), vExpected, TDuration::Days(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDate32().time_since_epoch().count(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime64:
-        return CompareValueImplDatetime64(errStream, vp.GetDatetime64(), vExpected, TDuration::Seconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDatetime64().time_since_epoch().count(), vExpected, TDuration::Seconds(1));
     case EPrimitiveType::Timestamp64:
-        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64(), vExpected, TDuration::MicroSeconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64().time_since_epoch().count(), vExpected, TDuration::MicroSeconds(1));
     case EPrimitiveType::Interval64:
-        return CompareValueImpl(errStream, vp.GetInterval64(), vExpected);
+        return CompareValueImpl(errStream, vp.GetInterval64().count(), vExpected);
     case EPrimitiveType::String:
         return CompareValueImpl(errStream, vp.GetString(), vExpected);
     case EPrimitiveType::Utf8:

@@ -1,12 +1,21 @@
 #include "mon.h"
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/http/http_proxy.h>
+#include "mon_impl.h"
+#include "counters_adapter_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/protos/mon.pb.h>
+#include <ydb/core/util/wildcard.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -14,22 +23,12 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <ydb/library/actors/core/probes.h>
-#include <ydb/core/base/monitoring_provider.h>
-#include <ydb/core/util/wildcard.h>
-
 #include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
 
 #include <util/system/hostname.h>
-
-#include <ydb/core/base/counters.h>
-#include <ydb/core/protos/mon.pb.h>
-
-#include "mon_impl.h"
-#include "counters_adapter_impl.h"
 
 namespace NActors {
 
@@ -109,7 +108,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
         new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner),
+            owner,
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -137,7 +137,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             owner,
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided")
+                "No security credentials were provided",
+                {})
         );
     } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
         TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
@@ -147,7 +148,8 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
             new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
                 {},
                 {},
-                token
+                token,
+                {}
             )
         );
     } else {
@@ -366,6 +368,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -381,6 +384,7 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
@@ -393,6 +397,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -521,9 +526,14 @@ public:
                 << " " << request->URL);
         }
         TString serializedToken;
-        if (result && result->UserToken) {
-            serializedToken = result->UserToken->GetSerializedToken();
+        if (result) {
+            AuditCtx.AddAuditLogParts(result->AuditLogParts);
+            if (result->UserToken) {
+                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
+                serializedToken = result->UserToken->GetSerializedToken();
+            }
         }
+        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -573,6 +583,7 @@ class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndex
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
         : Event(std::move(event))
@@ -584,12 +595,15 @@ public:
     }
 
     void Bootstrap() {
+        AuditCtx.InitAudit(Event);
         ProcessRequest();
     }
 
     void ProcessRequest() {
+        AuditCtx.LogOnReceived();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
     }
@@ -1028,6 +1042,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
@@ -1041,6 +1056,7 @@ public:
     }
 
     void Bootstrap() {
+        AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Fields.UseAuth && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
@@ -1055,6 +1071,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -1159,9 +1176,14 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result && result->UserToken) {
-            Event->Get()->UserToken = result->UserToken->GetSerializedToken();
+        if (result) {
+            AuditCtx.AddAuditLogParts(result->AuditLogParts);
+            if (result->UserToken) {
+                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
+                Event->Get()->UserToken = result->UserToken->GetSerializedToken();
+            }
         }
+        AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1196,6 +1218,7 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
         bool endOfData = ev->Get()->Response->IsDone();
+        AuditCtx.LogOnCompleted(ev->Get()->Response);
         Forward(ev, Event->Sender);
         if (endOfData) {
             return PassAway();

@@ -9,7 +9,6 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 NO_UTIL()
 
 SUBSCRIBER(
-    akozhikhov
     g:base
     g:yt
 )

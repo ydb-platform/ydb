@@ -210,6 +210,111 @@ TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ct
         .Ptr();
 }
 
+bool HaveFieldsSubsetLMap(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap) {
+    if (&arg == start.Get()) {
+        return false;
+    }
+
+    size_t inputStructSize = GetSeqItemType(arg.GetTypeAnn())->Cast<TStructExprType>()->GetSize();
+
+    if (!IsDepended(*start, arg)) {
+        return inputStructSize > 0;
+    }
+
+    TNodeSet nodes;
+    VisitExpr(start, [&](const TExprNode::TPtr& node) {
+        nodes.insert(node.Get());
+        return true;
+    });
+
+    const auto parents = parentsMap.find(&arg);
+    YQL_ENSURE(parents != parentsMap.cend());
+    for (const auto& parent : parents->second) {
+        if (nodes.cend() == nodes.find(parent)) {
+            continue;
+        }
+
+        if (IsDependsOnUsage(*parent, parentsMap)) {
+            continue;
+        } else if (TCoExtractMembers::Match(parent)) {
+            const auto extract = TCoExtractMembers(parent);
+            for (const auto& member: extract.Members()) {
+                usedFields.emplace(member.Value());
+            }
+        } else {
+            // unknown node
+            usedFields.clear();
+            return false;
+        }
+    }
+
+    return usedFields.size() < inputStructSize;
+}
+
+TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    static const char optName[] = "LMapSubsetFields";
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node.Ptr();
+    }
+    auto itemArg = node.Lambda().Args().Arg(0);
+    auto itemType = itemArg.Ref().GetTypeAnn();
+    if (itemType->GetKind() != ETypeAnnotationKind::Stream || GetSeqItemType(itemType)->GetKind() != ETypeAnnotationKind::Struct) {
+        return node.Ptr();
+    }
+
+    auto itemStructType = GetSeqItemType(itemType)->Cast<TStructExprType>();
+    if (itemStructType->GetSize() == 0) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> usedFields;
+    if (!HaveFieldsSubsetLMap(node.Lambda().Body().Ptr(), itemArg.Ref(), usedFields, *optCtx.ParentsMap)) {
+        return node.Ptr();
+    }
+
+    TExprNode::TListType fieldNodes;
+    for (auto& item : itemStructType->GetItems()) {
+        if (usedFields.contains(item->GetName())) {
+            fieldNodes.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
+        }
+    }
+
+    if (fieldNodes.empty()) {
+        return node.Ptr();
+    }
+
+    return Build<TCoMapBase>(ctx, node.Pos())
+        .CallableName(node.Ref().Content())
+        .Input<TCoExtractMembers>()
+            .Input(node.Input())
+            .Members()
+                .Add(fieldNodes)
+                .Build()
+            .Build()
+        .Lambda()
+            .Args({"item"})
+            .Body<TExprApplier>()
+                .Apply(node.Lambda())
+                .With(0, "item")
+                .Build()
+            .Build()
+        .Done()
+        .Ptr();
+}
+
+TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TCoMapBase self(node);
+    if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+        return node;
+    }
+    auto ret = LMapSubsetFields(self, ctx, optCtx);
+    if (ret != node) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+        return ret;
+    }
+    return node;
+}
+
 TExprNode::TPtr RenameJoinTable(TPositionHandle pos, TExprNode::TPtr table,
     const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx)
 {
@@ -1090,7 +1195,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         return node;
     }
 
-    static const TStringBuf canaryBaseName = "_yql_canary_";
+    static const TStringBuf canaryBaseName = YqlCanaryColumnName;
 
     THashMap<TStringBuf, THashSet<TStringBuf>> joinKeysByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
     const auto renames = LoadJoinRenameMap(*settings);
@@ -1109,7 +1214,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         const TTypeAnnotationNode* itemType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto structType = itemType->Cast<TStructExprType>();
         for (auto& si : structType->GetItems()) {
-            if (si->GetName().find(canaryBaseName, 0) == 0) {
+            if (IsNoPullColumn(si->GetName())) {
                 // EquiJoin already processed
                 return node;
             }
@@ -1408,7 +1513,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
             result[node.Get()] = EXPR_CONST;
             return false;
         }
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
             return true;
         }
@@ -1425,7 +1530,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
 
         return true;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn);
             --insideDependsOn;
         }
@@ -1849,7 +1954,7 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
         if (curr->GetDependencyScope() && curr->IsComplete()) {
             return false;
         }
-        if (curr->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(curr.Get())) {
             TExprNodeList children = curr->Head().IsList() ? curr->Head().ChildrenList() : curr->ChildrenList();
             if (AllOf(children, [](const TExprNode::TPtr& child) { return child->IsArgument(); })) {
                 return false;
@@ -2065,6 +2170,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         return node;
     };
+
+    map["LMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
+    map["OrderedLMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
 
     map[TCoGroupingCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoGroupingCore self(node);

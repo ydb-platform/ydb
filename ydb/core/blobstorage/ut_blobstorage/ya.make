@@ -18,6 +18,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    bsc_cache.cpp
     counting_events.cpp
     deadlines.cpp
     decommit_3dc.cpp
@@ -68,6 +69,7 @@ RECURSE_FOR_TESTS(
     ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
+    ut_bridge
     ut_check_integrity
     ut_donor
     ut_group_reconfiguration

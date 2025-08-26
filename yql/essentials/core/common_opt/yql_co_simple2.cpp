@@ -621,6 +621,74 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
     return node;
 }
 
+bool IsOptimizeXNotXEnabled(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char flag[] = "OptimizeXNotX";
+    return IsOptimizerEnabled<flag>(*optCtx.Types) && !IsOptimizerDisabled<flag>(*optCtx.Types);
+}
+
+const TExprNode* UnwrapUnessential(const TExprNode* node) {
+    while (node->IsCallable("Unessential")) {
+        node = &node->Head();
+    }
+    return node;
+}
+
+TExprNode::TPtr OptimizeXNotXPairs(const TExprNode::TPtr& node, const bool replaceWith, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable(replaceWith ? "Or" : "And"));
+
+    std::unordered_set<ui32> toReplace;
+    auto add = [&toReplace] (TNodeMap<std::unordered_set<ui32>>& saveTo, const TNodeMap<std::unordered_set<ui32>>& intersectWith, const TExprNode* predicate, const ui32 pos) {
+        auto& children1 = saveTo[predicate];
+        children1.insert(pos);
+        if (const auto it = intersectWith.find(predicate); it != intersectWith.end()) {
+            const auto& children2 = it->second;
+            toReplace.insert(children1.begin(), children1.end());
+            toReplace.insert(children2.begin(), children2.end());
+        }
+    };
+
+    TNodeMap<std::unordered_set<ui32>> predicates;
+    TNodeMap<std::unordered_set<ui32>> predicatesWithNot;
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        const auto child = node->Child(i);
+        if (child->HasSideEffects()) {
+            // Can optimize only predicates without side effects in a row.
+            predicates.clear();
+            predicatesWithNot.clear();
+        } else if (!child->GetTypeAnn()->IsOptionalOrNull()) {
+            const auto p = UnwrapUnessential(child);
+            add(predicates, predicatesWithNot, p, i);
+            if (p->IsCallable("Not")) {
+                const auto pInsideNot = UnwrapUnessential(&p->Head());
+                add(predicatesWithNot, predicates, pInsideNot, i);
+            }
+        }
+    }
+
+    if (toReplace.empty()) {
+        return node;
+    }
+
+    TExprNode::TListType newChildren;
+    bool wasReplaced = false;
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        const auto child = node->ChildPtr(i);
+        if (!toReplace.contains(i)) {
+            newChildren.push_back(child);
+        } else if (!wasReplaced) {
+            newChildren.push_back(MakeBool(child->Pos(), replaceWith, ctx));
+            wasReplaced = true;
+        }
+    }
+
+    YQL_CLOG(DEBUG, Core)
+        << (replaceWith ? "X OR NOT X -> TRUE" : "X AND NOT X -> FALSE")
+        << ". Original size: " << node->ChildrenSize()
+        << ", result size: " << newChildren.size();
+    return ctx.ChangeChildren(*node, std::move(newChildren));
+}
+
 TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     if (auto opt = OptimizeDups(node, ctx); opt != node) {
         return opt;
@@ -633,6 +701,12 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
     if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
         if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
             return opt;
+        }
+    }
+
+    if (IsOptimizeXNotXEnabled(optCtx)) {
+        if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
+            return KeepWorld(opt, *node, ctx, *optCtx.Types);
         }
     }
 
@@ -791,6 +865,13 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
             return opt;
         }
     }
+
+    if (IsOptimizeXNotXEnabled(optCtx)) {
+        if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {
+            return KeepWorld(opt, *node, ctx, *optCtx.Types);
+        }
+    }
+
     return node;
 }
 

@@ -139,6 +139,11 @@ void TMemoryChanges::GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOpera
     LongIncrementalRestoreOps.emplace(opId, ss->LongIncrementalRestoreOps.at(opId));
 }
 
+void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
+    Y_ABORT_UNLESS(!ss->IncrementalBackups.contains(id));
+    IncrementalBackups.emplace(id, nullptr);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -231,8 +236,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
-    for (const auto& [id, elem] : SubDomains) {
-        ss->SubDomains[id] = elem;
+    for (const auto& [id, savedState] : SubDomains) {
+        auto& subdomain = ss->SubDomains[id];
+        subdomain = savedState;
+        if (ss->GetCurrentSubDomainPathId() == id) {
+            subdomain->UpdateCounters(ss);
+        }
     }
     SubDomains.clear();
 
@@ -304,6 +313,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->LongIncrementalRestoreOps.erase(id);
         }
         LongIncrementalRestoreOps.pop();
+    }
+
+    while (IncrementalBackups) {
+        const auto& [id, elem] = IncrementalBackups.top();
+        if (elem) {
+            ss->IncrementalBackups[id] = elem;
+        } else {
+            ss->IncrementalBackups.erase(id);
+        }
+        IncrementalBackups.pop();
     }
 }
 

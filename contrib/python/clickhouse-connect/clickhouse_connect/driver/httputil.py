@@ -55,10 +55,10 @@ def close_managers():
 def get_pool_manager_options(keep_interval: int = DEFAULT_KEEP_INTERVAL,
                              keep_count: int = DEFAULT_KEEP_COUNT,
                              keep_idle: int = DEFAULT_KEEP_IDLE,
-                             ca_cert: str = None,
+                             ca_cert: Optional[str] = None,
                              verify: bool = True,
-                             client_cert: str = None,
-                             client_cert_key: str = None,
+                             client_cert: Optional[str] = None,
+                             client_cert_key: Optional[str] = None,
                              **options) -> Dict[str, Any]:
     socket_options = core_socket_options.copy()
     if getattr(socket, 'TCP_KEEPINTVL', None) is not None:
@@ -88,12 +88,12 @@ def get_pool_manager_options(keep_interval: int = DEFAULT_KEEP_INTERVAL,
 def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
                      keep_count: int = DEFAULT_KEEP_COUNT,
                      keep_idle: int = DEFAULT_KEEP_IDLE,
-                     ca_cert: str = None,
+                     ca_cert: Optional[str] = None,
                      verify: bool = True,
-                     client_cert: str = None,
-                     client_cert_key: str = None,
-                     http_proxy: str = None,
-                     https_proxy: str = None,
+                     client_cert: Optional[str] = None,
+                     client_cert_key: Optional[str] = None,
+                     http_proxy: Optional[str] = None,
+                     https_proxy: Optional[str] = None,
                      **options):
     options = get_pool_manager_options(keep_interval,
                                        keep_count,
@@ -228,12 +228,13 @@ class ResponseSource:
             read_gen = response.stream(chunk_size, decompress is None)
             while True:
                 while not done:
+                    chunk = None
                     try:
                         chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
                     except Exception: # pylint: disable=broad-except
                         # By swallowing an unexpected exception reading the stream, we will let consumers decide how to
                         # handle the unexpected end of stream
-                        pass
+                        logger.warning('unexpected failure to read next chunk', exc_info=True)
                     if not chunk:
                         done = True
                         break

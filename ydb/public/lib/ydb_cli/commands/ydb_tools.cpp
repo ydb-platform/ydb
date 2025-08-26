@@ -311,11 +311,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -340,7 +336,18 @@ void TCommandCopy::ExtractParams(TConfig& config) {
 int TCommandCopy::Run(TConfig& config) {
     TVector<NYdb::NTable::TCopyItem> copyItems;
     copyItems.reserve(Items.size());
+    auto driver = CreateDriver(config);
+    auto schemeClient = NScheme::TSchemeClient(driver);
     for (auto& item : Items) {
+        auto describeResult = schemeClient.DescribePath(item.Source).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+        switch (describeResult.GetEntry().Type) {
+            case NScheme::ESchemeEntryType::Table:
+                break;
+            default:
+                Cerr << "Source path " << item.Source << " is of type `" << describeResult.GetEntry().Type << "`. Only row tables are supported for copying." << Endl;
+                return EXIT_FAILURE;
+        }
         copyItems.emplace_back(item.Source, item.Destination);
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
@@ -373,11 +380,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(

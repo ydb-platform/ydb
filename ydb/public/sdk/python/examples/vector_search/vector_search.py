@@ -1,6 +1,12 @@
 import os
+import struct
 
 import ydb
+
+
+def convert_vector_to_bytes(vector: list[float]) -> bytes:
+    b = struct.pack("f" * len(vector), *vector)
+    return b + b"\x01"
 
 
 def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
@@ -23,7 +29,47 @@ def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
     print("Vector table created")
 
 
-def insert_items(
+def insert_items_vector_as_bytes(
+    pool: ydb.QuerySessionPool,
+    table_name: str,
+    items: list[dict],
+) -> None:
+    query = f"""
+    DECLARE $items AS List<Struct<
+        id: Utf8,
+        document: Utf8,
+        embedding: String
+    >>;
+
+    UPSERT INTO `{table_name}`
+    (
+    id,
+    document,
+    embedding
+    )
+    SELECT
+        id,
+        document,
+        embedding,
+    FROM AS_TABLE($items);
+    """
+
+    items_struct_type = ydb.StructType()
+    items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+
+    for item in items:
+        item["embedding"] = convert_vector_to_bytes(item["embedding"])
+
+    pool.execute_with_retries(
+        query, {"$items": (items, ydb.ListType(items_struct_type))}
+    )
+
+    print(f"{len(items)} items inserted")
+
+
+def insert_items_vector_as_float_list(
     pool: ydb.QuerySessionPool,
     table_name: str,
     items: list[dict],
@@ -100,7 +146,57 @@ def add_vector_index(
     print(f"Table index {index_name} created.")
 
 
-def search_items(
+def search_items_vector_as_bytes(
+    pool: ydb.QuerySessionPool,
+    table_name: str,
+    embedding: list[float],
+    strategy: str = "CosineSimilarity",
+    limit: int = 1,
+    index_name: str | None = None,
+) -> list[dict]:
+    view_index = f"VIEW {index_name}" if index_name else ""
+
+    sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+    query = f"""
+    DECLARE $embedding as String;
+
+    SELECT
+        id,
+        document,
+        Knn::{strategy}(embedding, $embedding) as score
+    FROM {table_name} {view_index}
+    ORDER BY score
+    {sort_order}
+    LIMIT {limit};
+    """
+
+    result = pool.execute_with_retries(
+        query,
+        {
+            "$embedding": (
+                convert_vector_to_bytes(embedding),
+                ydb.PrimitiveType.String,
+            ),
+        },
+    )
+
+    items = []
+
+    for result_set in result:
+        for row in result_set.rows:
+            items.append(
+                {
+                    "id": row["id"],
+                    "document": row["document"],
+                    "score": row["score"],
+                }
+            )
+
+    return items
+
+
+def search_items_vector_as_float_list(
     pool: ydb.QuerySessionPool,
     table_name: str,
     embedding: list[float],
@@ -189,9 +285,9 @@ def main(
         {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
     ]
 
-    insert_items(pool, table_name, items)
+    insert_items_vector_as_bytes(pool, table_name, items)
 
-    items = search_items(
+    items = search_items_vector_as_bytes(
         pool,
         table_name,
         embedding=[1, 0, 0],
@@ -206,12 +302,12 @@ def main(
         table_name,
         index_name=index_name,
         strategy="similarity=cosine",
-        dim=3,
+        dimension=3,
         levels=1,
         clusters=3,
     )
 
-    items = search_items(
+    items = search_items_vector_as_bytes(
         pool,
         table_name,
         embedding=[1, 0, 0],

@@ -206,6 +206,7 @@ Annotations:  <none>
 API Version:  ydb.tech/v1alpha1
 Kind:         Database
 ...
+  Storage Endpoint:  grpc://storage-sample-grpc.default.svc.cluster.local:2135
 Status:
   State:  Ready
 Events:
@@ -253,15 +254,15 @@ Events:
 2. Запустите новый под с [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md):
 
     ```bash
-    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44 --rm ydb-cli bash
+    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2 --rm ydb-cli bash
     ```
 
-3. Выполните запрос к базе данных {{ ydb-short-name }}:
+3. Выполните запрос к базе данных {{ ydb-short-name }} (endpoint можно получить из вывода `kubectl describe database.ydb.tech`):
 
     ```bash
-    ydb \
+    /opt/ydb/bin/ydb \
       --endpoint grpc://database-sample-grpc:2135 \
-      --database /root/database-sample \
+      --database /Root/database-sample \
       sql -s 'SELECT 2 + 2;'
     ```
 

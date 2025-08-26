@@ -55,6 +55,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::PragmaName;
     using ECandidateKind::TableName;
     using ECandidateKind::TypeName;
+    using ECandidateKind::UnknownName;
 
     TLexerSupplier MakePureLexerSupplier() {
         NSQLTranslationV1::TLexers lexers;
@@ -118,12 +119,30 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                        "room": {},
                        "time": {}
                     }}
-                }}
+                }},
+                "link": { "type": "LINK" },
+                "topic": { "type": "Topic" }
             }},
             "saurus": { "type": "Folder", "entries": {
                 "maxim": { "type": "Table", "columns": {
                    "Y Q L": {},
                    "o``o": {}
+                }}
+            }},
+            "loggy": { "type": "Folder", "entries": {
+                "yql": { "type": "Folder", "entries": {
+                    "2025-01": { "type": "Table", "columns": {
+                        "timestamp": {},
+                        "message": {}
+                    }},
+                    "2025-02": { "type": "Table", "columns": {
+                        "timestamp": {},
+                        "message": {}
+                    }},
+                    "2025-03": { "type": "Table", "columns": {
+                        "timestamp": {},
+                        "message": {}
+                    }}
                 }}
             }}
         })";
@@ -216,6 +235,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(Use) {
         TVector<TCandidate> expected = {
             {ClusterName, "example"},
+            {ClusterName, "loggy"},
             {ClusterName, "saurus"},
         };
         auto engine = MakeSqlCompletionEngineUT();
@@ -225,19 +245,25 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(UseClusterResultion) {
         auto engine = MakeSqlCompletionEngineUT();
         {
+            TString query = R"sql(
+                DECLARE $cluster_name AS String;
+                USE yt:$cluster_name;
+                SELECT * FROM #
+            )sql";
+
+            TEnvironment env = {
+                .Parameters = {{"$cluster_name", "saurus"}},
+            };
+
             TVector<TCandidate> expected = {
+                {BindingName, "$cluster_name"},
                 {TableName, "`maxim`"},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
-                {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(
-                CompleteTop(
-                    4,
-                    engine,
-                    "USE yt:$cluster_name; SELECT * FROM ",
-                    {.Parameters = {{"$cluster_name", "saurus"}}}),
-                expected);
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query, env), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -246,12 +272,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FolderName, "`prod/`", 1},
                 {FolderName, "`test/`", 1},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(
                 CompleteTop(
-                    7,
+                    8,
                     engine,
                     "USE yt:$cluster_name; SELECT * FROM ",
                     {.Parameters = {}}),
@@ -312,6 +339,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FolderName, "`prod/`", 1},
                 {FolderName, "`test/`", 1},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "IF NOT EXISTS"},
             };
@@ -361,6 +389,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {FolderName, "`prod/`", 1},
             {FolderName, "`test/`", 1},
             {ClusterName, "example"},
+            {ClusterName, "loggy"},
             {ClusterName, "saurus"},
             {Keyword, "IF EXISTS"},
         };
@@ -560,6 +589,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FolderName, "`prod/`", 1},
                 {FolderName, "`test/`", 1},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
                 {FunctionName, "CONCAT()", 1},
@@ -669,6 +699,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:"), expected);
@@ -705,10 +736,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {TableName, "`maxim`"},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, "USE yt:saurus; SELECT * FROM "), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, "USE yt:saurus; SELECT * FROM "), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -721,20 +753,22 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {TableName, "`maxim`"},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, "USE example; USE yt:saurus; SELECT * FROM "), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, "USE example; USE yt:saurus; SELECT * FROM "), expected);
         }
         {
             TVector<TCandidate> expected = {
                 {BindingName, "$hello"},
                 {TableName, "`maxim`"},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, R"(
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, R"(
                 USE example;
                 DEFINE ACTION $hello() AS
                     USE yt:saurus;
@@ -748,10 +782,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {TableName, "`people`"},
                 {FolderName, "`yql/`", 1},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, R"(
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(7, engine, R"(
                 USE example;
 
                 DEFINE ACTION $action() AS
@@ -805,6 +840,17 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM a WHERE "), expected);
     }
 
+    Y_UNIT_TEST(SelectSubquery) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TCandidate> expected = {
+            {Keyword, "SELECT"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = sel#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = (sel#)"), expected);
+    }
+
     Y_UNIT_TEST(Upsert) {
         TVector<TCandidate> expected = {
             {Keyword, "INTO"},
@@ -824,6 +870,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FolderName, "`prod/`", 1},
                 {FolderName, "`test/`", 1},
                 {ClusterName, "example"},
+                {ClusterName, "loggy"},
                 {ClusterName, "saurus"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO "), expected);
@@ -835,6 +882,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO `test/#`"), expected);
         }
+    }
+
+    Y_UNIT_TEST(AlterObject) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            ALTER OBJECT example.`#`
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {FolderName, "yql/"},
+            {UnknownName, "link"},
+            {UnknownName, "topic"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
     }
 
     Y_UNIT_TEST(TypeName) {
@@ -918,7 +980,6 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {BindingName, "$udf"},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS my_table USING $udf(TableRows()) WITH "), expected);
@@ -927,6 +988,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {Keyword, "COLUMNS"},
                 {Keyword, "SCHEMA"},
+                {Keyword, "WATERMARK AS()", 1},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -935,6 +997,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {Keyword, "COLUMNS"},
                 {Keyword, "SCHEMA"},
+                {Keyword, "WATERMARK AS()", 1},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -946,6 +1009,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "COLUMNS"},
             {HintName, "EXPIRATION"},
             {Keyword, "SCHEMA"},
+            {Keyword, "WATERMARK AS()", 1},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -1143,13 +1207,31 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 CompleteTop(1, engine, "SELECT * FROM Range(#)").at(0).Kind, FolderName);
-            UNIT_ASSERT_VALUES_UNEQUAL(
+            UNIT_ASSERT_VALUES_EQUAL(
                 CompleteTop(1, engine, "SELECT * FROM Range(``, #)").at(0).Kind, FolderName);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "example"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                CompleteTop(10, engine, "SELECT * FROM Range(`test/service`, `#`)"), expected);
+            UNIT_ASSERT_VALUES_EQUAL(
+                CompleteTop(10, engine, "SELECT * FROM Range(`test/service`, ``, `#`)"), expected);
         }
         {
             UNIT_ASSERT_VALUES_UNEQUAL(CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
             UNIT_ASSERT_VALUES_UNEQUAL(CompleteTop(1, engine, "SELECT Concat(#)").at(0).Kind, FolderName);
         }
+    }
+
+    Y_UNIT_TEST(TableFunctionCluster) {
+        auto engine = MakeSqlCompletionEngineUT();
+        TVector<TCandidate> expected = {
+            {TableName, "`people`"},
+            {FolderName, "`yql/`", 1},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT * FROM example.Concat(#)"), expected);
     }
 
     Y_UNIT_TEST(ColumnsAtSimpleSelect) {
@@ -1310,6 +1392,82 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(ColumnsFromNamedExpr) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TString> queries = {
+                R"sql(SELECT # FROM $)sql",
+                R"sql(SELECT # FROM $$)sql",
+                R"sql(SELECT # FROM $x)sql",
+            };
+
+            TVector<TCandidate> expected = {
+                {Keyword, "ALL"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[0]), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[1]), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[2]), expected);
+        }
+        {
+            TString declare = R"sql(DECLARE $x AS String;)sql";
+
+            TVector<TString> queries = {
+                declare + R"sql(SELECT # FROM example.$x)sql",
+                declare + R"sql(USE example; SELECT # FROM $x)sql",
+            };
+
+            TVector<TCandidate> expected = {
+                {BindingName, "$x"},
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
+
+            TEnvironment env = {
+                .Parameters = {{"$x", "/people"}},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, queries[0], env), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, queries[1], env), expected);
+        }
+        {
+            TString query = R"sql(
+                USE example;
+                SELECT # FROM $x;
+            )sql";
+
+            TEnvironment env = {
+                .Parameters = {{"$x", "/people"}},
+            };
+
+            TVector<TCandidate> expected = {
+                {Keyword, "ALL"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query, {}), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query, env), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnFromTableFunction) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TString> input = {
+            R"sql(SELECT # FROM loggy.CONCAT(`yql/2025-01`))sql",
+            R"sql(SELECT # FROM loggy.CONCAT(`yql/2025-01`, `yql/2025-02`))sql",
+            R"sql(SELECT # FROM loggy.RANGE(`yql`, `2025-01`, `2025-03`))sql",
+        };
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "message"},
+            {ColumnName, "timestamp"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, input[0]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, input[1]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, input[2]), expected);
+    }
+
     Y_UNIT_TEST(ColumnPositions) {
         auto engine = MakeSqlCompletionEngineUT();
 
@@ -1331,12 +1489,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` WHERE a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = "SELECT * FROM example.`/people` WHERE f(#)";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
             TString query = "SELECT * FROM example.`/people` ORDER BY #";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` ORDER BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
         }
         {
             TString query = "SELECT * FROM example.`/people` ORDER BY f(#)";
@@ -1347,11 +1513,90 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` GROUP BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = R"(
                 SELECT *
                 FROM example.`/people` AS a
                 JOIN example.`/people` AS b ON a.#
             )";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnFiltration) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            SELECT roo#
+            FROM example.`/people` AS roommate
+            JOIN example.`/yql/tutorial` AS query ON 1 = 1;
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "roommate.Age"},
+            {ColumnName, "roommate.Name"},
+            {ColumnName, "query.room"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query), expected);
+    }
+
+    Y_UNIT_TEST(QualifiedColumnAtWhere) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "Age"},
+            {ColumnName, "Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "WHERE x.#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "GROUP BY x.#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "HAVING x.#"), expected);
+    }
+
+    Y_UNIT_TEST(ColumnFromQualifiedAtWhere) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "x.Age"},
+            {ColumnName, "x.Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "WHERE #"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "GROUP BY #"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "HAVING #"), expected);
+    }
+
+    Y_UNIT_TEST(ColumnFromQuotedAlias) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query;
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "`per son`.Age"},
+                {ColumnName, "`per son`.Name"},
+            };
+
+            query = R"sql(SELECT # FROM example.`/people` AS `per son`)sql";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+
+            query = R"sql(SELECT per# FROM example.`/people` AS `per son`)sql";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = R"sql(SELECT `per son`.# FROM example.`/people` AS `per son`)sql";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
+
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
     }
@@ -1369,7 +1614,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
-            TString query = "SELECT Age as a, b FROM example.`/people` WHERE #";
+            TString query = "SELECT Age as a, b FROM example.`/people` ORDER BY #";
 
             TVector<TCandidate> expected = {
                 {ColumnName, "a"},
@@ -1378,6 +1623,33 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
+    }
+
+    Y_UNIT_TEST(ColumnFromNamedNode) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(
+            USE example;
+            $source = '/peo' || 'ple';
+        )sql";
+
+        TVector<TString> input = {
+            prefix + R"sql(SELECT # FROM $source)sql",
+            prefix + R"sql(SELECT * FROM $source WHERE #)sql",
+            prefix + R"sql(SELECT * FROM $source GROUP BY #)sql",
+            prefix + R"sql(SELECT * FROM $source AS x FROM x.#)sql",
+        };
+
+        // FIXME: change ranking.
+        TVector<TCandidate> expected = {
+            {BindingName, "$source"},
+            {ColumnName, "Age"},
+            {ColumnName, "Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[0]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[1]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[2]), expected);
     }
 
     Y_UNIT_TEST(ColumnQuoted) {

@@ -59,6 +59,7 @@ cluster.wait_tenant_up(shared_db, token=root_token)
 cluster.create_serverless_database(serverless_db, shared_db, token=root_token)
 cluster.wait_tenant_up(serverless_db, token=root_token)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
+databases_and_no_database = ['no-database', domain_name, dedicated_db, shared_db, serverless_db]
 default_headers = {
     'Cookie': 'ydb_session_id=' + root_session_id,
 }
@@ -107,6 +108,7 @@ def call_viewer_db(url, params=None):
     if params is None:
         params = {}
     result = {}
+    result["no-database"] = call_viewer(url, params)
     for name in databases:
         params["database"] = name
         result[name] = call_viewer(url, params)
@@ -504,6 +506,7 @@ def normalize_result_nodes(result):
                                           'Roles',
                                           'ConnectTime',
                                           'Connections',
+                                          'ResolveHost',
                                           ])
 
 
@@ -585,6 +588,12 @@ def get_viewer_db_normalized(url, params=None):
     return normalize_result(get_viewer_db(url, params))
 
 
+def test_viewer_nodelist():
+    result = get_viewer_db_normalized("/viewer/nodelist", {
+    })
+    return result
+
+
 def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
     })
@@ -642,10 +651,10 @@ def test_viewer_tabletinfo():
         'group': 'Type',
         'enums': 'true',
     })
-    for name in databases:
+    for name in databases_and_no_database:
         result['totals'][name]['TabletStateInfo'].sort(key=lambda x: x['Type'])
     result['detailed'] = get_viewer_db_normalized("/viewer/tabletinfo")
-    for name in databases:
+    for name in databases_and_no_database:
         result['detailed'][name]['TabletStateInfo'].sort(key=lambda x: x['TabletId'])
     return result
 
@@ -835,7 +844,6 @@ def test_operations_list_page_bad():
 
 
 def test_scheme_directory():
-
     result = {}
     result["1-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
@@ -980,24 +988,118 @@ def test_topic_data():
     return result
 
 
-def test_transfer_describe():
+def test_topic_data_cdc():
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'create table table_test_topic_data_cdc(id int64, name text, primary key(id))',
+        'schema': 'multi'
+    })
+
+    alter_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
+    })
+
+    insert_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
+        'schema': 'multi'
+    })
+
+    update_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "update table_test_topic_data_cdc set name = 'ONE' where id = 1",
+        'schema': 'multi'
+    })
+
+    topic_path = '{}/table_test_topic_data_cdc/updates_feed'.format(dedicated_db)
+    data_response = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'limit': '3'
+    })
+
+    data_response = replace_values_by_key(
+        data_response, ['CreateTimestamp', 'WriteTimestamp', 'ProducerId', ]
+    )
+    data_response = replace_types_by_key(data_response, ['TimestampDiff'])
+
+    final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
+    logging.info("Results: {}".format(final_result))
+    return final_result
+
+
+def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
-    call_viewer("/viewer/query", {
+    create_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
-    result = get_viewer_normalized("/viewer/describe_replication", {
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_replication", {
+            'database': dedicated_db,
+            'path': '{}/TestAsyncReplication'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
+
+        if "error" in describe_result:
+            break
+
+        time.sleep(1)
+
+    return {
+        'create_result': create_result,
+        'describe_result': describe_result
+    }
+
+
+def test_transfer_describe():
+    topic_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
-        'path': '{}/TestAsyncReplication'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
+        'query': 'CREATE TOPIC TestTransferSourceTopic (CONSUMER OurConsumer)',
+        'schema': 'multi'
     })
 
-    return result
+    table_result = get_viewer_normalized("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
+        'schema': 'multi'
+    })
+
+    transfer_result = get_viewer_normalized("/viewer/query", {
+        'database': dedicated_db,
+        'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
+            USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
+            WITH (CONSUMER='OurConsumer')''',
+        'schema': 'multi'
+    })
+
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+            'database': dedicated_db,
+            'path': '{}/TestTransfer'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
+
+        if "running" in describe_result:
+            break
+
+        time.sleep(1)
+
+    return {
+        'topic_result': topic_result,
+        'table_result': table_result,
+        'transfer_result': transfer_result,
+        'describe_result': describe_result
+    }
 
 
 def normalize_result_query_long(result):

@@ -365,6 +365,13 @@ def to_strings(o):
             elif isinstance(o, (str, int)):
                 yield str(o)
             else:
+                try:
+                    # Huge Python2 is still used for generating ymake.conf in case of ya.make yndexing
+                    if isinstance(o, unicode):
+                        yield o.decode('utf-8')
+                        return
+                except NameError:
+                    pass
                 raise ConfigureError('Unexpected value {} {}'.format(type(o), o))
 
 
@@ -1426,8 +1433,6 @@ class GnuCompiler(Compiler):
         self.tc = tc
 
         self.c_foptions = [
-            # Enable C++ exceptions (and allow them to be throw through pure C code)
-            '-fexceptions',
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
             '-fno-common',
@@ -1436,6 +1441,18 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        if is_positive('NO_CXX_EXCEPTIONS'):
+            self.c_foptions.append('-fno-exceptions')
+        else:
+            # Enable C++ exceptions (and allow them to be throw through pure C code)
+            self.c_foptions.append('-fexceptions')
+
+        if is_positive('NO_CXX_RTTI'):
+            self.c_foptions.append('-fno-rtti')
+        else:
+            # RTTI is enabled by default
+            pass
 
         if self.tc.is_clang and self.target.is_linux:
             # Use .init_array instead of .ctors (default for old clang versions)
@@ -1923,6 +1940,10 @@ class MSVCCompiler(MSVC, Compiler):
         super(MSVCCompiler, self).print_compiler()
 
         target = self.build.target
+
+        # Not supported/tested for MSVC
+        assert not is_positive('NO_CXX_EXCEPTIONS')
+        assert not is_positive('NO_CXX_RTTI')
 
         warns_enabled = [
             4018,  # 'expression' : signed/unsigned mismatch

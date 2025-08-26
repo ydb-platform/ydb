@@ -1765,31 +1765,25 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         }
 
                         TExprNode::TPtr left, right;
-                        if (!IsEquality(andTerm, left, right)) {
+                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right)) {
                             bad = true;
                             break;
                         }
 
                         bool leftOnLeft;
-                        if (left->IsCallable("Member") && &left->Head() == &predicate->Head().Head()) {
+                        {
                             auto inputPtr = memberToInput.FindPtr(left->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
                             leftOnLeft = leftIdxs.contains(*inputPtr);
                             (leftOnLeft ? leftColumns : rightColumns).push_back(left->ChildPtr(1));
-                        } else {
-                            bad = true;
-                            break;
                         }
 
                         bool rightOnRight;
-                        if (right->IsCallable("Member") && &right->Head() == &predicate->Head().Head()) {
+                        {
                             auto inputPtr = memberToInput.FindPtr(right->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
                             rightOnRight = rightIdxs.contains(*inputPtr);
                             (rightOnRight ? rightColumns : leftColumns).push_back(right->ChildPtr(1));
-                        } else {
-                            bad = true;
-                            break;
                         }
 
                         if (leftOnLeft != rightOnRight) {

@@ -68,11 +68,11 @@ SELECT *
       LIMIT 10
   ```
 
-* Выбор всех полей из таблицы `series` с использованием префиксного векторного индекса `views_index2`, созданного для `embedding` с мерой близости "косинусное расстояние" и префиксной колонкой `release_date`:
+* Выбор всех полей из таблицы `series` с использованием векторного индекса с фильтрацией `views_filtered_index`, созданного для `embedding` с мерой близости "косинусное расстояние" и с ускорением фильтрации по колонке `release_date`:
 
   ```yql
   SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::CosineSimilarity(embedding, $target) as similarity
-      FROM series VIEW views_index2
+      FROM series VIEW views_filtered_index
       WHERE release_date = "2025-03-31"
       ORDER BY similarity DESC
       LIMIT 10

@@ -800,7 +800,7 @@ namespace {
                     dstSettings.EnsureStateDone();
                 } else if (to_lower(value) == "paused") {
                     dstSettings.StatePaused = true;
-                } else if (to_lower(value) == "standby") {
+                } else if (to_lower(value) == "standby" || to_lower(value) == "active") {
                     dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -938,6 +938,14 @@ namespace {
                 }
 
                 dstSettings.ConsumerName = value;
+            } else if (name == "directory") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                dstSettings.DirectoryPath = value;
             }
         }
 

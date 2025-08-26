@@ -201,7 +201,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         if bridge_config is None:
             return None
 
-        bridge_pile_name = node.get('bridge_pile_name', None)
+        bridge_pile_name = node.get('location', {}).get('bridge_pile_name', None)
         if bridge_pile_name is None:
             return None
 
@@ -221,7 +221,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 host=node.get('name', node.get('host')),
                 rack=node.get('location', {}).get('rack', None),
                 datacenter=node.get('location', {}).get('data_center', None),
-                bridge_pile_name=node.get('bridge_pile_name', None),
+                bridge_pile_name=node.get('location', {}).get('bridge_pile_name', None),
                 bridge_pile_id=self._get_bridge_pile_id(node),
                 ssh_username=self.__ssh_username,
                 port=DEFAULT_GRPC_PORT,

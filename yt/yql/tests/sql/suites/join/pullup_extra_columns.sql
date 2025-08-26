@@ -1,6 +1,5 @@
 use plato;
 
-pragma config.flags('OptimizerFlags', 'MemberNthOverFlatMap');
 pragma yt.MapJoinLimit="1m";
 
 

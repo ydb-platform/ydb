@@ -172,10 +172,10 @@ arrow::compute::FunctionRegistry* GetCustomFunctionRegistry() {
 }  // namespace internal
 
 TConclusion<arrow::Datum> TInternalFunction::Call(
-    const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     auto funcNames = GetRegistryFunctionNames();
 
-    auto argumentsReader = resources->GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
+    auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
     TAccessorsCollection::TChunksMerger merger;
     while (auto arguments = argumentsReader.ReadNext()) {
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");

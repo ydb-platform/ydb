@@ -8,8 +8,9 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
-    Storage = partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
+PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage) {
+    Storage = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == tabletConfig.GetMeteringMode()
+        ? currentStorageUsage : partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
     Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
 }
 

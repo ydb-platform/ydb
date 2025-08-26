@@ -26,9 +26,6 @@ namespace NKikimr {
     namespace NJaegerTracing {
         class TSamplingThrottlingConfigurator;
     }
-    namespace NKqp::NScheduler {
-        class TComputeScheduler;
-    }
 }
 
 namespace NKikimrCms {
@@ -82,6 +79,7 @@ namespace NKikimrConfig {
     class TWorkloadManagerConfig;
     class TQueryServiceConfig;
     class TBridgeConfig;
+    class TStatisticsConfig;
 }
 
 namespace NKikimrReplication {
@@ -171,6 +169,10 @@ namespace NYamlConfig {
     class IConfigSwissKnife;
 }
 
+namespace NAudit {
+    class TAuditConfig;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -243,7 +245,7 @@ struct TAppData {
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
-    NKikimrConfig::TAuditConfig& AuditConfig;
+    NKikimr::NAudit::TAuditConfig& AuditConfig;
     NKikimrConfig::TCompactionConfig& CompactionConfig;
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
@@ -261,6 +263,7 @@ struct TAppData {
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
+    NKikimrConfig::TStatisticsConfig& StatisticsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -312,8 +315,6 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
-
-    std::shared_ptr<NKqp::NScheduler::TComputeScheduler> ComputeScheduler;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

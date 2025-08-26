@@ -156,6 +156,14 @@ ELogLevel GetThreadMinLogLevel();
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Sets an extra tag for messages in current thread.
+// NB: Same as above, in fiber environment messages tags
+// are attached to a fiber.
+void SetThreadMessageTag(std::string messageTag);
+std::string& GetThreadMessageTag();
+
+////////////////////////////////////////////////////////////////////////////////
+
 static constexpr auto NullLoggerMinLevel = ELogLevel::Maximum;
 
 // Min level for non-null logger depends on whether we are in debug or release build.

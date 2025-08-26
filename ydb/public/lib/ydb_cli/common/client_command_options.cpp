@@ -269,6 +269,7 @@ TClientCommandOption& TClientCommandOption::LogToConnectionParams(const TString&
 
 TClientCommandOption& TClientCommandOption::DocLink(const TString& link) {
     Documentation = link;
+    RebuildHelpMessage();
     return *this;
 }
 
@@ -278,12 +279,26 @@ TClientCommandOption& TClientCommandOption::DefaultValue(const TString& defaultV
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::ManualDefaultValueDescription(const TString& description) {
+    ManualDefaultOptionValueDescription = description;
+    RebuildHelpMessage();
+    return *this;
+}
+
+bool TClientCommandOption::NeedPrintDefinitionsPriority() const {
+    return CanParseFromProfile || !EnvInfo.empty(); // If only this option and default value => no need to print priority
+}
+
 void TClientCommandOption::RebuildHelpMessage() {
     NColorizer::TColors& colors = NColorizer::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
-    if (ClientOptions->HelpCommandVerbosiltyLevel <= 1 && DefaultOptionValue) {
-        helpMessage << " (default: " << colors.Cyan() << DefaultOptionValue << colors.OldColor() << ")";
+    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();
+
+    if (!needDefinitionsPriority && (DefaultOptionValue || ManualDefaultOptionValueDescription)) {
+        helpMessage << " (default: " << colors.Cyan()
+            << (DefaultOptionValue ? DefaultOptionValue : ManualDefaultOptionValueDescription)
+            << colors.OldColor() << ")";
     }
 
     bool multiline = false;
@@ -303,7 +318,7 @@ void TClientCommandOption::RebuildHelpMessage() {
         makeMultiline();
         helpMessage << indent << "For more info go to: " << Documentation << Endl;
     }
-    if (ClientOptions->HelpCommandVerbosiltyLevel >= 2) {
+    if (needDefinitionsPriority) {
         makeMultiline();
         helpMessage << indent << "Definition priority:";
         size_t currentPoint = 1;
@@ -319,8 +334,12 @@ void TClientCommandOption::RebuildHelpMessage() {
         if (CanParseFromProfile) {
             helpMessage << Endl << indent << indent << currentPoint++ << ". Active configuration profile";
         }
-        if (DefaultOptionValue) {
-            helpMessage << Endl << indent << indent << currentPoint++ << ". Default value: " << colors.Cyan() << DefaultOptionValue << colors.OldColor();
+        if (DefaultOptionValue || ManualDefaultOptionValueDescription) {
+            if (DefaultOptionValue) {
+                helpMessage << Endl << indent << indent << currentPoint++ << ". Default value: " << colors.Cyan() << DefaultOptionValue << colors.OldColor();
+            } else {
+                helpMessage << Endl << indent << indent << currentPoint++ << ". " << ManualDefaultOptionValueDescription;
+            }
         }
     } else {
         if (!EnvInfo.empty()) {

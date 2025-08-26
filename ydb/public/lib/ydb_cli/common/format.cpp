@@ -236,14 +236,28 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    bool printComma = false;
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
         Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+                << "\n    " << findResult->second;
+        } else {
+            if (printComma) {
+                description << ", ";
+            } else {
+                printComma = true;
+            }
+            description << colors.BoldColor() << format << colors.OldColor();
+        }
     }
-    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    if (config.HelpCommandVerbosiltyLevel >= 2) {
+        description << "\nDefault: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ".";
+    } else {
+        description << " (default: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ")";
+    }
     config.Opts->AddLongOption("format", description.Str())
         .RequiredArgument("STRING").StoreResult(&OutputFormat);
     AllowedFormats = allowedFormats;

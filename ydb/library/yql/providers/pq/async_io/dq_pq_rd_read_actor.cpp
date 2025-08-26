@@ -552,7 +552,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         ColumnIndexes[index] = i;
     }
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
-    DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType);
+    DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
     IngressStats.Level = statsLevel;
 }
@@ -969,6 +969,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
     Counters.CoordinatorResult++;
     if (ev->Cookie != CoordinatorRequestCookie) {
         SRC_LOG_W("Ignore TEvCoordinatorResult. wrong cookie");
+        return;
+    }
+    if (!ev->Get()->Record.GetIssues().empty()) {
+        NYql::TIssues issues;
+        IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+        Stop(NYql::NDqProto::StatusIds::BAD_REQUEST, issues);
         return;
     }
     LastReceivedPartitionDistribution.clear();

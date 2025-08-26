@@ -281,6 +281,9 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.PartitionByHashFunction && parsingMode == ETableSettingsParsingMode::Create) {
         settings = L(settings, Q(Y(Q("partitionByHashFunction"), tableSettings.PartitionByHashFunction)));
     }
+    if (tableSettings.ExternalDataChannelsCount) {
+        settings = L(settings, Q(Y(Q("externalDataChannelsCount"), tableSettings.ExternalDataChannelsCount)));
+    }
 
     return settings;
 }
@@ -862,6 +865,20 @@ public:
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
+
+            if ("watermark" == hintName) {
+                TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(Pos_);
+                for (auto& x : hint.second) {
+                    if (!x->Init(ctx, anyColumnSrc.Get())) {
+                        return false;
+                    }
+                    option = L(option, x);
+                }
+                Nodes_.push_back(Q(option));
+                continue;
+            }
+
             TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
@@ -1126,6 +1143,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
@@ -1531,6 +1551,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1549,6 +1572,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
@@ -3310,6 +3336,11 @@ public:
                 if (ctx.Engine) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "Engine"), BuildQuotedAtom(Pos_, *ctx.Engine))));
+                }
+
+                if (ctx.DebugPositions) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
             }
         }

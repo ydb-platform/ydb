@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
+    blob_serialization.cpp
     common_app.cpp
     cluster_tracker.cpp
     event_helpers.cpp
@@ -18,6 +19,7 @@ SRCS(
     offload_actor.cpp
     partition_blob_encoder.cpp
     partition_compaction.cpp
+    partition_compactification.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
@@ -46,6 +48,7 @@ SRCS(
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp
+    tracing_support.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
@@ -85,7 +88,6 @@ RECURSE(
     events
     partition_key_range
     pqrb
-    purecalc
     writer
 )
 

@@ -24,7 +24,7 @@ def add_options(p):
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
     p.add_argument('--sleep-before-rounds', type=float, default=1, help='Seconds to sleep before rounds')
     p.add_argument('--no-fail-model-check', action='store_true', help='Do not check VDisk states before taking action')
-    p.add_argument('--enable-soft-switch-piles', action='store_true', help='Enable soft switch pile with PROMOTE')
+    p.add_argument('--enable-soft-switch-piles', action='store_true', help='Enable soft switch pile with PROMOTED')
     p.add_argument('--enable-hard-switch-piles', action='store_true', help='Enable hard switch pile with setting PRIMARY')
     p.add_argument('--enable-disconnect-piles', action='store_true', help='Enable disconnect pile')
     p.add_argument('--fixed-pile-for-disconnect', type=int, help='Pile to disconnect')
@@ -292,7 +292,7 @@ def do(args):
                 common.fetch('tablets', dict(RestartTabletID=tablet_id), fmt='raw', cache=False)
 
         def do_soft_switch_pile(pile_id):
-            print(f"Switching primary pile to {pile_id} with PROMOTE")
+            print(f"Switching primary pile to {pile_id} with PROMOTED")
             common.promote_pile(pile_id)
 
         def do_hard_switch_pile(pile_id, all_piles):
@@ -407,7 +407,7 @@ def do(args):
                     primary_pile = idx
                 elif pile_state.state == ydb_bridge.PileState.SYNCHRONIZED:
                     synchronized_piles.append(idx)
-                elif pile_state.state == ydb_bridge.PileState.PROMOTE:
+                elif pile_state.state == ydb_bridge.PileState.PROMOTED:
                     promoted_piles.append(idx)
                 elif pile_state.state == ydb_bridge.PileState.DISCONNECTED:
                     disconnected_piles.append(idx)

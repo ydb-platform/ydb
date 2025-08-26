@@ -16,6 +16,7 @@ PEERDIR(
 )
 
 SRCS(
+    transfer_common.cpp
     utils.cpp
 )
 

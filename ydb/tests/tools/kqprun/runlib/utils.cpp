@@ -18,14 +18,24 @@ namespace NKikimrRun {
 
 namespace {
 
+std::terminate_handler DefaultTerminateHandler;
+
 void TerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
+        backtrace.PrintTo(Cerr);
+    }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
 
-    abort();
+    if (DefaultTerminateHandler) {
+        DefaultTerminateHandler();
+    } else {
+        abort();
+    }
 }
 
 TString SignalToString(int signal) {
@@ -46,7 +56,7 @@ void BackTraceSignalHandler(int signal) {
     abort();
 }
 
-}  // nonymous namespace
+}  // anonymous namespace
 
 
 TRequestResult::TRequestResult()
@@ -267,7 +277,8 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 }
 
 void SetupSignalActions() {
-    std::set_terminate(&TerminateHandler);
+    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
+
     for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
         signal(sig, &BackTraceSignalHandler);
     }

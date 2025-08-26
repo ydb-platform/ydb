@@ -576,9 +576,16 @@ def check_resource(fields, unit, *args):
         df.KtlintBinary.value,
         df.UseKtlintOld.value,
         df.KtlintBaselineFile.value,
+        df.KtlintRuleset.value,
     )
 )
 def ktlint(fields, unit, *args):
+    ruleset_dict = df.KtlintRuleset.value(unit, [], [])
+    if ruleset_dict:
+        ruleset = ruleset_dict[df.KtlintRuleset.KEY]
+        unit.ondepends(ruleset)
+        args = (*args, "DEPENDS", ruleset)
+
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,
@@ -749,8 +756,7 @@ def detekt_report(fields, unit, *args):
 
 
 def onadd_check(unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
     flat_args, *_ = _common.sort_by_keywords(
@@ -804,8 +810,7 @@ def on_register_no_check_imports(unit):
     )
 )
 def onadd_check_py_imports(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE').strip() == "":
@@ -841,8 +846,7 @@ def onadd_check_py_imports(fields, unit, *args):
     )
 )
 def onadd_pytest_bin(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     flat_args, spec_args = _common.sort_by_keywords({'RUNNER_BIN': 1}, args)
     if flat_args:
@@ -901,8 +905,7 @@ def onadd_pytest_bin(fields, unit, *args):
     )
 )
 def onjava_test(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
     assert unit.get('MODULE_TYPE') is not None
@@ -942,8 +945,7 @@ def onjava_test(fields, unit, *args):
     )
 )
 def onjava_test_deps(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
     assert unit.get('MODULE_TYPE') is not None
@@ -982,8 +984,7 @@ def onrun(unit, *args):
     )
 )
 def onsetup_exectest(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     command = unit.get(["EXECTEST_COMMAND_VALUE"])
     if command is None:
@@ -1019,11 +1020,12 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
+        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
 def on_add_cpp_linter_check(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
     no_lint_value = _common.get_no_lint_value(unit)
@@ -1034,6 +1036,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     keywords = {
         "NAME": 1,
         "LINTER": 1,
+        "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,
@@ -1067,7 +1070,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     + LINTER_FIELDS_BASE
 )
 def on_add_py_linter_check(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
+    if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
     no_lint_value = _common.get_no_lint_value(unit)
@@ -1133,6 +1136,33 @@ def clang_tidy(fields, unit, *args):
 
     unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
     unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
+
+    dart_record = create_dart_record(fields, unit, flat_args, spec_args)
+
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+@df.with_fields(
+    YTEST_FIELDS_BASE
+    + (
+        df.TestName.value,
+        df.TestPartition.value,
+        df.ModuleLang.value,
+    )
+)
+def iwyu(fields, unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
     dart_record = create_dart_record(fields, unit, flat_args, spec_args)
 
@@ -1465,7 +1495,6 @@ def onadd_ytest(unit, *args):
     }
     flat_args, *_ = _common.sort_by_keywords(keywords, args)
     test_type = flat_args[1]
-
     # TIDY not supported for module
     if unit.get("TIDY_ENABLED") == "yes" and test_type != "clang_tidy":
         return
@@ -1475,10 +1504,21 @@ def onadd_ytest(unit, *args):
     # TIDY disabled for module in ya.make
     elif unit.get("TIDY") == "yes" and unit.get("TIDY_ENABLED") != "yes":
         return
+    # IWYU not supported for module
+    elif unit.get("IWYU_ENABLED") == "yes" and test_type != "iwyu":
+        return
+    # IWYU explicitly disabled for module in ymake.core.conf
+    elif test_type == "iwyu" and unit.get("IWYU_ENABLED") != "yes":
+        return
+    # IWYU disabled for module in ya.make
+    elif unit.get("IWYU") == "yes" and unit.get("IWYU_ENABLED") != "yes":
+        return
     elif test_type == "no.test":
         return
     elif test_type == "clang_tidy" and unit.get("TIDY_ENABLED") == "yes":
         clang_tidy(unit, *args)
+    elif test_type == "iwyu" and unit.get("IWYU_ENABLED") == "yes":
+        iwyu(unit, *args)
     elif test_type == "unittest.py":
         unittest_py(unit, *args)
     elif test_type == "gunittest":

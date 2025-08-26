@@ -333,7 +333,7 @@ class ScenarioTestHelper:
         n_retries=0,
         fail_on_error=True,
         return_error=False,
-        ignore_error=tuple(),
+        ignore_error: Set[str] = set(),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -356,8 +356,8 @@ class ScenarioTestHelper:
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
 
-            if any(sub in str(error) for sub in ignore_error):
-                return (result, error) if return_error else result
+            if error and any(sub in str(error) for sub in ignore_error):
+                return error if return_error else result
 
             if status in expected_status:
                 return result
@@ -484,7 +484,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error=tuple()
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error: Set[str] = set()
     ):
         """Run a query on the tested database.
 

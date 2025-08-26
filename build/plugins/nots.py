@@ -151,6 +151,11 @@ class NotsUnitType(UnitType):
         Setup test recipe to extract peer's output before running tests
         """
 
+    def on_ts_proto_auto_prepare_deps_configure(self) -> None:
+        """
+        Configure prepare deps for TS_PROTO_AUTO
+        """
+
 
 TS_TEST_FIELDS_BASE = (
     df.BinaryPath.normalized,
@@ -166,6 +171,7 @@ TS_TEST_FIELDS_BASE = (
     df.TestName.value,
     df.TestRecipes.value,
     df.TestTimeout.from_unit,
+    df.TsConfigPath.from_unit,
 )
 
 TS_TEST_SPECIFIC_FIELDS = {
@@ -224,6 +230,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.Requirements.from_unit,
     ),
     TsTestType.TS_STYLELINT: (
+        df.Size.from_unit,
         df.TsStylelintConfig.value,
         df.TestFiles.stylesheets,
         df.NodeModulesBundleFilename.value,
@@ -316,6 +323,10 @@ def _get_var_name(s: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _is_real_file(path: str) -> bool:
+    return os.path.isfile(path) and not os.path.islink(path)
+
+
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
@@ -338,13 +349,16 @@ def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
     return _build_directives([hide_part, "output"], paths)
 
 
+def _arc_path(unit: NotsUnitType, path: str) -> str:
+    return unit.resolve(unit.resolve_arc_path(path))
+
+
 def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
-    erm_packages_path = unit.get("ERM_PACKAGES_PATH")
-    path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
+    erm_packages_path = _arc_path(unit, unit.get("ERM_PACKAGES_PATH"))
 
-    return ErmJsonLite.load(path)
+    return ErmJsonLite.load(erm_packages_path)
 
 
 def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
@@ -433,7 +447,7 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
     from lib.nots.package_manager import BasePackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -482,16 +496,17 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
     mod_dir = unit.get("MODDIR")
     cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(unit.resolve(unit.resolve_arc_path(cur_dir)))
+    pj_path = build_pj_path(_arc_path(unit, cur_dir))
     dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
 
     # reversed for using the first tsconfig as the config for include processor (legacy)
     for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
         if not abs_tsconfig_path:
             raise Exception("tsconfig not found: {}".format(tsconfig_path))
 
-        tsconfig = TsConfig.load(abs_tsconfig_path)
+        source_dir = _arc_path(unit, _get_source_path(unit))
+        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
         config_files = tsconfig.inline_extend(dep_paths)
         config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
@@ -583,14 +598,14 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
     mod_dir = unit.get("MODDIR")
     target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
 
-    all_files = [__strip_prefix(target_path, f) for f in unit.get("TS_GLOB_FILES").split(" ")]
-    filtered_files = tsconfig.filter_files(all_files)
-
-    __set_append(unit, "TS_INPUT_FILES", [os.path.join(target_path, f) for f in filtered_files])
+    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
+        all_files = [__strip_prefix(target_path, f) for f in unit.get(from_var).split(" ")]
+        filtered_files = tsconfig.filter_files(all_files)
+        __set_append(unit, to_var, [os.path.join(target_path, f) for f in filtered_files])
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:
-    return unit.get("TIDY") != "yes"
+    return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
 
 def _setup_eslint(unit: NotsUnitType) -> None:
@@ -612,7 +627,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -652,11 +667,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.ts_input_files(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
         return
 
-    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    tsconfig_paths = unit.get("_TS_TYPECHECK_TSCONFIG").split(" ")
+    if len(tsconfig_paths) > 1:
+        raise Exception(
+            f"You have set several tsconfig files for TS_TYPECHECK: {tsconfig_paths}. "
+            f"Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
+        )
+
+    tsconfig_path = tsconfig_paths[0]
     if not tsconfig_path:
         tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
         if len(tsconfig_paths) > 1:
@@ -665,7 +687,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
         tsconfig_path = tsconfig_paths[0]
 
-    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    abs_tsconfig_path = _arc_path(unit, tsconfig_path)
     if not abs_tsconfig_path:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
@@ -677,7 +699,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -727,7 +749,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     test_type = TsTestType.TS_STYLELINT
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
@@ -803,10 +825,19 @@ def _select_matching_version(
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager.base.utils import build_pj_path
+
     pm = _create_pm(unit)
+
+    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
+        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+        unit.on_ts_proto_auto_prepare_deps_configure()
+        return
+
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
-    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
@@ -818,6 +849,18 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
     else:
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
+def on_ts_proto_auto_prepare_deps_configure(unit: NotsUnitType) -> None:
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
+
+    pm = _create_pm(unit)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
@@ -929,7 +972,7 @@ def on_ts_test_for_configure(
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -993,6 +1036,7 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += " "
     new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 

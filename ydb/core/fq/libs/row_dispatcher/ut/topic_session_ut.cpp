@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
+#include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
@@ -23,6 +23,7 @@ namespace {
 
 using namespace NKikimr;
 using namespace NYql::NDq;
+using namespace NTestUtils;
 
 constexpr ui64 TimeoutBeforeStartSessionSec = 3;
 constexpr ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
@@ -65,7 +66,7 @@ public:
 
         if (MockTopicSession) {
             PqGatewayNotifier = Runtime.AllocateEdgeActor();
-            MockPqGateway = CreateMockPqGateway(Runtime, PqGatewayNotifier);
+            MockPqGateway = CreateMockPqGateway({.Runtime = &Runtime, .Notifier = PqGatewayNotifier});
         }
 
         TopicSession = Runtime.Register(NewTopicSession(
@@ -109,7 +110,7 @@ public:
         }
 
         if (MockTopicSession) {
-            Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
+            Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
             MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
         }
     }
@@ -619,7 +620,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1)});
 
         StopSession(ReadActorId2, source);
-        Runtime.GrabEdgeEvent<NYql::NDq::TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
+        Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
         MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
 
         std::vector<TString> data3 = { Json4 };

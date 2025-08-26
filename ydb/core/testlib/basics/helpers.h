@@ -43,7 +43,7 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize);
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1);
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
                                                            const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);

@@ -4,6 +4,7 @@ import dataclasses
 import os
 import sys
 import traceback
+import re
 from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
@@ -11,6 +12,38 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
+
+
+def is_sanitizer_issue(error_text):
+    """
+    Detect if a test failure is caused by a sanitizer.
+    Returns True if the error text contains sanitizer-specific patterns.
+    """
+    if not error_text:
+        return False
+    
+    # Sanitizer error patterns for comprehensive coverage
+    sanitizer_patterns = [
+        # Main sanitizer patterns with severity levels (covers most cases)
+        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
+        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # UndefinedBehaviorSanitizer runtime errors
+        r'runtime error:',
+        r'==\d+==.*runtime error:',
+        
+        # Memory leak detection (specific LeakSanitizer output)
+        r'detected memory leaks',
+        r'==\d+==.*detected memory leaks',
+    ]
+    
+    for pattern in sanitizer_patterns:
+        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
+            return True
+    
+    return False
 
 
 class TestStatus(Enum):
@@ -38,6 +71,7 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    is_sanitizer_issue: bool = False
 
     @property
     def status_display(self):
@@ -105,7 +139,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description)
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
 
 
 class TestSummaryLine:
@@ -230,7 +264,7 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn, build_preset, branch):
+def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
@@ -300,6 +334,20 @@ def render_testlist_html(rows, fn, build_preset, branch):
         buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
         buid_preset_params = '--build "relwithdebinfo"'
+    
+    # Get GitHub server URL and repository from environment
+    github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
+    
+    # Construct PR and workflow URLs if the information is available
+    pr_url = None
+    workflow_url = None
+    
+    if pr_number:
+        pr_url = f"{github_server_url}/{github_repository}/pull/{pr_number}"
+    
+    if workflow_run_id:
+        workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
         
     content = env.get_template("summary.html").render(
         status_order=status_order,
@@ -308,7 +356,11 @@ def render_testlist_html(rows, fn, build_preset, branch):
         history=history,
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,
-        branch=branch
+        branch=branch,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        workflow_run_id=workflow_run_id,
+        workflow_url=workflow_url
     )
 
     with open(fn, "w") as fp:
@@ -345,7 +397,7 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
             tests_data_with_owners.append(test)
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -359,7 +411,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset, branch)
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -425,6 +477,8 @@ def main():
     parser.add_argument('--is_test_result_ignored', required=True, type=int)
     parser.add_argument('--comment_color_file', required=True)
     parser.add_argument('--comment_text_file', required=True)
+    parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
+    parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -440,7 +494,9 @@ def main():
                           title_path,
                           is_retry=bool(args.is_retry),
                           build_preset=args.build_preset,
-                          branch=args.branch
+                          branch=args.branch,
+                          pr_number=args.pr_number,
+                          workflow_run_id=args.workflow_run_id
                           )
     write_summary(summary)
 

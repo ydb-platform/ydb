@@ -89,6 +89,7 @@ namespace NActors {
         double Utilization;
         ui64 ConnectTime;
         ui64 BytesWrittenToSocket;
+        TString PeerBridgePileName;
     };
 
     struct TChannelSettings {

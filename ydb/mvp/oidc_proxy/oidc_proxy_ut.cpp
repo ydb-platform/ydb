@@ -1515,7 +1515,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TString WhoamiResponse;
         TString ExpectedStatus;
         NMvp::EAccessServiceType AccessServiceType = NMvp::nebius_v1;
-        bool YdbTimeout = false;
 
         TWhoamiContext(TStringBuf token, TString whoamiResponse, TStringBuf expectedStatus)
             : Token(token)
@@ -1609,14 +1608,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/viewer/whoami");
 
-        if (context.YdbTimeout) {
-            runtime.Send(new IEventHandle(handle->Sender, edge, new NActors::TEvents::TEvWakeup()));
-        } else {
-            // viewer returns response to oidc
-            NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
-            EatWholeString(incomingResponse, context.WhoamiResponse);
-            runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
-        }
+        // viewer returns response to oidc
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, context.WhoamiResponse);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
         // oidc final response
         auto* outgoing = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
@@ -1726,19 +1721,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
 
-    Y_UNIT_TEST(OidcYdbTimeout200) {
-        TWhoamiContext ctx(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200");
-        ctx.YdbTimeout = true;
-        auto json = OidcWhoamiExtendedInfoTest(ctx);
-        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
-        UNIT_ASSERT(json.Has(EXTENDED_INFO));
-        UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
-        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting info");
-        UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
-    }
-
-    Y_UNIT_TEST(OidcYandexIgnoresWhoamiExtention) {
+    Y_UNIT_TEST(OidcYandexIgnoresWhoamiExtension) {
         TWhoamiContext ctx(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200");
         ctx.AccessServiceType = NMvp::yandex_v2;
         auto json = OidcWhoamiExtendedInfoTest(ctx);

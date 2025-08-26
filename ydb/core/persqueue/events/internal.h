@@ -200,6 +200,9 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvAcquireExclusiveLock,
+        EvExclusiveLockAcquired,
+        EvReleaseExclusiveLock,
         EvRunCompaction,
         EvEnd
     };
@@ -285,6 +288,7 @@ struct TEvPQ {
             , ExternalOperation(externalOperation)
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
+            , IsInternal(false)
         {}
 
         ui64 Cookie;
@@ -301,6 +305,7 @@ struct TEvPQ {
         bool ExternalOperation;
         TActorId PipeClient;
         ui64 LastOffset;
+        bool IsInternal;
     };
 
     struct TMessageGroup {
@@ -397,6 +402,7 @@ struct TEvPQ {
         bool Strict;
         TActorId PipeClient;
         std::optional<TString> CommittedMetadata;
+        bool IsInternal = false;
     };
 
 
@@ -472,11 +478,13 @@ struct TEvPQ {
 
 
     struct TEvProxyResponse : public TEventLocal<TEvProxyResponse, EvProxyResponse> {
-        TEvProxyResponse(ui64 cookie)
+        TEvProxyResponse(ui64 cookie, bool isInternal)
             : Cookie(cookie)
+            , IsInternal(isInternal)
             , Response(std::make_shared<NKikimrClient::TResponse>())
         {}
         ui64 Cookie;
+        bool IsInternal;
         std::shared_ptr<NKikimrClient::TResponse> Response;
     };
 
@@ -489,15 +497,17 @@ struct TEvPQ {
     };
 
     struct TEvError : public TEventLocal<TEvError, EvError> {
-        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie)
+        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie, bool internal = false)
         : ErrorCode(errorCode)
         , Error(error)
         , Cookie(cookie)
+        , IsInternal(internal)
         {}
 
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString Error;
         ui64 Cookie;
+        bool IsInternal = false;
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
@@ -846,6 +856,8 @@ struct TEvPQ {
         TVector<NKikimrPQ::TPartitionOperation> Operations;
         TActorId SupportivePartitionActor;
         bool ForcePredicateFalse = false;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -903,6 +915,8 @@ struct TEvPQ {
         ui64 TxId;
 
         TMessageGroupsPtr ExplicitMessageGroups;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
@@ -916,6 +930,8 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         NPQ::TPartitionId Partition;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
@@ -927,6 +943,8 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
@@ -1091,6 +1109,8 @@ struct TEvPQ {
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
         TActorId OriginalPartition;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1210,6 +1230,15 @@ struct TEvPQ {
         bool HaveMoreTopics = false;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         TString Error;
+    };
+
+    struct TEvAcquireExclusiveLock : public TEventLocal<TEvAcquireExclusiveLock, EvAcquireExclusiveLock> {
+    };
+
+    struct TEvExclusiveLockAcquired : public TEventLocal<TEvExclusiveLockAcquired, EvExclusiveLockAcquired> {
+    };
+
+    struct TEvReleaseExclusiveLock : public TEventLocal<TEvReleaseExclusiveLock, EvReleaseExclusiveLock> {
     };
 
     struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {

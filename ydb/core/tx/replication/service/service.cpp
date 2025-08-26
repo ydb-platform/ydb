@@ -26,7 +26,7 @@ namespace NKikimr::NReplication::NService {
 class TSessionInfo {
     struct TWorkerInfo {
         const TActorId ActorId;
-        TRowVersion Heartbeat;
+        TRowVersion Heartbeat = TRowVersion::Min();
 
         explicit TWorkerInfo(const TActorId& actorId)
             : ActorId(actorId)
@@ -99,8 +99,8 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
-        auto res = Workers.emplace(id, ops->Register(actor));
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId) {
+        auto res = Workers.emplace(id, ops->Register(actor, TMailboxType::HTSwap, poolId));
         Y_ABORT_UNLESS(res.second);
 
         const auto actorId = res.first->second;
@@ -432,6 +432,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> TransferWriterFn(
+            const TString& database,
             const NKikimrReplication::TTransferWriterSettings& writerSettings,
             const ITransferWriterFactory* transferWriterFactory)
     {
@@ -447,9 +448,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             compilationService = *CompilationService,
             batchingSettings = writerSettings.GetBatching(),
             transferWriterFactory = transferWriterFactory,
-            runAsUser = writerSettings.GetRunAsUser()
+            runAsUser = writerSettings.GetRunAsUser(),
+            directoryPath = writerSettings.GetDirectoryPath(),
+            database = database
         ]() {
-            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser, directoryPath, database});
         };
     }
 
@@ -490,6 +493,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         bool autoCommit = true;
+        ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
         if (cmd.HasLocalTableWriter()) {
             const auto& writerSettings = cmd.GetLocalTableWriter();
@@ -503,12 +507,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 return;
             }
             autoCommit = false;
-            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+            poolId = AppData()->BatchPoolId;
+            writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)));
+            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)), poolId);
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 

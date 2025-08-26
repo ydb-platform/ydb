@@ -9,4 +9,6 @@ namespace NYql::NDocs {
 
     TPages ParsePages(TResourcesByRelativePath resources);
 
+    TPages Resolved(TPages pages, TStringBuf baseURL);
+
 } // namespace NYql::NDocs

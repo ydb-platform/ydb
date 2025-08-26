@@ -113,6 +113,8 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     if (GetWithJsonDocument()) {
         fields.emplace_back(arrow::field("json_payload", arrow::utf8()));
     }
+
+    fields.emplace_back(arrow::field("new_column1", arrow::uint64()));
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
@@ -125,6 +127,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     arrow::Int32Builder b4;
     arrow::StringBuilder b5;
     arrow::StringBuilder b6;
+    arrow::UInt64Builder b7;
 
     NJson::TJsonValue jsonInfo;
     jsonInfo["a"]["b"] = 1;
@@ -153,6 +156,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         jsonInfo["a"]["b"] = i;
         auto jsonStringBase = jsonInfo.GetStringRobust();
         Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
+        Y_ABORT_UNLESS(b7.Append(i * 1000).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -161,6 +165,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     std::shared_ptr<arrow::Int32Array> a4;
     std::shared_ptr<arrow::StringArray> a5;
     std::shared_ptr<arrow::StringArray> a6;
+    std::shared_ptr<arrow::UInt64Array> a7;
 
     Y_ABORT_UNLESS(b1.Finish(&a1).ok());
     Y_ABORT_UNLESS(b2.Finish(&a2).ok());
@@ -168,11 +173,12 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     Y_ABORT_UNLESS(b4.Finish(&a4).ok());
     Y_ABORT_UNLESS(b5.Finish(&a5).ok());
     Y_ABORT_UNLESS(b6.Finish(&a6).ok());
+    Y_ABORT_UNLESS(b7.Finish(&a7).ok());
 
     if (GetWithJsonDocument()) {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6 });
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7 });
     } else {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a7 });
     }
 
 }
@@ -207,6 +213,7 @@ TString THelper::GetTestTableSchema() const {
     sb << "Columns{ Name: \"uid\" Type : \"Utf8\" NotNull : true StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
     sb << "Columns{ Name: \"message\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";
+    sb << R"(Columns{ Name: "new_column1" Type : "Uint64" })";
     if (GetWithJsonDocument()) {
         sb << R"(Columns{ Name: "json_payload" Type : "JsonDocument" })";
     }

@@ -3,6 +3,8 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TNodeWardenUpdateNotifier {
@@ -10,6 +12,7 @@ namespace NKikimr::NBsController {
             TConfigState &State;
             THashMap<TNodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate> Services;
             THashSet<TPDiskId> DeletedPDiskIds;
+            NKikimrBlobStorage::TCacheUpdate CacheUpdate;
 
         public:
             TNodeWardenUpdateNotifier(TBlobStorageController *self, TConfigState &state)
@@ -33,6 +36,11 @@ namespace NKikimr::NBsController {
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
                         State.Outbox.emplace_back(nodeId, std::move(event), 0);
                     }
+                }
+
+                if (CacheUpdate.KeyValuePairsSize()) {
+                    State.Outbox.emplace_back(Self->SelfId().NodeId(), std::make_unique<NStorage::TEvNodeWardenUpdateCache>(
+                        std::move(CacheUpdate)), 0, true);
                 }
             }
 
@@ -258,9 +266,11 @@ namespace NKikimr::NBsController {
                 const TString storagePoolName = info.Name;
 
                 // push group information to each node that will receive VDisk status update
+                NKikimrBlobStorage::TGroupInfo proto;
+                SerializeGroupInfo(&proto, groupInfo, storagePoolName, scopeId);
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
-                    SerializeGroupInfo(service->AddGroups(), groupInfo, storagePoolName, scopeId);
+                    service->AddGroups()->CopyFrom(proto);
                 }
 
                 // push group state notification to NodeWhiteboard (for virtual groups only)
@@ -274,6 +284,12 @@ namespace NKikimr::NBsController {
                         MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
                         scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
+
+                auto *kvp = CacheUpdate.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(groupInfo.Generation);
+                const bool success = proto.SerializeToString(kvp->MutableValue());
+                Y_DEBUG_ABORT_UNLESS(success);
             }
 
             void ApplyGroupDeleted(const TGroupId &groupId, const TGroupInfo& /*groupInfo*/) {
@@ -284,6 +300,10 @@ namespace NKikimr::NBsController {
                     item.SetGroupID(groupId.GetRawId());
                     item.SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 }
+
+                auto *kvp = CacheUpdate.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(Max<ui32>());
             }
 
             void ApplyGroupDiff(const TGroupId &groupId, const TGroupInfo &prev, const TGroupInfo &cur) {
@@ -688,8 +708,12 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& [nodeId, ev, cookie] : Outbox) {
-                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            for (TOutgoingMessage& msg : Outbox) {
+                if (msg.ToLocalWarden) {
+                    Self.Send(MakeBlobStorageNodeWardenID(Self.SelfId().NodeId()), std::move(msg.Event), 0, msg.Cookie);
+                } else {
+                    Self.SendToWarden(msg.NodeId, std::move(msg.Event), msg.Cookie);
+                }
             }
             for (auto& ev : StatProcessorOutbox) {
                 Self.SelfId().Send(Self.StatProcessorActorId, ev.release());

@@ -265,11 +265,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         auto passwordParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
-            TString password;
+            std::optional<TString> password;
             bool hasPasswordOption = false;
             if (authData["password"]) {
                 hasPasswordOption = true;
-                DoNotAskForPassword = true;
                 password = authData["password"].as<TString>();
             }
             if (authData["password-file"]) {
@@ -279,7 +278,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                     }
                     return false;
                 }
-                DoNotAskForPassword = true;
                 PasswordFile = authData["password-file"].as<TString>();
                 TString fileContent;
                 if (!ReadFromFileIfExists(PasswordFile, "password", fileContent, true)) {
@@ -290,12 +288,15 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 }
                 password = std::move(fileContent);
             }
+            if (!password.has_value()) {
+                return false;
+            }
             if (value) {
-                *value = password;
+                *value = password.value();
             }
             // Assign values
             if (!parseOnly) {
-                Password = std::move(password);
+                Password = std::move(password.value());
             }
             return true;
         };
@@ -307,18 +308,13 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .Env("YDB_PASSWORD", false)
             .SetSupportsProfile()
             .FileName("password").RequiredArgument("PATH")
-            .StoreFilePath(&PasswordFileOption)
-            .Handler([this](const TString& value) {
-                Y_UNUSED(value);
-                // Do not ask for password if a password (even empty) was provided from any option source
-                DoNotAskForPassword = true;
-            })
-            .StoreResult(&PasswordOption);
+            .StoreFilePath(&PasswordFile)
+            .StoreResult(&Password);
 
         auto& noPasswordOpt = opts.AddLongOption("no-password",
                 "Do not use a password for the specified user. All password sources will be ignored. "
                 "If this option is not specified and no password is found, the CLI will prompt for one interactively.")
-            .Optional().StoreTrue(&NoPasswordOption);
+            .Optional().StoreTrue(&PassEmptyPassword);
 
         opts.MutuallyExclusiveOpt(passwordOpt, noPasswordOpt);
     }
@@ -513,35 +509,29 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         return;
     }
 
-    // Check that we have username/password from one source
     const TOptionParseResult* userResult = ParseResult->FindResult("user");
     const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
-
-    if (passwordResult) {
+    if (passwordResult && userResult) {
         if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
             MisuseErrors.push_back("User password was provided without user name");
+            return;
         }
-        Password = PasswordOption;
-        PasswordFile = PasswordFileOption;
     }
 
-    // Assign values
+    if (UserName.empty()) {
+        return;
+    }
+
     config.StaticCredentials.User = UserName;
 
-    if (NoPasswordOption) {
-        DoNotAskForPassword = true;
-    } else {
-        config.StaticCredentials.Password = Password;
-    }
-
-    // Interactively ask for password
-    if (!config.StaticCredentials.User.empty()) {
-        if (config.StaticCredentials.Password.empty() && !DoNotAskForPassword) {
-            Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
-            config.StaticCredentials.Password = InputPassword();
-            if (IsVerbose()) {
-                config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
-            }
+    if (Password.has_value()) {
+        config.StaticCredentials.Password = Password.value();
+    } else if (!PassEmptyPassword) {
+        // Interactively ask for password
+        Cerr << "Enter password for user " << UserName << ": ";
+        config.StaticCredentials.Password = InputPassword();
+        if (IsVerbose()) {
+            config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
         }
     }
 }

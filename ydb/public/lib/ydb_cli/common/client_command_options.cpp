@@ -629,6 +629,12 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             Cerr << " from default value \"" << opt.Opt->DefaultOptionValue << "\"";
             break;
         }
+        if (opt.GetOpt()->GetOpt().ToShortString() == "--user") {
+            auto& values = opt.Values();
+            if (values.size()) {
+                Cerr << " with username \"" << values[0] << "\"";
+            }
+        }
         Cerr << Endl;
         if (opt.GetOpt()->GetOpt().ToShortString() == "--user") {
             if (noPassword) {

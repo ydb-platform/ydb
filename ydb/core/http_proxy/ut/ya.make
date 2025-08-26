@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 PEERDIR(
     contrib/restricted/nlohmann_json
     library/cpp/resource
+    library/cpp/http/misc
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/testlib/default
@@ -31,6 +32,7 @@ PEERDIR(
 SRCS(
     json_proto_conversion_ut.cpp
     datastreams_fixture.h
+    http_ut.cpp
 )
 
 RESOURCE(

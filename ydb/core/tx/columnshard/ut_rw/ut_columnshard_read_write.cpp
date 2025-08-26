@@ -1757,7 +1757,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(NullablePkGroupBy) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
-        pk[0].SetType(TTypeInfo(NTypeIds::Int64)); // первый ключ nullable
+        pk[0].SetType(TTypeInfo(NTypeIds::Int64)); // first key is nullable
 
         TestTableDescription table{ .Schema = schema, .Pk = pk };
         TTestBasicRuntime runtime;
@@ -1775,7 +1775,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 tableId = 1;
         auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-        // Вставляем строки с NULL и без него
+        // Inserting strings with NULL and without it
         {
             std::vector<ui64> writeIds;
             {
@@ -1793,13 +1793,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             PlanCommit(runtime, sender, planStep, txId);
         }
 
-        // Читаем через группировку (NULL должна считаться отдельной группой)
+        // Reading by grouping (NULL shuold be counted as distinct group)
         {
             using TBorder = TTabletReadPredicateTest::TBorder;
             TTabletReadPredicateTest tester(runtime, planStep, 100, pk);
 
             tester.Test("Group by PK with NULL should create distinct group")
-                  .SetExpectedCount(2); // одна группа NULL, одна — со значением
+                  .SetExpectedCount(2); // one goup is NULL, one — with value
         }
     }
 

@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        // создаём таблицу
+        // creating table
         {
             auto res = session.ExecuteSchemeQuery(R"(
                 --!syntax_v1
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        // вставляем строки: одна с NULL PK, две с обычными
+        // insert strings: one with NULL PK, two with normal one
         {
             auto res = session.ExecuteDataQuery(R"(
                 REPLACE INTO `/Root/nullablePkTable` (id, value) VALUES
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        // вставляем данные: NULL PK, NULL в value, и нормальные строки
+        // inserting data: NULL PK, NULL into value, and normal strings
         {
             auto res = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             TString result = StreamResultToYson(it);
             Cout << "Aggregations: " << result << Endl;
 
-            // ожидаем: COUNT(*)=4 строки всего, COUNT(id)=3 (NULL pk не считается), SUM(value)=60
+            // expected: COUNT(*)=4 total strings, COUNT(id)=3 (NULL pk is not taken into account), SUM(value)=60
             CompareYson(result, "[[4u;3u;[60]]]");
         }
     }
@@ -432,7 +432,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             // Check plan
             CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
-//            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
 

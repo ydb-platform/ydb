@@ -88,6 +88,13 @@ jobs:
         uname -a
         echo "YDB CLI version: $(cat ydb/apps/ydb/version.txt) (read from ydb/apps/ydb/version.txt)"
 
+    - name: Install LLVM/Clang 18 for Windows
+      if: ${{ matrix.os == 'windows-amd' }}
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: "18"
+        cached: true
+
     # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}

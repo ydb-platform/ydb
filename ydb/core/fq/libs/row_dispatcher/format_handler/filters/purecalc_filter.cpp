@@ -311,8 +311,6 @@ public:
     }
 
 private:
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    TStringBuf LogPrefix = "TProgramHolder: ";
     IProcessedDataConsumer::TPtr Consumer_;
     NYT::TNode InputSchema_;
     NYT::TNode OutputSchema_;
@@ -322,7 +320,7 @@ private:
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
 };
 
-class TProgramCompileHandler final : public IProgramCompileHandler {
+class TProgramCompileHandler final : public IProgramCompileHandler, public TNonCopyable {
 public:
     TProgramCompileHandler(
         TString name,
@@ -337,8 +335,15 @@ public:
         , LogPrefix(TStringBuilder() << "TProgramCompileHandler [" << GetName() << "]: ")
         , CompileServiceId_(compileServiceId)
         , Owner_(owner)
+        , InFlightCompileRequests_(counters->GetCounter("InFlightCompileRequests", false))
         , CompileErrors_(counters->GetCounter("CompileErrors", true))
-    {}
+    {
+        InFlightCompileRequests_->Inc();
+    }
+
+    ~TProgramCompileHandler() {
+        InFlightCompileRequests_->Dec();
+    }
 
     void Compile() override {
         LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << Cookie_);
@@ -386,15 +391,28 @@ private:
     NActors::TActorId CompileServiceId_;
     NActors::TActorId Owner_;
 
+    NMonitoring::TDynamicCounters::TCounterPtr InFlightCompileRequests_;
     NMonitoring::TDynamicCounters::TCounterPtr CompileErrors_;
 };
 
-class TProgramRunHandler final : public IProgramRunHandler {
+class TProgramRunHandler final : public IProgramRunHandler, public TNonCopyable {
 public:
-    TProgramRunHandler(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder)
+    TProgramRunHandler(
+        TString name,
+        IProcessedDataConsumer::TPtr consumer,
+        IProgramHolder::TPtr programHolder,
+        NMonitoring::TDynamicCounterPtr counters
+    )
         : IProgramRunHandler(std::move(name), std::move(consumer), std::move(programHolder))
         , LogPrefix(TStringBuilder() << "TProgramRunHandler [" << GetName() << "]: ")
-    {}
+        , ActiveFilters_(counters->GetCounter("ActiveFilters", false))
+    {
+        ActiveFilters_->Inc();
+    }
+
+    ~TProgramRunHandler() {
+        ActiveFilters_->Dec();
+    }
 
     void ProcessData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) const override {
         LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
@@ -416,6 +434,8 @@ public:
 private:
     // NOLINTNEXTLINE(readability-identifier-naming)
     TString LogPrefix;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveFilters_;
 };
 
 [[nodiscard]] TString GenerateFilterSql(TString whereFilter, const TPurecalcCompileSettings& settings) {
@@ -483,8 +503,13 @@ IProgramCompileHandler::TPtr CreateProgramCompileHandler(
     return MakeIntrusive<TProgramCompileHandler>(std::move(name), std::move(consumer), std::move(programHolder), cookie, compileServiceId, owner, std::move(counters));
 }
 
-IProgramRunHandler::TPtr CreateProgramRunHandler(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
-    return MakeIntrusive<TProgramRunHandler>(std::move(name), std::move(consumer), std::move(programHolder));
+IProgramRunHandler::TPtr CreateProgramRunHandler(
+    TString name,
+    IProcessedDataConsumer::TPtr consumer,
+    IProgramHolder::TPtr programHolder,
+    NMonitoring::TDynamicCounterPtr counters
+) {
+    return MakeIntrusive<TProgramRunHandler>(std::move(name), std::move(consumer), std::move(programHolder), std::move(counters));
 }
 
 }  // namespace NFq::NRowDispatcher

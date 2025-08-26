@@ -95,6 +95,11 @@ IProgramCompileHandler::TPtr CreateProgramCompileHandler(
     NMonitoring::TDynamicCounterPtr counters
 );
 
-IProgramRunHandler::TPtr CreateProgramRunHandler(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder);
+IProgramRunHandler::TPtr CreateProgramRunHandler(
+    TString name,
+    IProcessedDataConsumer::TPtr consumer,
+    IProgramHolder::TPtr programHolder,
+    NMonitoring::TDynamicCounterPtr counters
+);
 
 }  // namespace NFq::NRowDispatcher

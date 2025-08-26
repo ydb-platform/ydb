@@ -9,18 +9,6 @@ namespace NFq::NRowDispatcher {
 namespace {
 
 class TTopicFilters : public ITopicFilters {
-    struct TCounters {
-        explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
-            : Counters(counters)
-            , ActiveFilters(Counters->GetCounter("ActiveFilters", false))
-            , InFlightCompileRequests(Counters->GetCounter("InFlightCompileRequests", false))
-        {}
-
-        NMonitoring::TDynamicCounterPtr Counters;
-        NMonitoring::TDynamicCounters::TCounterPtr ActiveFilters;
-        NMonitoring::TDynamicCounters::TCounterPtr InFlightCompileRequests;
-    };
-
     class TStats {
     public:
         void AddFilterLatency(TDuration filterLatency) {
@@ -76,7 +64,7 @@ public:
 
         auto compileHandlerStatus = RemoveCompileProgram(ev->Cookie);
         if (compileHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_DEBUG(compileHandlerStatus.GetError().GetErrorMessage());
+            LOG_ROW_DISPATCHER_ERROR(compileHandlerStatus.GetError().GetErrorMessage());
             return;
         }
         const auto compileHandler = compileHandlerStatus.DetachResult();
@@ -89,7 +77,7 @@ public:
 
         auto runHandlerStatus = AddRunProgram(compileHandler->GetName(), compileHandler->GetConsumer(), compileHandler->GetProgram());
         if (runHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_DEBUG(runHandlerStatus.GetError().GetErrorMessage());
+            LOG_ROW_DISPATCHER_ERROR(runHandlerStatus.GetError().GetErrorMessage());
             return;
         }
 
@@ -145,7 +133,7 @@ private:
         const auto cookie = NextCookie_++;
         auto compileHandlerStatus = AddCompileProgram(std::move(name), std::move(consumer), std::move(programHolder), cookie);
         if (compileHandlerStatus.IsFail()) {
-            return compileHandlerStatus.GetError();
+            return compileHandlerStatus;
         }
         const auto compileHandler = compileHandlerStatus.DetachResult();
         compileHandler->Compile();
@@ -161,15 +149,13 @@ private:
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, "Got duplicated compilation event id");
         }
 
-        auto compileHandler = CreateProgramCompileHandler(name, std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_.Counters);
+        auto compileHandler = CreateProgramCompileHandler(name, std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_);
         auto& compileHandlers = CompileHandlers_[clientId];
         auto [iter, inserted] = compileHandlers.emplace(name, std::move(compileHandler));
         if (!inserted) {
             InFlightCompilations_.erase(inflightIter);
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " and name \"" << name << "\" already exists");
         }
-
-        Counters_.InFlightCompileRequests->Inc();
         return iter->second;
     }
 
@@ -184,7 +170,6 @@ private:
             const auto cookie = compileHandler->GetCookie();
             InFlightCompilations_.erase(cookie);
             CompileHandlers_.erase(iter);
-            Counters_.InFlightCompileRequests->Dec();
         }
     }
 
@@ -198,12 +183,12 @@ private:
 
         const auto handlersIter = CompileHandlers_.find(clientId);
         if (handlersIter == CompileHandlers_.end()) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " not found");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " and name \"" << name << "\" not found");
         }
 
         const auto iter = handlersIter->second.find(name);
         if (iter == handlersIter->second.end()) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " not found");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " and name \"" << name << "\" not found");
         }
 
         const auto result = iter->second;
@@ -212,21 +197,18 @@ private:
             CompileHandlers_.erase(handlersIter);
         }
         InFlightCompilations_.erase(requestIter);
-        Counters_.InFlightCompileRequests->Dec();
         return result;
     }
 
     TValueStatus<IProgramRunHandler::TPtr> AddRunProgram(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
         const auto clientId = consumer->GetClientId();
 
-        auto runHandler = CreateProgramRunHandler(name, std::move(consumer), std::move(programHolder));
+        auto runHandler = CreateProgramRunHandler(name, std::move(consumer), std::move(programHolder), Counters_);
         auto& runHandlers = RunHandlers_[clientId];
         const auto [iter, inserted] = runHandlers.emplace(name, std::move(runHandler));
         if (!inserted) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with client id " << clientId << " already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with client id " << clientId << " and name \"" << name << "\" already exists");
         }
-
-        Counters_.ActiveFilters->Inc();
         return iter->second;
     }
 
@@ -235,8 +217,6 @@ private:
         if (iter == RunHandlers_.end()) {
             return;
         }
-
-        Counters_.ActiveFilters->Sub(iter->second.size());
         RunHandlers_.erase(iter);
     }
 
@@ -275,7 +255,7 @@ private:
     std::unordered_map<NActors::TActorId, std::unordered_map<TString, IProgramRunHandler::TPtr>> RunHandlers_;
 
     // Metrics
-    TCounters Counters_;
+    NMonitoring::TDynamicCounterPtr Counters_;
     TStats Stats_;
 };
 

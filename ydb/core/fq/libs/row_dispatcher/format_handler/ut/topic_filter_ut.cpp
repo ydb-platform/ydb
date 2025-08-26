@@ -157,7 +157,7 @@ public:
             if (!compileHandler) {
                 return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program");
             }
-            auto runHandler = CreateProgramRunHandler(name, Consumer, programHolder);
+            auto runHandler = CreateProgramRunHandler(name, Consumer, programHolder, MakeIntrusive<NMonitoring::TDynamicCounters>());
             const auto [iter, inserted] = RunHandlers.emplace(name, std::move(runHandler));
             if (!inserted) {
                 return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with name " << name << " already exists");
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         CheckError(
             FiltersSet->AddPrograms(consumer, programHolders),
             EStatusId::INTERNAL_ERROR,
-            "Failed to run new program, program with client id [0:0:0] already exists"
+            R"(Failed to run new program, program with client id [0:0:0] and name "filter" already exists)"
         );
     }
 

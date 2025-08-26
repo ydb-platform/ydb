@@ -3,9 +3,6 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <ydb/library/actors/core/log.h>
-#include <util/stream/output.h>
-#include <util/string/join.h>
 
 namespace NYql::NDq {
 

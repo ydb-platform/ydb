@@ -18,7 +18,10 @@ namespace NKikimr {
 
 class TControlBoardWrapper;
 
+//
 // CREATE CONTROLS
+//
+
 {% for control_class in control_classes %}
 {%- if control_class.has_proto_config_class_name %}
 void {{ control_class.class_name}}::CreateConfigControls(bool allowExisting) {
@@ -55,7 +58,9 @@ void {{ control_class.class_name }}::CreateConfigControls(bool allowExisting) {
 {%- endif %}
 {% endfor %}
 
+//
 // UPDATE CONTROLS
+//
 
 {%-for control_class in control_classes %}
 {%- if control_class.has_proto_config_class_name %}

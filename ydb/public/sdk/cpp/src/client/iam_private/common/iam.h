@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/common/types.h>
 
-#include <ydb/public/sdk/cpp/src/client/iam/common/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
 namespace NYdb::inline Dev {
 

@@ -75,17 +75,10 @@ void {{ control_class.class_name}}::UpdateControls(const {{ control_class.proto_
             control->RestoreDefault();
         }
     } else if (createIfNotExist) {
-        auto descriptor = {{ control_class.proto_config_class_name }}::descriptor();
-        auto protoField = descriptor->FindFieldByName("{{ control.name }}");
-        if (protoField) {
-            // can't read from codegened control fields here
-            // since config can be changed in runtime
-            auto& opts = protoField->options().GetExtension(NKikimrConfig::ControlOptions);
-            TAtomicBase defaultValue = opts.GetDefaultValue();
-            TAtomicBase minValue = opts.GetMinValue();
-            TAtomicBase maxValue = opts.GetMaxValue();
-            {{ control.name }}.AtomicStore(MakeIntrusive<TControl>(defaultValue, minValue, maxValue));
-        }
+        TAtomicBase defaultValue = {{ control.default_value }};
+        TAtomicBase minValue = {{ control.min_value }};
+        TAtomicBase maxValue = {{ control.max_value }};
+        {{ control.name }}.AtomicStore(MakeIntrusive<TControl>(defaultValue, minValue, maxValue));
     }
 {%-endfor %}
 }

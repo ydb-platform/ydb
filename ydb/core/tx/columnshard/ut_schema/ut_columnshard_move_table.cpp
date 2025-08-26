@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
     }
 
-    Y_UNIT_TEST(WithCommitInProgress) {
+    Y_UNIT_TEST_DUO(WithCommitInProgress, Reboot) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -111,7 +111,17 @@ Y_UNIT_TEST_SUITE(MoveTable) {
             NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), 0, 0);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
         PlanCommit(runtime, sender, commitPlanStep, commitTxId);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
 
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
         UNIT_ASSERT(ev);
@@ -122,7 +132,18 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         planStep = TPlanStep{ res.GetMaxStep() };
         const auto moveTablePlanStep = planStep;
         UNIT_ASSERT(commitPlanStep.Val() < moveTablePlanStep.Val());
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
         PlanSchemaTx(runtime, sender, { moveTablePlanStep, moveTableTxId });
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot{ moveTablePlanStep, moveTableTxId });

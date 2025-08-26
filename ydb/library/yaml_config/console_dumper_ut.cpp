@@ -1127,7 +1127,10 @@ selector_config:
         configItem->MutableConfig()->AddNamedConfigs()->SetName("test");
 
         TString result = NYamlConfig::DumpConsoleConfigs(items);
-        const TString expected = R"(config: {}
+        const TString expected = R"(
+config:
+  nameservice_config:
+    cluster_uuid: test
 allowed_labels:
   node_id:
     type: string

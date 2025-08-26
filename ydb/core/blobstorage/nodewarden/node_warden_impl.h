@@ -13,6 +13,10 @@
 
 namespace NKikimr {
     struct TNodeWardenConfig;
+
+    namespace NBridge {
+        struct TSyncerDataStats;
+    }
 }
 
 namespace NKikimr::NStorage {
@@ -652,6 +656,19 @@ namespace NKikimr::NStorage {
             TActorId ActorId;
             bool Finished = false;
             std::optional<TString> ErrorReason;
+            ui32 NumStart = 0;
+            ui32 NumStop = 0;
+            ui32 NumFinishOK = 0;
+            ui32 NumFinishError = 0;
+            std::optional<TString> LastErrorReason;
+            std::shared_ptr<NBridge::TSyncerDataStats> SyncerDataStats;
+
+            ui64 ReportedBytesDone = 0;
+            ui64 ReportedBytesTotal = 0;
+            ui64 ReportedBytesError = 0;
+            ui64 ReportedBlobsDone = 0;
+            ui64 ReportedBlobsTotal = 0;
+            ui64 ReportedBlobsError = 0;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
                 return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>
@@ -663,7 +680,8 @@ namespace NKikimr::NStorage {
 
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
-        void FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
+        void FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, bool forceProgress);
+        void NotifySyncersProgress();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

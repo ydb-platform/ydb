@@ -4943,16 +4943,16 @@
     ],
     "test_sql2yql.test[optimizers-unordered_over_extract_members_topsort]": [
         {
-            "checksum": "9cb1b2793d6d65a3bfcebcdc3f3aa420",
-            "size": 1742,
-            "uri": "https://{canondata_backend}/1925821/4a7a165d661ae378f2025a97c95475bb115e6d39/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_extract_members_topsort_/sql.yql"
+            "checksum": "804bcce658c5033a68c6b55118a88c50",
+            "size": 1641,
+            "uri": "https://{canondata_backend}/1599023/6adb0747037540f1c7f57d674c369793e89b624e/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_extract_members_topsort_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-unordered_over_sort_multiusage]": [
         {
-            "checksum": "f1c95bf6035b258a482866f55a179e19",
-            "size": 2131,
-            "uri": "https://{canondata_backend}/1899731/164076531bc4516ecd4b3deb7194d9251f373494/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_sort_multiusage_/sql.yql"
+            "checksum": "f2b1525b4b5cd1b6258d7d3c5af92b1d",
+            "size": 2030,
+            "uri": "https://{canondata_backend}/1599023/6adb0747037540f1c7f57d674c369793e89b624e/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_sort_multiusage_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-wide_if_present_over_double_just]": [
@@ -5016,6 +5016,13 @@
             "checksum": "19291d33c89950200174dcb82dc542c6",
             "size": 1294,
             "uri": "https://{canondata_backend}/1784826/73292dd2b499c72f7236e320f3f6e992baf8a929/resource.tar.gz#test_sql2yql.test_optimizers-yql-20126_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-yql-20150]": [
+        {
+            "checksum": "90fc7437715dc09d7e293e11e83d5ae5",
+            "size": 2776,
+            "uri": "https://{canondata_backend}/1600758/3bbfb9cf08060c89dd0b96b3f2d295c5ef15797b/resource.tar.gz#test_sql2yql.test_optimizers-yql-20150_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-yql-20199]": [
@@ -11618,6 +11625,11 @@
     "test_sql_format.test[optimizers-yql-20126]": [
         {
             "uri": "file://test_sql_format.test_optimizers-yql-20126_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-yql-20150]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-yql-20150_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-yql-20199]": [

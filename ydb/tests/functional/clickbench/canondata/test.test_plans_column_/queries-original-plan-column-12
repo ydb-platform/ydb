@@ -72,14 +72,15 @@
                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
+                                                                        "Aggregation": "{SUM(1)}",
+                                                                        "GroupBy": "item.SearchPhrase",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
                                                                         "Name": "Aggregate",
-                                                                        "Phase": "Intermediate",
-                                                                        "Pushdown": "True"
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [
@@ -144,32 +145,10 @@
                                                                                     }
                                                                                 },
                                                                                 {
-                                                                                    "GroupBy": {
-                                                                                        "Aggregates": [
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 108
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "KeyColumns": [
-                                                                                            {
-                                                                                                "Id": 40
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 40
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 108
                                                                                             }
                                                                                         ]
                                                                                     }

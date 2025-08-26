@@ -24,6 +24,7 @@ namespace NSQLComplete {
         TString Name;
         size_t ArgumentNumber = 0;
         TMaybe<TString> Arg0 = Nothing();
+        TMaybe<TString> Arg1 = Nothing();
         TMaybe<TClusterContext> Cluster = Nothing();
 
         friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;

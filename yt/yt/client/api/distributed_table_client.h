@@ -44,6 +44,10 @@ struct TDistributedWriteSessionStartOptions
     std::optional<TDuration> Timeout;
 };
 
+struct TDistributedWriteSessionPingOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDistributedWriteSessionFinishOptions
     : public TTimeoutOptions
 {
@@ -64,6 +68,10 @@ struct IDistributedTableClientBase
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) = 0;
 
+    virtual TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) = 0;
+
     virtual TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) = 0;
@@ -79,13 +87,6 @@ struct IDistributedTableClient
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options = {}) = 0;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Defined in distributed_table_session.cpp.
-TFuture<void> PingDistributedWriteSession(
-    const TSignedDistributedWriteSessionPtr& session,
-    const IClientPtr& client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

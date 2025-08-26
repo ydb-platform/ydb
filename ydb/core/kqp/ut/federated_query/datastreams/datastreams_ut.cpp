@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // YdbTopics is not allowed.
         auto query3 = TStringBuilder() << R"(
             CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
-                SOURCE_TYPE=")" << ToString(NKikimr::NExternalSource::YdbTopicsType) << R"(",
+                SOURCE_TYPE=")" << ToString(NYql::EDatabaseType::YdbTopics) << R"(",
                 LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
                 DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
                 AUTH_METHOD="NONE"
@@ -246,7 +246,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST(ReadTopic) {
-        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("YdbTopics");
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appCfg, NYql::NDq::CreateS3ActorsFactory());
 
         TString sourceName = "sourceName";
         TString topicName = "topicName";

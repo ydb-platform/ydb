@@ -56,6 +56,8 @@ namespace NSQLComplete {
         friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
     };
 
+    TString NormalizeName(TStringBuf name);
+
 } // namespace NSQLComplete
 
 template <>

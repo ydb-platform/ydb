@@ -77,5 +77,5 @@ const std::vector<ECodec>& GetSupportedCodecIds()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NChunkClient
+} // namespace NYT::NErasure
 

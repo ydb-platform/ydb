@@ -24,7 +24,7 @@ namespace {
         if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
             return Ydb::Bridge::PileState::PRIMARY;
         } else if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPromotedPile)) {
-            return Ydb::Bridge::PileState::PROMOTE;
+            return Ydb::Bridge::PileState::PROMOTED;
         } else {
             switch (from.GetPerPileState(pileId.GetPileIndex())) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
@@ -49,6 +49,7 @@ void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, cons
         state->set_pile_name(pile->Name);
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
+    to.set_generation(from.GetGeneration());
 }
 
 class TUpdateClusterStateRequest : public TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest,
@@ -111,7 +112,7 @@ public:
                     }
                     primary = update.pile_name();
                     break;
-                case Ydb::Bridge::PileState::PROMOTE:
+                case Ydb::Bridge::PileState::PROMOTED:
                     if (promoted) {
                         status = Ydb::StatusIds::BAD_REQUEST;
                         issues.AddIssue("multiple promoted piles are not allowed in a single request");
@@ -181,7 +182,7 @@ private:
                     return;
                 }
                 finalPrimary = pileId;
-            } else if (publicState == Ydb::Bridge::PileState::PROMOTE) {
+            } else if (publicState == Ydb::Bridge::PileState::PROMOTED) {
                 if (finalPromoted) {
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Multiple promoted piles are not allowed, found " << *finalPromoted << " and " << pileId, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
@@ -192,7 +193,7 @@ private:
             NKikimrBridge::TClusterState::EPileState internalState;
             switch (publicState) {
                 case Ydb::Bridge::PileState::PRIMARY:
-                case Ydb::Bridge::PileState::PROMOTE:
+                case Ydb::Bridge::PileState::PROMOTED:
                 case Ydb::Bridge::PileState::SYNCHRONIZED:
                     internalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;

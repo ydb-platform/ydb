@@ -281,6 +281,9 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.PartitionByHashFunction && parsingMode == ETableSettingsParsingMode::Create) {
         settings = L(settings, Q(Y(Q("partitionByHashFunction"), tableSettings.PartitionByHashFunction)));
     }
+    if (tableSettings.ExternalDataChannelsCount) {
+        settings = L(settings, Q(Y(Q("externalDataChannelsCount"), tableSettings.ExternalDataChannelsCount)));
+    }
 
     return settings;
 }
@@ -1141,6 +1144,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
@@ -1545,6 +1551,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1563,6 +1572,9 @@ public:
                 }
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
+                if (family.CacheMode) {
+                    familyDesc = L(familyDesc, Q(Y(Q("cache_mode"), family.CacheMode)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }

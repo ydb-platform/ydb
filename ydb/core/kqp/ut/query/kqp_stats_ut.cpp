@@ -489,103 +489,46 @@ Y_UNIT_TEST(SelfJoin) {
 }
 
 Y_UNIT_TEST(SysViewClientLost) {
-    TKikimrRunner kikimr;
-    CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));    
 
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+    auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 
-    {
-        TStringStream request;
-        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
+    kikimr.RunCall( [&] { 
+        CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
+        return true;
+    });
 
-        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        ui64 rowsCount = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-
-                NYdb::TResultSetParser parser(resultSet);
-                while (parser.TryNextRow()) {
-                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
-                    UNIT_ASSERT(value);
-                    rowsCount++;
-                }
-            }
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    ui32 updateCount = 0;
+    auto grab = [&updateCount](TAutoPtr<IEventHandle>& ev) -> auto {
+        if (ev->GetTypeRewrite() == NSysView::TEvSysView::TEvCollectQueryStats::EventType) {
+            ++updateCount;
         }
-        UNIT_ASSERT(rowsCount == 1);
-    }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
 
-    auto settings = TStreamExecScanQuerySettings();
-    settings.ClientTimeout(TDuration::MilliSeconds(50));
+    runtime.SetObserverFunc(grab);
 
     TStringStream timeoutedRequestStream;
     timeoutedRequestStream << R"(
         SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
     )";
     TString timeoutedRequest = timeoutedRequestStream.Str();
+    
+    auto settings = TStreamExecScanQuerySettings();
+    settings.ClientTimeout(TDuration::MilliSeconds(50));
+    auto resultFuture = kikimr.RunInThreadPool([&]{
+        return db.StreamExecuteScanQuery(timeoutedRequest).GetValueSync();});
+    
+    TDispatchOptions opts;
+    opts.FinalEvents.emplace_back([&updateCount](IEventHandle&) {
+        return updateCount > 0;
+    });
+    runtime.DispatchEvents(opts);
 
-    auto result = db.StreamExecuteScanQuery(timeoutedRequest, settings).GetValueSync();
-
-    if (result.IsSuccess()) {
-        try {
-            auto yson = StreamResultToYson(result, true);
-            UNIT_ASSERT(false);
-        } catch (const TStreamReadError& ex) {
-            UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
-        } catch (const std::exception& ex) {
-            UNIT_ASSERT_C(false, "unknown exception during the test");
-        }
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
-    }
-
-    ui32 timeoutedCount = 0;
-    ui32 iterations = 10;
-    while (timeoutedCount == 0 && iterations > 0)
-    {
-        iterations--;
-        Sleep(TDuration::Seconds(1));
-
-        TStringStream request;
-        request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
-
-        auto it = db.StreamExecuteScanQuery(request.Str()).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        ui64 queryCount = 0;
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-
-                NYdb::TResultSetParser parser(resultSet);
-                while (parser.TryNextRow()) {
-                    auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
-                    UNIT_ASSERT(value);
-                    if (*value == timeoutedRequest) {
-                        queryCount++;
-                    }
-                }
-            }
-        }
-        timeoutedCount = queryCount;
-    }
-
-    UNIT_ASSERT(timeoutedCount == 1);
+    auto result = runtime.WaitFuture(resultFuture);
+    UNIT_ASSERT_VALUES_EQUAL_C(updateCount, 1, "updated views more than once: " << updateCount);
 }
 
 Y_UNIT_TEST(SysViewCancelled) {

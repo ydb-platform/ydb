@@ -29,21 +29,23 @@ namespace NSQLComplete {
     TConfiguration MakeYQLConfiguration() {
         auto config = MakeConfiguration(/* allowedStmts = */ {
             "lambda_stmt",
-            "pragma_stmt",
-            "select_stmt",
-            "named_nodes_stmt",
-            "drop_table_stmt",
-            "use_stmt",
-            "into_table_stmt",
-            "commit_stmt",
             "declare_stmt",
             "import_stmt",
             "export_stmt",
             "do_stmt",
+            "pragma_stmt",
+            "select_stmt",
+            "select_unparenthesized_stmt",
+            "into_table_stmt",
+            "values_stmt",
+            "drop_table_stmt",
             "define_action_or_subquery_stmt",
             "if_stmt",
             "for_stmt",
-            "values_stmt",
+            "use_stmt",
+            "subselect_stmt",
+            "named_nodes_stmt",
+            "commit_stmt",
         });
 
         config.DisabledPreviousByToken_ = {};

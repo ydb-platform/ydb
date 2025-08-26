@@ -60,6 +60,7 @@
 #include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
@@ -564,6 +565,7 @@ namespace Tests {
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
+            appData.StatisticsConfig.MergeFrom(Settings->AppConfig->GetStatisticsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -1139,7 +1141,7 @@ namespace Tests {
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NStat::CreateStatisticsAggregatorForTests, TMailboxType::Revolving, appData.UserPoolId,
+                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 
@@ -1246,6 +1248,13 @@ namespace Tests {
 
         Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
         {
+            if (Settings->AuthConfig.GetTokenManager().GetEnable()) {
+                TActorId fakeHttProxy = Runtime->AllocateEdgeActor(nodeIdx);
+                IActor* tokenManager = Settings->CreateTokenManager({.Config = Settings->AuthConfig.GetTokenManager(), .HttpProxyId = fakeHttProxy});
+                TActorId tokenManagerId = Runtime->Register(tokenManager, nodeIdx, userPoolId);
+                Runtime->RegisterService(MakeTokenManagerID(), tokenManagerId, nodeIdx);
+            }
+
             if (Settings->AuthConfig.HasLdapAuthentication()) {
                 IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(Settings->AuthConfig.GetLdapAuthentication());
                 TActorId ldapAuthProviderId = Runtime->Register(ldapAuthProvider, nodeIdx, userPoolId);
@@ -1324,7 +1333,11 @@ namespace Tests {
                         );
                     }
                 }
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
+
+                auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+                actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
+                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1342,8 +1355,15 @@ namespace Tests {
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
-                    std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
+                    actorSystemPtr,
                     driver);
+            }
+
+            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
+            for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+                if (!allExternalSourcesTypes.contains(source)) {
+                    ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+                }
             }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),

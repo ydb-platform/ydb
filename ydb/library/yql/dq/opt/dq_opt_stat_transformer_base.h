@@ -12,7 +12,8 @@ public:
         TTypeAnnotationContext* typeCtx,
         const IProviderContext& ctx,
         const TOptimizerHints& hints = {},
-        TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
+        TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
+        const bool useFSMForSortElimination = false
     );
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
@@ -30,6 +31,7 @@ protected:
     const IProviderContext& Pctx;
     TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
+    const bool UseFSMForSortElimination;
 };
 
 } // namespace NYql::NDq

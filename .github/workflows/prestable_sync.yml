@@ -35,4 +35,5 @@ jobs:
           head_branch: ${{ matrix.head_branch }}
           label: ${{ matrix.label }}
           repository: ${{ github.repository }}
+          merge_ours: ".github/CODEOWNERS"
           gh_personal_access_token: ${{ env.GH_TOKEN }}

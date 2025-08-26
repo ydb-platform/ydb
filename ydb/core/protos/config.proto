@@ -2025,6 +2025,7 @@ message THiveConfig {
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
+    optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
 }
 
 message THealthCheckConfig {
@@ -2117,6 +2118,7 @@ message TColumnShardConfig {
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
+    optional bool DisableBulkUpsertRequireAllColumns = 47 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2438,7 +2440,7 @@ message TKafkaProxyConfig {
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
-    optional bool AutoCreateTopicsEnable = 13 [default = true];
+    optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
 }
@@ -2473,6 +2475,19 @@ message TGeneralCacheConfig {
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
 }
+
+message TStatisticsConfig {
+    // Interval for base statistics send requests from SchemeShard to StatisticsAggregator.
+    // Serverless interval should be higher because many SchemeShards send data to one aggregator.
+    optional uint32 BaseStatsSendIntervalSecondsDedicated = 1 [default = 5];
+    optional uint32 BaseStatsSendIntervalSecondsServerless = 2 [default = 240];
+
+    // Interval for base statistics propagate requests from StatisticsAggregator to StatisticsService.
+    // Serverless interval should be higher because in each iteration we need to propagate more data
+    // from many SchemeShards.
+    optional uint32 BaseStatsPropagateIntervalSecondsDedicated = 3 [default = 5];
+    optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
+};
 
 message TAppConfig {
     option (NMarkers.Root) = true;
@@ -2578,6 +2593,7 @@ message TAppConfig {
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;
     optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
+    optional TStatisticsConfig StatisticsConfig = 113;
 }
 
 message TYdbVersion {

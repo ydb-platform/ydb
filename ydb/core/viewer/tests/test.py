@@ -844,7 +844,6 @@ def test_operations_list_page_bad():
 
 
 def test_scheme_directory():
-
     result = {}
     result["1-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
@@ -989,40 +988,92 @@ def test_topic_data():
     return result
 
 
+def test_topic_data_cdc():
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'create table table_test_topic_data_cdc(id int64, name text, primary key(id))',
+        'schema': 'multi'
+    })
+
+    alter_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
+    })
+
+    insert_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
+        'schema': 'multi'
+    })
+
+    update_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "update table_test_topic_data_cdc set name = 'ONE' where id = 1",
+        'schema': 'multi'
+    })
+
+    topic_path = '{}/table_test_topic_data_cdc/updates_feed'.format(dedicated_db)
+    data_response = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'limit': '3'
+    })
+
+    data_response = replace_values_by_key(
+        data_response, ['CreateTimestamp', 'WriteTimestamp', 'ProducerId', ]
+    )
+    data_response = replace_types_by_key(data_response, ['TimestampDiff'])
+
+    final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
+    logging.info("Results: {}".format(final_result))
+    return final_result
+
+
 def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
-    call_viewer("/viewer/query", {
+    create_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
-    result = get_viewer_normalized("/viewer/describe_replication", {
-        'database': dedicated_db,
-        'path': '{}/TestAsyncReplication'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
-    })
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_replication", {
+            'database': dedicated_db,
+            'path': '{}/TestAsyncReplication'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
 
-    return result
+        if "error" in describe_result:
+            break
+
+        time.sleep(1)
+
+    return {
+        'create_result': create_result,
+        'describe_result': describe_result
+    }
 
 
 def test_transfer_describe():
-    topic_result = call_viewer("/viewer/query", {
+    topic_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TOPIC TestTransferSourceTopic',
+        'query': 'CREATE TOPIC TestTransferSourceTopic (CONSUMER OurConsumer)',
         'schema': 'multi'
     })
 
-    table_result = call_viewer("/viewer/query", {
+    table_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
         'schema': 'multi'
     })
 
-    transfer_result = call_viewer("/viewer/query", {
+    transfer_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
             USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
@@ -1030,12 +1081,18 @@ def test_transfer_describe():
         'schema': 'multi'
     })
 
-    describe_result = get_viewer_normalized("/viewer/describe_transfer", {
-        'database': dedicated_db,
-        'path': '{}/TestTransfer'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
-    })
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+            'database': dedicated_db,
+            'path': '{}/TestTransfer'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
+
+        if "running" in describe_result:
+            break
+
+        time.sleep(1)
 
     return {
         'topic_result': topic_result,

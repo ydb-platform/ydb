@@ -14,6 +14,7 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TBase = TActorBootstrapped<TTableUploader<TData>>;
 
     static constexpr size_t MaxRetries = 9;
+    static constexpr size_t MaxSchemeRetries = 3;
     static constexpr size_t BaseTimeoutMs = 1000;
 
 public:
@@ -70,12 +71,17 @@ private:
             return;
         }
 
-        auto withRetry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
+        const auto schemeError = ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR;
+
         auto& retry = Retries[tablePath];
-        if (withRetry && retry < MaxRetries) {
-            size_t timeout = BaseTimeoutMs << retry;
+        auto withRetry = schemeError ? retry.SchemeCount < MaxSchemeRetries && retry.Count < MaxRetries : retry.Count < MaxRetries;
+        if (withRetry) {
+            size_t timeout = BaseTimeoutMs << retry.Count;
             TThis::Schedule(TDuration::MilliSeconds(timeout + RandomNumber<size_t>(timeout >> 2)), new NTransferPrivate::TEvRetryTable(tablePath));
-            ++retry;
+            ++retry.Count;
+            if (schemeError) {
+                ++retry.SchemeCount;
+            }
             CookieMapping.erase(ev->Cookie);
             return;
         }
@@ -137,7 +143,12 @@ private:
     ui64 Cookie = 0;
     // Cookie -> <Table path, Actor>
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
-    std::unordered_map<TString, size_t> Retries;
+
+    struct Retry {
+        size_t Count = 0;
+        size_t SchemeCount = 0;
+    };
+    std::unordered_map<TString, Retry> Retries;
 };
 
 

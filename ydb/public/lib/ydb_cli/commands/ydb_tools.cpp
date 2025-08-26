@@ -336,7 +336,18 @@ void TCommandCopy::ExtractParams(TConfig& config) {
 int TCommandCopy::Run(TConfig& config) {
     TVector<NYdb::NTable::TCopyItem> copyItems;
     copyItems.reserve(Items.size());
+    auto driver = CreateDriver(config);
+    auto schemeClient = NScheme::TSchemeClient(driver);
     for (auto& item : Items) {
+        auto describeResult = schemeClient.DescribePath(item.Source).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+        switch (describeResult.GetEntry().Type) {
+            case NScheme::ESchemeEntryType::Table:
+                break;
+            default:
+                Cerr << "Source path " << item.Source << " is of type `" << describeResult.GetEntry().Type << "`. Only row tables are supported for copying." << Endl;
+                return EXIT_FAILURE;
+        }
         copyItems.emplace_back(item.Source, item.Destination);
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(

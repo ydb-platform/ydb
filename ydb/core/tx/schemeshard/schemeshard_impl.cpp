@@ -3128,8 +3128,8 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
 
     Y_ABORT_UNLESS(partitionInfo.ParentPartitionIds.size() <= 2);
     auto it = partitionInfo.ParentPartitionIds.begin();
-    const auto parent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
-    const auto adjacentParent = it != partitionInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    const auto parent = it != partitionInfo.ParentPartitionIds.end() ? *(it++) : Max<ui32>();
+    const auto adjacentParent = it != partitionInfo.ParentPartitionIds.end() ? *(it++) : Max<ui32>();
 
     db.Table<Schema::PersQueues>()
         .Key(pathId.LocalPathId, partitionInfo.PqId)
@@ -4961,6 +4961,9 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
+    SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
+    SendStatsIntervalSecondsServerless = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsServerless();
+
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureShredManager(appData->ShredConfig);
     ConfigureExternalSources(appData->QueryServiceConfig, ctx);
@@ -5212,6 +5215,10 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvGetIncrementalBackupRequest, Handle);
         HFuncTraced(TEvBackup::TEvForgetIncrementalBackupRequest, Handle);
         HFuncTraced(TEvBackup::TEvListIncrementalBackupsRequest, Handle);
+
+        HFuncTraced(TEvBackup::TEvGetBackupCollectionRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetBackupCollectionRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListBackupCollectionRestoresRequest, Handle);
         // } // NBackup
 
 
@@ -5229,6 +5236,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {
@@ -5414,6 +5422,11 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     DecrementPathDbRefCount(pathId, "remove txstate target path");
     if (txState->SourcePathId) {
         DecrementPathDbRefCount(txState->SourcePathId, "remove txstate source path");
+    }
+
+    // Check if this operation is part of an incremental restore and notify completion
+    if (TxIdToIncrementalRestore.contains(opId.GetTxId())) {
+        NotifyIncrementalRestoreOperationCompleted(opId, ctx);
     }
 
     TxInFlight.erase(opId); // must be called last, erases txState invalidating txState ptr
@@ -6944,7 +6957,7 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
     } else if (Imports.contains(id)) {
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (IncrementalRestoreStates.contains(id)) {
-        return Execute(CreateTxProgressIncrementalRestore(ev), ctx);
+        return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
     }
@@ -6970,7 +6983,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
     } else if (TxIdToImport.contains(txId)) {
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIncrementalRestore.contains(txId)) {
-        return Execute(CreateTxProgressIncrementalRestore(ev), ctx);
+        return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
     } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
@@ -7026,7 +7039,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         executed = true;
     }
     if (TxIdToIncrementalRestore.contains(txId)) {
-        Execute(CreateTxProgressIncrementalRestore(txId), ctx);
+        Execute(CreateTxProgressIncrementalRestore(txId, ctx), ctx);
         executed = true;
     }
     if (TxIdToIndexBuilds.contains(txId)) {
@@ -7994,12 +8007,20 @@ void TSchemeShard::ChangePathCount(i64 delta) {
     TabletCounters->Simple()[COUNTER_PATHS].Add(delta);
 }
 
+void TSchemeShard::SetPathCount(ui64 value) {
+    TabletCounters->Simple()[COUNTER_PATHS].Set(value);
+}
+
 void TSchemeShard::SetPathsQuota(ui64 value) {
     TabletCounters->Simple()[COUNTER_PATHS_QUOTA].Set(value);
 }
 
 void TSchemeShard::ChangeShardCount(i64 delta) {
     TabletCounters->Simple()[COUNTER_SHARDS].Add(delta);
+}
+
+void TSchemeShard::SetShardCount(ui64 value) {
+    TabletCounters->Simple()[COUNTER_SHARDS].Set(value);
 }
 
 void TSchemeShard::SetShardsQuota(ui64 value) {
@@ -8264,8 +8285,17 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
 
-    return TDuration::Seconds(SendStatsIntervalMinSeconds
-        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
+    if (IsServerlessDomain(SubDomains.at(RootPathId()))) {
+        // In serverless subdomains several schemeshards send stats to a single SA
+        // so we use a bigger interval with jitter.
+        const auto max = TDuration::Seconds(SendStatsIntervalSecondsServerless);
+        const auto min = max * 3 / 4;
+        return min + TDuration::MilliSeconds(
+            RandomNumber<ui64>(max.MilliSeconds() - min.MilliSeconds()));
+    } else {
+        // Dedicated subdomains can use a smaller interval.
+        return TDuration::Seconds(SendStatsIntervalSecondsDedicated);
+    }
 }
 
 THolder<TShredManager> TSchemeShard::CreateShredManager(const NKikimrConfig::TDataErasureConfig& config) {

@@ -624,7 +624,7 @@ struct MainTestCase {
         ExecuteDDL(Sprintf(R"(
             ALTER TRANSFER `%s`
             SET (
-                STATE = "StandBy"
+                STATE = "Active"
             );
         )", TransferName.data()));
     }
@@ -866,7 +866,7 @@ struct MainTestCase {
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
-    void Run(const TConfig& config) {
+    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
 
         CreateTable(config.TableDDL);
         CreateTopic();
@@ -878,7 +878,7 @@ struct MainTestCase {
         for (size_t i = 0; i < lambdas.size(); ++i) {
             auto lambda = lambdas[i];
             if (!i) {
-                CreateTransfer(lambda);
+                CreateTransfer(lambda, settings);
             } else {
                 Sleep(TDuration::Seconds(1));
 

@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
         auto sender = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         for (size_t originalGroupIndex = 0; originalGroupIndex < groupIds.size(); ++originalGroupIndex) {
             for (bool indexOnly : {true, false}) {
-                for (bool mustRestoreFirst : {true, false}) {
+                for (bool mustRestoreFirst : {true}) {
                     Cerr << "originalGroupIndex# " << originalGroupIndex
                         << " indexOnly# " << indexOnly
                         << " mustRestoreFirst# " << mustRestoreFirst

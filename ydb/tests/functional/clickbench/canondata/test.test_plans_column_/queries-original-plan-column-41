@@ -102,14 +102,15 @@
                                                                                 "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.WindowClientHeight,item.WindowClientWidth]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Aggregate",
-                                                                                        "Phase": "Intermediate",
-                                                                                        "Pushdown": "True"
+                                                                                        "Phase": "Intermediate"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [
@@ -280,28 +281,6 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
-                                                                                                    "GroupBy": {
-                                                                                                        "Aggregates": [
-                                                                                                            {
-                                                                                                                "Column": {
-                                                                                                                    "Id": 114
-                                                                                                                },
-                                                                                                                "Function": {
-                                                                                                                    "Id": 2
-                                                                                                                }
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "KeyColumns": [
-                                                                                                            {
-                                                                                                                "Id": 44
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 43
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                },
-                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -309,9 +288,6 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 43
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 114
                                                                                                             }
                                                                                                         ]
                                                                                                     }

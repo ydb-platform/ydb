@@ -250,7 +250,7 @@ TEST(TYsonStructSchemaTest, TestYsonStruct)
         New<TTestYsonStruct>(),
         R"({type_name="struct";
             members=[
-                {name="my_enum";type={type_name="enum";enum_name="ETestEnum";values=["value0";"value1";]}};
+                {name="my_enum";type={type_name="tagged";tag="enum/ETestEnum";item="string";enum=["value0";"value1";]}};
                 {name="my_char";type="int8";};
                 {name="my_ushort";type="uint16";};
                 {name="my_std_string";type="string";required=%true;};

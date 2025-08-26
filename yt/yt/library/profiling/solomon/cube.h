@@ -115,7 +115,8 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
+    // Each projection from `extraProjections` added to each inner projection of this cube.
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
 
 private:
     const int WindowSize_;

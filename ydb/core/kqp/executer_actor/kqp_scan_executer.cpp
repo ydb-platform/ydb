@@ -35,7 +35,7 @@ namespace {
 
 class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan> {
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
-    TPreparedQueryHolder::TConstPtr PreparedQuery;
+    std::optional<TLlvmSettings> LlvmSettings;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
@@ -46,13 +46,13 @@ public:
         TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        TPreparedQueryHolder::TConstPtr preparedQuery,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
+        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+        const std::optional<TLlvmSettings>& llvmSettings)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(resultSetFormatSettings), counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter", false)
-        , PreparedQuery(preparedQuery)
+        , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
@@ -177,7 +177,7 @@ private:
             }
         }
 
-        BuildAllTasks<true>(false, PreparedQuery);
+        BuildAllTasks<true>(false, LlvmSettings);
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {
@@ -282,13 +282,14 @@ private:
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
-    const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
+    const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const std::optional<TLlvmSettings>& llvmSettings)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings),
-        counters, executerConfig, std::move(asyncIoFactory), preparedQuery, userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings);
+        counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
+        federatedQuerySetup, GUCSettings, llvmSettings);
 }
 
 } // namespace NKqp

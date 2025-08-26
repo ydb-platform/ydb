@@ -1237,8 +1237,10 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
                 .Seal()
                 .Build();
         } else {
-            isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
-            isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            if (mode != "optional") {
+                isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
+                isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            }
         }
 
         if (isDict) {
@@ -1249,6 +1251,34 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
         }
 
         if (!isDict && !isList) {
+            bool knownNotNull = flattenInfo.Type->GetKind() != ETypeAnnotationKind::Optional && flattenInfo.Type->GetKind() != ETypeAnnotationKind::Null;
+
+            if (flattenInfo.Type->GetKind() == ETypeAnnotationKind::Pg) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("If")
+                        .Callable(0, "Exists")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(1, "Just")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(2, "Nothing")
+                            .Callable(0, "OptionalType")
+                                .Callable(0, "TypeOf")
+                                    .Add(0, flattenInfo.ListMember)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            } else if (knownNotNull) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("Just")
+                    .Add(0, flattenInfo.ListMember)
+                    .Seal()
+                    .Build();
+            }
+
             flattenPriority.push_back(&flattenInfo);
         } else {
             flattenPriority.push_front(&flattenInfo);

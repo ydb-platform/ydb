@@ -396,17 +396,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
 
     TExprBase newSecondElement = maybeRightRow;
 
-    if (extraRightFilter.IsValid()) {
-        newSecondElement = Build<TCoFlatMap>(ctx, join.Pos())
-            .Input(newSecondElement)
-            .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
-            .Done();
-    }
-
     if (!rightTableUnmatchedJoinKeys.empty()) {
         TVector<TExprBase> onConditions;
 
-        for(auto [leftJoinKey, rightJoinKey] : rightTableUnmatchedJoinKeys) {
+        for(auto [rightJoinKey, leftJoinKey] : rightTableUnmatchedJoinKeys) {
             onConditions.push_back(
                 Build<TCoCmpEqual>(ctx, join.Pos())
                     .Left<TCoMember>()
@@ -436,7 +429,15 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
             .Done();
     }
 
+    if (extraRightFilter.IsValid()) {
+        newSecondElement = Build<TCoFlatMap>(ctx, join.Pos())
+            .Input(newSecondElement)
+            .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
+            .Done();
+    }
+
     newSecondElement = rightReadMatch.BuildProcessNodes(newSecondElement, ctx);
+
     if (newSecondElement.Raw() != maybeRightRow.Raw()) {
         lookupJoin = Build<TCoMap>(ctx, join.Pos())
             .Input(lookupJoin.Cast())
@@ -457,12 +458,14 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
             .Done();
     }
 
-    return Build<TKqlIndexLookupJoin>(ctx, join.Pos())
+    auto builtJoin = Build<TKqlIndexLookupJoin>(ctx, join.Pos())
         .Input(lookupJoin.Cast())
         .LeftLabel().Build(leftLabel)
         .RightLabel().Build(rightLabel)
         .JoinType(join.JoinType())
         .Done();
+
+    return builtJoin;
 }
 
 

@@ -152,7 +152,7 @@ class WorkloadInsertDelete(WorkloadBase):
             logger.debug(f"iteration {i}")
             self._query_with_retries(
                 f"""
-                    INSERT INTO `{table_path}` (`id`, `i64Val`)
+                    UPSERT INTO `{table_path}` (`id`, `i64Val`)
                     VALUES
                     ({i * 2}, {i * 10}),
                     ({i * 2 + 1}, {i * 10 + 1})

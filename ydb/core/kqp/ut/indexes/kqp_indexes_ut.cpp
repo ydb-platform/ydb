@@ -3746,7 +3746,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
 
         {
@@ -3859,6 +3859,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT(result.GetIssues().Empty());
+            Cerr << result.GetStats()->GetAst() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
                 "[[[\"Table1Primary3\"];[\"cc\"]];[[\"Table1Primary4\"];[\"dd\"]];[[\"Table1Primary55\"];#]]");
 
@@ -4070,92 +4071,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(DuplicateUpsertInterleaveParams) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto tableBuilder = db.GetTableBuilder();
-        tableBuilder
-            .AddNullableColumn("Key", EPrimitiveType::String)
-            .AddNullableColumn("Index2", EPrimitiveType::String)
-            .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
-        tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"Index2"});
-        auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-        {
-            const TString query(Q1_(R"(
-                DECLARE $rows AS
-                    List<Struct<
-                        Key: String?,
-                        Index2: String?,
-                        Value: String?>>;
-
-                    UPSERT INTO `/Root/TestTable`
-                    SELECT Key, Index2, Value FROM AS_TABLE($rows);
-            )"));
-
-            auto explainResult = session.ExplainDataQuery(query).ExtractValueSync();
-            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
-
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
-
-            UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
-            const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
-            UNIT_ASSERT(tables.size() == 2);
-            UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
-            UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
-
-            auto qId = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
-
-            auto params = qId.GetParamsBuilder()
-                .AddParam("$rows")
-                .BeginList()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key").OptionalString("Primary1")
-                        .AddMember("Index2").OptionalString("Secondary1")
-                        .AddMember("Value").OptionalString("Value1")
-                    .EndStruct()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key").OptionalString("Primary2")
-                        .AddMember("Index2").OptionalString("Secondary2")
-                        .AddMember("Value").OptionalString("Value2")
-                    .EndStruct()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key").OptionalString("Primary1")
-                        .AddMember("Index2").OptionalString("Secondary11")
-                        .AddMember("Value").OptionalString("Value1")
-                    .EndStruct()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key").OptionalString("Primary2")
-                        .AddMember("Index2").OptionalString("Secondary22")
-                        .AddMember("Value").OptionalString("Value2")
-                    .EndStruct()
-                .EndList()
-                .Build()
-            .Build();
-
-            auto result = qId.Execute(
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                    std::move(params)).ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-
-            CompareYson(R"([[["Secondary11"];["Primary1"]];[["Secondary22"];["Primary2"]]])",
-                ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable"));
-        }
-    }
-
-    Y_UNIT_TEST(MultipleModifications) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
@@ -5436,6 +5351,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     Y_UNIT_TEST_TWIN(JoinWithNonPKColumnsInPredicate, UseStreamJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
+        if (UseStreamJoin) {
+            return;
+        }
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting})

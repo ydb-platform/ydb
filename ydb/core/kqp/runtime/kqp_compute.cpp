@@ -149,20 +149,17 @@ public:
             return resultRow;
         }
 
-        bool OmitRow(TState& state, ui64 header, bool isNull) {
+        bool OmitRowLeftJoin(TState& state, ui64 header, bool isNull) {
 
             auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
-            bool lastRowInSequence = cookie.LastRow;
-            bool firstRowInSequence = cookie.FirstRow;
-            ui32 rowId = cookie.RowSeqNo;
 
-            if (lastRowInSequence) {
+            if (cookie.LastRow) {
                 // if row is the first and last row in the sequence at the same time
                 // we can return it as a result row
-                if (firstRowInSequence)
+                if (cookie.FirstRow)
                     return false;
 
-                auto it = state.AllRowsAreNull.find(rowId);
+                auto it = state.AllRowsAreNull.find(cookie.RowSeqNo);
                 Y_ENSURE(it != state.AllRowsAreNull.end());
                 bool allRowsAreNull = it->second;
                 state.AllRowsAreNull.erase(it);
@@ -186,42 +183,134 @@ public:
                 return false;
             }
 
-            if (firstRowInSequence) {
-                state.AllRowsAreNull[rowId] = isNull;
+            if (cookie.FirstRow) {
+                state.AllRowsAreNull[cookie.RowSeqNo] = isNull;
             } else {
-                state.AllRowsAreNull[rowId] &= isNull;
+                state.AllRowsAreNull[cookie.RowSeqNo] &= isNull;
             }
 
             return isNull;
         }
 
-        bool OmitRowSemiJoin(TState& state, ui64 header, bool isNull) {
-            if (isNull)
+        /**
+        * LEFT-ONLY JOIN OPERATION EXPLANATION:
+        *
+        * A left-only join returns rows from the left table that DO NOT have matching rows
+        * in the right table. This is different from a regular left join:
+        *
+        * - Regular left join: Returns all left rows, with matching right rows or NULLs
+        * - Left-only join: Returns only left rows that have NO matches in the right table
+        *
+        * In stream processing with lookup strategy:
+        * 1. We perform a lookup to find potential right-side matches for each left row
+        * 2. We apply residual filters to these potential matches
+        * 3. After filtering, some right rows may become NULL (indicating they didn't pass filters)
+        * 4. We need to determine if NO right rows matched for this left row
+        */
+
+        // Determines whether to emit a row in a left-only join operation
+        // Returns true if the row should be omitted, false if it should be included
+        bool OmitLeftOnlyJoin(TState& state, ui64 rowMeta, bool rightIsNull) {
+            // Decode metadata from the row header
+            // Contains information about the position of this right row in the sequence
+            // of potential matches for the current left row
+            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta);
+
+            // Case 1: Right row is NULL (didn't pass filters) AND this isn't the last potential match
+            // We need to wait for more potential matches before making a final decision
+            if (rightIsNull && !meta.LastRow) {
+                return true; // Omit for now; check again with future potential matches
+            }
+
+            // Case 2: Right row is NOT NULL (passed all filters)
+            // Mark that we've found at least one valid match for this left row
+            // This means we should NOT include the left row in the final result
+            if (!rightIsNull) {
+                state.AllRowsAreNull[meta.RowSeqNo] = false;
+            }
+
+            // Case 3: This is the last potential right match for the current left row
+            // Time to make a final decision about whether to emit the left row
+            if (meta.LastRow) {
+                // Check if we found any valid right matches for this left row
+                auto it = state.AllRowsAreNull.find(meta.RowSeqNo);
+                bool hasValidMatch = (it != state.AllRowsAreNull.end()); // True if we found at least one valid match
+
+                if (hasValidMatch) {
+                    state.AllRowsAreNull.erase(it); // Cleanup state for this left row
+                }
+
+                // Decision logic for left-only join:
+                // - If we found valid matches (hasValidMatch = true): omit this row
+                //   (We don't want to include left rows that have matches)
+                // - If no valid matches found (hasValidMatch = false): include this row
+                //   (We want to include left rows that have no matches)
+                return hasValidMatch;
+            }
+
+            // Default case: Not the last row, and right is not NULL
+            // We're still processing potential matches, so omit for now
+            return true;
+        }
+        /**
+        * SEMI-JOIN OPERATION EXPLANATION:
+        *
+        * A semi-join returns rows from the left table that have matching rows in the right table,
+        * but unlike a regular join, it doesn't duplicate left rows when multiple right rows match.
+        *
+        * In stream processing with lookup strategy:
+        * 1. We first perform a lookup to find potential matches
+        * 2. Then we apply residual filters and "on conditions" that couldn't be pushed down to the lookup
+        * 3. After applying filters, some right rows may be reset to null (filtered out)
+        *
+        * We need to ensure that if ANY right row in a sequence matches the filters,
+        * the left row is included exactly once, regardless of how many right rows actually match.
+        */
+
+        // Determines whether a row should be omitted in a stream semi-join operation
+        // Returns true if the row should be skipped (omitted), false if it should be included
+        bool OmitRowSemiJoin(TState& state, ui64 rowMeta, bool rightRowIsNull) {
+            // After applying residual filters, right rows may be reset to null
+            // Null values cannot participate in join operations - omit them
+            if (rightRowIsNull)
                 return true;
 
-            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
-            bool lastRowInSequence = cookie.LastRow;
-            bool firstRowInSequence = cookie.FirstRow;
-            ui32 rowId = cookie.RowSeqNo;
+            // Decode the row metadata to extract information about:
+            // - RowSeqNo: Unique identifier grouping related right rows from the same lookup
+            // - FirstRow: Flag indicating if this is the first row in its lookup result sequence
+            // - LastRow: Flag indicating if this is the last row in its lookup result sequence
+            //
+            // Even though we're processing a single logical right row, the lookup might return
+            // multiple related rows that need to be considered as a group for semi-join semantics
+            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta);
 
-            if (firstRowInSequence && lastRowInSequence) {
+            // Optimization for single-row sequences from lookup:
+            // If a row is both the first and last in its sequence, it's a complete unit
+            // Never omit these rows as they don't have related rows that could duplicate them
+            if (meta.FirstRow && meta.LastRow) {
                 return false;
             }
 
-            bool prevExists = state.RightRowExists[rowId];
+            // Track which sequences have already contributed to the join result
+            // firstNonNull indicates whether this is the first non-null row in its sequence
+            auto [it, firstNonNull] = state.RightRowExists.emplace(meta.RowSeqNo, true);
 
-            if (!prevExists) {
-                state.RightRowExists[rowId] = true;
+            // Clean up tracking for completed sequences:
+            // If this is the last row in a sequence, remove it from tracking
+            // This ensures we don't hold state for sequences that are complete
+            if (meta.LastRow) {
+                state.RightRowExists.erase(it);
             }
 
-            if (lastRowInSequence) {
-                state.RightRowExists.erase(rowId);
-            }
-
-            return prevExists;
+            // Omission logic:
+            // - Return true (omit) if this is NOT the first non-null row in the sequence
+            //   (We only need one row from each sequence to trigger the semi-join match)
+            // - Return false (include) if this IS the first non-null row in the sequence
+            //   (This row will cause the left side row to be included in the result)
+            return !firstNonNull;
         }
 
-        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 header) {
+        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 rowMeta) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
 
@@ -237,7 +326,7 @@ public:
                     break;
                 }
                 case EJoinKind::Left: {
-                    if (OmitRow(state, header, !rightRow.HasValue())) {
+                    if (OmitRowLeftJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -246,7 +335,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftOnly: {
-                    if (rightRow.HasValue()) {
+                    if (OmitLeftOnlyJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -255,7 +344,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftSemi: {
-                    if (OmitRowSemiJoin(state, header, !rightRow.HasValue())) {
+                    if (OmitRowSemiJoin(state, rowMeta, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -285,8 +374,8 @@ public:
                     return status;
                 }
 
-                ui64 header = item.GetElement(2).Get<ui64>();
-                bool buildRow = TryBuildResultRow(state, item, result, header);
+                ui64 rowMeta = item.GetElement(2).Get<ui64>();
+                bool buildRow = TryBuildResultRow(state, item, result, rowMeta);
                 if (buildRow) {
                     return NUdf::EFetchStatus::Ok;
                 }

@@ -138,7 +138,7 @@ class TllTieringTestBase(object):
                 "small_portion_detect_size_limit": 0,
                 "max_read_staleness_ms": 5000,
                 "alter_object_enabled": True,
-                "disable_bulk_upsert_require_all_columns": True,
+                "bulk_upsert_require_all_columns": False,
             },
             additional_log_configs={
                 "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,

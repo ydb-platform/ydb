@@ -144,6 +144,7 @@ PEERDIR(
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
+    ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types
     yql/essentials/public/issue

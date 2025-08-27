@@ -1,6 +1,4 @@
-# CREATE TABLE AS SELECT
-
-## Синтаксис CREATE TABLE AS SELECT
+# Заполнение таблицы данными из запроса
 
 Вызов `CREATE TABLE AS` создает новую {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %}, которая заполнена данными из результатов запроса.
 

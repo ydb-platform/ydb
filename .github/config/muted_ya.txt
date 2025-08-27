@@ -1,5 +1,6 @@
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
@@ -19,6 +20,7 @@ ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
 ydb/core/kqp/ut/olap KqpOlapWrite.WriteDeleteCleanGC
 ydb/core/kqp/ut/scan KqpSplit.StreamLookupDeliveryProblem
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
@@ -56,6 +58,8 @@ ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_ex
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadFromTimestamp_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadFromTimestamp_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
@@ -73,6 +77,7 @@ ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
+ydb/library/yaml_config/ut ConsoleDumper.IgnoreUnmanagedItems
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [9/10] chunk chunk
@@ -84,8 +89,7 @@ ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
 ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.Transactions_Conflict_On_SeqNo
-ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
-ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
+ydb/public/sdk/cpp/client/ydb_topic/ut *
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/datastreams/ut DataStreams.TestPutRecordsOfAnauthorizedUser
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
@@ -126,9 +130,19 @@ ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsBlockKee
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsBlockMax.test_restart_as_much_as_can
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorKeep.test_restart_as_much_as_can
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorMax.test_restart_as_much_as_can
+ydb/tests/functional/cms [test_cms_erasure.py 0/10]
+ydb/tests/functional/cms [test_cms_erasure.py 1/10]
+ydb/tests/functional/cms [test_cms_erasure.py 2/10]
+ydb/tests/functional/cms [test_cms_erasure.py 3/10]
+ydb/tests/functional/cms [test_cms_restart.py 0/10]
+ydb/tests/functional/cms [test_cms_restart.py 1/10]
+ydb/tests/functional/cms [test_cms_restart.py 2/10]
+ydb/tests/functional/cms [test_cms_restart.py 3/10]
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/blobstorage test_tablet_channel_migration.py.TestChannelsOps.test_when_write_and_change_tablet_channel_then_can_read_from_tablet
 ydb/tests/functional/blobstorage test_tablet_channel_migration.py.TestChannelsOps.test_when_write_in_new_channel_then_can_read_from_tablet
+ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 0/20]
+ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 1/20]
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*

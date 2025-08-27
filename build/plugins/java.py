@@ -372,11 +372,7 @@ def on_setup_project_coords_if_needed(unit, *args):
         return
 
     project_dir = args[0]
-    if project_dir.startswith(CONTRIB_JAVA_PREFIX):
-        value = '{}'.format(_get_classpath(unit, project_dir).rstrip(':'))
-    else:
-        value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH', _get_classpath(unit, project_dir)])
 
 
 def on_java_resource_tar_validate_extract_root(unit, extract_root):

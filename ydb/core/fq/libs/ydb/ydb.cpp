@@ -196,7 +196,7 @@ TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
 {
 }
 
-TYdbConnection::TYdbConnection(const NKikimrConfig::TSharedReadingConfig::TExternalStorage& config,
+TYdbConnection::TYdbConnection(const NKikimrConfig::TExternalStorage& config,
                                const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                const NYdb::TDriver& driver)
     : Driver(driver)
@@ -208,6 +208,7 @@ TYdbConnection::TYdbConnection(const NKikimrConfig::TSharedReadingConfig::TExter
     , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
 {
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
@@ -216,7 +217,7 @@ TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
     return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
 }
 
-TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TSharedReadingConfig::TExternalStorage& config,
+TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TExternalStorage& config,
                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                    const NYdb::TDriver& driver) {
     return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);

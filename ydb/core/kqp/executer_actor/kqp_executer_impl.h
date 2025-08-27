@@ -567,6 +567,10 @@ protected:
             return;
         }
 
+        if (CheckpointCoordinatorId) {
+            TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
+        }
+
         static_cast<TDerived*>(this)->CheckExecutionComplete();
     }
 
@@ -1880,6 +1884,7 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
+            .CheckpointCoordinator = CheckpointCoordinatorId
         });
 
         auto err = Planner->PlanExecution();
@@ -2695,6 +2700,8 @@ protected:
 
     THashSet<ui64> ShardsWithEffects; // tracks which shards are expected to have effects - only Data executer
 
+    TActorId CheckpointCoordinatorId;
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 
@@ -2711,7 +2718,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing());
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,

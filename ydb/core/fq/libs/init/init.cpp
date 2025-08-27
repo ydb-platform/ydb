@@ -2,7 +2,6 @@
 
 #include <ydb/core/fq/libs/audit/yq_audit_service.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/cloud_audit/yq_cloud_audit_service.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
@@ -51,7 +50,6 @@
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-
 
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
@@ -177,9 +175,34 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
+        NKikimrConfig::TCheckpointsConfig config;
+        const auto& oldConfig = protoConfig.GetCheckpointCoordinator();
+        config.SetEnabled(oldConfig.GetEnabled());
+        auto* storageConfig = config.MutableExternalStorage();
+        storageConfig->SetEndpoint(oldConfig.GetStorage().GetEndpoint());
+        storageConfig->SetDatabase(oldConfig.GetStorage().GetDatabase());
+        storageConfig->SetOAuthFile(oldConfig.GetStorage().GetOAuthFile());
+        storageConfig->SetToken(oldConfig.GetStorage().GetToken());
+        storageConfig->SetTablePrefix(oldConfig.GetStorage().GetTablePrefix());
+        storageConfig->SetCertificateFile(oldConfig.GetStorage().GetCertificateFile());
+        storageConfig->SetIamEndpoint(oldConfig.GetStorage().GetIamEndpoint());
+        storageConfig->SetSaKeyFile(oldConfig.GetStorage().GetSaKeyFile());
+        storageConfig->SetUseLocalMetadataService(oldConfig.GetStorage().GetUseLocalMetadataService());
+        storageConfig->SetClientTimeoutSec(oldConfig.GetStorage().GetClientTimeoutSec());
+        storageConfig->SetOperationTimeoutSec(oldConfig.GetStorage().GetOperationTimeoutSec());
+        storageConfig->SetCancelAfterSec(oldConfig.GetStorage().GetCancelAfterSec());
+        storageConfig->SetUseSsl(oldConfig.GetStorage().GetUseSsl());
+        storageConfig->SetTableClientMaxActiveSessions(oldConfig.GetStorage().GetTableClientMaxActiveSessions());
+        auto* gcConfig = config.MutableCheckpointGarbageConfig();
+        gcConfig->SetEnabled(oldConfig.GetCheckpointGarbageConfig().GetEnabled());
+        auto* limitsConfig = config.MutableStateStorageLimits();
+        limitsConfig->SetMaxGraphCheckpointsSizeBytes(oldConfig.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes());
+        limitsConfig->SetMaxTaskStateSizeBytes(oldConfig.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
+        limitsConfig->SetMaxRowSizeBytes(oldConfig.GetStateStorageLimits().GetMaxRowSizeBytes());
+
         auto checkpointStorage = NFq::NewCheckpointStorageService(
-            protoConfig.GetCheckpointCoordinator(),
-            protoConfig.GetCommon(),
+            config,
+            protoConfig.GetCommon().GetIdsPrefix(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));

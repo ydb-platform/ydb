@@ -5504,7 +5504,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetConstraint(true);
+        featureFlags.SetEnableSetColumnConstraint(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -5573,7 +5573,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetConstraint(true);
+        featureFlags.SetEnableSetColumnConstraint(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

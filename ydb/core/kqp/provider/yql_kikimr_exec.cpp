@@ -1726,7 +1726,7 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetConstraint()) {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                         << "SET NOT NULL is currently not supported."));
                                     return SyncError();

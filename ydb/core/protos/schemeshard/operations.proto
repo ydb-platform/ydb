@@ -196,7 +196,7 @@ enum EOperationType {
     ESchemeOpCreateLongIncrementalBackupOp = 124;
 
     // Alter Table Alter Column Set
-    ESchemeOpCreateSetConstraint = 125;
+    ESchemeOpCreateSetConstraint = 126;
 
     // Some entries are grouped by semantics, so are out of order
 }

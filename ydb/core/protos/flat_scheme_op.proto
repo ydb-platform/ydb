@@ -1894,7 +1894,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsRequest SetColumnConstraintsRequest = 86;
+    optional TSetColumnConstraintsRequest SetColumnConstraintsRequest = 87;
 
     // Some entries are grouped by semantics, so are out of order
 }

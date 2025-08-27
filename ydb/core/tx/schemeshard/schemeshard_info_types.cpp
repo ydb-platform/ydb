@@ -449,8 +449,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (isChangeNotNullConstraint) {
                 if (col.GetNotNull()) { // SET NOT NULL
-                    if (!featureFlags.EnableSetConstraint) {
-                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetConstraint feature flag is off)", col.GetType().data(), colName.data());
+                    if (!featureFlags.EnableSetColumnConstraint) {
+                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetColumnConstraint feature flag is off)", col.GetType().data(), colName.data());
                         return nullptr;
                     }
 

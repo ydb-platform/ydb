@@ -1,5 +1,5 @@
 items:
-- { name: Схема кластера,                         href: cluster_schema.md }
+- { name: Схема кластера,                         href: cluster-schema.md }
 - { name: Имена схемных объектов,                 href: object-naming-rules.md }
 - { name: Директории,                             href: dir.md }
 - { name: Таблицы,                                href: table.md }

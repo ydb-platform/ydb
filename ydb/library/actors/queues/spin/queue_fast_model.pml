@@ -11,7 +11,7 @@
 #endif
 
 #ifndef ELEMENTS
-#define ELEMENTS 1
+#define ELEMENTS 2
 #endif
 
 #include "atomics.pml"
@@ -40,8 +40,8 @@ inline try_increment_tail(id) {
     fi
 }
 
-inline try_push(id) {
-    printf("Producer %d: try_push start\n", id);
+inline try_push_slow(id) {
+    printf("Producer %d: try_push_slow start\n", id);
     // ui64 currentTail = Tail.load(std::memory_order_acquire);
     atomic {
         atomic_load(queue.tail, currentTail);
@@ -126,7 +126,81 @@ try_push_success:
     }
 
 try_push_end:
-    printf("Producer %d: try_push end\n", id);
+    printf("Producer %d: try_push_slow end\n", id);
+}
+
+inline try_push_fast(id) {
+    printf("Producer %d: try_push_fast start\n", id);
+    // ui64 currentTail = Tail.fetch_add(1, std::memory_order_release);
+    // ui64 generation = currentTail / MaxSize;
+    atomic {
+        atomic_load(queue.tail, currentTail);
+        atomic_increment(queue.tail);
+        printf("Producer %d: try_push_fast. tail=%d, generation=%d\n", id, currentTail, currentTail / QUEUE_SIZE);
+    }
+
+
+    // std::atomic<ui64> &currentSlot = Buffer[currentTail % MaxSize];
+    // TSlot slot;
+    // ui64 expected = TSlot::MakeEmpty(generation);
+    atomic {
+        currentSlot.generation = generation;
+        currentSlot.isEmpty = true;
+    }
+
+    // do {
+    //     if (currentSlot.compare_exchange_weak(expected, val)) {
+    //         return true;
+    //     }
+    // } while (slot.Generation <= generation && slot.IsEmpty);
+    do
+    :: true ->
+        atomic {
+            compare_exchange_slot(currentTail, currentSlot, generation, false, is_success);
+            if
+            :: is_success ->
+                printf("Producer %d: success push fast. tail=%d, generation=%d, slot_generation=%d, slot_isEmpty=%d\n", id, currentTail, generation, currentSlot.generation, currentSlot.isEmpty);
+                producers[id].success_push = true;
+                goto try_push_fast_end
+            :: else ->
+                printf("Producer %d: failed fast compare_exchange_slot. tail=%d, generation=%d, slot_generation=%d, slot_isEmpty=%d\n", id, currentTail, generation, currentSlot.generation, currentSlot.isEmpty);
+            fi
+            if
+            :: currentSlot.generation <= generation && currentSlot.isEmpty ->
+                skip
+            :: else ->
+                break
+            fi
+        }
+    od
+
+    // if (!slot.IsEmpty) {
+    //     ui64 currentHead = Head.load(std::memory_order_acquire);
+    //     if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
+    //         return false;
+    //     }
+    // }
+    if
+    :: !currentSlot.isEmpty ->
+        atomic_load(queue.head, currentHead);
+        atomic {
+            printf("Producer %d: check fast push. head=%d, tail=%d, generation=%d\n", id, currentHead, currentTail, generation);
+            if
+            :: currentHead + QUEUE_SIZE <= currentTail ->
+                printf("Producer %d: queue seems full on fast path, fail. head=%d, tail=%d, generation=%d\n", id, currentHead, currentTail, generation);
+                producers[id].success_push = false;
+                goto try_push_fast_end
+            :: else -> skip
+            fi
+        }
+    :: else -> skip
+    fi
+
+    // return TryPushSlow(val);
+    try_push_slow(id);
+
+try_push_fast_end:
+    printf("Producer %d: try_push_fast end\n", id);
 }
 
 inline try_increment_head(id) {
@@ -316,7 +390,13 @@ proctype ProducerProc(unsigned id:2) {
                 pushed_elements = pushed_elements + 1;
             }
         :: else ->
-            try_push(id);
+            if
+            :: true ->
+                try_push_slow(id);
+            :: true ->
+                try_push_fast(id);
+            fi
+
             if
             :: producers[id].success_push ->
                 atomic {

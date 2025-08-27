@@ -1255,7 +1255,6 @@ struct TEvBlobStorage {
 
         std::optional<TReaderTabletData> ReaderTabletData;
         std::optional<TForceBlockTabletData> ForceBlockTabletData;
-        std::optional<ui32> ForceGroupGeneration;
 
         TEvGet(TCloneEventPolicy, const TEvGet& origin)
             : QuerySize(origin.QuerySize)

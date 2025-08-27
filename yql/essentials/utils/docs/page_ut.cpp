@@ -25,10 +25,19 @@ Get the value for an expression specified as an argument, for one of the table r
 Gives no guarantee of which row is used. It's similar to the
 [any()](https://clickhouse.tech/docs/en/sql-reference/aggregate-functions/reference/any/)
 function in ClickHouse.
+
+{% note alert %}
+
+If one of the compared arguments is 0.0, the function always returns false.
+
+{% endnote %}
+
+End.
 )";
 
         TPages pages = {{"builtins/window", ParseMarkdownPage(markdown)}};
         pages = Resolved(std::move(pages), "https://ytsaurus.tech/docs/en/yql");
+        pages = ExtendedSyntaxRemoved(std::move(pages));
 
         TVector<TString> changes = {
             "[separate article](https://ytsaurus.tech/docs/en/yql/builtins/window/../../syntax/window)",
@@ -41,6 +50,11 @@ function in ClickHouse.
         UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, changes.at(1));
         UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, changes.at(2));
         UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, changes.at(3));
+
+        UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, "the function always returns false");
+        UNIT_ASSERT_STRING_CONTAINS(pages["builtins/window"].Text, "End.");
+        UNIT_ASSERT(!pages["builtins/window"].Text.Contains("{% note alert %}"));
+        UNIT_ASSERT(!pages["builtins/window"].Text.Contains("{% endnote %}"));
     }
 
 } // Y_UNIT_TEST_SUITE(PageTests)

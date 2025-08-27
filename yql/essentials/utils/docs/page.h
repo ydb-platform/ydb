@@ -11,4 +11,6 @@ namespace NYql::NDocs {
 
     TPages Resolved(TPages pages, TStringBuf baseURL);
 
+    TPages ExtendedSyntaxRemoved(TPages pages);
+
 } // namespace NYql::NDocs

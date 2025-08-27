@@ -31,7 +31,21 @@ namespace NYql::NDocs {
     TMarkdownPage Resolved(TStringBuf relativePath, TMarkdownPage page, TStringBuf baseURL) {
         page.Text = ResolvedMarkdownText(relativePath, page.Text, baseURL);
         for (auto& [_, section] : page.SectionsByAnchor) {
-            section.Body = ResolvedMarkdownText(relativePath, section.Body, baseURL);
+            section.Body = ResolvedMarkdownText(relativePath, std::move(section.Body), baseURL);
+        }
+        return page;
+    }
+
+    TString ExtendedSyntaxRemoved(TString text) {
+        static const RE2 regex(R"re( *{%[^\\]*?%} *\n?)re");
+        RE2::GlobalReplace(&text, regex, "");
+        return text;
+    }
+
+    TMarkdownPage ExtendedSyntaxRemoved(TMarkdownPage page) {
+        page.Text = ExtendedSyntaxRemoved(page.Text);
+        for (auto& [_, section] : page.SectionsByAnchor) {
+            section.Body = ExtendedSyntaxRemoved(std::move(section.Body));
         }
         return page;
     }
@@ -48,6 +62,13 @@ namespace NYql::NDocs {
     TPages Resolved(TPages pages, TStringBuf baseURL) {
         for (auto& [relativeURL, page] : pages) {
             page = Resolved(relativeURL, std::move(page), baseURL);
+        }
+        return pages;
+    }
+
+    TPages ExtendedSyntaxRemoved(TPages pages) {
+        for (auto& [_, page] : pages) {
+            page = ExtendedSyntaxRemoved(std::move(page));
         }
         return pages;
     }

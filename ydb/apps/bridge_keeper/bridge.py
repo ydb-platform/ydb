@@ -326,19 +326,20 @@ class PileState:
         self.synced_since = None
 
     def is_healthy(self):
-        if self.admin_reported_state in ['PRIMARY', 'SYNCHRONIZED']:
+        if self.admin_reported_state == 'PRIMARY':
             if not self.self_reported_alive:
                 return False
-
-            if self.reported_bad and self.admin_reported_state == 'SYNCHRONIZED':
+            return not self.reported_bad
+        elif self.admin_reported_state == 'SYNCHRONIZED':
+            if self.reported_bad:
                 if not self.synced_since:
                     # sanity check, shouldn't happen
                     return False
                 if time.monotonic() - self.synced_since < TO_SYNC_TRANSITION_GRACE_PERIOD:
                     return True
-
-            return not self.reported_bad and self.responsive
-        return True
+            return not self.reported_bad
+        else:
+            return True
 
     def can_vote_for_bad_piles(self):
         if not self.self_reported_alive:
@@ -560,8 +561,11 @@ class Bridgekeeper:
 
         for pile_name, pile in new_state.Piles.items():
             if pile.admin_reported_state == 'SYNCHRONIZED' and pile_name in current_piles:
-                if current_piles[pile_name].admin_reported_state != 'SYNCHRONIZED':
+                current_pile = current_piles[pile_name]
+                if current_pile.admin_reported_state != 'SYNCHRONIZED':
                     pile.synced_since = new_state.MonotonicTs
+                else:
+                    pile.synced_since = current_pile.synced_since
 
     def _do_healthcheck(self):
         # TODO: it seems that sometimes this calls takes too long for unknown yet reason,

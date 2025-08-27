@@ -128,6 +128,8 @@ class KeeperApp(App):
         self._refresh_timer = None
 
         self.pile_widgets: Dict[str, PileWidget] = {}
+        self.prev_state = None
+        self.prev_transitions = None
 
         self._keeper_thread = self.keeper.run_async()
         if not self._keeper_thread:
@@ -176,40 +178,43 @@ class KeeperApp(App):
         if self.header:
             self.header.now_utc = now
 
-        # Compute statuses and colors
-        current_status_color: Dict[str, [str, str]] = {}
-        if state:
-            for pile_name, pile_state in state.Piles.items():
-                current_status_color[pile_name] = [pile_state.get_state(), pile_state.get_color(),]
+        if state != self.prev_state:
+            # Compute statuses and colors
+            current_status_color: Dict[str, [str, str]] = {}
+            if state:
+                for pile_name, pile_state in state.Piles.items():
+                    current_status_color[pile_name] = [pile_state.get_state(), pile_state.get_color(),]
 
-            # Ensure widgets exist for all piles
-            # TODO: remove old piles?
-            for pile_name in current_status_color.keys():
-                if pile_name not in self.pile_widgets:
-                    w = PileWidget(classes="pile")
-                    w.pile_name = pile_name
-                    self.pile_widgets[pile_name] = w
+                # Ensure widgets exist for all piles
+                # TODO: remove old piles?
+                for pile_name in current_status_color.keys():
+                    if pile_name not in self.pile_widgets:
+                        w = PileWidget(classes="pile")
+                        w.pile_name = pile_name
+                        self.pile_widgets[pile_name] = w
 
-            # Stable order by name; clear and mount all widgets
-            ordered_names = sorted(current_status_color.keys())
-            self.piles_group.remove_children()
-            widgets_to_mount = []
-            for name in ordered_names:
-                widget = self.pile_widgets[name]
-                widget.status = current_status_color[name][0]
-                widget.color = current_status_color[name][1]
-                widgets_to_mount.append(widget)
-            if widgets_to_mount:
-                self.piles_group.mount(*widgets_to_mount)
+                # Stable order by name; clear and mount all widgets
+                ordered_names = sorted(current_status_color.keys())
+                self.piles_group.remove_children()
+                widgets_to_mount = []
+                for name in ordered_names:
+                    widget = self.pile_widgets[name]
+                    widget.status = current_status_color[name][0]
+                    widget.color = current_status_color[name][1]
+                    widgets_to_mount.append(widget)
+                if widgets_to_mount:
+                    self.piles_group.mount(*widgets_to_mount)
 
-        # TODO: show disaster and disaster stopwatch
+            self.prev_state = state
 
         # Update transitions from history
 
-        if transitions:
+        if transitions and transitions != self.prev_transitions:
             # TODO: append only new ones
             self.history_view.clear()
             self.history_view.write_lines(list(transitions[-50:]))
+
+            self.prev_transitions = transitions
 
         # Update logs
         new_records = self.log_consumer()

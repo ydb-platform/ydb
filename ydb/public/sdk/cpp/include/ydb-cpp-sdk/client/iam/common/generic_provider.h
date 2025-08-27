@@ -1,37 +1,36 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/iam/common/types.h>
+#include "types.h"
 
-#include <src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <util/string/builder.h>
 #include <util/system/spinlock.h>
 
+#include <grpcpp/grpcpp.h>
+
 namespace NYdb::inline V3 {
 
 constexpr TDuration BACKOFF_START = TDuration::MilliSeconds(50);
 constexpr TDuration BACKOFF_MAX = TDuration::Seconds(10);
 
+// This file contains internal generic implementation of IAM credentials providers.
+// DO NOT USE THIS CLASS DIRECTLY. Use specialized factory methods for specific cases.
 template<typename TRequest, typename TResponse, typename TService>
 class TGrpcIamCredentialsProvider : public ICredentialsProvider {
 protected:
     using TRequestFiller = std::function<void(TRequest&)>;
-
-    using TSimpleRpc =
-        typename NYdbGrpc::TSimpleRequestProcessor<
-            typename TService::Stub,
-            TRequest,
-            TResponse>::TAsyncRequest;
+    using TAsyncInterface = typename TService::Stub::async_interface;
+    using TAsyncRpc = void (TAsyncInterface::*)(grpc::ClientContext*, const TRequest*, TResponse*, std::function<void(grpc::Status)>);
 
 private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
     public:
-        TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller, TSimpleRpc rpc)
-            : Client(std::make_unique<NYdbGrpc::TGRpcClientLow>())
-            , Connection_(nullptr)
-            , Rpc_(rpc)
+        TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller, TAsyncRpc rpc)
+            : Rpc_(rpc)
             , Ticket_("")
             , NextTicketUpdate_(TInstant::Zero())
             , IamEndpoint_(iamEndpoint)
@@ -42,13 +41,22 @@ private:
             , BackoffTimeout_(BACKOFF_START)
             , Lock_()
         {
-            NYdbGrpc::TGRpcClientConfig grpcConf;
-            grpcConf.Locator = IamEndpoint_.Endpoint;
-            grpcConf.EnableSsl = IamEndpoint_.EnableSsl;
-            if (!IamEndpoint_.CaCerts.empty()) {
-                grpcConf.SslCredentials.pem_root_certs = IamEndpoint_.CaCerts;
+            std::shared_ptr<grpc::ChannelCredentials> creds = nullptr;
+            if (IamEndpoint_.EnableSsl) {
+                grpc::SslCredentialsOptions opts;
+                opts.pem_root_certs = IamEndpoint_.CaCerts;
+                creds = grpc::SslCredentials(opts);
+            } else {
+                creds = grpc::InsecureChannelCredentials();
             }
-            Connection_ = std::unique_ptr<NYdbGrpc::TServiceConnection<TService>>(Client->CreateGRpcServiceConnection<TService>(grpcConf).release());
+
+            grpc::ChannelArguments args;
+
+            args.SetMaxSendMessageSize(NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+            args.SetMaxReceiveMessageSize(NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+
+            Channel_ = grpc::CreateCustomChannel(grpc::string{IamEndpoint_.Endpoint}, creds, args);
+            Stub_ = TService::NewStub(Channel_);
         }
 
         void UpdateTicket(bool sync = false) {
@@ -61,12 +69,12 @@ private:
             }
 
             auto resultPromise = NThreading::NewPromise();
+            auto response = std::make_shared<TResponse>();
 
             std::shared_ptr<TImpl> self = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::shared_from_this();
 
-            auto cb = [self, resultPromise, sync](
-                NYdbGrpc::TGrpcStatus&& status, TResponse&& result) mutable {
-                self->ProcessIamResponse(std::move(status), std::move(result), sync);
+            auto cb = [self, sync, resultPromise, response] (grpc::Status status) mutable {
+                self->ProcessIamResponse(std::move(status), std::move(*response), sync);
                 resultPromise.SetValue();
             };
 
@@ -74,12 +82,15 @@ private:
 
             RequestFiller_(req);
 
-            Connection_->template DoRequest<TRequest, TResponse>(
-                std::move(req),
-                std::move(cb),
-                Rpc_,
-                { {}, {}, IamEndpoint_.RequestTimeout }
-            );
+            grpc::ClientContext context;
+
+            auto deadline = gpr_time_add(
+                gpr_now(GPR_CLOCK_MONOTONIC),
+                gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
+
+            context.set_deadline(deadline);
+
+            (Stub_->async()->*Rpc_)(&context, &req, response.get(), std::move(cb));
 
             if (sync) {
                 resultPromise.GetFuture().Wait(2 * IamEndpoint_.RequestTimeout);
@@ -110,22 +121,19 @@ private:
                 }
                 NeedStop_ = true;
             }
-
-            Client.reset(); // Will trigger destroy
         }
 
     private:
-        void ProcessIamResponse(NYdbGrpc::TGrpcStatus&& status, TResponse&& result, bool sync) {
-            if (!status.Ok()) {
+        void ProcessIamResponse(grpc::Status&& status, TResponse&& result, bool sync) {
+            if (!status.ok()) {
                 TDuration sleepDuration;
                 {
                     std::lock_guard guard(Lock_);
                     LastRequestError_ = TStringBuilder()
                         << "Last request error was at " << TInstant::Now()
-                        << ". GrpcStatusCode: " << status.GRpcStatusCode
-                        << " Message: \"" << status.Msg
-                        << "\" internal: " << status.InternalError
-                        << " iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
+                        << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
+                        << " Message: \"" << status.error_message()
+                        << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
                     RequestInflight_ = false;
                     sleepDuration = std::min(BackoffTimeout_, BACKOFF_MAX);
@@ -152,9 +160,9 @@ private:
         }
 
     private:
-        std::unique_ptr<NYdbGrpc::TGRpcClientLow> Client;
-        std::unique_ptr<NYdbGrpc::TServiceConnection<TService>> Connection_;
-        TSimpleRpc Rpc_;
+        std::shared_ptr<grpc::Channel> Channel_;
+        std::shared_ptr<typename TService::Stub> Stub_;
+        TAsyncRpc Rpc_;
         std::string Ticket_;
         TInstant NextTicketUpdate_;
         const TIamEndpoint IamEndpoint_;
@@ -167,7 +175,7 @@ private:
     };
 
 public:
-    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint, const TRequestFiller& requestFiller, TSimpleRpc rpc)
+    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint, const TRequestFiller& requestFiller, TAsyncRpc rpc)
         : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc))
     {
         Impl_->UpdateTicket(true);
@@ -196,7 +204,7 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [jwtParams = params.JwtParams](TRequest& req) {
                 req.set_jwt(MakeSignedJwt(jwtParams));
-            }, &TService::Stub::AsyncCreate) {}
+            }, &TService::Stub::async_interface::Create) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -206,7 +214,7 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
                 req.set_yandex_passport_oauth_token(TStringType{token});
-            }, &TService::Stub::AsyncCreate) {}
+            }, &TService::Stub::async_interface::Create) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>

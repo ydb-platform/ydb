@@ -1822,8 +1822,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }
 
-    if ((serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled())
-        || runConfig.AppConfig.GetQueryServiceConfig().GetSharedReading().GetEnabled()) {
+    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetFederatedQueryConfig().GetEnabled()) {
         YqSharedResources = NFq::CreateYqSharedResources(
             runConfig.AppConfig.GetFederatedQueryConfig(),
             NKikimr::CreateYdbCredentialsProviderFactory,

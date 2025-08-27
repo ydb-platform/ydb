@@ -34,20 +34,29 @@ def get_ap_options(ap_options):
     if not ap_options:
         return []
     # Format of apoptions https://kotlinlang.org/docs/kapt.html#ap-javac-options-encoding
-    # ObjectOutputStream https://docs.oracle.com/en/java/javase/21/docs/specs/serialization/protocol.html
+    # ObjectOutputStream https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/io/ObjectOutputStream.java
+
+    kvs = bytes()  # all key-values
+    for ap_option in ap_options:
+        k, v = ap_option.split('=', 1)
+        k = bytes(k)  # UTF-8 supported
+        kvs += struct.pack(">H", len(k))
+        kvs += k
+        v = bytes(v)  # UTF-8 supported
+        kvs += struct.pack(">H", len(v))
+        kvs += v
+
     s = struct.pack(">H", 0xACED)  # STREAM_MAGIC
     s += struct.pack(">H", 0x0005)  # STREAM_VERSION
-    s += struct.pack("B", 0x77)  # TC_BLOCKDATA
-    s += struct.pack("B", 0x8A)  # ???
-    s += struct.pack(">L", len(ap_options))
-    for ap_option in ap_options:
-        k, v = ap_option.split('=', 2)
-        k = bytes(k)  # UTF-8 supported
-        s += struct.pack(">H", len(k))
-        s += k
-        v = bytes(v)  # UTF-8 supported
-        s += struct.pack(">H", len(v))
-        s += v
+    data_len = 4 + len(kvs)  # sizeof(ui32) options count + length of all key-values
+    if data_len < 256:
+        s += struct.pack("B", 0x77)  # TC_BLOCKDATA
+        s += struct.pack("B", data_len)
+    else:
+        s += struct.pack("B", 0x7A)  # TC_BLOCKDATALONG
+        s += struct.pack(">I", data_len)
+    s += struct.pack(">I", len(ap_options))  # count of options
+    s += kvs  # key-values of all options
 
     arg = 'plugin:org.jetbrains.kotlin.kapt3:apoptions=' + base64.b64encode(s).decode('utf-8')
     return '-P', arg

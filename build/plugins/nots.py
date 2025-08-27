@@ -541,6 +541,16 @@ def on_ts_configure(unit: NotsUnitType) -> None:
     _setup_stylelint(unit)
 
 
+def _should_setup_build_env(unit: NotsUnitType) -> bool:
+    build_env_for = unit.get("TS_BUILD_ENV_FOR")
+    if build_env_for is None:
+        return True
+
+    target = unit.get("MODDIR")
+
+    return target in build_env_for.split(":")
+
+
 @_with_report_configure_error
 def on_setup_build_env(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
@@ -550,7 +560,7 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
 
     options = []
     names = set()
-    if build_env_var:
+    if build_env_var and _should_setup_build_env(unit):
         for name in build_env_var.split(","):
             value = unit.get(f"TS_ENV_{name}")
             if value is None:

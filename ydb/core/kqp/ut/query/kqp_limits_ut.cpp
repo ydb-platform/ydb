@@ -442,7 +442,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(OutOfSpaceYQLUpsertFail) {
         auto settings = TKikimrSettings()
-            .SetAppConfig(app)
             .SetWithSampleTables(false)
             .SetStorage(NFake::TStorage{
                 .UseDisk = false,

@@ -1072,6 +1072,7 @@ Y_UNIT_TEST_TWIN(JoinLeftJoinPostJoinFilterTest, StreamLookupJoin) {
             select A.a, A.b, B.a, B.b from A
             left join (select * from B where a > 2 and a < 3) as B
             on A.b = B.b
+            ORDER BY A.a, A.b
         )",
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]
@@ -1088,6 +1089,7 @@ Y_UNIT_TEST_TWIN(JoinInclusionTestSemiJoin, StreamLookupJoin) {
             select A.a, A.b, from A
             left semi join (select * from B where a > 1 and a < 3) as B
             ON A.b = B.b
+            ORDER BY A.a, A.b
         )",
         .Answer=R"([
             [[1];[2]];[[2];[2]];[[3];[2]];[[4];[2]]

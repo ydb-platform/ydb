@@ -1527,7 +1527,7 @@ private:
                 case NKqpProto::EStreamLookupStrategy::SEMI_JOIN: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                    YQL_ENSURE(inputTupleType->GetSize() == 2);
+                    YQL_ENSURE(inputTupleType->GetSize() == 2 || inputTupleType->GetSize() == 3);
 
                     YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
                     const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();

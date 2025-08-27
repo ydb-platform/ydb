@@ -516,11 +516,14 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            if (!EnsureTupleTypeSize(node->Pos(), lookupType, 2, ctx)) {
+            auto tupleType = lookupType->Cast<TTupleExprType>();
+            if (tupleType->GetSize() < 2 || tupleType->GetSize() > 3) {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Table stream lookup has unexpected input tuple, expected tuple size 2 or 3, but found %s"
+                        << tupleType->GetSize()));
                 return TStatus::Error;
             }
 
-            auto tupleType = lookupType->Cast<TTupleExprType>();
             if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
                 return TStatus::Error;
             }
@@ -1793,11 +1796,14 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 2, ctx)) {
+        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+        if (inputTupleType->GetSize() < 2 || inputTupleType->GetSize() > 3) {
+            ctx.AddError(
+                TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Table stream lookup has unexpected input tuple, expected tuple size 2 or 3, but found %s"
+                    << inputTupleType->GetSize()));
             return TStatus::Error;
         }
 
-        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
         if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }

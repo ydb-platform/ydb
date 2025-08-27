@@ -905,9 +905,9 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
 
     TMaybeNode<TExprBase> lookupKeys;
     if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
-        // Result type of lookupIndexTable: list<tuple<left_row, optional<main_table_pk>>>,
-        // expected input type for main table stream join: list<tuple<optional<main_table_pk>, left_row>>,
-        // so we should transform list<tuple<left_row, optional<main_table_pk>>> to list<tuple<optional<main_table_pk>, left_row>>
+        // Result type of lookupIndexTable: list<tuple<left_row, optional<main_table_pk>, rowMeta>>,
+        // expected input type for main table stream join: list<tuple<optional<main_table_pk>, left_row, rowMeta>>,
+        // so we should transform list<tuple<left_row, optional<main_table_pk>>> to list<tuple<optional<main_table_pk>, left_row, rowMeta>>
         lookupKeys = Build<TCoMap>(ctx, node.Pos())
             .Input(lookupIndexTable)
             .Lambda()
@@ -920,6 +920,10 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
                     .Add<TCoNth>()
                         .Tuple("tuple")
                         .Index().Value("0").Build()
+                        .Build()
+                    .Add<TCoNth>()
+                        .Tuple("tuple")
+                        .Index().Value("2").Build()
                         .Build()
                     .Build()
                 .Build()

@@ -127,17 +127,17 @@ jobs:
         mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 
         mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
 
-    - name: Patch fix_msvc_output.py to filter None arguments
+    - name: Patch fix_msvc_output.py to filter None arguments early
       if: ${{ matrix.os == 'windows-amd' }}
       shell: powershell
       run: |
-        Write-Host "=== Original content around line 59 ==="
-        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 55 -First 10
+        Write-Host "=== Original content around line 42 ==="
+        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 40 -First 10
         $content = Get-Content build/scripts/fix_msvc_output.py -Raw
-        $content = $content -replace "cmd = pwa\.ProcessWholeArchiveOption\('WINDOWS', wa_peers, wa_libs\)\.construct_cmd\(args\)", "cmd = pwa.ProcessWholeArchiveOption('WINDOWS', wa_peers, wa_libs).construct_cmd([arg for arg in args if arg != 'None'])"
+        $content = $content -replace "args = sys\.argv\[1:\]", "args = [arg for arg in sys.argv[1:] if arg != 'None']"
         Set-Content build/scripts/fix_msvc_output.py -Value $content
-        Write-Host "=== Patched content around line 59 ==="
-        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 55 -First 10
+        Write-Host "=== Patched content around line 42 ==="
+        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 40 -First 10
 
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}

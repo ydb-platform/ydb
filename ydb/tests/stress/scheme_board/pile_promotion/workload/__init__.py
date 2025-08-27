@@ -215,7 +215,7 @@ class PilePromotionWorkload(WorkloadBase):
 
             # Promote non-primary pile
             updates = [
-                PileState(pile_name=non_primary_pile, state=PileState.PROMOTED),
+                PileState(pile_name=non_primary_pile, state=PileState.PROMOTE),
             ]
             update_cluster_state(self.bridge_client, updates)
             logger.info(f"Promoted {non_primary_pile}")

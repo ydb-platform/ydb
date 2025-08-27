@@ -10,7 +10,5 @@ items:
       path: medalion/toc_p.yaml
   - name: Обзор аналитической платформы
     href: olap_quickstart.md
-  - name: Структура аналитической платформы
-    href: cluster_structure.md
   - name: Возможности аналитической платформы
     href: olap_features.md

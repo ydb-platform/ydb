@@ -3,3 +3,13 @@ items:
     href: ingest.md
   - name: Хранение данных
     href: store.md
+  - name: Выполнение запросов
+    href: execution.md
+  - name: Федеративные запросы
+    href: federated.md
+  # - name: ETL
+  #   href: etl.md
+  # - name: BI
+  #   href: bi.md
+  # - name: ML
+  #   href: ml.md

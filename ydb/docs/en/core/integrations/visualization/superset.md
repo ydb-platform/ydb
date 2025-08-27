@@ -2,28 +2,26 @@
 
 Apache Superset is a modern data exploration and data visualization platform.
 
-[PostgreSQL compatibility mode in {{ ydb-short-name }}](../../postgresql/intro.md) enables the use of [Apache Superset](https://superset.apache.org/) to query and visualize data from {{ ydb-short-name }}. In this case Apache Superset works with {{ ydb-short-name }} just like with PostgreSQL.
+## Installation of needed dependencies
 
-{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
+To work with {{ ydb-short-name }} via Superset it is required to install driver [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy).
+
+Depending on Superset installation it is possible to do it several ways, refer to [official documentation](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images) for more details.
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
-To connect to {{ ydb-short-name }} from Apache Superset using the PostgreSQL wire protocol, follow these steps:
+To connect to {{ ydb-short-name }} from Apache Superset, follow these steps:
 
 1. In the Apache Superset toolbar, hover over **Settings** and select **Database Connections**.
 1. Click the **+ DATABASE** button.
 
      The **Connect a database** wizard will appear.
 
-1. In **Step 1** of the wizard, click the **PostgreSQL** button.
+1. In **Step 1** of the wizard, choose **YDB** from **Supported databases** list.
 1. In **Step 2** of the wizard, enter the {{ ydb-short-name }} credentials in the corresponding fields:
 
-    * **HOST**. The [endpoint](https://ydb.tech/docs/en/concepts/connect#endpoint) of the {{ ydb-short-name }} cluster to which the connection will be made.
-    * **PORT**. The port of the {{ ydb-short-name }} endpoint.
-    * **DATABASE NAME**. The path to the [database](../../concepts/glossary.md#database) in the {{ ydb-short-name }} cluster where queries will be executed.
-    * **USERNAME**. The login for connecting to the {{ ydb-short-name }} database.
-    * **PASSWORD**. The password for connecting to the {{ ydb-short-name }} database.
-    * **DISPLAY NAME**. The {{ ydb-short-name }} connection name in Apache Superset.
+    * **Display Name**. The {{ ydb-short-name }} connection name in Apache Superset.
+    * **SQLAlchemy URI**. The string like `ydb://{host}:{port}/{database_name}`, where **host** and **port** are parts of [endpoint](https://ydb.tech/docs/en/concepts/connect#endpoint) of the {{ ydb-short-name }} cluster to which the connection will be made, and **database_name** - the path to the [database](../../concepts/glossary.md#database).
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 
@@ -31,21 +29,16 @@ To connect to {{ ydb-short-name }} from Apache Superset using the PostgreSQL wir
 
 1. To save the database connection, click **FINISH**.
 
+For additional info about configuration of {{ ydb-short-name }} connection, please refer to [YDB section on official documentation](https://superset.apache.org/docs/configuration/databases#ydb).
+
 ## Creating a dataset {#create-dataset}
 
 To create a dataset for a {{ ydb-short-name }} table, follow these steps:
 
 1. In the Apache Superset toolbar, hover over the **+** button and select **SQL query**.
 1. In the **DATABASE** drop-down list, select the {{ ydb-short-name }} database connection.
-1. In the **SCHEMA** drop-down list, select `public`.
 
-    {% note alert %}
-
-    {{ ydb-short-name }} currently does not provide table schema information via the PostgreSQL protocol. You can skip selecting a table in the **SEE TABLE SCHEMA** drop-down list.
-
-    {% endnote %}
-
-4. Enter the SQL query in the right section of the page. For example, `SELECT * FROM <ydb_table_name>`.
+1. Enter the SQL query in the right section of the page. For example, `SELECT * FROM <ydb_table_name>`.
 
     {% note tip %}
 

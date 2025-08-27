@@ -1,0 +1,3 @@
+В настоящее время одновременное использование {% if backend_name == 'YDB' %}[колоночных](../../../concepts/glossary.md#column-oriented-table){% else %}колоночных{% endif %} и {% if backend_name == 'YDB' %}[строковых](../../../concepts/glossary.md#row-oriented-table){% else %}строковых{% endif %} таблиц возможно только в Read-Only транзакциях. Поддержка транзакций с возможностью записи при одновременном использовании строковых и колоночных таблиц находится в разработке.
+
+Если попытаться выполнить операцию записи в транзакции, в которой задействованы и колоночные, и строковые таблицы, транзакция завершится с ошибкой: `Write transactions between column and row tables are disabled at current time`.

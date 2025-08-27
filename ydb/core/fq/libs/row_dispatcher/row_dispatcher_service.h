@@ -32,7 +32,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
-    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring = nullptr,
     ::NMonitoring::TDynamicCounterPtr countersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>());
 

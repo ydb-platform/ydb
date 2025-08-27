@@ -223,7 +223,7 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString());
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString() << ", local mode " << Config.GetLocalMode());
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;

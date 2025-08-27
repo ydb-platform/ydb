@@ -104,15 +104,13 @@ public:
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
             credentialsFactory,
             "Tenant",
             TestActorFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
-            yqSharedResources->UserSpaceYdbDriver,
-            NActors::TActorId()
+            yqSharedResources->UserSpaceYdbDriver
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

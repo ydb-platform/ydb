@@ -28,7 +28,8 @@ class StreamingImportTestBase(object):
                 "enable_move_column_table": True
             },
             query_service_config={"available_external_data_sources": ["Ydb"]},
-            table_service_config={}
+            table_service_config={},
+            nodes=2
         )
         config.yaml_config["query_service_config"] = {}
         config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb"]

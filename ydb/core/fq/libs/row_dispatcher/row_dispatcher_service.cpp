@@ -22,7 +22,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
-    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring,
     ::NMonitoring::TDynamicCounterPtr countersRoot)
 {
@@ -36,7 +35,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         countersRoot,
         pqGateway,
         driver,
-        nodesManagerId,
         monitoring);
 }
 

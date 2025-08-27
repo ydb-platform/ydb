@@ -273,7 +273,6 @@ void Init(
             yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
             pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
             yqSharedResources->UserSpaceYdbDriver,
-            MakeNodesManagerId(),
             appData->Mon,
             appData->Counters);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());

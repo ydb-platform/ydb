@@ -4,9 +4,7 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NKikimrConfig::TSharedReadingConfig {
-    class TJsonParserConfig;
-} // namespace NFq::NKikimrConfig
+#include <ydb/core/protos/config.pb.h>
 
 namespace NFq::NRowDispatcher {
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/core/protos/config.pb.h>
@@ -14,6 +16,6 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nodesManagerId);
+    NActors::TActorId nameserviceId = NActors::GetNameserviceActorId());
 
 } // namespace NFq

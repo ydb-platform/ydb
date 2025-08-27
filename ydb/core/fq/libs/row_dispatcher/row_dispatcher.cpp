@@ -342,7 +342,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     NYql::IPqGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
-    NActors::TActorId NodesManagerId;
     TNodesTracker NodesTracker;
     NYql::TCounters::TEntry AllSessionsDateRate;
     TAggregatedStats AggrStats; 
@@ -425,7 +424,6 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
-        NActors::TActorId nodesManagerId,
         NActors::TMon* monitoring = nullptr);
 
     void Bootstrap();
@@ -507,7 +505,6 @@ TRowDispatcher::TRowDispatcher(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
-    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -522,7 +519,6 @@ TRowDispatcher::TRowDispatcher(
     , PqGateway(pqGateway)
     , Driver(driver)
     , Monitoring(monitoring)
-    , NodesManagerId(nodesManagerId)
 {
 }
 
@@ -531,7 +527,7 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters).release());
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
@@ -1296,7 +1292,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
-    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
@@ -1309,7 +1304,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         countersRoot,
         pqGateway,
         driver,
-        nodesManagerId,
         monitoring));
 }
 

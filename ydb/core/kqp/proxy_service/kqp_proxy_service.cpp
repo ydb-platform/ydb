@@ -334,7 +334,6 @@ public:
                 Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
                 FederatedQuerySetup->PqGateway,
                 *FederatedQuerySetup->Driver,
-                NActors::TActorId{},
                 mon,
                 Counters->GetKqpCounters());
 

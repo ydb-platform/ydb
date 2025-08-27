@@ -46,10 +46,12 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvPrintState = EvBegin,
+        EvListNodes,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+    struct TEvListNodes : public NActors::TEventLocal<TEvListNodes, EvListNodes> {};
 };
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
@@ -177,7 +179,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     TActorId LocalRowDispatcherId;
-    NActors::TActorId NodesManagerId;
+    TActorId NameserviceId;
     const TString LogPrefix;
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
@@ -194,7 +196,7 @@ public:
         const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        NActors::TActorId nodesManagerId);
+        NActors::TActorId nameserviceId);
 
     void Bootstrap();
 
@@ -203,22 +205,24 @@ public:
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
-    void Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr&);
+    void Handle(TEvPrivate::TEvListNodes::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
-        hFunc(NFq::TEvNodesManager::TEvGetNodesResponse, Handle);
+        hFunc(TEvPrivate::TEvListNodes, Handle);
     })
 
 private:
@@ -233,6 +237,7 @@ private:
     TString GetInternalState();
     bool IsReady() const;
     void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
+    void ScheduleNodeInfoRequest() const;
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -240,10 +245,10 @@ TActorCoordinator::TActorCoordinator(
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nameserviceId)
     : Config(config)
     , LocalRowDispatcherId(localRowDispatcherId)
-    , NodesManagerId(nodesManagerId)
+    , NameserviceId(nameserviceId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters)
@@ -254,11 +259,7 @@ TActorCoordinator::TActorCoordinator(
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-
-    if (NodesManagerId) {
-        Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery);
-    }
-
+    ScheduleNodeInfoRequest();
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
@@ -363,9 +364,9 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
 
-    if (ev->Sender == NodesManagerId) {
-        LOG_ROW_DISPATCHER_INFO("TEvUndelivered, from nodes manager, reason: " << ev->Get()->Reason);
-        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
+    if (ev->Sender == NActors::GetNameserviceActorId()) {
+        LOG_ROW_DISPATCHER_INFO("TEvUndelivered, from name service, reason: " << ev->Get()->Reason);
+        ScheduleNodeInfoRequest();
         return;
     }
 
@@ -522,19 +523,17 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     PrintInternalState();
 }
 
-void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
-    NodesCount = ev->Get()->NodeIds.size();
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetNodesResponse, nodes count " << NodesCount);
-    if (!NodesCount) {
-        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
-    }
+void TActorCoordinator::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+    NodesCount = ev->Get()->Nodes.size();
+    LOG_ROW_DISPATCHER_DEBUG("Updated node info, node count: " <<  ev->Get()->Nodes.size());
     UpdatePendingReadActors();
 }
 
+void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
+    Send(NameserviceId, new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
+}
+
 bool TActorCoordinator::IsReady() const {
-    if (!NodesManagerId) {
-        return true;
-    }
     if (!NodesCount) {
         return false;
     }
@@ -548,6 +547,10 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
     Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
 }
 
+void TActorCoordinator::ScheduleNodeInfoRequest() const {
+    Schedule(NodesManagerRetryPeriod, new TEvPrivate::TEvListNodes());
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -557,9 +560,9 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nameserviceId)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nodesManagerId));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nameserviceId));
 }
 
 } // namespace NFq

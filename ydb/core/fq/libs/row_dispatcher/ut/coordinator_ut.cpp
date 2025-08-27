@@ -32,7 +32,7 @@ public:
         RowDispatcher2Id = Runtime.AllocateEdgeActor(2);
         ReadActor1 = Runtime.AllocateEdgeActor(0);
         ReadActor2 = Runtime.AllocateEdgeActor(0);
-        NodesManager = Runtime.AllocateEdgeActor(0);
+        Nameservice = Runtime.AllocateEdgeActor(0);
 
         NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
@@ -40,13 +40,12 @@ public:
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
-
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,
             config,
             "Tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            NodesManager
+            Nameservice
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);
@@ -106,14 +105,15 @@ public:
     }
 
     void ProcessNodesManagerRequest(ui64 nodesCount) {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvNodesManager::TEvGetNodesRequest>(NodesManager, TDuration::Seconds(5));
+        auto eventHolder = Runtime.GrabEdgeEvent<TEvInterconnect::TEvListNodes>(Nameservice, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
 
-        auto event = new NFq::TEvNodesManager::TEvGetNodesResponse();
+        auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+        nodesInfo->reserve(nodesCount);
         for (ui64 i = 0; i < nodesCount; ++i) {
-            event->NodeIds.push_back(i);
+            nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{});
         }
-        Runtime.Send(new NActors::IEventHandle(Coordinator, NodesManager, event));
+        Runtime.Send(new NActors::IEventHandle(Coordinator, Nameservice, new TEvInterconnect::TEvNodesInfo(nodesInfo)));
     }
 
     TActorSystemStub actorSystemStub;
@@ -124,7 +124,7 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
-    NActors::TActorId NodesManager;
+    NActors::TActorId Nameservice;
 };
 
 Y_UNIT_TEST_SUITE(CoordinatorTests) {

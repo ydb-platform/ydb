@@ -65,7 +65,7 @@ public:
             Coordinator3,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources->UserSpaceYdbDriver,,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());

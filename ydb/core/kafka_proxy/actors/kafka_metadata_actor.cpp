@@ -183,7 +183,7 @@ TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TE
     TVector<TNodeInfo*> partitionNodes;
     for (const auto& part : response->Partitions) {
         auto iter = Nodes.find(part.NodeId);
-        if (iter.IsEnd()) {
+        if (iter == Nodes.end()) {
             return {};
         }
         partitionNodes.push_back(&iter->second);
@@ -215,8 +215,31 @@ void TKafkaMetadataActor::AddTopicResponse(
         responsePartition.ErrorCode = NONE_ERROR;
         responsePartition.LeaderId = nodeId;
         responsePartition.LeaderEpoch = part.Generation;
-        responsePartition.ReplicaNodes.push_back(nodeId);
-        responsePartition.IsrNodes.push_back(nodeId);
+
+        // adding replica nodes in a roundrobin manner based on sorted NodeId
+        TMap<ui32, TKafkaMetadataActor::TNodeInfo> nodesToAdd;
+        nodesToAdd[nodeId] = *(*nodeIter);
+
+        auto nodeToAddIter = Nodes.find(part.NodeId);
+        nodeToAddIter++;
+        if (nodeToAddIter != Nodes.end()) {
+            nodesToAdd[nodeToAddIter->first] = nodeToAddIter->second;
+        } else {
+            nodeToAddIter = Nodes.begin();
+            nodesToAdd[nodeToAddIter->first] = nodeToAddIter->second;
+        }
+
+        nodeToAddIter++;
+        if (nodeToAddIter != Nodes.end()) {
+            nodesToAdd[nodeToAddIter->first] = nodeToAddIter->second;
+        } else {
+            nodeToAddIter = Nodes.begin();
+            nodesToAdd[nodeToAddIter->first] = nodeToAddIter->second;
+        }
+        for (const auto& [nodeToAddId, nodeToAddInfo] : nodesToAdd) {
+            responsePartition.ReplicaNodes.push_back(nodeToAddId);
+            responsePartition.IsrNodes.push_back(nodeToAddId);
+        }
 
         topic.Partitions.emplace_back(std::move(responsePartition));
 
@@ -228,6 +251,14 @@ void TKafkaMetadataActor::AddTopicResponse(
                     hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
                 }
                 AddBroker(part.NodeId, hostname, (*nodeIter)->Port);
+            }
+            for (const auto& [nodeToAddId, nodeToAddInfo] : nodesToAdd) {
+                if (nodeToAddId != nodeId) {
+                    ins = AllClusterNodes.insert(nodeToAddId);
+                    if (ins.second) {
+                        AddBroker(nodeToAddId, nodeToAddInfo.Host, nodeToAddInfo.Port);
+                    }
+                }
             }
         }
         ++nodeIter;

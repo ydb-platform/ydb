@@ -127,17 +127,17 @@ jobs:
         mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 
         mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
 
-    - name: Patch fix_msvc_output.py to filter None arguments early
+    - name: Patch fix_msvc_output.py with debug output and None filtering
       if: ${{ matrix.os == 'windows-amd' }}
       shell: powershell
       run: |
-        Write-Host "=== Original content around line 42 ==="
-        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 40 -First 10
+        Write-Host "=== Adding debug output and filtering None ==="
         $content = Get-Content build/scripts/fix_msvc_output.py -Raw
-        $content = $content -replace "args = sys\.argv\[1:\]", "args = [arg for arg in sys.argv[1:] if arg != 'None']"
+        $content = $content -replace "args = \[arg for arg in sys\.argv\[1:\] if arg != 'None'\]", "args = [arg for arg in sys.argv[1:] if arg != 'None']; print(f'DEBUG: Filtered args = {args}', file=sys.stderr)"
+        $content = $content -replace "p = subprocess\.Popen\(cmd, stdout=subprocess\.PIPE\)", "print(f'DEBUG: Executing command = {cmd}', file=sys.stderr); p = subprocess.Popen(cmd, stdout=subprocess.PIPE)"
+        $content = $content -replace "return subprocess\.Popen\(cmd, stdout=sys\.stderr\)\.wait\(\)", "print(f'DEBUG: Executing out2err command = {cmd}', file=sys.stderr); return subprocess.Popen(cmd, stdout=sys.stderr).wait()"
         Set-Content build/scripts/fix_msvc_output.py -Value $content
-        Write-Host "=== Patched content around line 42 ==="
-        Get-Content build/scripts/fix_msvc_output.py | Select-Object -Skip 40 -First 10
+        Write-Host "=== Patched with debug output ==="
 
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}

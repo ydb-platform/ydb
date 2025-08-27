@@ -219,8 +219,9 @@ namespace NKafka::NTests {
             runtime->EnableScheduleForActor(actorId);
         }
 
-        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false, ui64 expectedTopicCount = 1, ui64 expectedBrokersCount = 1,
-                                                                const std::vector<ui32>& expectedNodeIds = {}) {
+        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false,
+                                    ui64 expectedTopicCount = 1, ui64 expectedBrokersCount = 1,
+                                    const std::vector<ui32>& expectedNodeIds = {}) {
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
             UNIT_ASSERT(ev);

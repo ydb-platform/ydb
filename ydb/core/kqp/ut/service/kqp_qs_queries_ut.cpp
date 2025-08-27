@@ -5546,7 +5546,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented");
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented. TablePath = '/Root/test/alterNotNull'");
         }
 
         // {
@@ -5615,7 +5615,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented");
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented. TablePath = '/Root/test/alterNotNull'");
         }
 
         // {

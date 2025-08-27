@@ -1752,17 +1752,17 @@ message TSetColumnConstraintSettings {
 }
 
 message TSetColumnConstraintsRequest {
-    optional string TablePath = 1;
+    optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
 message TSetColumnConstraintsLock {
-    optional string TablePath = 1;
+    optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
 message TSetColumnConstraintsCheck {
-    optional string TablePath = 1;
+    optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
@@ -1772,7 +1772,7 @@ message TSetColumnConstraintsFinalize {
         COLUMN_CONSTRAINT_VIOLATION = 1;
     }
 
-    optional string TablePath = 1;
+    optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
     optional EStatus Status = 3;
 }
@@ -1894,7 +1894,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsRequest SetConstraintRequest = 86;
+    optional TSetColumnConstraintsRequest SetColumnConstraintsRequest = 86;
 
     // Some entries are grouped by semantics, so are out of order
 }

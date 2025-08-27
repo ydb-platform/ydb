@@ -672,7 +672,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         // since it operates on paths determined at runtime
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint:
-        result.emplace_back(tx.GetSetConstraintRequest().GetTablePath());
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsRequest().GetTableName()}));
         break;
     }
 

@@ -884,6 +884,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
                     if (cIt->second.SchemaSnapshotAcquired) {
                         const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
                         if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                            std::cerr << "PersistChangeRecord::ScheduleRemoveSchemaSnapshot\n";
                             ScheduleRemoveSchemaSnapshot(snapshotKey);
                         }
                     }
@@ -1021,6 +1022,7 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
             if (cIt->second.SchemaSnapshotAcquired) {
                 const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
                 if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                    std::cerr << "CommitLockChangeRecords::ScheduleRemoveSchemaSnapshot\n";
                     ScheduleRemoveSchemaSnapshot(snapshotKey);
                 }
             }
@@ -1091,6 +1093,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     if (record.SchemaSnapshotAcquired) {
         const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
         if (const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+            std::cerr << "RemoveChangeRecord::ScheduleRemoveSchemaSnapshot\n";
             ScheduleRemoveSchemaSnapshot(snapshotKey);
         }
     }
@@ -1495,6 +1498,7 @@ void TDataShard::ScheduleRemoveAbandonedLockChanges() {
 }
 
 void TDataShard::ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key) {
+    std::cerr << "ScheduleRemoveSchemaSnapshot\n";
     Y_ABORT_UNLESS(!SchemaSnapshotManager.HasReference(key));
 
     const auto* snapshot = SchemaSnapshotManager.FindSnapshot(key);
@@ -1516,6 +1520,7 @@ void TDataShard::ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key) {
 }
 
 void TDataShard::ScheduleRemoveAbandonedSchemaSnapshots() {
+    std::cerr << "ScheduleRemoveAbandonedSchemaSnapshots\n";
     bool wasEmpty = PendingSchemaSnapshotsToGc.empty();
 
     for (const auto& [key, snapshot] : SchemaSnapshotManager.GetSnapshots()) {
@@ -1776,7 +1781,10 @@ void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersio
             break;
         }
         if (!SchemaSnapshotManager.HasReference(it->first)) {
+            std::cerr << "AddSchemaSnapshot::ScheduleRemoveSchemaSnapshot " << it->first.Version << "\n";
             ScheduleRemoveSchemaSnapshot(it->first);
+        } else {
+            std::cerr << "!AddSchemaSnapshot::ScheduleRemoveSchemaSnapshot " << it->first.Version << "\n";
         }
     }
 }
@@ -3262,6 +3270,7 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
 }
 
 void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx) {
+    std::cerr << "Handle(TEvTxProcessing::TEvPlanStep\n";
     ui64 srcMediatorId = ev->Get()->Record.GetMediatorID();
     if (!CheckMediatorAuthorisation(srcMediatorId)) {
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() <<
@@ -3271,7 +3280,9 @@ void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorCont
         return;
     }
 
+    std::cerr << "Start execute\n";
     Execute(new TTxPlanStep(this, ev), ctx);
+    std::cerr << "End execute\n";
 }
 
 void TDataShard::Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx) {
@@ -3300,6 +3311,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorCo
 }
 
 void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TActorContext &ctx) {
+    std::cerr << "TDataShard::Handle(TEvPrivate::TEvProgressTransaction)\n";
     Y_UNUSED(ev);
     IncCounter(COUNTER_TX_PROGRESS_EV);
     ExecuteProgressTx(ctx);
@@ -4599,12 +4611,14 @@ bool TDataShard::ReassignChannelsEnabled() const {
 }
 
 void TDataShard::ExecuteProgressTx(const TActorContext& ctx) {
+    std::cerr << "ExecuteProgressTx\n";
     Execute(new TTxProgressTransaction(this, {}, {}), ctx);
 }
 
 void TDataShard::ExecuteProgressTx(TOperation::TPtr op, const TActorContext& ctx) {
     Y_ABORT_UNLESS(op->IsInProgress());
     NWilson::TTraceId traceId = op->GetTraceId();
+    std::cerr << "ExecuteProgressTx\n";
     Execute(new TTxProgressTransaction(this, std::move(op), std::move(traceId)), ctx);
 }
 

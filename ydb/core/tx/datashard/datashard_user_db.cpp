@@ -317,6 +317,7 @@ ui64 TDataShardUserDb::GetChangeGroup() {
 }
 
 void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
+    std::cerr << "CommitChanges\n";
     auto localTid = Self.GetLocalTableId(tableId);
     Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 

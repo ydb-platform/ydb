@@ -155,7 +155,10 @@ public:
 
     // schema ops
 
-    bool HasSchemaOperation() const { return CurrentSchemaTxId(); }
+    bool HasSchemaOperation() const { 
+        std::cerr << "HasSchemaOperation " << CurrentSchemaTxId() << "\n";
+        return CurrentSchemaTxId();
+    }
     bool HasCreate() const { return SchemaTx && SchemaTx->IsCreate(); }
     bool HasAlter() const { return SchemaTx && SchemaTx->IsAlter(); }
     bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); }
@@ -184,6 +187,7 @@ public:
     }
 
     void SetSchemaOp(TSchemaOperation * op) {
+        std::cerr << "SetSchemaOp " << op->TxId << "\n";
         Y_ABORT_UNLESS(!SchemaTx || SchemaTx->TxId == op->TxId);
         SchemaTx = op;
     }

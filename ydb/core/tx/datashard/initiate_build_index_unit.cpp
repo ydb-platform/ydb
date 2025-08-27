@@ -19,6 +19,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
+        std::cerr << "TInitiateBuildIndexUnit::Execute\n";
         Y_ABORT_UNLESS(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -26,6 +27,7 @@ public:
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasInitiateBuildIndex()) {
+            std::cerr << "RETURN\n";
             return EExecutionStatus::Executed;
         }
 
@@ -50,14 +52,17 @@ public:
 
             tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, version, indexDesc);
         } else {
+            std::cerr << "DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);\n";
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
         Y_ABORT_UNLESS(tableInfo);
         TDataShardLocksDb locksDb(DataShard, txc);
+        std::cerr << "DataShard.AddUserTable(pathId, tableInfo, &locksDb);\n";
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
+            std::cerr << "DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);\n";
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
@@ -68,11 +73,14 @@ public:
         const TSnapshotKey key(pathId, step, txId);
         const ui64 flags = TSnapshot::FlagScheme;
 
+        std::cerr << "DataShard.GetSnapshotManager().AddSnapshot()\n";
         DataShard.GetSnapshotManager().AddSnapshot(
             txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
+        std::cerr << "RESULT\n";
+        //sleep(10);
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }

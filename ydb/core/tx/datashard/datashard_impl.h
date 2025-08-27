@@ -341,6 +341,7 @@ class TDataShard
     class TSendVolatileWriteResult;
     class TSendArbiterReadSets;
 
+    public:
     struct TEvPrivate {
         enum EEv {
             EvProgressTransaction = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), // WARNING: tests use ES_PRIVATE + 0
@@ -602,6 +603,7 @@ class TDataShard
 
         struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
     };
+    private:
 
     struct Schema : NIceDb::Schema {
         struct Sys : Table<1> {
@@ -1643,7 +1645,9 @@ public:
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
+        std::cerr << "AddUserTable\n";
         if (locksDb) {
+            std::cerr << "SysLocks.RemoveSchema\n";
             SysLocks.RemoveSchema(tableId, locksDb);
         }
         TableInfos[tableId.LocalPathId] = tableInfo;

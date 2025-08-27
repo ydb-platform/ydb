@@ -79,6 +79,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:
+        std::cerr << "case EExecutionUnitKind::ExecuteKqpDataTx:\n";
         return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
@@ -129,18 +130,23 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::DropVolatileSnapshot:
         return CreateDropVolatileSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::InitiateBuildIndex:
+        std::cerr << "case EExecutionUnitKind::InitiateBuildIndex:\n";
         return CreateInitiateBuildIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeBuildIndex:
+        std::cerr << "case EExecutionUnitKind::FinalizeBuildIndex:\n";
         return CreateFinalizeBuildIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropIndexNotice:
         return CreateDropIndexNoticeUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveTable:
         return CreateMoveTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreateCdcStream:
+        std::cerr << "case EExecutionUnitKind::CreateCdcStream:\n";
         return CreateCreateCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterCdcStream:
+        std::cerr << "case EExecutionUnitKind::AlterCdcStream:\n";
         return CreateAlterCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropCdcStream:
+        std::cerr << "case EExecutionUnitKind::DropCdcStream:\n";
         return CreateDropCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveIndex:
         return CreateMoveIndexUnit(dataShard, pipeline);
@@ -149,6 +155,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteRead:
         return CreateReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteWrite:
+        std::cerr << "case EExecutionUnitKind::ExecuteWrite:\n";
         return CreateExecuteWriteUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
@@ -243,6 +250,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     }
 
     if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+        std::cerr << "XXXXXXXXXXXXX\n";
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 

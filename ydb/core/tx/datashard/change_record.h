@@ -36,7 +36,7 @@ public:
 
     const TPathId& GetTableId() const { return TableId; }
     ui64 GetSchemaVersion() const { return SchemaVersion; }
-    TUserTable::TCPtr GetSchema() const { return Schema; }
+    //TUserTable::TCPtr GetSchema() const { return Schema; }
 
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
@@ -92,6 +92,15 @@ public:
         }
     }
 
+    TUserTable::TCPtr GetSchema() const {
+        if (!Schema_) {
+            std::cerr << "AAAA There is NO scheme\n";
+        } else {
+            std::cerr << "BBBB There is scheme" << Schema_.Get() << "\n";
+        }
+        return  Schema_;
+    }
+
 private:
     ui64 Group = 0;
     ui64 Step = 0;
@@ -103,7 +112,7 @@ private:
 
     ui64 SchemaVersion;
     TPathId TableId;
-    TUserTable::TCPtr Schema;
+    TUserTable::TCPtr Schema_;
 
     mutable TMaybe<TOwnedCellVec> Key;
     mutable TMaybe<TString> PartitionKey;
@@ -161,7 +170,12 @@ public:
     }
 
     TSelf& WithSchema(TUserTable::TCPtr schema) {
-        GetRecord()->Schema = schema;
+        if (!schema) {
+            std::cerr << "CCCC There is NO scheme\n";
+        } else {
+            std::cerr << "DDDD There is scheme" << schema.Get() << "\n";
+        }
+        GetRecord()->Schema_ = schema;
         return static_cast<TSelf&>(*this);
     }
 

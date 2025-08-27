@@ -14,6 +14,7 @@ namespace NKikimr::NDataShard {
         TTxType GetTxType() const override { return TXTYPE_VOLATILE_TX_COMMIT; }
 
         bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+            std::cerr << "TTxVolatileTxCommit::Execute\n";
             NIceDb::TNiceDb db(txc.DB);
 
             Y_ABORT_UNLESS(Self->VolatileTxManager.PendingCommitTxScheduled);

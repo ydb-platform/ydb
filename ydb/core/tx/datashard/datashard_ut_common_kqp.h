@@ -203,6 +203,7 @@ namespace NKqpHelpers {
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
+        std::cerr << "!!!     KqpSimpleBegin.    !!! " << result.tx_meta().id() << "\n";
         txId = result.tx_meta().id();
         return FormatResult(result);
     }

@@ -59,6 +59,7 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
 }
 
 bool TSchemaSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {
+    std::cerr << "AddSnapshot\n";
     if (auto it = Snapshots.find(key); it != Snapshots.end()) {
         Y_VERIFY_DEBUG_S(false, "Duplicate schema snapshot: " << key);
         return false;
@@ -77,10 +78,12 @@ bool TSchemaSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSchemaSna
 }
 
 const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapshotKey& key) const {
+    std::cerr << "FindSnapshot " << key.Version << "\n";
     return Snapshots.FindPtr(key);
 }
 
 void TSchemaSnapshotManager::RemoveShapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key) {
+    std::cerr << "RemoveShapshot " << key.Version << "\n";
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
         return;
@@ -114,8 +117,11 @@ void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
 
         auto refIt = References.find(prevKey);
         if (refIt != References.end()) {
+            std::cerr << "TSchemaSnapshotManager::RenameSnapshots " << prevKey.Version << " " << newKey.Version << "\n";
             References[newKey] = refIt->second;
             References.erase(refIt);
+        } else {
+            std::cerr << "TSchemaSnapshotManager::RenameSnapshots " << prevKey.Version << "\n";
         }
 
         it = Snapshots.erase(it);
@@ -127,6 +133,7 @@ const TSchemaSnapshotManager::TSnapshots& TSchemaSnapshotManager::GetSnapshots()
 }
 
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
+    std::cerr << "TSchemaSnapshotManager::AcquireReference " << key.Version << "\n";
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
         return false;
@@ -137,6 +144,7 @@ bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
 }
 
 bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
+    std::cerr << "TSchemaSnapshotManager::ReleaseReference " << key.Version << "\n";
     auto refIt = References.find(key);
 
     if (refIt == References.end() || refIt->second <= 0) {
@@ -162,8 +170,10 @@ bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
 bool TSchemaSnapshotManager::HasReference(const TSchemaSnapshotKey& key) const {
     auto refIt = References.find(key);
     if (refIt != References.end()) {
+        std::cerr << "TSchemaSnapshotManager::HasReference" << "\n";
         return refIt->second;
     } else {
+        std::cerr << "!TSchemaSnapshotManager::HasReference" << "\n";
         return false;
     }
 }

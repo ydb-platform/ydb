@@ -20,6 +20,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
+        std::cerr << "TCreateCdcStreamUnit::Execute\n";
         Y_ABORT_UNLESS(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -27,6 +28,7 @@ public:
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasCreateCdcStreamNotice()) {
+            std::cerr << "RETURN\n";
             return EExecutionStatus::Executed;
         }
 
@@ -41,10 +43,13 @@ public:
         Y_ABORT_UNLESS(version);
 
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
-        TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        //TDataShardLocksDb locksDb(DataShard, txc);
+        //DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        std::cerr << "DataShard.AddUserTable(pathId, tableInfo)\n";
+        DataShard.AddUserTable(pathId, tableInfo);
 
         if (tableInfo->NeedSchemaSnapshots()) {
+            std::cerr << "DataShard.AddSchemaSnapshot()\n";
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
@@ -72,6 +77,7 @@ public:
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
+        std::cerr << "RESULT\n";
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }

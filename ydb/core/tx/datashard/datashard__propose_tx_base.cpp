@@ -98,6 +98,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
         Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
+        std::cerr << "RunExecutionPlan\n";
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
         switch (status) {

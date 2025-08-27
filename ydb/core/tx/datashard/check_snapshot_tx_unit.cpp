@@ -135,6 +135,7 @@ public:
 
         if (!op->IsImmediate()) {
             if (!Pipeline.AssignPlanInterval(op)) {
+                std::cerr << "JJJJJJJJJ\n";
                 TString err = TStringBuilder()
                     << "Can't propose tx " << op->GetTxId() << " at blocked shard "
                     << DataShard.TabletID();

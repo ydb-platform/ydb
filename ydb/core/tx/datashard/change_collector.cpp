@@ -94,6 +94,7 @@ public:
     }
 
     void CommitLockChanges(ui64 lockId, const TRowVersion& writeVersion) override {
+        std::cerr << "CommitLockChanges\n";
         NIceDb::TNiceDb db(Db);
 
         Self->CommitLockChangeRecords(db, lockId, GroupProvider.GetChangeGroup(), writeVersion, Collected);
@@ -131,6 +132,12 @@ public:
             builder
                 .WithLockId(WriteTxId)
                 .WithLockOffset(lockOffset);
+        }
+
+        if (userTable) {
+            std::cerr << "aaa there is userTable\n";
+        } else {
+            std::cerr << "bbb there is NO userTable\n";
         }
 
         auto recordPtr = builder

@@ -248,7 +248,7 @@ class AsyncHealthcheckRunner:
             this_pile = data['location']['pile']['name']
             failed_groups = filter(
                 lambda issue: 'GROUP' in issue.get('type', '') and 'pile' in issue.get('location', {}).get('storage', {}).get('pool', {}).get('group', {})
-                    and issue.get('status') == 'RED',
+                    and (issue.get('status') == 'RED' or issue.get('status') == 'YELLOW'),
                 issues,
             )
             failed_piles = set(

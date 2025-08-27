@@ -65,6 +65,8 @@ protected:
     ui32 UploadBytes = 0;
     const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
+    const TString EmptyVector;
+    const ui32 EmptyLevels;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -76,7 +78,9 @@ public:
                    TIndexBuildId buildId,
                    TIndexBuildInfo::TSample::TRows sample,
                    NTableIndex::TClusterId parent,
-                   NTableIndex::TClusterId child)
+                   NTableIndex::TClusterId child,
+                   const TString& emptyVector,
+                   ui32 emptyLevels)
         : TargetTable(std::move(targetTable))
         , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
@@ -85,11 +89,13 @@ public:
         , Sample(std::move(sample))
         , Parent(parent)
         , Child(child)
+        , EmptyVector(emptyVector)
+        , EmptyLevels(emptyLevels)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Sample.empty());
+        Y_ENSURE(!Sample.empty() || EmptyLevels > 0);
         Y_ENSURE(Parent < Child);
         Y_ENSURE(Child != 0);
     }
@@ -130,6 +136,19 @@ public:
             UploadRows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
         Sample = {}; // release memory
+
+        if (EmptyLevels > 0) {
+            // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
+            TVector<TCell> emptyCells = {TCell(EmptyVector.data(), EmptyVector.size())};
+            auto emptyRow = TSerializedCellVec::Serialize(emptyCells);
+            Y_ENSURE(!UploadRows->size());
+            for (ui32 level = 1; level <= EmptyLevels; level++) {
+                pk[0] = TCell::Make((ui64)(level-1));
+                pk[1] = TCell::Make(level == EmptyLevels ? SetPostingParentFlag((ui64)level) : (ui64)level);
+                UploadBytes += NDataShard::CountRowCellBytes(pk, emptyCells);
+                UploadRows->emplace_back(TSerializedCellVec{pk}, emptyRow);
+            }
+        }
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -869,16 +888,11 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto rows = buildInfo.Sample.Rows;
-        auto isLeaf = !buildInfo.KMeans.NeedsAnotherLevel();
-        if (buildInfo.KMeans.IsEmpty) {
-            auto emptyRow = buildInfo.Clusters->GetEmptyRow();
-            rows.push_back(TIndexBuildInfo::TSample::TRow(0, TSerializedCellVec::Serialize({TCell(emptyRow.data(), emptyRow.size())})));
-            isLeaf = true;
-        }
-        auto actor = new TUploadSampleK(path.PathString(), isLeaf,
+        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
-            rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
+            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child,
+            buildInfo.KMeans.IsEmpty ? buildInfo.Clusters->GetEmptyRow() : "",
+            buildInfo.KMeans.IsEmpty ? buildInfo.KMeans.Levels : 0);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 

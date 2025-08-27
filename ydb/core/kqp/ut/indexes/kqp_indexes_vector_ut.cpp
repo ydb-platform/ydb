@@ -809,25 +809,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         auto session = DoOnlyCreateTableForVectorIndex(db, false, "data", Partitioned);
         DoCreateVectorIndex(session, false);
 
-        // Check that the index has 1 empty leaf cluster
-        {
-            const TString query1(Q_(R"(
-                SELECT COUNT(*), UNWRAP(SUM(CASE WHEN (__ydb_id & 0x8000000000000000) != 0 THEN 1 ELSE 0 END)) FROM `/Root/TestTable/index1/indexImplLevelTable`;
-            )"));
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u;1]]");
-        }
-        {
-            const TString query1(Q_(R"(
-                SELECT COUNT(*) FROM `/Root/TestTable/index1/indexImplPostingTable`;
-            )"));
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[0u]]");
-        }
+        // Check that the index has a stub cluster hierarchy but the posting table is empty
+        const TString level = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplLevelTable");
+        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"  \\2\"]];[[1u];[9223372036854775810u];[\"  \\2\"]]]");
+        const TString posting = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(posting, "[]");
 
         // Insert to the table with index should succeed
         {
@@ -850,6 +836,19 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+        }
+
+        // The added vector should be found successfully
+        {
+            const TString query1(Q_(R"(
+                SELECT pk FROM `/Root/TestTable`
+                VIEW index1
+                ORDER BY Knn::CosineDistance(emb, "AA\x03")
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[10]]");
         }
     }
 

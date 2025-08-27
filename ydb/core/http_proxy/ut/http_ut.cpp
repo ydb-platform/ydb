@@ -38,12 +38,13 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
         } else {
             UNIT_ASSERT(compressed.empty());
         }
-        const auto contentLength = contentLengthDiff.transform([&payload](int d) {
+        std::optional<ssize_t> contentLength = std::nullopt;
+        if (contentLengthDiff.has_value()) {
             ssize_t sz = payload.size();
-            sz += d;
+            sz += contentLengthDiff.value();
             sz = Max<ssize_t>(1, sz);
-            return sz;
-        });
+            contentLength = sz;
+        }
 
         TString request;
         {

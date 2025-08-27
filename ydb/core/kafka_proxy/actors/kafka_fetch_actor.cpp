@@ -169,7 +169,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         TKafkaHeader header;
         header.CodecKeyStr = "__codec";
-        header.Key = header.CodecKeyStr; // обеспечить более долгую жизнь. record.CodecHeaderStr
+        header.Key = header.CodecKeyStr;
         header.CodecValueStr = TString(std::to_string(record.DataChunk.GetCodec()));
         header.Value = header.CodecValueStr;
         record.Headers.push_back(header);

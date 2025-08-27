@@ -1,4 +1,6 @@
 #include "yql_generic_state.h"
+#include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 
 namespace NYql {
     bool TGenericState::TTableMeta::HasSplitsForSelect(const NConnector::NApi::TSelect& select) const {
@@ -21,7 +23,9 @@ namespace NYql {
         if (!SelectSplits.contains(k)) {
             throw yexception()
                 << "Table metadata does not contains split for select: "
-                << select.DebugString();
+                << select.what().DebugString()
+                << select.from().DebugString()
+                << select.where().DebugString();
         }
 
         return SelectSplits.at(k);
@@ -60,51 +64,6 @@ namespace NYql {
 
         result->AttachSplitsForSelect(select, splits);
         return std::nullopt;
-    }
-
-    TString GetWhereKey(const NConnector::NApi::TSelect& select) {
-        if (!select.has_where() || !select.where().has_filter_typed()) {
-            return "";
-        }
-
-        return select.where().filter_typed().SerializeAsString();
-    }
-
-    TString GetColumnsKey(const NConnector::NApi::TSelect& select) {
-        if (!select.has_what() || !select.what().items_size()) {
-            return "";
-        }
-
-        // Use a set to preserve order of columns
-        std::set<TString> columnNames;
-
-        for (auto column: select.what().items()) {
-            columnNames.emplace(column.column().name());
-        }
-
-        auto key = std::accumulate(
-            columnNames.begin(),
-            columnNames.end(),
-            TString(),
-            [](const TString& acc, const TString& str) -> TString {
-                if (acc.empty()) {
-                    return str;
-                }
-
-                return TStringBuilder() << acc << "!" << str;
-            }
-        );
-
-        return key;
-    }
-
-    TString GetSelectKey(const NConnector::NApi::TSelect& select) {
-        Y_ENSURE(select.has_from());
-
-        return TStringBuilder()
-            << select.from().table() << "!"
-            << GetColumnsKey(select) << "!"
-            << GetWhereKey(select);
     }
 
 } // namespace NYql

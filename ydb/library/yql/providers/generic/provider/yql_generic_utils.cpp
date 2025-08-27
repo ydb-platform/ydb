@@ -1,6 +1,8 @@
 #include "yql_generic_utils.h"
 
 #include <util/string/builder.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 
 namespace NYql {
     TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) {
@@ -19,4 +21,94 @@ namespace NYql {
 
         return sb;
     }
+
+    ///
+    /// Fill a select from a TGenSourceSettings
+    ///
+    void FillSelectFromGenSourceSettings(NConnector::NApi::TSelect& select,
+                                         const NNodes::TGenSourceSettings& settings,
+                                         TExprContext& ctx,
+                                         const TGenericState::TTableMeta* tableMeta) {
+        const auto& tableName = settings.Table().StringValue();
+
+        select.mutable_from()->set_table(TString(tableName));
+        *select.mutable_data_source_instance() = tableMeta->DataSourceInstance;
+
+        const auto& columns = settings.Columns();
+        auto items = select.mutable_what()->mutable_items();
+
+        for (size_t i = 0; i < columns.Size(); i++) {
+            // assign column name
+            auto column = items->Add()->mutable_column();
+            auto columnName = columns.Item(i).StringValue();
+            column->mutable_name()->assign(columnName);
+
+            // assign column type
+            auto type = NConnector::GetColumnTypeByName(tableMeta->Schema, columnName);
+            *column->mutable_type() = type;
+        }
+
+        if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+            TStringBuilder err;
+
+            if (!SerializeFilterPredicate(ctx, predicate, select.mutable_where()->mutable_filter_typed(), err)) {
+                throw yexception() << "Failed to serialize filter predicate for source: " << err;
+            }
+        }
+    }
+
+    ///
+    /// Get an unique key for a where clause
+    ///
+    TString GetWhereKey(const NConnector::NApi::TSelect& select) {
+        if (!select.has_where() || !select.where().has_filter_typed()) {
+            return "";
+        }
+
+        return select.where().filter_typed().SerializeAsString();
+    }
+
+    ///
+    /// Get an unique key for a columns clause
+    ///
+    TString GetColumnsKey(const NConnector::NApi::TSelect& select) {
+        if (!select.has_what() || !select.what().items_size()) {
+            return "";
+        }
+
+        // Use a set to preserve order of columns
+        std::set<TString> columnNames;
+
+        for (auto column: select.what().items()) {
+            columnNames.emplace(column.column().name());
+        }
+
+        auto key = std::accumulate(
+            columnNames.begin(),
+            columnNames.end(),
+            TString(),
+            [](const TString& acc, const TString& str) -> TString {
+                if (acc.empty()) {
+                    return str;
+                }
+
+                return TStringBuilder() << acc << "!" << str;
+            }
+        );
+
+        return key;
+    }
+
+    ///
+    /// Get an unique key for a select request
+    ///
+    TString GetSelectKey(const NConnector::NApi::TSelect& select) {
+        Y_ENSURE(select.has_from());
+
+        return TStringBuilder()
+            << select.from().table() << "!"
+            << GetColumnsKey(select) << "!"
+            << GetWhereKey(select);
+    }
+
 } // namespace NYql

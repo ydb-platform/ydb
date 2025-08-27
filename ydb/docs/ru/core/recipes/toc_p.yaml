@@ -17,7 +17,7 @@ items:
   include:
     mode: link
     path: vector-search/toc_p.yaml
-- name: Трансфер данных из топика в таблицу
+- name: Трансфер
   href: transfer/index.md
   include:
     mode: link

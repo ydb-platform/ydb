@@ -2021,6 +2021,7 @@ struct Schema : NIceDb::Schema {
         struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
         // Also for "auto" settings will needs to save K
         struct Round : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct IsEmpty : Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -2032,7 +2033,8 @@ struct Schema : NIceDb::Schema {
             Child,
             ChildBegin,
             TableSize,
-            Round
+            Round,
+            IsEmpty
         >;
     };
 

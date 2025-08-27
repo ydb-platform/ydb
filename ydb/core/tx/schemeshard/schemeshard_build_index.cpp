@@ -330,7 +330,8 @@ void TSchemeShard::PersistBuildIndexKMeansState(NIceDb::TNiceDb& db, const TInde
         NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
         NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
         NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize),
-        NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round)
+        NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round),
+        NIceDb::TUpdate<Schema::KMeansTreeProgress::IsEmpty>(buildInfo.KMeans.IsEmpty)
     );
 }
 

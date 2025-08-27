@@ -1607,8 +1607,6 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
-
-    optional bool MakeOneEmptyCluster = 23;
 }
 
 message TEvLocalKMeansResponse {
@@ -1625,7 +1623,7 @@ message TEvLocalKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
-    optional bool IsLastLevel = 13;
+    optional bool IsEmpty = 13;
 }
 
 message TEvReshuffleKMeansRequest {

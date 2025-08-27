@@ -710,7 +710,6 @@ private:
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
         ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);
-        ev->Record.SetMakeOneEmptyCluster(!buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1);
 
         if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::MultiLocal) {
             ev->Record.SetParentFrom(buildInfo.KMeans.Parent);
@@ -872,7 +871,7 @@ private:
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto rows = buildInfo.Sample.Rows;
         auto isLeaf = !buildInfo.KMeans.NeedsAnotherLevel();
-        if (!rows.size() && buildInfo.KMeans.Parent == 0) {
+        if (buildInfo.KMeans.IsEmpty) {
             auto emptyRow = buildInfo.Clusters->GetEmptyRow();
             rows.push_back(TIndexBuildInfo::TSample::TRow(0, TSerializedCellVec::Serialize({TCell(emptyRow.data(), emptyRow.size())})));
             isLeaf = true;
@@ -1219,9 +1218,9 @@ private:
                 // No samples
                 if (buildInfo.KMeans.Parent == 0) {
                     // Index is empty - add 1 leaf cluster for future index updates
-                    SendUploadSampleKRequest(buildInfo);
-                    buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
-                    return false;
+                    buildInfo.KMeans.IsEmpty = true;
+                    PersistKMeansState(txc, buildInfo);
+                    return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // No data for a specific cluster - should not happen
                 // Supported to not crash if we have duplicate clusters for some reason
@@ -1282,7 +1281,7 @@ private:
             }
         }
 
-        if (buildInfo.KMeans.NextLevel()) {
+        if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.NextLevel()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -1293,6 +1292,22 @@ private:
                                     : TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
+        }
+
+        if (buildInfo.KMeans.IsEmpty) {
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadSampleKRequest(buildInfo);
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
+                // Wait
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                // Pass through
+            } else {
+                Y_ENSURE(false);
+            }
         }
 
         LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
@@ -2119,8 +2134,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     }
 
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        if (Response->Get()->Record.GetIsLastLevel()) {
-            buildInfo.KMeans.Level = buildInfo.KMeans.Levels;
+        if (Response->Get()->Record.GetIsEmpty()) {
+            buildInfo.KMeans.IsEmpty = true;
             Self->PersistBuildIndexKMeansState(db, buildInfo);
         }
     }

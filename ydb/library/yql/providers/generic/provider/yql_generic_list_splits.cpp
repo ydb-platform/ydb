@@ -3,6 +3,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -24,7 +25,6 @@
 #include <ydb/core/external_sources/iceberg_fields.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 
 namespace NYql {
 
@@ -37,96 +37,38 @@ TGenericListSplitTransformer::TGenericListSplitTransformer(TGenericState::TPtr s
 { }
 
 ///
-/// Fill columns in a select query
-///
-void FillColumns(NConnector::NApi::TSelect& select, const TGenReadTable& reader, NYql::NConnector::NApi::TSchema schema) {
-    auto items = select.mutable_what()->mutable_items();
-    auto columns = reader.Columns().Ptr();
-
-    if (!columns->IsList()) {
-        const auto rowType = reader.Ref()
-            .GetTypeAnn()
-                ->Cast<TTupleExprType>()
-                ->GetItems()
-            .back()
-                ->Cast<TListExprType>()
-                ->GetItemType();
-
-        const auto& exp = rowType->Cast<TStructExprType>()->GetItems();
-
-        for (auto item : exp) {
-            auto column = items->Add()->mutable_column();
-            column->mutable_name()->assign(item->GetName());
-            auto type = NConnector::GetColumnTypeByName(schema, TString(item->GetName()));
-            *column->mutable_type() = type;
-        }
-
-        return;
-    }
-
-    for (size_t i = 0; i < columns->ChildrenSize(); i++) {
-        auto cc = columns->Child(i);
-        Y_ENSURE(cc->IsAtom());
-
-        auto column = items->Add()->mutable_column();
-        auto columnName = TString(cc->Content());
-        column->mutable_name()->assign(columnName);
-
-        // assign column type
-        auto type = NConnector::GetColumnTypeByName(schema, columnName);
-        *column->mutable_type() = type;
-    }
-}
-
-///
-/// Fill where clause in a select query
-///
-void FillPredicate(NConnector::NApi::TSelect& select, const TGenReadTable& reader, TExprContext& ctx) {
-    auto predicate = reader.FilterPredicate();
-
-    if (IsEmptyFilterPredicate(predicate)) {
-        return;
-    }
-
-    TStringBuilder err;
-
-    if (!SerializeFilterPredicate(ctx, reader.FilterPredicate(), select.mutable_where()->mutable_filter_typed(), err)) {
-        throw yexception() << "Failed to serialize filter predicate for source: " << err;
-    }
-}
-
-///
-/// Make an unique key for a select created for a table
+/// Make an unique key for a select request on a particular cluster table
 ///
 TString MakeKeyFor(const TGenericState::TTableAddress& table, const NConnector::NApi::TSelect& select) {
     return TStringBuilder() << table.ClusterName << GetSelectKey(select);
 }
 
 IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::TPtr input,
-                                                                TExprNode::TPtr& output,
-                                                                TExprContext& ctx) {
+                                                                     TExprNode::TPtr& output,
+                                                                     TExprContext& ctx) {
     output = input;
 
-    const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
-        if (const auto maybeRead = TMaybeNode<TGenReadTable>(node)) {
-            Y_ENSURE(maybeRead.Cast().DataSource().Category().Value() == GenericProviderName);
+    const auto& readsSettings = FindNodes(input, [&](const TExprNode::TPtr& node) {
+        if (const auto maybeSettings = TMaybeNode<TGenSourceSettings>(node)) {
             return true;
         }
         
         return false;
     });
 
-    if (reads.empty()) {
+    if (readsSettings.empty()) {
         return TStatus::Ok;
     }
 
     std::unordered_map<TString, TListSplitRequestData> pendingRequests;
 
-    // Iterate over all read table queries in the input expression, create ListSplit request if needed
-    for (const auto& r : reads) {
-        const TGenReadTable read(r);
-        const auto clusterName = read.DataSource().Cluster().StringValue();
-        const auto tableName = read.Table().Name().StringValue();
+    // Iterate over all settings in the input expression, create ListSplit request if needed
+    for (const auto& r : readsSettings) {
+        const TGenSourceSettings settings(r);
+
+        const auto& tableName = settings.Table().StringValue();
+        const auto& clusterName = settings.Cluster().StringValue();
+
         auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
         auto table = State_->GetTable(tableAddress);
 
@@ -137,12 +79,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
 
         // Grab select from a read table query
         NConnector::NApi::TSelect select;
-
-        *select.mutable_data_source_instance() = table.first->DataSourceInstance;
-        select.mutable_from()->set_table(tableName);
-
-        FillColumns(select, read, table.first->Schema);
-        FillPredicate(select, read, ctx);
+        FillSelectFromGenSourceSettings(select, settings, ctx, table.first);
 
         // Splits has been already acquired for such select, skip it
         if (table.first->HasSplitsForSelect(select)) {
@@ -227,7 +164,10 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
             // check transport and logical errors
             if (drainerResult.Issues) {
                 auto msg = TStringBuilder()
-                    << "Call ListSplits for table: " << data.TableAddress.ToString() << " with select";
+                    << "Call ListSplits for table: " << data.TableAddress.ToString() << " with select: "
+                    << data.Select.what().DebugString()
+                    << data.Select.from().DebugString()
+                    << data.Select.where().DebugString();
 
                 TIssue dstIssue(msg);
 
@@ -259,25 +199,30 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
     AsyncFuture_.GetValue();
     output = input;
 
-    const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
-        if (const auto maybeRead = TMaybeNode<TGenReadTable>(node)) {
-            Y_ENSURE(maybeRead.Cast().DataSource().Category().Value() == GenericProviderName);
+    /* 
+     * Search for a TGenSourceSettings. TGenSourceSettings contains the same data as during
+     * DoTransform method call
+     */
+    const auto& readsSettings = FindNodes(input, [&](const TExprNode::TPtr& node) {
+        if (const auto maybeSettings = TMaybeNode<TGenSourceSettings>(node)) {
             return true;
         }
 
         return false;
     });
 
-    if (reads.empty()) {
+    if (readsSettings.empty()) {
         return TStatus::Ok;
     }
 
-    // Iterate over all read table queries in the input expression, check Connector responses
-    for (const auto& r : reads) {
-        const TGenReadTable genRead(r);
-        const auto clusterName = genRead.DataSource().Cluster().StringValue();
-        const auto tableName = genRead.Table().Name().StringValue();
-        const TGenericState::TTableAddress tableAddress{clusterName, tableName};
+    // Iterate over all settings in the input expression, check Connector responses
+    for (const auto& r : readsSettings) {
+        const TGenSourceSettings settings(r);
+
+        const auto& tableName = settings.Table().StringValue();
+        const auto& clusterName = settings.Cluster().StringValue();
+
+        auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
         auto table = State_->GetTable(tableAddress);
 
         if (!table.first) {
@@ -287,12 +232,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 
         // Grab select from a read table query
         NConnector::NApi::TSelect select;
-
-        *select.mutable_data_source_instance() = table.first->DataSourceInstance;
-        select.mutable_from()->set_table(tableName);
-
-        FillColumns(select, genRead, table.first->Schema);
-        FillPredicate(select, genRead, ctx);
+        FillSelectFromGenSourceSettings(select, settings, ctx, table.first);
 
         // If splits for a similar select for this table was created skip it
         if (table.first->HasSplitsForSelect(select)) {
@@ -304,10 +244,12 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 
         if (iter == ListResponses_.end()) {
             auto msg = TStringBuilder()
-                << "Connector response not found for table: " << tableAddress.ToString()
-                << " and select: " << select.DebugString();
+                << "Connector response not found for table: " << tableAddress.ToString() << " and select: "
+                << select.what().DebugString()
+                << select.from().DebugString()
+                << select.where().DebugString();
 
-            ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), msg));
+            ctx.AddError(TIssue(ctx.GetPosition(settings.Pos()), msg));
             return TStatus::Error;
         }
 

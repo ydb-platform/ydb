@@ -9,6 +9,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
@@ -116,7 +117,7 @@ namespace NYql {
             }
 
             ///
-            /// Fill a select based on a dq source
+            /// Fill a select from a dq source
             ///
             void FillSelect(NConnector::NApi::TSelect& select, const TDqSource& source, TExprContext& ctx) {
                 const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>();
@@ -126,7 +127,6 @@ namespace NYql {
                 }
 
                 const auto settings = maybeSettings.Cast();
-                const auto& columns = settings.Columns();
                 const auto& tableName = settings.Table().StringValue();
                 const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                 auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
@@ -135,28 +135,7 @@ namespace NYql {
                     throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                select.mutable_from()->set_table(TString(tableName));
-                *select.mutable_data_source_instance() = tableMeta->DataSourceInstance;
-
-                auto items = select.mutable_what()->mutable_items();
-
-                for (size_t i = 0; i < columns.Size(); i++) {
-                    // assign column name
-                    auto column = items->Add()->mutable_column();
-                    auto columnName = columns.Item(i).StringValue();
-                    column->mutable_name()->assign(columnName);
-
-                    // assign column type
-                    auto type = NConnector::GetColumnTypeByName(tableMeta->Schema, columnName);
-                    *column->mutable_type() = type;
-                }
-
-                if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
-                    TStringBuilder err;
-                    if (!SerializeFilterPredicate(ctx, predicate, select.mutable_where()->mutable_filter_typed(), err)) {
-                        throw yexception() << "Failed to serialize filter predicate for source: " << err;
-                    }
-                }
+                FillSelectFromGenSourceSettings(select, settings, ctx, tableMeta);
             }
 
             ui64 Partition(

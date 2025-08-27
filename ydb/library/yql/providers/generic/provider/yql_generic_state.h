@@ -103,9 +103,4 @@ namespace NYql {
         THashMap<TTableAddress, TTableMeta> Tables_;
     };
 
-    ///
-    /// Get unique key for a select request
-    ///
-    TString GetSelectKey(const NConnector::NApi::TSelect& select);
-
 } // namespace NYql

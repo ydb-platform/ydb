@@ -41,7 +41,7 @@
 
 - Как загрузить свои данные из файла
 
-  {{ydb-short-name}} поддерживает загрузку данных из файлов формата CSV/TSV/Json и тд с помощью [YDB CLI](reference/ydb-cli/export-import/import-file.md).
+  {{ydb-short-name}} поддерживает загрузку данных из файлов формата CSV/TSV/Json и тд с помощью [YDB CLI](../reference/ydb-cli/export-import/import-file.md).
 
 - Выполните запросы
 

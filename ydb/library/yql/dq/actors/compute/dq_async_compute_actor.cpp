@@ -890,14 +890,6 @@ private:
     }
 
     void SendAsyncChannelData(TOutputChannelInfo& outputChannel) {
-        CA_LOG_T("SendAsyncChannelData. Channel: " << outputChannel.ChannelId
-            << " Finished: " << outputChannel.Finished
-            << " Data: { DataSize: " << outputChannel.AsyncData->Data.size()
-            << ", Watermark: " << outputChannel.AsyncData->Watermark
-            << ", Checkpoint: " << outputChannel.AsyncData->Checkpoint
-            << ", Finished: " << outputChannel.AsyncData->Finished
-            << ", Changed: " << outputChannel.AsyncData->Changed << "}"
-            );
         Y_ABORT_UNLESS(outputChannel.AsyncData);
 
         // If the channel has finished, then the data received after drain is no longer needed

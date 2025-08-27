@@ -433,7 +433,6 @@ private:
     void OnOutputChannelDataRequest(TEvOutputChannelDataRequest::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
 
-        LOG_T("OnOutputChannelDataRequest");
         auto channelId = ev->Get()->ChannelId;
         auto channel = TaskRunner->GetOutputChannel(channelId);
         auto wasFinished = ev->Get()->WasFinished;
@@ -457,7 +456,6 @@ private:
         TVector<TDqSerializedBatch> chunks;
         TMaybe<NDqProto::TWatermark> watermark = Nothing();
         TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing();
-        LOG_I("maxChunks " << maxChunks << " remain " << remain << " isFinished " << isFinished);
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             TDqSerializedBatch data;
             hasData = channel->Pop(data);
@@ -470,7 +468,6 @@ private:
 
             dataSize = data.Size();
             isFinished = channel->IsFinished();
-            LOG_I(" hasData " << hasData << " dataSize " << dataSize << " " << " hasWatermark " << hasWatermark << " hasCheckpoint " << hasCheckpoint << " isFinished " << isFinished);
             // IsFinished() won't return true until channel drained
 
             changed = changed || hasData || hasWatermark || hasCheckpoint || (isFinished != wasFinished);

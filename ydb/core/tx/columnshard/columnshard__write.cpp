@@ -191,18 +191,38 @@ public:
                 return TConclusionStatus::Fail("no arbiter info in request");
             }
             ArbiterColumnShard = locks.GetArbiterColumnShard();
-
-            if (IsPrimary() && !ReceivingShards.contains(ArbiterColumnShard)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+            if (IsPrimary()) {
+                if (!ReceivingShards.contains(ArbiterColumnShard)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
+                        "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
+                    return TConclusionStatus::Fail("arbiter is absent in receiving lists");
+                }
+            } else {
+                auto validateShards = [this](const std::set<ui64>& shards) -> bool {
+                    //shards lists for a secondaty shard must contain either arbiter only or a pair: arbiter and current tablet_id
+                    if (!shards.contains(ArbiterColumnShard)) {
+                        return false;
+                    }
+                    if (shards.size() == 1) {
+                        return true;
+                    }
+                    if ((shards.size() != 2) || !shards.contains(TabletId)) {
+                        return false;
+                    }
+                    return true;
+                };
+                if (!validateShards(ReceivingShards)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect receiving shards list")(
+                        "arbiter_id", ArbiterColumnShard)("receiving", JoinSeq(", ", ReceivingShards));
+                    return TConclusionStatus::Fail("incorrect receiving shards list");
+                }
+                if (!validateShards(SendingShards)) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect sending shards list")("arbiter_id", ArbiterColumnShard)(
+                        "sending", JoinSeq(", ", SendingShards));
+                    return TConclusionStatus::Fail("incorrect sending shards list");
+                }
             }
-            if (!IsPrimary() && (!ReceivingShards.contains(ArbiterColumnShard) || !SendingShards.contains(ArbiterColumnShard))) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "incorrect arbiter")("arbiter_id", ArbiterColumnShard)(
-                    "receiving", JoinSeq(", ", ReceivingShards))("sending", JoinSeq(", ", SendingShards));
-                return TConclusionStatus::Fail("arbiter is absent in sending or receiving lists");
-            }
-        }
+    }
 
         Generation = lock.GetGeneration();
         InternalGenerationCounter = lock.GetCounter();

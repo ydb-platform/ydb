@@ -44,6 +44,8 @@ namespace NKikimr {
             THPTimer Timer;
             std::deque<std::tuple<TString, TDuration>> SubrequestTimings;
 
+            NWilson::TSpan Span;
+
             struct TDiscoverState {
                 TLogoBlobID Id;
                 TString Buffer;
@@ -98,10 +100,11 @@ namespace NKikimr {
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                    TThis& self)
+                    TThis& self, ui32 requestType, NWilson::TTraceId&& traceId)
                 : Sender(sender)
                 , Cookie(cookie)
                 , Info(std::move(info))
+                , Span(TWilson::BlobStorage, std::forward<NWilson::TTraceId>(traceId), "BridgedRequest", NWilson::EFlags::AUTO_END)
             {
                 Y_ABORT_UNLESS(Info);
                 Y_ABORT_UNLESS(Info->Group);
@@ -136,6 +139,13 @@ namespace NKikimr {
                 }
 
                 OriginalRequest = std::move(request);
+
+                if (Span) {
+                    Span.Attribute("GroupId", Info->GroupID.GetRawId());
+                    Span.Attribute("database", AppData()->TenantName);
+                    Span.Attribute("storagePool", Info->GetStoragePoolName());
+                    Span.Attribute("RequestType", TEvBlobStorage::TEvRequestCommon::GetRequestName(requestType));
+                }
             }
 
             template<typename TEvent, typename... TArgs>
@@ -659,7 +669,8 @@ namespace NKikimr {
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;
-            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
+            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
+                    ev->GetTypeRewrite(), std::move(ev->TraceId));
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
@@ -704,7 +715,7 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
             // send event
-            SendToBSProxy(SelfId(), groupId, ev.release(), cookie);
+            SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
             ++request->ResponsesPending;
         }
 
@@ -828,6 +839,13 @@ namespace NKikimr {
                             (Response, response->ToString()),
                             (Passed, TDuration::Seconds(request->Timer.Passed())),
                             (SubrequestTimings, makeSubrequestTimings()));
+
+                        if (success) {
+                            request->Span.EndOk();
+                        } else if (request->Span) {
+                            request->Span.EndError(common->ErrorReason);
+                        }
+
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }

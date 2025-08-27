@@ -154,6 +154,9 @@ struct TUserInfo: public TUserInfoBase {
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
                   const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
         Y_UNUSED(tablet);
+        if (BytesReadPerPartition) {
+            BytesReadPerPartition->Add(readSize);
+        }
         if (BytesRead && !clientDC.empty()) {
             BytesRead.Inc(readSize);
             if (!isExternalRead && BytesReadGrpc) {
@@ -203,7 +206,8 @@ struct TUserInfo: public TUserInfoBase {
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
         const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
-        const std::optional<TString>& committedMetadata = std::nullopt
+        const std::optional<TString>& committedMetadata = std::nullopt,
+        const bool enablePerPartitionCounters = false
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient, committedMetadata}
@@ -229,6 +233,10 @@ struct TUserInfo: public TUserInfoBase {
         , MeterRead(meterRead)
     {
         if (AppData(ctx)->Counters) {
+            if (enablePerPartitionCounters) {
+                SetupPerPartitionCounters();
+            }
+
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
@@ -242,6 +250,54 @@ struct TUserInfo: public TUserInfoBase {
                 SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
             }
         }
+    }
+
+    ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const {
+        auto counters = AppData(ActorContext())->Counters;
+        if (!counters) {
+            return nullptr;
+        }
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            return counters
+                ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
+                ->GetSubgroup("host", "")
+                ->GetSubgroup("database", Config.GetYdbDatabasePath())
+                ->GetSubgroup("cloud_id", CloudId)
+                ->GetSubgroup("folder_id", FolderId)
+                ->GetSubgroup("database_id", DbId)
+                ->GetSubgroup("topic", EscapeBadChars(TopicName()))
+                ->GetSubgroup("partition_id", ToString(Partition.InternalPartitionId));
+        } else {
+            return counters
+                ->GetSubgroup("counters", "topics_per_partition")
+                ->GetSubgroup("host", "cluster")
+                ->GetSubgroup("Account", TopicConverter->GetAccount())
+                ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
+                ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+                ->GetSubgroup("Partition", ToString(Partition.InternalPartitionId));
+        }
+    }
+
+    void SetupPerPartitionCounters() {
+        if (BytesReadPerPartition) {
+            // Don't recreate the counters if they already exist.
+            return;
+        }
+
+        auto subgroup = GetPerPartitionCounterSubgroup();
+        if (!subgroup) {
+            return;
+        }
+
+        auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
+            bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+            return subgroup->GetExpiringNamedCounter(
+                fcc ? "name" : "sensor",
+                fcc ? forFCC : forFederation,
+                deriv);
+        };
+
+        BytesReadPerPartition = getCounter("topic.partition.read.bytes", "BytesReadPerPartition", true);
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {

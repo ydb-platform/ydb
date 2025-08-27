@@ -327,11 +327,6 @@ class PileState:
 
     def is_healthy(self):
         if self.admin_reported_state in ['PRIMARY', 'SYNCHRONIZED']:
-            # TODO: remove responsive from the check!!!
-            # shouldn't be checked as the only condition
-            if not self.responsive:
-                return False
-
             if not self.self_reported_alive:
                 return False
 

@@ -13,7 +13,8 @@ struct TBackoff {
         : MaxRetries(maxRetries)
         , InitialDelay(std::max(initialDelay, MinDelay))
         , MaxDelay(maxDelay)
-        , Iteration(0) {
+        , Iteration(0)
+    {
     }
 
     TDuration Next() {
@@ -27,7 +28,7 @@ struct TBackoff {
         return Iteration < MaxRetries;
     }
 
-    operator bool() const {
+    explicit operator bool() const {
         return HasMore();
     }
 
@@ -36,4 +37,5 @@ struct TBackoff {
     const TDuration MaxDelay;
     size_t Iteration;
 };
+
 }

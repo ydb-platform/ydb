@@ -351,7 +351,7 @@ private:
 
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
-        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownProjections();
+        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");

@@ -67,7 +67,7 @@ WITH (
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/object-naming-rules.md) %}
+{% include [table naming rules](../../../../concepts/datamodel/includes/object-naming-rules.md) %}
 
 ## Примеры создания таблиц
 

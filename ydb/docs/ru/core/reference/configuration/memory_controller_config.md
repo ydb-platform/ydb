@@ -29,8 +29,8 @@ Process Memory,Other,10
 Cache Components,Shared cache, 40
 Cache Components,MemTable, 10
 
-Activity Components,"KQP", 15
-Activity Components,Compaction, 15
+Activity Components,"KQP", 20
+Activity Components,Compaction, 10
 ```
 
 ## Жёсткий лимит памяти {#hard-memory-limit}

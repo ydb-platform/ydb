@@ -3042,6 +3042,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
             minOffset = Min(minOffset, static_cast<i64>(data.offset()));
             maxOffset = Max(maxOffset, static_cast<i64>(data.offset()));
 
+            DecompressedSize += data.data().size();
+
             try {
                 if constexpr (UseMigrationProtocol) {
                     if (parent->DoDecompress
@@ -3063,11 +3065,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         data.set_data(TStringType{decompressed});
                     }
                 }
-
-                DecompressedSize += data.data().size();
             } catch (...) {
                 parent->PutDecompressionError(std::current_exception(), messages.Batch, i);
-                data.clear_data(); // Free memory, because we don't count it.
 
                 if (auto session = parent->CbContext->LockShared()) {
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();

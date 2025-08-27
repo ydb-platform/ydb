@@ -1,6 +1,5 @@
 items:
-  - name: Обзор аналитической платформы
-    href: index.md
+  - name: Обзор
     include:
       mode: link
       path: medalion/toc_p.yaml

@@ -4,7 +4,7 @@
 
 ![](_includes/olap_whole.png)
 
-## Ввод данных
+## [Ввод данных](medalion/ingest.md) {#ingest}
 
 {{ydb-short-name}} предоставляет большое количество инструментов для ввода данных:
 
@@ -12,4 +12,10 @@
 - Прямая поставка с использованием [Fluentbit](../integrations/ingestion/fluent-bit.md), [Logstash](../integrations/ingestion/logstash.md)
 - и другие
 
-[Подробнее](medalion/ingest.md).
+[Подробнее](medalion/ingest.md)
+
+## [Хранение данных](medalion/store.md) {#store}
+
+[Колоночные таблицы {{ydb-short-name}}](../concepts/datamodel/table.md#column-oriented-tables) хранят данные каждого столбца отдельно (независимо) от других столбцов. Такой принцип хранения данных оптимизирован для работы с Online Analytical Processing-нагрузками (OLAP), так как при выполнении запроса считываются только те столбцы, которые непосредственно участвуют в запросе. Еще один плюс такого подхода — высокая степень сжатия данных, так как в столбцах зачастую хранятся повторяющиеся или близкие данные.
+
+[Подробнее](medalion/store.md)

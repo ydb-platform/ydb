@@ -4,7 +4,7 @@ items:
 - name: Начало работы
   href: quickstart.md
 - name: Аналитическая платформа
-  href: olap/olap_quickstart.md
+  href: olap/index.md
   include:
     mode: link
     path: olap/toc_p.yaml

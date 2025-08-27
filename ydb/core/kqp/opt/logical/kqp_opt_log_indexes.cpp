@@ -852,6 +852,10 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
                         .Tuple("tuple")
                         .Index().Value("0").Build()
                         .Build()
+                    .Add<TCoNth>()
+                        .Tuple("tuple")
+                        .Index().Value("2").Build()
+                        .Build()
                     .Build()
                 .Build()
             .Done();

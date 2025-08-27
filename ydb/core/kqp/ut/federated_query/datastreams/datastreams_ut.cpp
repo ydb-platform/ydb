@@ -804,63 +804,36 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        TString inputTopicName = "inputTopicName";
-        TString outputTopicName = "outputTopicName";
+        constexpr char inputTopicName[] = "inputTopicName";
+        CreateTopic(inputTopicName);
+        constexpr char outputTopicName[] = "outputTopicName";
+        CreateTopic(outputTopicName);
 
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), {
             .PqGateway = pqGateway
         });
-        auto db = kikimr->GetQueryClient();
 
-        const auto topicDriver = TDriver(TDriverConfig());
-        NTopic::TTopicClient topicClient(topicDriver, NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
-            .Database(GetEnv("YDB_DATABASE")));
-        {
-            auto status = topicClient.CreateTopic(inputTopicName).ExtractValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-            status = topicClient.CreateTopic(outputTopicName).ExtractValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
 
-        constexpr char pqSourceName[] = "sourceName";
-        {
-            const auto query = fmt::format(R"(
-                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
-                    SOURCE_TYPE = "Ydb",
-                    LOCATION = "{pq_location}",
-                    DATABASE_NAME = "{pq_database_name}",
-                    AUTH_METHOD = "NONE"
-                );)",
-                "pq_source"_a = pqSourceName,
-                "pq_location"_a = GetEnv("YDB_ENDPOINT"),
-                "pq_database_name"_a = GetEnv("YDB_DATABASE")
-            );
-            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+                $input = SELECT key, value FROM `{source}`.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    ));
+                INSERT INTO `{source}`.`{output_topic}`
+                    SELECT key || value FROM $input;)",
+                "source"_a = sourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ), {
+                .SaveState = true,
+                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
+            }, false);
 
-        TOperation::TOperationId operationId;
-        {
-            const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
-                    $input = SELECT key, value FROM `{source}`.`{input_topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(
-                            key String NOT NULL,
-                            value String  NOT NULL
-                        ));
-                    INSERT INTO `{source}`.`{output_topic}`
-                        SELECT key || value FROM $input;)",
-                    "source"_a = pqSourceName,
-                    "input_topic"_a = inputTopicName,
-                    "output_topic"_a = outputTopicName
-                ), {
-                    .SaveState = true,
-                    .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
-                }, false);
-            
-        }
         Sleep(TDuration::MilliSeconds(3000));
 
         pqGateway->AddEvent(inputTopicName, MakePqMessage(1, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
@@ -886,9 +859,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             }
             Sleep(TDuration::MilliSeconds(100));
         }
-        NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
-        auto status = client.Cancel(operationId).ExtractValueSync();
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        CancelScriptExecution(operationId);
     }
 }
 

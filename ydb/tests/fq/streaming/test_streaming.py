@@ -50,12 +50,15 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
             WITH (
                 FORMAT="json_each_row",
                 SCHEMA=(time String NOT NULL))
+            WHERE time like "%lunch%"
             LIMIT 1"""
 
-        future = self.ydb_client.query_async(sql)
+        future1 = self.ydb_client.query_async(sql)
+        future2 = self.ydb_client.query_async(sql)
         time.sleep(1)
         data = ['{"time": "lunch time"}']
         self.write_stream(data)
-        # time.sleep(4)
-        result_sets = future.result()
-        assert result_sets[0].rows[0]['time'] == b'lunch time'
+        result_sets1 = future1.result()
+        result_sets2 = future2.result()
+        assert result_sets1[0].rows[0]['time'] == b'lunch time'
+        assert result_sets2[0].rows[0]['time'] == b'lunch time'

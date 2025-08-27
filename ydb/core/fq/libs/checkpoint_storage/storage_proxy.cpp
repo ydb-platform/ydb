@@ -68,7 +68,7 @@ struct TRequestContext : public TThrRefBase {
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     NKikimrConfig::TCheckpointsConfig Config;
     TString IdsPrefix;
-    NKikimrConfig::TCheckpointsConfig::TExternalStorage StorageConfig;
+    NKikimrConfig::TExternalStorage StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
@@ -116,7 +116,7 @@ private:
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
 };
 
-static void FillDefaultParameters(NKikimrConfig::TCheckpointsConfig& checkpointCoordinatorConfig, NKikimrConfig::TCheckpointsConfig::TExternalStorage& ydbStorageConfig) {
+static void FillDefaultParameters(NKikimrConfig::TCheckpointsConfig& checkpointCoordinatorConfig, NKikimrConfig::TExternalStorage& ydbStorageConfig) {
     auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
     if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
         limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);

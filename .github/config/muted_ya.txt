@@ -8,8 +8,10 @@ ydb/core/client/ut TFlatTest.AutoSplitBySize
 ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Upsert+LogEnabled
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderLookupBug
 ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderTPCC

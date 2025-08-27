@@ -117,11 +117,11 @@ jobs:
         echo "=== LLVM directory contents ==="
         ls -la "C:/Program Files/LLVM/bin/" || echo "LLVM bin directory not found"
 
-    # Use LLVM tools with explicit compiler flags, create symlinks and test them
+    # Use LLVM tools with explicit compiler flags, create symlinks with and without .exe extension
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" && mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo "=== Testing symlinks ===" && where ml.exe && ml.exe /? && echo "=== Starting build ===" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./'}
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" && mklink "C:\Program Files\LLVM\bin\lib" "C:\Program Files\LLVM\bin\llvm-lib.exe" && mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" && mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo "=== Testing symlinks ===" && where ml && where ml.exe && echo "=== Starting build ===" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./'}
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

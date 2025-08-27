@@ -789,7 +789,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool MaybeRunVersionSync() {
-        SBS_LOG_T("MaybeRunVersionSync, delayed sync request: " << DelayedSyncRequest);
+        SBS_LOG_T("MaybeRunVersionSync"
+            << ": delayed sync request# " << DelayedSyncRequest);
         if (!DelayedSyncRequest) {
             return false;
         }

@@ -13,6 +13,8 @@
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,6 +30,11 @@ struct TYdbConnection : public TThrRefBase {
 
     TYdbConnection(
         const NConfig::TYdbStorageConfig& config,
+        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+        const NYdb::TDriver& driver);
+
+    TYdbConnection(
+        const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const NYdb::TDriver& driver);
 };
@@ -109,6 +116,7 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 ////////////////////////////////////////////////////////////////////////////////
 
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
+TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
 NYdb::TStatus MakeErrorStatus(
     NYdb::EStatus code,
@@ -139,10 +147,27 @@ NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& 
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
-NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const NConfig::TYdbStorageConfig& config);
+template <class TStorageConfig>
+NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TStorageConfig& config) {
+    TString oauth;
+    if (config.GetToken()) {
+        oauth = config.GetToken();
+    } else if (config.GetOAuthFile()) {
+        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
+    } else {
+        oauth = GetEnv("YDB_TOKEN");
+    }
 
-template <class TSettings>
-TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
+    NKikimr::TYdbCredentialsSettings credSettings;
+    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
+    credSettings.OAuthToken = oauth;
+    credSettings.SaKeyFile = config.GetSaKeyFile();
+    credSettings.IamEndpoint = config.GetIamEndpoint();
+    return credSettings;
+}
+
+template <class TSettings, class TStorageConfig>
+TSettings GetClientSettings(const TStorageConfig& config,
                             const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
     TSettings settings;
     settings

@@ -569,7 +569,7 @@ private:
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
-        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetDisableBulkUpsertRequireAllColumns()) {
+        if (isColumnTable && HasAppData() && AppDataVerified().ColumnShardConfig.GetBulkUpsertRequireAllColumns()) {
             res = CheckRequiredColumns(entry, *reqColumns);
         }
 

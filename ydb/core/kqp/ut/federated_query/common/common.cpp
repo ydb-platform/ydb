@@ -108,7 +108,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetS3ActorsFactory(std::move(s3ActorsFactory))
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
-            .SetNodeCount(options.NodeCount);
+            .SetNodeCount(options.NodeCount)
+            .SetEnableStorageProxy(true);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 

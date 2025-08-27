@@ -8,6 +8,7 @@
 #include <util/string/join.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>

@@ -37,6 +37,7 @@ public:
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
+    bool Local = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
     TClientCommandOptions Opts;
@@ -163,6 +164,8 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
+        // Whether a command is local (need no connection to YDB) or not
+        bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
@@ -417,6 +420,7 @@ public:
 
     void Hide();
     void MarkDangerous();
+    void MarkLocal();
     void UseOnlyExplicitProfile();
 
 protected:
@@ -446,6 +450,7 @@ public:
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
+    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandDescription(
         TStringStream& stream,

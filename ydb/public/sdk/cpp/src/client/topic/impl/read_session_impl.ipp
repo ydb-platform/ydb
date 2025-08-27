@@ -1361,7 +1361,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 
     if (graceful) {
         auto committedOffset = partitionStream->GetMaxCommittedOffset();
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1422 TStopPartitionSessionEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
@@ -1374,7 +1373,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         released.set_partition_session_id(partitionStream->GetAssignId());
         WriteToProcessorImpl(std::move(req));
         PartitionStreams.erase(partitionSessionId);
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1435 TPartitionSessionClosedEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),

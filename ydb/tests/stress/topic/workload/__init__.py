@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import os
 import stat
+import time
 from library.python import resource
 
 
@@ -27,7 +28,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
-        self.working_dir = os.path.join(self.tempdir.name, "ydb_cli")
+        self.working_dir = os.path.join(self.tempdir.name, "topic_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
@@ -49,7 +50,9 @@ class YdbTopicWorkload(WorkloadBase):
 
     def cmd_run(self, cmd):
         logger.debug(f"Running cmd {cmd}")
+        print(f"Running cmd {cmd} at {time.time()}")
         subprocess.run(cmd, check=True, text=True)
+        print(f"End at {time.time()}")
 
     def __loop(self):
         # init

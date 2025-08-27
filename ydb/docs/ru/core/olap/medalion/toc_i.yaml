@@ -1,3 +1,5 @@
 items:
   - name: Ввод данных
     href: ingest.md
+  - name: Хранение данных
+    href: store.md

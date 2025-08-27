@@ -331,50 +331,24 @@ namespace NKafka::NTests {
 
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
-
+            TVector<ui32> allNodesIds = {0, runtime->GetNodeId(0), 10000, 10001, 10002};
             Ydb::Discovery::ListEndpointsResult leResult;
             auto* ep = leResult.add_endpoints();
-            ep->set_address("localhost");
-            ep->set_port(12345);
-            ep->set_node_id(100);
-
-            ep = leResult.add_endpoints();
-            ep->set_address("localhost");
-            ep->set_port(2);
-            ep->set_node_id(200);
-
-            ep = leResult.add_endpoints();
-            ep->set_address("localhost");
-            ep->set_port(3);
-            ep->set_node_id(25);
-
-            ep = leResult.add_endpoints();
-            ep->set_address("localhost");
-            ep->set_port(2495);
-            ep->set_node_id(8888);
-
-            ep = leResult.add_endpoints();
-            ep->set_address("localhost");
-            ep->set_port(1395);
-            ep->set_node_id(9999);
+            for (size_t i = 0; i < allNodesIds.size(); i++) {
+                ep->set_address("localhost");
+                ep->set_port(i + 1);
+                ep->set_node_id(allNodesIds[i]);
+                if (i != allNodesIds.size() - 1) {
+                    ep = leResult.add_endpoints();
+                }
+            }
 
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
-            std::vector<ui32> allNodeIds ={runtime->GetNodeId(0), 25, 100, 200, 8888, 9999};
-            std::sort(allNodeIds.begin(), allNodeIds.end());
-            auto nodeIter = std::find(allNodeIds.begin(), allNodeIds.end(), runtime->GetNodeId(0));
-            std::vector<ui32> expectedNodeIds;
-            expectedNodeIds.push_back(runtime->GetNodeId(0));
-            for (size_t i = 0; i < 2; i++) {
-                nodeIter++;
-                if (nodeIter == allNodeIds.end()) {
-                    nodeIter = allNodeIds.begin();
-                }
-                expectedNodeIds.push_back(*nodeIter);
-            }
+            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0), 10000, 10001};
             CheckKafkaMetaResponse(runtime, 12345, false, 1, 3, expectedNodeIds);
         }
 
@@ -388,16 +362,14 @@ namespace NKafka::NTests {
             auto* ep = leResult.add_endpoints();
             ep->set_address("localhost");
             ep->set_port(12345);
-            ep->set_node_id(1000);
-
-            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0), 1000};
-            std::sort(expectedNodeIds.begin(), expectedNodeIds.end());
+            ep->set_node_id(10000);
 
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
+            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0), 10000};
             CheckKafkaMetaResponse(runtime, 12345, false, 1, 2, expectedNodeIds);
         }
 
@@ -433,14 +405,14 @@ namespace NKafka::NTests {
             ep = leResult.add_endpoints();
             ep->set_address("localhost");
             ep->set_port(1999);
-            ep->set_node_id(1000);
+            ep->set_node_id(10000);
 
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
-            std::vector<ui32> expectedNodeIds = {0, runtime->GetNodeId(0), 1000};
+            std::vector<ui32> expectedNodeIds = {0, runtime->GetNodeId(0), 10000};
             std::sort(expectedNodeIds.begin(), expectedNodeIds.end());
             CheckKafkaMetaResponse(runtime, 12345, false, 1, 3, expectedNodeIds);
         }

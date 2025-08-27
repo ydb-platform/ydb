@@ -126,45 +126,67 @@ jobs:
         where ml64.exe 2>nul || echo "ml64.exe not found in PATH"
         
         set "ML64_PATH="
-        echo Searching in multiple Visual Studio paths...
+        echo Searching in Visual Studio paths...
         
-        REM Try different Visual Studio paths  
-        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files\Microsoft Visual Studio\2022\Professional" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional") do (
-          echo Checking base path: %%p
-          if exist "%%p\VC\Tools\MSVC\" (
-            echo Found MSVC tools directory: %%p\VC\Tools\MSVC\
-            dir "%%p\VC\Tools\MSVC\" /b
-            for /d %%i in ("%%p\VC\Tools\MSVC\*") do (
-              echo Checking version directory: %%i
-              if exist "%%i\bin\Hostx64\x64\" (
-                echo Found Hostx64\x64 directory: %%i\bin\Hostx64\x64\
-                dir "%%i\bin\Hostx64\x64\ml*" /b 2>nul || echo "No ml* files found"
-                if exist "%%i\bin\Hostx64\x64\ml64.exe" (
-                  echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
-                  set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
-                  goto :found
-                ) else (
-                  echo ml64.exe not found in %%i\bin\Hostx64\x64\
+        REM Check VS 2022 Enterprise
+        set "VSBASE=C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+        if exist "%VSBASE%\VC\Tools\MSVC\" (
+          echo Found Visual Studio Enterprise at: %VSBASE%
+          for /d %%v in ("%VSBASE%\VC\Tools\MSVC\*") do (
+            if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+              echo Found ml64.exe at: %%v\bin\Hostx64\x64\ml64.exe
+              set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+              goto :found
+            )
+            if exist "%%v\bin\Hostx64\x64\ml.exe" (
+              echo Found ml.exe (64-bit) at: %%v\bin\Hostx64\x64\ml.exe  
+              if not defined ML64_PATH (
+                set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
+              )
+            )
+          )
+        ) else (
+          echo Visual Studio Enterprise not found at: %VSBASE%
+        )
+        
+        REM Check VS 2022 Professional if not found
+        if not defined ML64_PATH (
+          set "VSBASE=C:\Program Files\Microsoft Visual Studio\2022\Professional"
+          if exist "%VSBASE%\VC\Tools\MSVC\" (
+            echo Found Visual Studio Professional at: %VSBASE%
+            for /d %%v in ("%VSBASE%\VC\Tools\MSVC\*") do (
+              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+                echo Found ml64.exe at: %%v\bin\Hostx64\x64\ml64.exe
+                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+                goto :found
+              )
+              if exist "%%v\bin\Hostx64\x64\ml.exe" (
+                echo Found ml.exe (64-bit) at: %%v\bin\Hostx64\x64\ml.exe
+                if not defined ML64_PATH (
+                  set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
                 )
-              ) else (
-                echo Hostx64\x64 directory not found in %%i\bin\
               )
             )
           ) else (
-            echo MSVC tools directory not found: %%p\VC\Tools\MSVC\
+            echo Visual Studio Professional not found at: %VSBASE%
           )
         )
         
-        REM Also try to find any ml.exe that might work for 64-bit
-        echo === Searching for any Microsoft ml.exe ===
-        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise") do (
-          if exist "%%p\VC\Tools\MSVC\" (
-            for /d %%i in ("%%p\VC\Tools\MSVC\*") do (
-              if exist "%%i\bin\Hostx64\x64\ml.exe" (
-                echo Found ml.exe (64-bit) at: %%i\bin\Hostx64\x64\ml.exe
+        REM Check Build Tools
+        if not defined ML64_PATH (
+          set "VSBASE=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+          if exist "%VSBASE%\VC\Tools\MSVC\" (
+            echo Found Visual Studio Build Tools at: %VSBASE%
+            for /d %%v in ("%VSBASE%\VC\Tools\MSVC\*") do (
+              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+                echo Found ml64.exe at: %%v\bin\Hostx64\x64\ml64.exe
+                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+                goto :found
+              )
+              if exist "%%v\bin\Hostx64\x64\ml.exe" (
+                echo Found ml.exe (64-bit) at: %%v\bin\Hostx64\x64\ml.exe
                 if not defined ML64_PATH (
-                  set "ML64_PATH=%%i\bin\Hostx64\x64\ml.exe"
-                  echo Using ml.exe as ml64.exe alternative
+                  set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
                 )
               )
             )
@@ -180,6 +202,7 @@ jobs:
           echo Using Microsoft ml64.exe: %ML64_PATH%
           mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%"
           mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%"
+          echo YA_ASSEMBLER_TYPE=MICROSOFT >> %GITHUB_ENV%
           echo MICROSOFT_ML64=yes > ml_type.txt
           echo DISABLE_ASM=no > asm_config.txt
         ) else (
@@ -187,6 +210,7 @@ jobs:
           echo Trying LLVM ml.exe as fallback, but may disable ASM if build fails
           mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe"
           mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
+          echo YA_ASSEMBLER_TYPE=LLVM >> %GITHUB_ENV%
           echo MICROSOFT_ML64=no > ml_type.txt
           echo DISABLE_ASM=maybe > asm_config.txt
         )
@@ -194,6 +218,8 @@ jobs:
     - name: Create patch script for fix_msvc_output.py
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
+      env:
+        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
         echo import sys > patch_script.py
         echo import re >> patch_script.py
@@ -210,18 +236,14 @@ jobs:
         echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
         echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
         echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
-        echo         # Check if we're using LLVM ml.exe - add --m64 flag for 64-bit mode >> patch_script.py
-        echo         try: >> patch_script.py
-        echo             with open('ml_type.txt', 'r') as f: >> patch_script.py
-        echo                 ml_type = f.read().strip() >> patch_script.py
-        echo             if 'MICROSOFT_ML64=no' in ml_type: >> patch_script.py
-        echo                 args.insert(2, '--m64') >> patch_script.py
-        echo                 print(f"DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
-        echo             else: >> patch_script.py
-        echo                 print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
-        echo         except: >> patch_script.py
-        echo             print(f"DEBUG: Could not read ml_type.txt, assuming LLVM", file=sys.stderr) >> patch_script.py
+        echo         # Check assembler type via environment variable >> patch_script.py
+        echo         import os >> patch_script.py
+        echo         assembler_type = os.environ.get('YA_ASSEMBLER_TYPE', 'LLVM') >> patch_script.py
+        echo         if assembler_type == 'LLVM': >> patch_script.py
         echo             args.insert(2, '--m64') >> patch_script.py
+        echo             print(f"DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
+        echo         else: >> patch_script.py
+        echo             print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
         echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py
@@ -232,11 +254,14 @@ jobs:
     - name: Verify patch and assembler setup
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
+      env:
+        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
         echo === Checking patched fix_msvc_output.py ===
         type build\scripts\fix_msvc_output.py | findstr "original_had_none"
         
         echo === Checking assembler setup ===
+        echo Assembler type: ${{ env.YA_ASSEMBLER_TYPE }}
         type ml_type.txt 2>nul || echo "ml_type.txt not found"
         echo Assembler symlink: C:\Program Files\LLVM\bin\ml.exe
         
@@ -255,11 +280,15 @@ jobs:
       shell: cmd
       continue-on-error: true
       id: build_with_asm
+      env:
+        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
 
     - name: Build windows binary without ASM optimizations (fallback)
       if: ${{ matrix.os == 'windows-amd' && steps.build_with_asm.outcome == 'failure' }}
       shell: cmd
+      env:
+        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
         echo === First build failed, trying without ASM optimizations ===
         echo Disabling OpenSSL ASM optimizations for compatibility

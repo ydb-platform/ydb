@@ -1131,15 +1131,12 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
 
 
 Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
-    if (StreamLookupJoin) {
-        return;
-    }
-
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, B.a, B.b from A
             left join (select * from B where b is null) as B
             on A.a = B.a and A.b = B.b
+            ORDER BY A.a, B.b
         )",
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]

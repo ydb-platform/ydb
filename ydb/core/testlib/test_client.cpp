@@ -1697,7 +1697,6 @@ namespace Tests {
                 );
             NFq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }
-
         {
             using namespace NViewer;
             if (Settings->KikimrRunConfig) {

@@ -1726,13 +1726,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
-    if (runConfig.AppConfig.GetQueryServiceConfig().GetSharedReading().GetEnabled()) {
-        YqSharedResources = NFq::CreateYqSharedResources(
-            runConfig.AppConfig.GetFederatedQueryConfig(),
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            Counters->GetSubgroup("counters", "yq"));
-    }
-
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this, YqSharedResources));
     }

@@ -607,7 +607,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
 
     for (const auto& message : messages) {
-        LOG_ROW_DISPATCHER_DEBUG("Data received: " << message.DebugString(true));
+        LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
         dataSize += message.GetData().size();
         Self.LastMessageOffset = message.GetOffset();
     }

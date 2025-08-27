@@ -93,7 +93,7 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "grpc_location", // solomon
         "project", // solomon
         "cluster", // solomon
-        "shared_reading" // yds (topics)
+        "shared_reading" // ydb (topics)
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

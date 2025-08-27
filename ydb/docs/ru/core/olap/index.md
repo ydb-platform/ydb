@@ -7,8 +7,9 @@
 ## Ввод данных
 
 {{ydb-short-name}} предоставляет большое количество инструментов для ввода данных:
-- [Топики]()
-- Прямая поставка с использованием [Fluentbit](), [Logstash]()
+
+- [Топики](../concepts/topic.md);
+- Прямая поставка с использованием [Fluentbit](../integrations/ingestion/fluent-bit.md), [Logstash](../integrations/ingestion/logstash.md)
 - и другие
 
 [Подробнее](medalion/ingest.md).

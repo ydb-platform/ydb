@@ -1,6 +1,7 @@
 #include "task_runner_actor.h"
 
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
@@ -600,10 +601,13 @@ private:
             }
         }
 
+        auto spiller = std::make_shared<TDqComputeStorage>(ExecCtx->GetTxId(), ExecCtx->GetWakeupCallback(), ExecCtx->GetErrorCallback(), ExecCtx->GetSpillingTaskCounters(), actorSystem);
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
             auto& channels = outputs[outputId].GetChannels();
             for (auto& channel : channels) {
-                CreateSpillingStorage(channel.GetId(), actorSystem, channel.GetEnableSpilling());
+                if (channel.GetEnableSpilling()) {
+                    CreateSpillingStorage(channel.GetId(), spiller);
+                }
             }
         }
 
@@ -738,9 +742,9 @@ private:
         return spillingStorage;
     }
 
-    void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
+    void CreateSpillingStorage(ui64 channelId, IDqSpiller::TPtr spiller) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
+        auto channelStorage = CreateDqChannelStorage({}, channelId, spiller);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);

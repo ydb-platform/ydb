@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compute_storage_actor.h"
+#include <ydb/library/yql/dq/runtime/dq_spiller.h>
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -13,7 +14,7 @@ namespace NActors {
 namespace NYql::NDq {
 
 // This class will be refactored to be non-actor spiller part
-class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
+class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller, public IDqSpiller
 {
 public:
     TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,

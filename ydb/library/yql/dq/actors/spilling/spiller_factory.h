@@ -28,6 +28,10 @@ public:
         return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, ActorSystem_);
     }
 
+    IDqSpiller::TPtr CreateDqSpiller() {
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, ActorSystem_);
+    }
+
 private:
     TActorSystem* ActorSystem_;
     TTxId TxId_;

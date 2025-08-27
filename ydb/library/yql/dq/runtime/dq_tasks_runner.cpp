@@ -26,6 +26,9 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
+
 #include <util/generic/scope.h>
 
 
@@ -295,7 +298,7 @@ public:
         return TaskId;
     }
 
-    void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+    void SetSpillerFactory(std::shared_ptr<TDqSpillerFactory> spillerFactory) override {
         SpillerFactory = spillerFactory;
     }
 
@@ -562,7 +565,7 @@ public:
         if (SpillerFactory) {
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = SpillerFactory;
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -644,6 +647,7 @@ public:
             }
         }
 
+        auto spiller = SpillerFactory->CreateDqSpiller();
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             const auto& outputDesc = task.GetOutputs(i);
@@ -700,7 +704,11 @@ public:
                     settings.ValuePackerVersion = task.GetValuePackerVersion();
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        if (spiller && outputChannelDesc.GetEnableSpilling()) {
+                            settings.ChannelStorage = CreateDqChannelStorage({}, 0, spiller);
+                        } else {
+                            settings.ChannelStorage = nullptr;
+                        }
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
@@ -1023,7 +1031,7 @@ private:
     }
 
 private:
-    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    std::shared_ptr<TDqSpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
     NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 

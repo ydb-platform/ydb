@@ -999,14 +999,6 @@ public:
         return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs), {});
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
-        return {};
-    }
-
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */) const override {
-        return {};
-    }
-
     NDq::TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }

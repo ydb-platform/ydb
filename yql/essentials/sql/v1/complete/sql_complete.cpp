@@ -8,6 +8,7 @@
 #include <yql/essentials/sql/v1/complete/name/service/ranking/dummy.h>
 #include <yql/essentials/sql/v1/complete/name/service/binding/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/column/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/column/replicating.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
@@ -33,6 +34,7 @@ namespace NSQLComplete {
         TSqlCompletionEngine(
             TLexerSupplier lexer,
             INameService::TPtr names,
+            IRanking::TPtr ranking,
             TConfiguration configuration)
             : Configuration_(std::move(configuration))
             , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(
@@ -42,7 +44,9 @@ namespace NSQLComplete {
                   Configuration_.ForcedPreviousByToken_))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
+            , Ranking_(std::move(ranking))
         {
+            Ranking_ = Ranking_ ? Ranking_ : MakeDummyRanking();
         }
 
         NThreading::TFuture<TCompletion>
@@ -87,7 +91,12 @@ namespace NSQLComplete {
                 children.emplace_back(Names_);
             }
 
-            return MakeUnionNameService(std::move(children), MakeDummyRanking())
+            INameService::TPtr service =
+                MakeColumnReplicatingService(
+                    MakeUnionNameService(std::move(children), Ranking_),
+                    Ranking_);
+
+            return service
                 ->Lookup(std::move(request))
                 .Apply([this, input, local = std::move(local)](auto f) {
                     return ToCompletion(input, std::move(local), f.ExtractValue());
@@ -165,6 +174,7 @@ namespace NSQLComplete {
                 table = !table->empty() ? table : Nothing();
 
                 request.Constraints.Column = TColumnName::TConstraints();
+                request.Constraints.Column->TableAlias = local.Column->Table;
                 request.Constraints.Column->Tables =
                     TColumnContext(*global.Column).ExtractAliased(table).Tables;
                 request.Constraints.Column->WithoutByTableAlias = global.Column->WithoutByTableAlias;
@@ -231,14 +241,16 @@ namespace NSQLComplete {
         ILocalSyntaxAnalysis::TPtr SyntaxAnalysis_;
         IGlobalAnalysis::TPtr GlobalAnalysis_;
         INameService::TPtr Names_;
+        IRanking::TPtr Ranking_;
     };
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,
         INameService::TPtr names,
-        TConfiguration configuration) {
+        TConfiguration configuration,
+        IRanking::TPtr ranking) {
         return MakeHolder<TSqlCompletionEngine>(
-            lexer, std::move(names), std::move(configuration));
+            lexer, std::move(names), std::move(ranking), std::move(configuration));
     }
 
 } // namespace NSQLComplete

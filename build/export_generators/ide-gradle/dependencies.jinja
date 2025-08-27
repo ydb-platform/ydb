@@ -97,7 +97,7 @@ dependencies {
 {%- endif -%}
 {%- if with_test_kapt -%}
 {%-     for extra_target in extra_targets -%}
-{{ Kapts("testKapt", extra_target.kapt.classpaths) }}
+{{ Kapts("kapt", extra_target.kapt.classpaths) }}
 {%-     endfor -%}
 {%- endif -%}
 {#- glue -#}

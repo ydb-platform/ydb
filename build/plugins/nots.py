@@ -1108,3 +1108,25 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
         processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
     unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
+
+
+@_with_report_configure_error
+def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.semver import Version
+
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    erm_json = _create_erm_json(unit)
+    version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
+
+    var_name = "TS_NEXT_COMMAND"
+
+    if version >= Version.from_str("14.1.2"):
+        # For Next >=v14: build --experimental-build-mode=compile
+        # https://github.com/vercel/next.js/commit/47f73cd8ec79d0a6c248139088aa536453b23ae1
+        unit.set([var_name, "build --experimental-build-mode=compile"])
+    elif version >= Version.from_str("13.5.3"):
+        # For Next <v14: experimental-compile
+        unit.set([var_name, "experimental-compile"])
+    else:
+        raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")

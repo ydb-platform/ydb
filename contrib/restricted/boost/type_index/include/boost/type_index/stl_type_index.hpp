@@ -19,6 +19,10 @@
 /// When typeid() is disabled or BOOST_TYPE_INDEX_FORCE_NO_RTTI_COMPATIBILITY macro
 /// is defined boost::typeindex::ctti is usually used instead of boost::typeindex::stl_type_index.
 
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
 #include <boost/type_index/type_index_facade.hpp>
 
 // MSVC is capable of calling typeid(T) even when RTTI is off
@@ -26,18 +30,23 @@
 #error "File boost/type_index/stl_type_index.ipp is not usable when typeid() is not available."
 #endif
 
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <typeinfo>
 #include <cstring>                                  // std::strcmp, std::strlen, std::strstr
 #include <stdexcept>
 #include <type_traits>
+
 #include <boost/throw_exception.hpp>
 #include <boost/core/demangle.hpp>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
 namespace boost { namespace typeindex {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 /// \class stl_type_index
 /// This class is a wrapper around std::type_info, that workarounds issues and provides
@@ -93,6 +102,8 @@ public:
     inline static stl_type_index type_id_runtime(const T& value) noexcept;
 };
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 inline const stl_type_index::type_info_t& stl_type_index::type_info() const noexcept {
     return *data_;
 }
@@ -111,7 +122,7 @@ inline const char* stl_type_index::name() const noexcept {
 }
 
 inline std::string stl_type_index::pretty_name() const {
-    static const char cvr_saver_name[] = "boost::typeindex::detail::cvr_saver<";
+    static const char cvr_saver_name[] = "boost::typeindex::detail::cvr_saver";
     static BOOST_CONSTEXPR_OR_CONST std::string::size_type cvr_saver_name_len = sizeof(cvr_saver_name) - 1;
 
     // In case of MSVC demangle() is a no-op, and name() already returns demangled name.
@@ -130,6 +141,12 @@ inline std::string stl_type_index::pretty_name() const {
         const char* b = std::strstr(begin, cvr_saver_name);
         if (b) {
             b += cvr_saver_name_len;
+
+            // Trim everuthing till '<'. In modules the name could be boost::typeindex::detail::cvr_saver@boost.type_index<
+            while (*b != '<') {         // the string is zero terminated, we won't exceed the buffer size
+                ++ b;
+            }
+            ++b;
 
             // Trim leading spaces
             while (*b == ' ') {         // the string is zero terminated, we won't exceed the buffer size
@@ -230,5 +247,7 @@ inline stl_type_index stl_type_index::type_id_runtime(const T& value) noexcept {
 }
 
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_STL_TYPE_INDEX_HPP

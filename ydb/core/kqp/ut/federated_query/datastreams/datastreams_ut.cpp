@@ -635,7 +635,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
-
         CancelScriptExecution(scriptExecutionOperation);
     }
 
@@ -800,6 +799,67 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(writeBucket), 0);
+    }
+
+    Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "inputTopicName";
+        CreateTopic(inputTopicName);
+        constexpr char outputTopicName[] = "outputTopicName";
+        CreateTopic(outputTopicName);
+
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), {
+            .PqGateway = pqGateway
+        });
+
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+                $input = SELECT key, value FROM `{source}`.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    ));
+                INSERT INTO `{source}`.`{output_topic}`
+                    SELECT key || value FROM $input;)",
+                "source"_a = sourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ), {
+                .SaveState = true,
+                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
+            }, false);
+
+        Sleep(TDuration::MilliSeconds(3000));
+
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(1, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(2, R"({"key":"key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(3, R"({"key":"key3", "value": "value3"})", {.Session = CreatePartitionSession()}));
+        Sleep(TDuration::MilliSeconds(1000));
+        pqGateway->AddEvent(inputTopicName, NTopic::TSessionClosedEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")}));
+
+        Sleep(TDuration::MilliSeconds(10000));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(4, R"({"key":"key4", "value": "value4"})", {.Session = CreatePartitionSession()}));
+
+        bool success = false;
+        while (true) {
+            auto writeResult = pqGateway->GetWriteSessionData(outputTopicName);
+            for (auto& w : writeResult) {
+                if (w == "key4value4") {
+                    success = true;
+                    break;
+                }
+            }
+            if (success) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        CancelScriptExecution(operationId);
     }
 }
 

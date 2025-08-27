@@ -83,7 +83,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings)
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -92,7 +93,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             false, executerConfig, std::move(asyncIoFactory), creator,
             userRequestContext, statementResultIndex,
             federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
-            shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
+            shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation
         );
     }
 
@@ -116,7 +117,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 false, executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
-                shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
+                shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -132,7 +133,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 counters, true, executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
-                shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings)
+                shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation
             );
 
         default:

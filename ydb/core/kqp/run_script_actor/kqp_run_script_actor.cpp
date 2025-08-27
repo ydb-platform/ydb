@@ -255,6 +255,7 @@ private:
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
+        ev->SetGeneration(LeaseGeneration);
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
 

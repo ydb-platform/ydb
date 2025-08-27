@@ -31,6 +31,8 @@
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -105,13 +107,17 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings)
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        ui64 generation)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(resultSetFormatSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , QueryServiceConfig(queryServiceConfig)
+        , Generation(generation)
     {
         AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
@@ -342,6 +348,8 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
                 IgnoreFunc(TEvKqpNode::TEvStartKqpTasksResponse);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone);
+                IgnoreFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues);
                 default:
                     UnexpectedEvent("FinalizeState", ev->GetTypeRewrite());
             }
@@ -487,6 +495,8 @@ private:
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default: {
                     CancelProposal(0);
@@ -1166,6 +1176,7 @@ private:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1884,6 +1895,7 @@ private:
 
         // TODO: move graph restoration outside of executer
         const bool graphRestored = RestoreTasksGraph();
+        StartCheckpointCoordinator();
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
@@ -2685,7 +2697,7 @@ private:
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
-            << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
+            << ", pending compute tasks: " << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
             << ", useFollowers: " << GetUseFollowers());
 
         // error
@@ -2784,6 +2796,10 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
+        }
         TBase::PassAway();
     }
 
@@ -2846,6 +2862,38 @@ private:
             LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
             PassAway();
         }
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
+        LOG_D("Coordinator saved zero checkpoint");
+        Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr&) {
+        LOG_D("TEvRaiseTransientIssues");
+    }
+
+    void StartCheckpointCoordinator() {
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
+            && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
+            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr);
+        if (!enableCheckpointCoordinator) {
+            return;
+        }
+        const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
+
+        FederatedQuery::StreamingDisposition streamingDisposition;
+        TString executionId = GetTasksGraph().GetMeta().UserRequestContext->CurrentExecutionId;
+        CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
+            ::NFq::TCoordinatorId(executionId, Generation),
+            NYql::NDq::MakeCheckpointStorageID(),
+            SelfId(),
+            checkpointsConfig,
+            Counters->Counters->GetKqpCounters(),
+            NFq::NProto::TGraphParams(),
+            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            streamingDisposition).Release());
+        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << Generation);
     }
 
 private:
@@ -2929,6 +2977,9 @@ private:
     ui64 LastShard = 0;
 
     const TDuration WaitCAStatsTimeout;
+
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    ui64 Generation = 0;
 };
 
 } // namespace
@@ -2940,11 +2991,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings)
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings), counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation);
 }
 
 } // namespace NKqp

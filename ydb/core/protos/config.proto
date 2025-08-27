@@ -1144,6 +1144,50 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
+message TCheckpointsConfig {
+    message TStateStorageLimitsConfig {
+        optional uint64 MaxGraphCheckpointsSizeBytes = 1;
+        optional uint64 MaxTaskStateSizeBytes = 2;
+        optional uint64 MaxRowSizeBytes = 3;
+    }
+
+    message TCheckpointGcConfig {
+        optional bool Enabled = 1;
+    }
+
+    message TExternalStorage {
+        optional string Endpoint = 1;
+        optional string Database = 2;
+        optional string OAuthFile = 3;
+        optional string Token = 4;
+        optional string TablePrefix = 5;
+        optional string CertificateFile = 6;
+        optional string IamEndpoint = 7;
+        optional string SaKeyFile = 8;
+        optional bool UseLocalMetadataService = 9;
+        optional uint32 ClientTimeoutSec = 10;
+        optional uint32 OperationTimeoutSec = 11;
+        optional uint32 CancelAfterSec = 12;
+        optional bool UseSsl = 13;
+        optional uint32 TableClientMaxActiveSessions = 14;
+    }
+
+    message TLocalStorage {
+        optional string TablePrefix = 1;
+    }
+    
+    optional bool Enabled = 1;
+    oneof Storage {
+        TExternalStorage ExternalStorage = 2;
+        TLocalStorage LocalStorage = 3;
+    }
+    optional TCheckpointGcConfig CheckpointGarbageConfig = 4;
+    optional TStateStorageLimitsConfig StateStorageLimits = 5;
+    optional uint64 CheckpointingPeriodMillis = 6;
+    optional uint64 MaxInflight = 7;
+    optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1169,6 +1213,7 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+    optional TCheckpointsConfig CheckpointsConfig = 24;
 }
 
 // Config describes immediate controls and allows

@@ -1,3 +1,4 @@
+
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -66,19 +67,16 @@ NUdf::TUnboxedValue DoTestDqScalarHashJoin(
     const auto rightFlow = ToWideFlow(dpb, rightList);
     
     // Создаем тип результата - объединение левого и правого типов
-    auto leftMultiType = AS_TYPE(TFlowType, leftFlow.GetStaticType())->GetItemType();
-    auto rightMultiType = AS_TYPE(TFlowType, rightFlow.GetStaticType())->GetItemType();
-    
     TVector<TType*> resultTypes;
     
     // Добавляем типы из левого flow
-    auto leftComponents = GetWideComponents(AS_TYPE(TMultiType, leftMultiType));
+    auto leftComponents = GetWideComponents(leftFlow.GetStaticType());
     for (auto* type : leftComponents) {
         resultTypes.push_back(type);
     }
     
     // Добавляем типы из правого flow
-    auto rightComponents = GetWideComponents(AS_TYPE(TMultiType, rightMultiType));
+    auto rightComponents = GetWideComponents(rightFlow.GetStaticType());
     for (auto* type : rightComponents) {
         resultTypes.push_back(type);
     }
@@ -295,3 +293,4 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+

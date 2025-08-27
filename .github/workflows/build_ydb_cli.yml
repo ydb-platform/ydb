@@ -127,18 +127,38 @@ jobs:
         mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 
         mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
 
-    - name: Patch fix_msvc_output.py with comprehensive debug output
+    - name: Create patch script for fix_msvc_output.py
       if: ${{ matrix.os == 'windows-amd' }}
-      shell: powershell
+      shell: cmd
       run: |
-        Write-Host "=== Adding comprehensive debug output ==="
-        $content = Get-Content build/scripts/fix_msvc_output.py -Raw
-        $content = $content -replace "args = sys\.argv\[1:\]", "args = sys.argv[1:]; print(f'DEBUG: Original sys.argv[1:] = {args}', file=sys.stderr); args = [arg for arg in args if arg != 'None']; print(f'DEBUG: Filtered args = {args}', file=sys.stderr)"
-        $content = $content -replace "cmd = pwa\.ProcessWholeArchiveOption\('WINDOWS', wa_peers, wa_libs\)\.construct_cmd\(args\)", "cmd = pwa.ProcessWholeArchiveOption('WINDOWS', wa_peers, wa_libs).construct_cmd(args); print(f'DEBUG: Final command before execution = {cmd}', file=sys.stderr)"
-        $content = $content -replace "p = subprocess\.Popen\(cmd, stdout=subprocess\.PIPE\)", "print(f'DEBUG: Executing command = {cmd}', file=sys.stderr); p = subprocess.Popen(cmd, stdout=subprocess.PIPE)"
-        $content = $content -replace "return subprocess\.Popen\(cmd, stdout=sys\.stderr\)\.wait\(\)", "print(f'DEBUG: Executing out2err command = {cmd}', file=sys.stderr); return subprocess.Popen(cmd, stdout=sys.stderr).wait()"
-        Set-Content build/scripts/fix_msvc_output.py -Value $content
-        Write-Host "=== Patched with comprehensive debug output ==="
+        echo import sys > patch_script.py
+        echo import re >> patch_script.py
+        echo with open('build/scripts/fix_msvc_output.py', 'r') as f: >> patch_script.py
+        echo     content = f.read() >> patch_script.py
+        echo. >> patch_script.py
+        echo # Fix None handling for assembler >> patch_script.py
+        echo content = content.replace( >> patch_script.py
+        echo     'args = sys.argv[1:]', >> patch_script.py
+        echo     '''args = sys.argv[1:] >> patch_script.py
+        echo     print(f"DEBUG: Original sys.argv[1:] = {args}", file=sys.stderr) >> patch_script.py
+        echo     original_had_none = len(args) ^> 1 and args[1] == 'None' >> patch_script.py
+        echo     args = [arg for arg in args if arg != 'None'] >> patch_script.py
+        echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
+        echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
+        echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
+        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
+        echo ) >> patch_script.py
+        echo. >> patch_script.py
+        echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py
+        echo     f.write(content) >> patch_script.py
+        python patch_script.py
+
+    - name: Verify patch applied correctly  
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: |
+        echo === Checking patched fix_msvc_output.py ===
+        type build\scripts\fix_msvc_output.py | findstr "original_had_none"
 
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}

@@ -117,11 +117,11 @@ jobs:
         echo "=== LLVM directory contents ==="
         ls -la "C:/Program Files/LLVM/bin/" || echo "LLVM bin directory not found"
 
-    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
-    - name: Prepare Visual Studio environment and build windows binary with ya make
+    # Use LLVM tools instead of Visual Studio tools since they're not found in PATH
+    - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=%PATH%;C:\Program Files\LLVM\bin" && echo "=== Visual Studio tools check ===" && where ml.exe && where lib.exe && where link.exe && echo "=== LLVM tools check ===" && where llvm-lib.exe && where llvm-ar.exe && echo "=== PATH ===" && echo %PATH% && echo "=== Starting build ===" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --archiver="C:\Program Files\LLVM\bin\llvm-lib.exe" --assembler="C:\Program Files\LLVM\bin\llvm-ml.exe" -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

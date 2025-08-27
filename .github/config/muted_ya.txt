@@ -130,19 +130,19 @@ ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsBlockKee
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsBlockMax.test_restart_as_much_as_can
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorKeep.test_restart_as_much_as_can
 ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorMax.test_restart_as_much_as_can
-ydb/tests/functional/cms [test_cms_erasure.py 0/10]
-ydb/tests/functional/cms [test_cms_erasure.py 1/10]
-ydb/tests/functional/cms [test_cms_erasure.py 2/10]
-ydb/tests/functional/cms [test_cms_erasure.py 3/10]
-ydb/tests/functional/cms [test_cms_restart.py 0/10]
-ydb/tests/functional/cms [test_cms_restart.py 1/10]
-ydb/tests/functional/cms [test_cms_restart.py 2/10]
-ydb/tests/functional/cms [test_cms_restart.py 3/10]
+ydb/tests/functional/cms [test_cms_erasure.py 0/10] chunk chunk
+ydb/tests/functional/cms [test_cms_erasure.py 1/10] chunk chunk
+ydb/tests/functional/cms [test_cms_erasure.py 2/10] chunk chunk
+ydb/tests/functional/cms [test_cms_erasure.py 3/10] chunk chunk
+ydb/tests/functional/cms [test_cms_restart.py 0/10] chunk chunk
+ydb/tests/functional/cms [test_cms_restart.py 1/10] chunk chunk
+ydb/tests/functional/cms [test_cms_restart.py 2/10] chunk chunk
+ydb/tests/functional/cms [test_cms_restart.py 3/10] chunk chunk
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/blobstorage test_tablet_channel_migration.py.TestChannelsOps.test_when_write_and_change_tablet_channel_then_can_read_from_tablet
 ydb/tests/functional/blobstorage test_tablet_channel_migration.py.TestChannelsOps.test_when_write_in_new_channel_then_can_read_from_tablet
-ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 0/20]
-ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 1/20]
+ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 0/20] chunk chunk
+ydb/tests/functional/blobstorage [test_tablet_channel_migration.py 1/20] chunk chunk
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*

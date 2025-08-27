@@ -128,15 +128,44 @@ jobs:
         set "ML64_PATH="
         echo Searching in multiple Visual Studio paths...
         
-        REM Try different Visual Studio paths
+        REM Try different Visual Studio paths  
         for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files\Microsoft Visual Studio\2022\Professional" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional") do (
+          echo Checking base path: %%p
           if exist "%%p\VC\Tools\MSVC\" (
-            echo Checking: %%p\VC\Tools\MSVC\
+            echo Found MSVC tools directory: %%p\VC\Tools\MSVC\
+            dir "%%p\VC\Tools\MSVC\" /b
             for /d %%i in ("%%p\VC\Tools\MSVC\*") do (
-              if exist "%%i\bin\Hostx64\x64\ml64.exe" (
-                echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
-                set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
-                goto :found
+              echo Checking version directory: %%i
+              if exist "%%i\bin\Hostx64\x64\" (
+                echo Found Hostx64\x64 directory: %%i\bin\Hostx64\x64\
+                dir "%%i\bin\Hostx64\x64\ml*" /b 2>nul || echo "No ml* files found"
+                if exist "%%i\bin\Hostx64\x64\ml64.exe" (
+                  echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
+                  set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
+                  goto :found
+                ) else (
+                  echo ml64.exe not found in %%i\bin\Hostx64\x64\
+                )
+              ) else (
+                echo Hostx64\x64 directory not found in %%i\bin\
+              )
+            )
+          ) else (
+            echo MSVC tools directory not found: %%p\VC\Tools\MSVC\
+          )
+        )
+        
+        REM Also try to find any ml.exe that might work for 64-bit
+        echo === Searching for any Microsoft ml.exe ===
+        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise") do (
+          if exist "%%p\VC\Tools\MSVC\" (
+            for /d %%i in ("%%p\VC\Tools\MSVC\*") do (
+              if exist "%%i\bin\Hostx64\x64\ml.exe" (
+                echo Found ml.exe (64-bit) at: %%i\bin\Hostx64\x64\ml.exe
+                if not defined ML64_PATH (
+                  set "ML64_PATH=%%i\bin\Hostx64\x64\ml.exe"
+                  echo Using ml.exe as ml64.exe alternative
+                )
               )
             )
           )
@@ -152,11 +181,14 @@ jobs:
           mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%"
           mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%"
           echo MICROSOFT_ML64=yes > ml_type.txt
+          echo DISABLE_ASM=no > asm_config.txt
         ) else (
-          echo Using LLVM ml.exe as fallback
+          echo WARNING: Microsoft assembler not found, LLVM ml.exe has limited MASM compatibility
+          echo Trying LLVM ml.exe as fallback, but may disable ASM if build fails
           mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe"
           mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
           echo MICROSOFT_ML64=no > ml_type.txt
+          echo DISABLE_ASM=maybe > asm_config.txt
         )
 
     - name: Create patch script for fix_msvc_output.py
@@ -218,10 +250,20 @@ jobs:
           echo "ERROR: ml.exe symlink not created"
         )
 
-    - name: Build windows binary with ya make using LLVM toolchain
+    - name: Build windows binary with ya make using LLVM toolchain (with ASM)
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
+      continue-on-error: true
+      id: build_with_asm
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+
+    - name: Build windows binary without ASM optimizations (fallback)
+      if: ${{ matrix.os == 'windows-amd' && steps.build_with_asm.outcome == 'failure' }}
+      shell: cmd
+      run: |
+        echo === First build failed, trying without ASM optimizations ===
+        echo Disabling OpenSSL ASM optimizations for compatibility
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

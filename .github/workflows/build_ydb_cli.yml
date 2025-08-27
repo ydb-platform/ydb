@@ -127,17 +127,18 @@ jobs:
         mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 
         mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
 
-    - name: Patch fix_msvc_output.py with debug output and None filtering
+    - name: Patch fix_msvc_output.py with comprehensive debug output
       if: ${{ matrix.os == 'windows-amd' }}
       shell: powershell
       run: |
-        Write-Host "=== Adding debug output and filtering None ==="
+        Write-Host "=== Adding comprehensive debug output ==="
         $content = Get-Content build/scripts/fix_msvc_output.py -Raw
-        $content = $content -replace "args = \[arg for arg in sys\.argv\[1:\] if arg != 'None'\]", "args = [arg for arg in sys.argv[1:] if arg != 'None']; print(f'DEBUG: Filtered args = {args}', file=sys.stderr)"
+        $content = $content -replace "args = sys\.argv\[1:\]", "args = sys.argv[1:]; print(f'DEBUG: Original sys.argv[1:] = {args}', file=sys.stderr); args = [arg for arg in args if arg != 'None']; print(f'DEBUG: Filtered args = {args}', file=sys.stderr)"
+        $content = $content -replace "cmd = pwa\.ProcessWholeArchiveOption\('WINDOWS', wa_peers, wa_libs\)\.construct_cmd\(args\)", "cmd = pwa.ProcessWholeArchiveOption('WINDOWS', wa_peers, wa_libs).construct_cmd(args); print(f'DEBUG: Final command before execution = {cmd}', file=sys.stderr)"
         $content = $content -replace "p = subprocess\.Popen\(cmd, stdout=subprocess\.PIPE\)", "print(f'DEBUG: Executing command = {cmd}', file=sys.stderr); p = subprocess.Popen(cmd, stdout=subprocess.PIPE)"
         $content = $content -replace "return subprocess\.Popen\(cmd, stdout=sys\.stderr\)\.wait\(\)", "print(f'DEBUG: Executing out2err command = {cmd}', file=sys.stderr); return subprocess.Popen(cmd, stdout=sys.stderr).wait()"
         Set-Content build/scripts/fix_msvc_output.py -Value $content
-        Write-Host "=== Patched with debug output ==="
+        Write-Host "=== Patched with comprehensive debug output ==="
 
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}

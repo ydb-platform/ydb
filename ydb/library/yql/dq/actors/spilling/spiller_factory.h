@@ -4,7 +4,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
-#include <contrib/ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
 namespace NYql::NDq {
 

@@ -116,35 +116,36 @@ private:
 
 } // namespace
 
+
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
-    MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
-    const auto joinStreamType = AS_TYPE(TStreamType, joinType);
-    MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(),
+    MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
+    const auto joinFlowType = AS_TYPE(TFlowType, joinType);
+    MKQL_ENSURE(joinFlowType->GetItemType()->IsMulti(),
                 "Expected Multi as a resulting item type");
-    const auto joinComponents = GetWideComponents(joinStreamType);
+    const auto joinComponents = GetWideComponents(joinFlowType);
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
     const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
-    MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
-    const auto leftStreamType = AS_TYPE(TStreamType, leftType);
-    MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(),
-                "Expected Multi as a left stream item type");
-    const auto leftStreamComponents = GetWideComponents(leftStreamType);
-    MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> leftStreamItems(leftStreamComponents.cbegin(), leftStreamComponents.cend());
+    MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
+    const auto leftFlowType = AS_TYPE(TFlowType, leftType);
+    MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(),
+                "Expected Multi as a left flow item type");
+    const auto leftFlowComponents = GetWideComponents(leftFlowType);
+    MKQL_ENSURE(leftFlowComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
 
     const auto rightType = callable.GetInput(1).GetStaticType();
-    MKQL_ENSURE(rightType->IsStream(), "Expected WideStream as a right stream");
-    const auto rightStreamType = AS_TYPE(TStreamType, rightType);
-    MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(),
-                "Expected Multi as a right stream item type");
-    const auto rightStreamComponents = GetWideComponents(rightStreamType);
-    MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> rightStreamItems(rightStreamComponents.cbegin(), rightStreamComponents.cend());
+    MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
+    const auto rightFlowType = AS_TYPE(TFlowType, rightType);
+    MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(),
+                "Expected Multi as a right flow item type");
+    const auto rightFlowComponents = GetWideComponents(rightFlowType);
+    MKQL_ENSURE(rightFlowComponents.size() > 0, "Expected at least one column");
+    const TVector<TType*> rightFlowItems(rightFlowComponents.cbegin(), rightFlowComponents.cend());
 
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
@@ -183,11 +184,10 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         leftFlow,
         rightFlow,
         std::move(joinItems),
-        std::move(leftStreamItems),
+        std::move(leftFlowItems),
         std::move(leftKeyColumns),
-        std::move(rightStreamItems),
+        std::move(rightFlowItems),
         std::move(rightKeyColumns)
     );
 }
-
 } // namespace NKikimr::NMiniKQL

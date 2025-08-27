@@ -39,3 +39,5 @@ items:
 - name: Управление потреблением ресурсов
   href: resource-consumption-management.md
   when: feature_resource_pool == true and feature_resource_pool_classifier == true
+- name: Структура кластера
+  href: cluster-structure.md

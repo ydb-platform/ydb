@@ -216,23 +216,25 @@ void TKafkaMetadataActor::AddTopicResponse(
         if (!WithProxy && !NeedAllNodes) {
             AddBroker(nodeId, (*nodeIter)->Host, (*nodeIter)->Port);
         }
-
-        auto nodeToAddIter = Nodes.find(part.NodeId);
-        nodeToAddIter++;
-        for (size_t i = 0; i < 2; ++i) {
-            if (nodeToAddIter == Nodes.end()) {
-                nodeToAddIter = Nodes.begin();
-            }
-            if (nodeToAddIter->first == nodeId) {
-                break;
-            }
-            nodesToAdd.push_back(nodeToAddIter->first);
-            if (!WithProxy && !NeedAllNodes) {
-                AddBroker(nodeToAddIter->first, nodeToAddIter->second.Host, nodeToAddIter->second.Port);
-            }
+        if (!WithProxy) {
+            auto nodeToAddIter = Nodes.find(part.NodeId);
             nodeToAddIter++;
+            for (size_t i = 0; i < 2; ++i) {
+                if (nodeToAddIter == Nodes.end()) {
+                    nodeToAddIter = Nodes.begin();
+                }
+                if (nodeToAddIter->first == nodeId) {
+                    break;
+                }
+                nodesToAdd.push_back(nodeToAddIter->first);
+                if (!NeedAllNodes) {
+                    AddBroker(nodeToAddIter->first, nodeToAddIter->second.Host, nodeToAddIter->second.Port);
+                }
+                nodeToAddIter++;
+            }
+            std::sort(nodesToAdd.begin(), nodesToAdd.end());
         }
-        std::sort(nodesToAdd.begin(), nodesToAdd.end());
+
         for (size_t i = 0; i < nodesToAdd.size(); i++) {
             responsePartition.ReplicaNodes.push_back(nodesToAdd[i]);
             responsePartition.IsrNodes.push_back(nodesToAdd[i]);

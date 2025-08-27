@@ -953,7 +953,7 @@ private:
         // Now we know we have a valid response, safe to access
         // Extract metadata for both streaming and non-streaming modes
         Ydb::Query::ExecuteScriptMetadata metadata;
-        if (GetOperationResponse->Get()->Metadata && GetOperationResponse->Get()->Metadata->UnpackTo(&metadata)) {
+        if (const auto& opMeta = GetOperationResponse->Get()->Info.Metadata; opMeta && opMeta->UnpackTo(&metadata)) {
             FetchResultSets = metadata.result_sets_meta_size();
             // Extract execution_id from metadata if we don't have it yet
             if (ExecutionId.empty() && !metadata.execution_id().empty()) {
@@ -966,7 +966,7 @@ private:
             NJson::TJsonValue& jsonMeta = json["meta"];
             jsonMeta["event"] = "OperationResponse";
             json["id"] = OperationId->ToString();
-            json["ready"] = GetOperationResponse->Get()->Ready;
+            json["ready"] = GetOperationResponse->Get()->Info.Ready;
             if (GetOperationResponse->Get()->Issues) {
                 Ydb::Issue::IssueMessage issueMessage;
                 NYql::IssuesToMessage(GetOperationResponse->Get()->Issues, issueMessage.mutable_issues());
@@ -976,7 +976,7 @@ private:
             StreamJsonResponse(json);
         }
 
-        if (GetOperationResponse->Get()->Ready) {
+        if (GetOperationResponse->Get()->Info.Ready) {
             if (FetchResultSets > 0) {
                 // Make sure we have execution_id before trying to fetch results
                 if (ExecutionId.empty()) {

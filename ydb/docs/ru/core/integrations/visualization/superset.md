@@ -1,8 +1,8 @@
 # Apache Superset
 
-Apache Superset — это современная платформа для анализа и визуализации данных.
+[Apache Superset](https://superset.apache.org/) — это современная платформа для анализа и визуализации данных. В данной статье будет рассказано, как строить визуализации поверх данных, хранящихся в YDB.
 
-## Установка необходимых зависимостей
+## Установка необходимых зависимостей {#prerequisites}
 
 Для работы с {{ ydb-short-name }} необходимо установить драйвер [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy).
 
@@ -10,18 +10,26 @@ Apache Superset — это современная платформа для ан
 
 ## Создание подключения к {{ ydb-short-name }} {#add-database-connection}
 
-Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset, выполните следующие шаги:
+Подключение к {{ ydb-short-name }} доступно в двух вариантах:
+
+1. Нативное подключение с помощью sqlalchemy драйвера (начиная с версии 5.0.0)
+1. Подключение с использованием сетевого протокола PostgreSQL
+
+Рекомендуется использовать нативное подключение, когда это возможно.
+
+### Нативное подключение с помощью sqlalchemy драйвера
+
+Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset **версии 5.0.0 и выше**, выполните следующие шаги:
 
 1. В верхнем меню Apache Superset наведите курсор на **Settings** и выберите в выпадающем списке пункт **Database Connections**.
 1. Нажмите кнопку **+ DATABASE**.
 
     Откроется окно мастера **Connect a database**.
 
-1. На первом шаге мастера выберите **YDB** из списка **Supported databases**.
+1. На первом шаге мастера выберите **YDB** из списка **Supported databases**. Если опция **YDB** недоступна, удостоверьтесь что выполнены все шаги из [пререквизитов](#prerequisites).
 1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
 
     * **Display Name** — наименование соединения с {{ ydb-short-name }} в Apache Superset.
-    "ydb://{host}:{port}/{database_name}"
     * **SQLAlchemy URI** — строка вида `ydb://{host}:{port}/{database_name}`, где **host** и **port** это часть [эндпоинта](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение, **database_name** - путь к [базе данных](../../concepts/glossary.md#database)
 
     ![](_assets/superset-ydb-connection-details.png =400x)
@@ -29,7 +37,31 @@ Apache Superset — это современная платформа для ан
 1. Нажмите кнопку **CONNECT**.
 1. Нажмите кнопку **FINISH**, чтобы сохранить подключение.
 
-Для дополнительной информации о возможностях конфигурации соединения обратитесь к [разделу YDB официальной документации](https://superset.apache.org/docs/configuration/databases#ydb).
+Для дополнительной информации о возможностях конфигурации соединения обратитесь к [разделу {{ ydb-short-name }} официальной документации](https://superset.apache.org/docs/configuration/databases#ydb).
+
+### Подключение с использованием сетевого протокола PostgreSQL
+
+Чтобы создать подключение к {{ ydb-short-name }} из Apache Superset с использованием сетевого протокола PostgreSQL, выполните следующие шаги:
+
+1. В верхнем меню Apache Superset наведите курсор на **Settings** и выберите в выпадающем списке пункт **Database Connections**.
+1. Нажмите кнопку **+ DATABASE**.
+
+    Откроется окно мастера **Connect a database**.
+
+1. На первом шаге мастера нажмите кнопку **PostgreSQL**.
+1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
+
+    * **HOST** — [эндпоинт](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение.
+    * **PORT** — порт эндпоинта {{ ydb-short-name }}.
+    * **DATABASE NAME** — путь к [базе данных](../../concepts/glossary.md#database) в кластере {{ ydb-short-name }}, к которой будут выполняться запросы.
+    * **USERNAME** — логин для подключения к базе данных {{ ydb-short-name }}.
+    * **PASSWORD** — пароль для подключения к базе данных {{ ydb-short-name }}.
+    * **DISPLAY NAME** — наименование соединения с {{ ydb-short-name }} в Apache Superset.
+
+    ![](_assets/superset-ydb-pg-connection-details.png =400x)
+
+1. Нажмите кнопку **CONNECT**.
+1. Нажмите кнопку **FINISH**, чтобы сохранить подключение.
 
 ## Создание набора данных (dataset) {#create-dataset}
 

@@ -146,7 +146,8 @@ jobs:
         echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
         echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
         echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
-        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
+        echo         args.insert(2, '--m64') >> patch_script.py
+        echo         print(f"DEBUG: Fixed ml args with 64-bit mode = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py
         echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py

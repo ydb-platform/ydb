@@ -30,9 +30,10 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     Logic->LoadEntry(this);
 }
 
-TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletStorageInfo *info, ui64 maxBytesInFly)
+TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly)
     : Ops(ops)
     , SelfId(self)
+    , BootAttempt(bootAttempt)
     , Info(info)
     , GroupResolveCachedChannel(Max<ui32>())
     , GroupResolveCachedGeneration(Max<ui32>())
@@ -186,7 +187,8 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
             std::move(fetch.PageCollection),
-            std::move(fetch.Pages)),
+            std::move(fetch.Pages),
+            BootAttempt),
         0, (ui64)ESharedCacheRequestType::BootLogic);
 
     return NBoot::TSpawned(true);
@@ -270,6 +272,9 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
         if (ESharedCacheRequestType(ev.Cookie) != ESharedCacheRequestType::BootLogic)
+            return OpResultUnhandled;
+
+        if (msg->Cookie != BootAttempt)
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->PageCollection.Get());

@@ -857,7 +857,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -898,7 +898,7 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
 
     auto executorCaches = CleanupState();
 
-    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), Owner->Info(), maxBootBytesInFly));
+    BootLogic.Reset(new TExecutorBootLogic(this, SelfId(), ++BootAttempt, Owner->Info(), maxBootBytesInFly));
 
     ProcessIoStats(
         NBlockIO::EDir::Read, NBlockIO::EPriority::Fast,
@@ -3100,6 +3100,10 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             AdvancePendingPartSwitches();
         }
+        return;
+
+    case ESharedCacheRequestType::BootLogic:
+        // ignore outdated replies
         return;
 
     default:

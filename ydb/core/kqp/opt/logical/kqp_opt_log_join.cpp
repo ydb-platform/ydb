@@ -777,14 +777,16 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     if (useStreamIndexLookupJoin && join.JoinType().Value() != "RightSemi") {
         TMaybeNode<TExprBase> joinKeyPredicate;
 
-        if (!equalLeftKeysConditions.empty()) {
+        TVector<TExprBase> preJoinConditions = prefixFilters;
+        if (!equalLeftKeysConditions.empty() || !preJoinConditions.empty()) {
             for (auto& cond : equalLeftKeysConditions) {
                 cond = TExprBase(ctx.ReplaceNode(std::move(cond.Ptr()), row.Ref(), leftRowArg.Ptr()));
+                preJoinConditions.push_back(cond);
             }
 
             joinKeyPredicate = Build<TCoCoalesce>(ctx, join.Pos())
                 .Predicate<TCoAnd>()
-                    .Add(equalLeftKeysConditions)
+                    .Add(preJoinConditions)
                     .Build()
                 .Value<TCoBool>()
                     .Literal().Build("false")
@@ -812,11 +814,11 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Input(leftData)
             .Lambda()
                 .Args({leftRowArg})
-                .Body<TCoFlatMap>()
+                .Body<TCoMap>()
                     .Input(rightPrefixExpr.Cast())
                     .Lambda()
                         .Args({prefixRowArg})
-                        .Body(wrapWithPrefixFilters(leftRowTuple))
+                        .Body(leftRowTuple)
                         .Build()
                     .Build()
                 .Build()

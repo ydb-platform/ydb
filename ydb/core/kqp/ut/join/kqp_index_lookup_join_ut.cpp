@@ -69,6 +69,10 @@ void PrepareTables(TSession session) {
             idx_launchNumber Int32,
             PRIMARY KEY(idx_processId, idx_launchNumber)
         );
+
+        CREATE TABLE X (x_id Int32, a Int32, b Int32, PRIMARY KEY(x_id));
+        CREATE TABLE Y (y_id Int32, a Int32, b Int32, c Int32, PRIMARY KEY(y_id), INDEX ix_a GLOBAL ON (a));
+
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
@@ -142,6 +146,15 @@ void PrepareTables(TSession session) {
         insert into B select * from AS_TABLE($b);
         insert into A select * from AS_TABLE($a);
         insert into B (a, b) values (5, null);
+
+        UPSERT INTO X (x_id,a,b) VALUES
+            (111, 1, 1), (112, 1, 2),  (113, 1, 3),
+            (121, 2, 1), (122, 2, 2),  (123, 2, 3),
+            (131, 3, 1), (132, 3, 2),  (133, 3, 3);
+            UPSERT INTO Y (y_id,a,b,c) VALUES
+            (211, 1, 1, 2), (212, 1, 2, 3),  (213, 1, 3, 4),
+            (221, 2, 1, 3), (222, 2, 2, 4),  (223, 2, 3, 5),
+            (231, 3, 1, 4), (232, 3, 2, 5),  (233, 3, 3, 6);
 
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 }
@@ -1066,6 +1079,25 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
     }
 }
 
+
+Y_UNIT_TEST_TWIN(LeftJoinOnRightTableOverIndex, StreamLookupJoin) {
+    auto tester = TTester{
+        .Query=R"(
+            SELECT x.a, x.b, y.a, y.b, y.c
+            FROM X AS x LEFT JOIN Y VIEW ix_a AS y ON x.a=y.a AND x.b=y.b
+            WHERE x.a=3;
+        )",
+        .Answer=R"([
+            [[3];[1];[3];[1];[4]];
+            [[3];[2];[3];[2];[5]];
+            [[3];[3];[3];[3];[6]]
+        ])",
+        .StreamLookup=StreamLookupJoin,
+        .DoValidateStats=false,
+    };
+    tester.Run();
+}
+
 Y_UNIT_TEST_TWIN(JoinLeftJoinPostJoinFilterTest, StreamLookupJoin) {
     auto tester = TTester{
         .Query=R"(
@@ -1137,15 +1169,12 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
 
 
 Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
-    if (StreamLookupJoin) {
-        return;
-    }
-
     auto tester = TTester{
         .Query=R"(
             select A.a, A.b, B.a, B.b from A
             left join (select * from B where b is null) as B
             on A.a = B.a and A.b = B.b
+            ORDER BY A.a, B.b
         )",
         .Answer=R"([
             [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]

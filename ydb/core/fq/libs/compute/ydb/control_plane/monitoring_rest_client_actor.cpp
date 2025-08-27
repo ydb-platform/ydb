@@ -92,7 +92,7 @@ public:
                 bool usageFound = false;
                 if (auto* tenantNode = info.GetValueByPath("TenantInfo")) {
                     if (tenantNode->GetType() == NJson::JSON_ARRAY) {
-                        for (auto tenantItem : tenantNode->GetArray()) {
+                        for (const auto& tenantItem : tenantNode->GetArray()) {
                             if (auto* nameNode = tenantItem.GetValueByPath("Name")) {
                                 if (nameNode->GetStringSafe() != Database) {
                                     continue;
@@ -100,7 +100,7 @@ public:
                             }
                             if (auto* poolNode = tenantItem.GetValueByPath("PoolStats")) {
                                 if (poolNode->GetType() == NJson::JSON_ARRAY) {
-                                    for (auto poolItem : poolNode->GetArray()) {
+                                    for (const auto& poolItem : poolNode->GetArray()) {
                                         if (auto* nameNode = poolItem.GetValueByPath("Name")) {
                                             if (nameNode->GetStringSafe() == "User") {
                                                 if (auto* usageNode = poolItem.GetValueByPath("Usage")) {

@@ -71,7 +71,8 @@ TVector<TConfigTemplate> BuildExamples() {
         TConfigTemplate{
             .LoadName = "InterconnectLoad",
             .Template = R"_(InterconnectLoad: {
-    DurationSeconds: 3600
+    DurationSeconds: 101
+    InFlyMax: 3
 })_"
         }
     };

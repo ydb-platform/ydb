@@ -604,6 +604,17 @@ public:
                 break;
             }
 
+            case NKikimr::TEvLoadTestRequest::CommandCase::kInterconnectLoad: {
+                const auto& cmd = record.GetInterconnectLoad();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+                LOG_D("Create new interconnect load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateInterconnectLoadTest(cmd, SelfId(),
+                                GetServiceCounters(Counters, "load_actor"), tag)));
+                break;
+            }
+
             default: {
                 TString protoTxt;
                 google::protobuf::TextFormat::PrintToString(record, &protoTxt);

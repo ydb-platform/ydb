@@ -3788,8 +3788,19 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 };
 
 struct TIncrementalRestoreState {
-    TPathId BackupCollectionPathId;
-    ui64 OriginalOperationId;
+    enum class EState : ui32 {
+        Running = 1,
+        Finalizing = 2,
+        Completed = 3,
+    };
+
+    EState State = EState::Running;
+
+    // The backup collection path this restore belongs to
+    TPathId BackupCollectionPathId; // used for DB scoping and finalization
+
+    // Global id of the original incremental restore operation
+    ui64 OriginalOperationId = 0;
 
     // Sequential incremental backup processing
     struct TIncrementalBackup {
@@ -3834,6 +3845,8 @@ struct TIncrementalRestoreState {
     // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
+    THashSet<TShardIdx> InvolvedShards;
+
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
     }
@@ -3869,6 +3882,7 @@ struct TIncrementalRestoreState {
             InProgressOperations.clear();
             CompletedOperations.clear();
             TableOperations.clear();
+            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
         }
     }
 

@@ -8816,6 +8816,11 @@
                 "ColumnId": 3,
                 "ColumnName": "CurrentIncrementalIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8824,7 +8829,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import ydb
 import time
-import random
 import threading
-import requests
 import logging
 from enum import Enum
 from urllib.parse import urlparse
@@ -11,7 +9,6 @@ from urllib.parse import urlparse
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.clients.kikimr_bridge_client import BridgeClient
-from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.stress.common.common import YdbClient
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as bridge

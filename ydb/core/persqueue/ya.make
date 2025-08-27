@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
+    blob_serialization.cpp
     common_app.cpp
     cluster_tracker.cpp
     event_helpers.cpp
@@ -47,6 +48,7 @@ SRCS(
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
     write_id.cpp
+    tracing_support.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
@@ -84,6 +86,7 @@ RECURSE(
     codecs
     config
     events
+    partition_index_generator
     partition_key_range
     pqrb
     writer

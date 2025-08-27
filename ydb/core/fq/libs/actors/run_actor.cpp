@@ -202,6 +202,8 @@ public:
                     return;
                 }
 
+                Parsed = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
@@ -215,13 +217,13 @@ public:
                     return;
                 }
 
+                Compiled = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
                 }
             }
-
-            Compiled = true;
 
             // next phases can be async: optimize, validate, run
             TProgram::TFutureStatus futureStatus;
@@ -259,6 +261,10 @@ public:
             Program->Print(&exprOut, &planOut);
             plan = Plan2Json(planOut.Str());
             expr = exprOut.Str();
+        } else if (Parsed) {
+            if (const auto& ast = Program->GetQueryAst()) {
+                expr = *ast;
+            }
         }
         Issues.AddIssues(Program->Issues());
         Send(RunActorId, new TEvPrivate::TEvProgramFinished(Issues, plan, expr, status, message));
@@ -315,6 +321,7 @@ private:
     const NSQLTranslation::TTranslationSettings SqlSettings;
     const FederatedQuery::ExecuteMode ExecuteMode;
     const TString QueryId;
+    bool Parsed = false;
     bool Compiled = false;
 };
 

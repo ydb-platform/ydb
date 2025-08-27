@@ -59,13 +59,15 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TPileStateUpdate> state;
+                uint64_t generation = 0;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
                         state = StateFromProto(result);
+                        generation = result.generation();
                     }
                 }
-                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state)));
+                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), std::move(generation)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(

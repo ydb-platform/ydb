@@ -1,4 +1,6 @@
 #include "blob.h"
+#include "header.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
@@ -144,7 +146,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (const auto& p : blob.GetClientBlobs()) {
         real.push_back(p);
         c++;
-        s += p.GetBlobSize();
+        s += p.GetSerializedSize();
     }
 
     UNIT_ASSERT(c == leftInHead);

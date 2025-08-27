@@ -2022,6 +2022,7 @@ message THiveConfig {
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
+    optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
 }
 
 message THealthCheckConfig {
@@ -2092,8 +2093,8 @@ message TColumnShardConfig {
     optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
     optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
-    optional bool ColumnChunksV0Usage = 25 [default = true];
-    optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional bool ColumnChunksV0Usage = 25 [default = false];
+    optional bool ColumnChunksV1Usage = 26 [default = false];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];
@@ -2114,6 +2115,7 @@ message TColumnShardConfig {
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
+    optional bool BulkUpsertRequireAllColumns = 47 [default = true];
 }
 
 message TSchemeShardConfig {

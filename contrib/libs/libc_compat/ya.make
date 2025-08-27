@@ -170,4 +170,10 @@ IF (PROVIDE_MEMFD_CREATE)
     )
 ENDIF()
 
+IF(OS_EMSCRIPTEN)
+    ADDINCL(
+        GLOBAL contrib/libs/libc_compat/include/windows
+    )
+ENDIF()
+
 END()

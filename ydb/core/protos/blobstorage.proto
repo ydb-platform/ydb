@@ -1080,6 +1080,14 @@ message TEvControllerUpdateSyncerState {
         optional uint32 TargetGroupId = 4;
         optional bool Finished = 5; // if set, then the current stage described in group is finished
         optional string ErrorReason = 6;
+
+        // progress report
+        optional uint64 BytesDone = 10;
+        optional uint64 BytesTotal = 11;
+        optional uint64 BytesError = 12;
+        optional uint64 BlobsDone = 13;
+        optional uint64 BlobsTotal = 14;
+        optional uint64 BlobsError = 15;
     }
 
     repeated TSyncer Syncers = 1;

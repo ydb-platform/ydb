@@ -225,9 +225,13 @@ SRCS(
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp
     schemeshard_backup_incremental__progress.cpp
+    schemeshard_restore_incremental__forget.cpp
+    schemeshard_restore_incremental__get.cpp
+    schemeshard_restore_incremental__list.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
     schemeshard_build_index.cpp
+    schemeshard_build_index_helpers.cpp
     schemeshard_build_index__cancel.cpp
     schemeshard_build_index__create.cpp
     schemeshard_build_index__forget.cpp
@@ -327,6 +331,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/persqueue/config
     ydb/core/persqueue/events
+    ydb/core/persqueue/partition_index_generator
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

@@ -4113,7 +4113,7 @@ typedef enum ffi_abi {
 #endif
 
 
-====================File: configs/x86_64-pc-linux-gnu/include/ffitarget.h====================
+====================File: configs/x86_64-unknown-linux-gnu/include/ffitarget.h====================
 /* -----------------------------------------------------------------*-C-*-
    ffitarget.h - Copyright (c) 2012, 2014, 2018  Anthony Green
                  Copyright (c) 1996-2003, 2010  Red Hat, Inc.

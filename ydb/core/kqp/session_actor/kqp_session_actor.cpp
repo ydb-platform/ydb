@@ -533,6 +533,17 @@ public:
     bool AreAllTheTopicsAndPartitionsKnown() const {
         if (QueryState->HasTopicOperations()) {
             const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+
+            if (operations.HasTabletId()) {
+                for (const auto& topic : operations.GetTopics()) {
+                    auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+                    for (const auto& partition : topic.partitions()) {
+                        QueryState->TxCtx->TopicOperations.SetTabletId(path, partition.partition_id(), operations.GetTabletId());
+                    }
+                }
+                return true;
+            }
+
             for (const auto& topic : operations.GetTopics()) {
                 auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
@@ -1682,15 +1693,21 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
+        std::optional<TLlvmSettings> llvmSettings;
+        if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
+            llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
+        }
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
-            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
+            AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing());
+                ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            llvmSettings);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

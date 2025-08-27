@@ -929,6 +929,7 @@ namespace NKikimr {
                 auto& msg = static_cast<TEvBlobStorage::TEv##T##Result&>(*ev); \
                 status = msg.Status; \
                 errorReason = msg.ErrorReason; \
+                msg.RacingGeneration = RacingGeneration; \
                 Mon->RespStat##T->Account(status); \
                 break; \
             }
@@ -948,10 +949,6 @@ namespace NKikimr {
                 Y_ABORT();
 #undef XX
         }
-
-        auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(ev.get());
-        Y_ABORT_UNLESS(common);
-        common->RacingGeneration = RacingGeneration;
 
         if (ExecutionRelay) {
             SetExecutionRelay(*ev, std::exchange(ExecutionRelay, {}));
@@ -1111,6 +1108,7 @@ namespace NKikimr {
     bool TBlobStorageGroupRequestActor::BootstrapCheck() {
         if (ForceGroupGeneration && *ForceGroupGeneration != Info->GroupGeneration) {
             ErrorReason = "forced group generation mismatch";
+            RacingGeneration = Info->GroupGeneration;
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }

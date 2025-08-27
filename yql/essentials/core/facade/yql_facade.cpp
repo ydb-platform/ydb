@@ -419,7 +419,9 @@ TProgram::TProgram(
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 
     if (QContext_) {
-        UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
+        if (UrlListerManager_) {
+            UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
+        }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanRead()) {
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();

@@ -1,14 +1,12 @@
 items:
-  - name: Релизы
-    include:
-      mode: link
-      path: releases/toc_p.yaml
   - name: Обзор аналитической платформы
     href: index.md
     include:
       mode: link
       path: medalion/toc_p.yaml
-  - name: Обзор аналитической платформы
+  - name: Быстрый старт
     href: olap_quickstart.md
-  - name: Возможности аналитической платформы
+  - name: Основные функции
     href: olap_features.md
+  - name: Ограничения
+    href: limitations.md

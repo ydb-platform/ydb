@@ -418,6 +418,27 @@ namespace NKafka::NTests {
             CheckKafkaMetaResponse(runtime, 12345, false, 1, 3, expectedNodeIds);
         }
 
+        Y_UNIT_TEST(TopicMetadataTwoNodesCheckReverseOrder) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            Ydb::Discovery::ListEndpointsResult leResult;
+            auto* ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(12345);
+            ep->set_node_id(0);
+
+            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
+            runtime->EnableScheduleForActor(fakeCache);
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
+                                   config, fakeCache);
+
+            std::vector<ui32> expectedNodeIds = {0, runtime->GetNodeId(0)};
+            CheckKafkaMetaResponse(runtime, 12345, false, 1, 2, expectedNodeIds);
+        }
+
 
         Y_UNIT_TEST(MetadataActorDoubleTopic) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1");

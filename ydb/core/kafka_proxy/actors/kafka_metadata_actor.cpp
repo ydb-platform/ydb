@@ -320,7 +320,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {
-    auto ins = AllClusterNodes.insert(nodeId);
+    auto ins = AddedNodes.insert(nodeId);
     if (ins.second) {
         auto hostname = host;
         if (hostname.StartsWith(UnderlayPrefix)) {

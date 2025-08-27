@@ -118,14 +118,34 @@ jobs:
         ls -la "C:/Program Files/LLVM/bin/" || echo "LLVM bin directory not found"
 
     # Create LLVM tool symlinks and patch fix_msvc_output.py to handle None arguments
-    - name: Setup LLVM symlinks
+    - name: Setup LLVM symlinks with Microsoft ml64.exe
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
+        echo === Finding Microsoft ml64.exe ===
+        where ml64.exe 2>nul || echo "ml64.exe not found in PATH"
+        
+        set "ML64_PATH="
+        for /d %%i in ("C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
+          if exist "%%i\bin\Hostx64\x64\ml64.exe" (
+            echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
+            set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
+          )
+        )
+        
+        echo === Creating symbolic links ===
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe"
         mklink "C:\Program Files\LLVM\bin\lib" "C:\Program Files\LLVM\bin\llvm-lib.exe"
-        mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 
-        mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
+        
+        if defined ML64_PATH (
+          echo Using Microsoft ml64.exe: %ML64_PATH%
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%"
+          mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%"
+        ) else (
+          echo Using LLVM ml.exe as fallback
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe"
+          mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
+        )
 
     - name: Create patch script for fix_msvc_output.py
       if: ${{ matrix.os == 'windows-amd' }}
@@ -146,8 +166,7 @@ jobs:
         echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
         echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
         echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
-        echo         args.insert(2, '--m64') >> patch_script.py
-        echo         print(f"DEBUG: Fixed ml args with 64-bit mode = {args}", file=sys.stderr)''' >> patch_script.py
+        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py
         echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py
@@ -160,6 +179,13 @@ jobs:
       run: |
         echo === Checking patched fix_msvc_output.py ===
         type build\scripts\fix_msvc_output.py | findstr "original_had_none"
+        echo === Checking assembler path ===
+        echo Assembler will be: C:\Program Files\LLVM\bin\ml.exe
+        if exist "C:\Program Files\LLVM\bin\ml.exe" (
+          "C:\Program Files\LLVM\bin\ml.exe" /? 2>nul | head -n 3 || echo "Could not get ml.exe version info"
+        ) else (
+          echo "ERROR: ml.exe symlink not created"
+        )
 
     - name: Build windows binary with ya make using LLVM toolchain
       if: ${{ matrix.os == 'windows-amd' }}

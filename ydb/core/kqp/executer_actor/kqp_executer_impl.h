@@ -593,11 +593,23 @@ protected:
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
+
+            // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
+            //       Replace with more precise database events in the future.
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+            addDatabaseEvent->Id = databaseId;
+            this->Send(schedulerServiceId, addDatabaseEvent.Release());
+
+            // TODO: replace with more precise pool events.
+            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
+            this->Send(schedulerServiceId, addPoolEvent.Release());
+
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = TxId;
-            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
+            this->Send(schedulerServiceId, addQueryEvent.Release(), 0, TxId);
             Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
         }
 
@@ -926,7 +938,7 @@ protected:
     }
 
     template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode, TPreparedQueryHolder::TConstPtr preparedQuery) {
+    auto BuildAllTasks(bool limitTasksPerNode, std::optional<TLlvmSettings> llvmSettings) {
         size_t sourceScanPartitionsCount = 0;
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -997,11 +1009,10 @@ protected:
                     }
                 }
 
-                if constexpr (isScan) {
-                    const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                    const bool useLlvm = preparedQuery ? preparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
+                if (llvmSettings) {
+                    const bool useLlvm = llvmSettings->GetUseLlvm(stage.GetProgram().GetSettings());
                     for (auto& taskId : stageInfo.Tasks) {
-                        GetTask(taskId).SetUseLlvm(useLlvm);
+                        TasksGraph.GetTask(taskId).SetUseLlvm(useLlvm);
                     }
                     if (Stats && CollectProfileStats(Request.StatsMode)) {
                         Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
@@ -1009,11 +1020,7 @@ protected:
                 }
 
                 if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(isScan
-                        ? stageInfo.Tasks.size() == 1
-                        : stageInfo.Tasks.size() <= 1
-                        , "Unexpected multiple tasks in single-partition stage"
-                    );
+                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
                 // Not task-related
@@ -2717,9 +2724,9 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const std::optional<TLlvmSettings>& llvmSettings);
 
 } // namespace NKqp
 } // namespace NKikimr

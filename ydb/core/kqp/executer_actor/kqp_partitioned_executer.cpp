@@ -365,7 +365,7 @@ private:
                         if (!settings.GetIsIndexImplTable()) {
                             return settings;
                         }
-                    } 
+                    }
                 }
             }
         }
@@ -487,16 +487,22 @@ private:
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
- 
+
         TPartitionPruner::TConfig prunerConfig{
             .BatchOperationRange=NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
         };
 
+        std::optional<TLlvmSettings> llvmSettings;
+        if (TableServiceConfig.GetEnableKqpScanQueryUseLlvm()) {
+            llvmSettings = PreparedQuery->GetLlvmSettings();
+        }
+
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, TResultSetFormatSettings{}, RequestCounters,
-            executerConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings), {}, 0);
+            executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
+            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
+            llvmSettings, {}, 0);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;

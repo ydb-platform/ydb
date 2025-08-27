@@ -549,7 +549,6 @@ public:
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
-        , PlanInfoTransformer(CreateKiSinkPlanInfoTransformer(queryExecutor))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -590,10 +589,6 @@ public:
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
         return *CallableExecutionTransformer;
-    }
-
-    IGraphTransformer& GetPlanInfoTransformer() override {
-        return *PlanInfoTransformer;
     }
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
@@ -1819,7 +1814,6 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    TAutoPtr<IGraphTransformer> PlanInfoTransformer;
 };
 
 } // namespace

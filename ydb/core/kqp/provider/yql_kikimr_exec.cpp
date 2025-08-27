@@ -981,49 +981,6 @@ namespace {
     }
 }
 
-class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
-public:
-    TKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : QueryExecutor(queryExecutor) {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final {
-        output = input;
-        VisitExpr(input, [](const TExprNode::TPtr& node) {
-            if (auto maybeExec = TMaybeNode<TKiExecDataQuery>(node)) {
-                auto exec = maybeExec.Cast();
-                if (exec.Ast().Maybe<TCoVoid>()) {
-                    YQL_ENSURE(false);
-                }
-            }
-
-            return true;
-        });
-
-        return TStatus::Ok;
-    }
-
-    TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input);
-        return MakeFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
-        output = input;
-        return TStatus::Ok;
-    }
-
-    void Rewind() final {
-    }
-private:
-    struct TExecInfo {
-        TKiExecDataQuery Node;
-        TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult> Result;
-    };
-
-private:
-    TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
-};
-
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
 private:
     IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
@@ -1640,6 +1597,12 @@ public:
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                            "Default values are not supported in column tables"));
+                                        return SyncError();
+                                    }
+
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
@@ -3180,10 +3143,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
     return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
-}
-
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor) {
-    return new TKiSinkPlanInfoTransformer(queryExecutor);
 }
 
 } // namespace NYql

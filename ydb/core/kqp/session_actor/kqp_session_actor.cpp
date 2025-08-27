@@ -1693,16 +1693,21 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
+        std::optional<TLlvmSettings> llvmSettings;
+        if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
+            llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
+        }
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
-            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
+            AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            QueryServiceConfig, QueryState ? QueryState->Generation : 0);
+            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

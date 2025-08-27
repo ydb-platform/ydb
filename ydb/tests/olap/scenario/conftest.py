@@ -116,10 +116,10 @@ class BaseTestSet:
         return KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_column_store": True,
-                "disable_column_shard_bulk_upsert_require_all_columns": True
             },
             column_shard_config={
-                "disabled_on_scheme_shard": False
+                "disabled_on_scheme_shard": False,
+                "bulk_upsert_require_all_columns": False,
             }
         )
 

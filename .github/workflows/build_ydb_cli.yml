@@ -126,12 +126,22 @@ jobs:
         where ml64.exe 2>nul || echo "ml64.exe not found in PATH"
         
         set "ML64_PATH="
-        for /d %%i in ("C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
-          if exist "%%i\bin\Hostx64\x64\ml64.exe" (
-            echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
-            set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
+        echo Searching in multiple Visual Studio paths...
+        
+        REM Try different Visual Studio paths
+        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files\Microsoft Visual Studio\2022\Professional" "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional") do (
+          if exist "%%p\VC\Tools\MSVC\" (
+            echo Checking: %%p\VC\Tools\MSVC\
+            for /d %%i in ("%%p\VC\Tools\MSVC\*") do (
+              if exist "%%i\bin\Hostx64\x64\ml64.exe" (
+                echo Found ml64.exe at: %%i\bin\Hostx64\x64\ml64.exe
+                set "ML64_PATH=%%i\bin\Hostx64\x64\ml64.exe"
+                goto :found
+              )
+            )
           )
         )
+        :found
         
         echo === Creating symbolic links ===
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe"
@@ -141,10 +151,12 @@ jobs:
           echo Using Microsoft ml64.exe: %ML64_PATH%
           mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%"
           mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%"
+          echo MICROSOFT_ML64=yes > ml_type.txt
         ) else (
           echo Using LLVM ml.exe as fallback
           mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe"
           mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
+          echo MICROSOFT_ML64=no > ml_type.txt
         )
 
     - name: Create patch script for fix_msvc_output.py
@@ -166,6 +178,18 @@ jobs:
         echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
         echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
         echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
+        echo         # Check if we're using LLVM ml.exe - add --m64 flag for 64-bit mode >> patch_script.py
+        echo         try: >> patch_script.py
+        echo             with open('ml_type.txt', 'r') as f: >> patch_script.py
+        echo                 ml_type = f.read().strip() >> patch_script.py
+        echo             if 'MICROSOFT_ML64=no' in ml_type: >> patch_script.py
+        echo                 args.insert(2, '--m64') >> patch_script.py
+        echo                 print(f"DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
+        echo             else: >> patch_script.py
+        echo                 print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
+        echo         except: >> patch_script.py
+        echo             print(f"DEBUG: Could not read ml_type.txt, assuming LLVM", file=sys.stderr) >> patch_script.py
+        echo             args.insert(2, '--m64') >> patch_script.py
         echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py
@@ -173,16 +197,23 @@ jobs:
         echo     f.write(content) >> patch_script.py
         python patch_script.py
 
-    - name: Verify patch applied correctly  
+    - name: Verify patch and assembler setup
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
         echo === Checking patched fix_msvc_output.py ===
         type build\scripts\fix_msvc_output.py | findstr "original_had_none"
-        echo === Checking assembler path ===
-        echo Assembler will be: C:\Program Files\LLVM\bin\ml.exe
+        
+        echo === Checking assembler setup ===
+        type ml_type.txt 2>nul || echo "ml_type.txt not found"
+        echo Assembler symlink: C:\Program Files\LLVM\bin\ml.exe
+        
         if exist "C:\Program Files\LLVM\bin\ml.exe" (
-          "C:\Program Files\LLVM\bin\ml.exe" /? 2>nul | head -n 3 || echo "Could not get ml.exe version info"
+          echo === Getting assembler version ===
+          "C:\Program Files\LLVM\bin\ml.exe" /? 2>nul | head -n 3 || "C:\Program Files\LLVM\bin\ml.exe" --version 2>nul | head -n 3 || echo "Could not get assembler version"
+          
+          echo === Checking assembler target ===
+          dir "C:\Program Files\LLVM\bin\ml.exe" 2>nul || echo "Symlink info not available"
         ) else (
           echo "ERROR: ml.exe symlink not created"
         )

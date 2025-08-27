@@ -393,7 +393,7 @@ class PileState:
 
         if self.synced_since:
             synced_elapsed = time.monotonic() - self.synced_since
-            s += f", synced for {synced_elapsed}s"
+            s += f", synced for {synced_elapsed:.3f}s"
 
         s += ")"
 

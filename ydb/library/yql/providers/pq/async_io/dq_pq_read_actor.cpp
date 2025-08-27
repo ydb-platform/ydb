@@ -757,6 +757,7 @@ private:
                 curBatch.UsedSpace += size;
 
                 auto& [cluster, offsets] = curBatch.OffsetRanges[message.GetPartitionSession()];
+                cluster = Cluster;
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
                 } else {

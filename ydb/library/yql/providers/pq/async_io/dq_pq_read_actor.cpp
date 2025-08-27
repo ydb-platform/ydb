@@ -750,7 +750,11 @@ private:
                 curBatch.Data.emplace_back(std::move(item));
                 curBatch.UsedSpace += size;
 
-                auto& [cluster, offsets] = curBatch.OffsetRanges[message.GetPartitionSession()];
+                auto [it, inserted] = curBatch.OffsetRanges.try_emplace(message.GetPartitionSession());
+                auto& [cluster, offsets] = it->second;;
+                if (inserted) {
+                    cluster = Cluster;
+                }
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
                 } else {

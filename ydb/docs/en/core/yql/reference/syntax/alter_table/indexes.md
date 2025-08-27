@@ -51,7 +51,7 @@ A vector index:
 
 ```yql
 ALTER TABLE `series`
-  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
     distance="cosine",

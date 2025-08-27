@@ -398,7 +398,6 @@ private:
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 
     TBackoff Backoff;
-
 }; // TTargetDiscoverer
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,

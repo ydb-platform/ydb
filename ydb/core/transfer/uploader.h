@@ -14,7 +14,6 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TThis = TTableUploader<TData>;
     using TBase = TActorBootstrapped<TTableUploader<TData>>;
 
-protected:
     static constexpr size_t MaxSchemeRetries = 3;
 
 public:

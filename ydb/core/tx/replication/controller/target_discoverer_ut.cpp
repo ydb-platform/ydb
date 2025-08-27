@@ -233,7 +233,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         ));
 
         for (size_t i = 0; i <= 5; ++i) {
-            NYdb::TStatus status(NYdb::EStatus::UNAVAILABLE, NYdb::NIssue::TIssues());
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "iteration-" << i);
+            NYdb::TStatus status(NYdb::EStatus::UNAVAILABLE, std::move(issues));
             env.SendAsync(discoveryActorId, new TEvYdbProxy::TEvDescribePathResponse(std::move(status), NYdb::NScheme::TSchemeEntry()));
 
             env.SendAsync(discoveryActorId, new TEvents::TEvWakeup());
@@ -245,6 +247,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& failed = ev->Get()->Failed;
         UNIT_ASSERT_VALUES_EQUAL(failed.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(failed.at(0).Error.GetStatus(), NYdb::EStatus::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(failed.at(0).Error.GetIssues().ToOneLineString(), "{ <main>: Error: iteration-5 }");
     }
 }
 

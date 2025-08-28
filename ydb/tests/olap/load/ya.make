@@ -9,6 +9,7 @@ PY3TEST()
     ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
     ENV(OLAP_WORKLOAD_BINARY="ydb/tests/stress/olap_workload/olap_workload")
     ENV(TOPIC_WORKLOAD_BINARY="ydb/tests/stress/topic/workload_topic")
+    ENV(LOG_WORKLOAD_BINARY="ydb/tests/stress/log/workload_log")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (

@@ -13,6 +13,7 @@ PY3_LIBRARY()
         workload_oltp.py
         workload_olap.py
         workload_topic.py
+        workload_log.py
         upload.py
 
     )

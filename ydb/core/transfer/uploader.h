@@ -59,8 +59,9 @@ private:
         }
 
         auto& tablePath = it->second.first;
+        const auto status = ev->Get()->Status;
 
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+        if (status == Ydb::StatusIds::SUCCESS) {
             Data.erase(tablePath);
             if (Data.empty()) {
                 return ReplyOkAndDie();
@@ -70,7 +71,9 @@ private:
             return;
         }
 
-        const auto schemeError = ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR;
+        const auto schemeError = status == Ydb::StatusIds::SCHEME_ERROR
+            || status == Ydb::StatusIds::BAD_REQUEST
+            || status == Ydb::StatusIds::UNAUTHORIZED;
 
         auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
@@ -144,7 +147,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff;
+        TBackoff Backoff = TBackoff(Max<size_t>());
         size_t SchemeCount = 0;
     };
     std::unordered_map<TString, Retry> Retries;

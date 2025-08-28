@@ -143,6 +143,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
                 size_t RdmaSize = 0;
+                ui32 RdmaCheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;

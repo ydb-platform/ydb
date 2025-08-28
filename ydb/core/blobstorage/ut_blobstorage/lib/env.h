@@ -548,9 +548,6 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
 #undef ADD_ICB_CONTROL
 
-#undef ADD_ICB_CONTROL
->>>>>>> (=) vdiskcontrols
-
                 {
                     auto* type = config->BlobStorageConfig.MutableVDiskPerformanceSettings()->AddVDiskTypes();
                     type->SetPDiskType(PDiskTypeToPDiskType(Settings.DiskType));

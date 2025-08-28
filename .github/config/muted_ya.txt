@@ -40,6 +40,7 @@ ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
+ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme [14/50]*
 ydb/core/kqp/ut/scheme [15/50]*
 ydb/core/kqp/ut/scheme [44/50]*

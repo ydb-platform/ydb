@@ -184,6 +184,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
+        std::unordered_map<ui64, ui64> ResumeOffsets;
     };
 
 public:
@@ -357,7 +358,6 @@ private:
                 clusterState.ReadSession.reset();
             }
         }
-        Reconnected = true;
         Metrics.ReconnectRate->Inc();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
@@ -532,11 +532,6 @@ private:
             InflightReconnect = true;
         }
 
-        if (Reconnected) {
-            Reconnected = false;
-            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
-        }
-
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
             return usedSpace;
@@ -681,7 +676,7 @@ private:
         TMaybe<TInstant> Watermark;
         TUnboxedValueVector Data;
         i64 UsedSpace = 0;
-        THashMap<NYdb::NTopic::TPartitionSession::TPtr, std::pair<std::string, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
+        THashMap<TPartitionKey, std::pair<NYdb::NTopic::TPartitionSession::TPtr, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
     };
 
     // must be called with bound allocator
@@ -698,14 +693,14 @@ private:
         usedSpace = readyBatch.UsedSpace;
         Metrics.DataRate->Add(readyBatch.UsedSpace);
 
-        for (const auto& [partitionSession, clusterRanges] : readyBatch.OffsetRanges) {
-            const auto& [cluster, ranges] = clusterRanges;
+        for (const auto& [partitionKey, clusterRanges] : readyBatch.OffsetRanges) {
+            const auto& [partitionSession, ranges] = clusterRanges;
             if (!WithoutConsumer) {
                 for (const auto& [start, end] : ranges) {
                     CurrentDeferredCommit.Add(partitionSession, start, end);
                 }
             }
-            PartitionToOffset[MakePartitionKey(TString(cluster), partitionSession)] = ranges.back().second;
+            PartitionToOffset[partitionKey] = ranges.back().second;
         }
 
         ReadyBuffer.pop();
@@ -756,13 +751,14 @@ private:
                 curBatch.Data.emplace_back(std::move(item));
                 curBatch.UsedSpace += size;
 
-                auto& [cluster, offsets] = curBatch.OffsetRanges[message.GetPartitionSession()];
-                cluster = Cluster;
+                auto& [partitionSession, offsets] = curBatch.OffsetRanges[partitionKey];
+                partitionSession = message.GetPartitionSession();
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
                 } else {
                     offsets.emplace_back(message.GetOffset(), message.GetOffset() + 1);
                 }
+                Self.Clusters[Index].ResumeOffsets[partitionKey.PartitionId] = message.GetOffset() + 1;
             }
         }
 
@@ -785,9 +781,14 @@ private:
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " StartPartitionSessionEvent received");
 
             std::optional<ui64> readOffset;
-            const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
-            if (offsetIt != Self.PartitionToOffset.end()) {
-                readOffset = offsetIt->second;
+            const auto& resumeOffsets = Self.Clusters[Index].ResumeOffsets;
+            if (auto resumeOffsetIt = resumeOffsets.find(partitionKey.PartitionId); resumeOffsetIt != resumeOffsets.end()) {
+                readOffset = resumeOffsetIt->second;
+            } else {
+                const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
+                if (offsetIt != Self.PartitionToOffset.end()) {
+                    readOffset = offsetIt->second;
+                }
             }
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Confirm StartPartitionSession with offset " << readOffset);
             event.Confirm(readOffset);
@@ -870,7 +871,6 @@ private:
 private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
-    bool Reconnected = false;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;

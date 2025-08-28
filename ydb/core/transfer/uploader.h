@@ -136,6 +136,8 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        LOG_E("Upload error: error=" << status << " " << issues.ToOneLineString());
+
         TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(status, std::move(issues)));
         TThis::PassAway();
     }

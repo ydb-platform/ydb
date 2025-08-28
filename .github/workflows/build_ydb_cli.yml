@@ -111,17 +111,19 @@ jobs:
         REM Create lib.exe symlink (required by ya make)
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" 2>nul || echo lib.exe symlink exists
         
-        REM Create ml.exe symlink (required even with NO_ASM due to ya make dependencies)
-        mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 2>nul || echo ml.exe symlink exists
+        REM Set flag that we're using LLVM ml.exe (no Microsoft ml64.exe found)
+        echo YA_USE_LLVM_ML=1 >> %GITHUB_ENV%
         
-        REM Fix Git Bash link.exe conflict and ml.exe handling in fix_msvc_output.py  
-        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args[0]=\"C:/Program Files/LLVM/bin/ml.exe\"\n        args.insert(1,\"--m64\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close()"
+        REM Fix Git Bash link.exe conflict and ml.exe handling in fix_msvc_output.py
+        python -c "import re,os; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args.insert(1,\"C:/Program Files/LLVM/bin/llvm-ml.exe\")\n        if os.environ.get(\"YA_USE_LLVM_ML\"): args.insert(2,\"--m64\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close()"
 
     # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes -DNO_ASM=yes -DOPENSSL_NO_INLINE_ASM=1 -o ./
+      env:
+        YA_USE_LLVM_ML: ${{ env.YA_USE_LLVM_ML }}
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

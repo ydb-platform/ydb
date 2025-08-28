@@ -735,7 +735,7 @@ namespace NActors {
             mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize(), NInterconnect::NRdma::IMemPool::EMPTY));
             if (!mr) {
                 TString err("Unable to allocate memory region for handshake rdma read");
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     err.c_str());
                 rdmaReadAck.SetErr(err);
                 return rdmaReadAck;
@@ -802,7 +802,7 @@ namespace NActors {
         NInterconnect::NRdma::TMemRegionPtr SetupRdmaHandshakeRegion(NActorsInterconnect::TRdmaHandshake& proto) {
             auto region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize, NInterconnect::NRdma::IMemPool::EMPTY);
             if (!region) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     "Unable to allocate memory region to perform rdma handshake");
                 return nullptr;
             }
@@ -969,7 +969,7 @@ namespace NActors {
 
                 if (RdmaQp && success.HasQpPrepared()) {
                     const auto& remoteQpPrepared = success.GetQpPrepared(); 
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
                         "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
                     ibv_gid gid;
                     gid.global.interface_id = remoteQpPrepared.GetInterfaceId();
@@ -1364,10 +1364,10 @@ namespace NActors {
                     auto addr = std::get<0>(sockname).GetV6CompatAddr(); 
                     RdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(addr);
                     if (RdmaCtx) {
-                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
                             "Found verbs fontext for address %s", std::get<0>(sockname).ToString().data());
                     } else {
-                        LOG_ERROR_IC("ICRDMA", "Unable to find verbs context using address %s",
+                        LOG_WARN_IC("ICRDMA", "Unable to find verbs context using address %s",
                             std::get<0>(sockname).ToString().data());
                     }
                     break;

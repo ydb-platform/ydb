@@ -21,6 +21,11 @@ struct TSchemeBoardMonEvents {
         EvDescribeRequest,
         EvDescribeResponse,
 
+        EvBackupProgress,
+        EvBackupResult,
+        EvRestoreProgress,
+        EvRestoreResult,
+
         EvEnd,
     };
 
@@ -40,6 +45,76 @@ struct TSchemeBoardMonEvents {
     };
 
     struct TEvUnregister: public TEventLocal<TEvUnregister, EvUnregister> {
+    };
+
+    struct TEvBackupProgress: public TEventLocal<TEvBackupProgress, EvBackupProgress> {
+        ui32 TotalPaths = 0;
+        ui32 CompletedPaths = 0;
+
+        explicit TEvBackupProgress(ui32 totalPaths, ui32 completedPaths)
+            : TotalPaths(totalPaths)
+            , CompletedPaths(completedPaths)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " CompletedPaths: " << CompletedPaths
+                << " TotalPaths: " << TotalPaths
+            << " }";
+        }
+    };
+
+    struct TEvBackupResult: public TEventLocal<TEvBackupResult, EvBackupResult> {
+        TMaybe<TString> Error = Nothing();
+
+        TEvBackupResult() = default;
+
+        explicit TEvBackupResult(TString error)
+            : Error(std::move(error))
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " " << (Error.Defined() ? *Error : "Success")
+            << " }";
+        }
+    };
+
+    struct TEvRestoreProgress : public TEventLocal<TEvRestoreProgress, EvRestoreProgress> {
+        ui32 TotalPaths;
+        ui32 ProcessedPaths;
+
+        TEvRestoreProgress(ui32 total, ui32 processed)
+            : TotalPaths(total)
+            , ProcessedPaths(processed)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " ProcessedPaths: " << ProcessedPaths
+                << " TotalPaths: " << TotalPaths
+            << " }";
+        }
+    };
+
+    struct TEvRestoreResult : public TEventLocal<TEvRestoreResult, EvRestoreResult> {
+        TMaybe<TString> Error = Nothing();
+
+        TEvRestoreResult() = default;
+
+        explicit TEvRestoreResult(const TString& error)
+            : Error(error)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " " << (Error.Defined() ? *Error : "Success")
+            << " }";
+        }
     };
 
     struct TEvInfoRequest: public TEventPB<TEvInfoRequest, NKikimrSchemeBoardMon::TEvInfoRequest, EvInfoRequest> {

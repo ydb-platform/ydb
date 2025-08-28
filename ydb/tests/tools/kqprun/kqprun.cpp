@@ -324,7 +324,7 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
 }
 
 
-void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner, TYdbSetupSettings::EVerbose verboseLevel) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     if (executionOptions.SchemeQuery) {
@@ -386,10 +386,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         }
     }
 
-    if (durations.size() > 1) {
-        auto gmean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
+    if (durations.size() > 1 && verboseLevel >= TYdbSetupSettings::EVerbose::Info) {
+        auto gMean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
         Cout << colors.Cyan()
-             << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gmean * 1000000.0))
+             << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gMean * 1000000.0))
              << colors.Default() << Endl;
     }
 

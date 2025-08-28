@@ -93,11 +93,14 @@ public:
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
     ui32 GetQpNum() const noexcept;
     void Output(IOutputStream&) const noexcept;
+    int GetState(bool forseUpdate) const noexcept;
     TRdmaCtx* GetCtx() const noexcept;
 
 private:
+    static const int UnknownQpState;
     ibv_qp* Qp = nullptr;
     TRdmaCtx* Ctx = nullptr;
+    mutable int LastState = UnknownQpState;
 };
 
 }

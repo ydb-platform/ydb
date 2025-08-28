@@ -238,9 +238,13 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
         if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
             return EOperationBehaviour::CommitWriteLock;
         }
-        if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
-            return EOperationBehaviour::AbortWriteLock;
-        }
+    }
+
+    if (!evWrite.Record.HasTxId() &&
+        evWrite.Record.HasLocks() &&
+        evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback &&
+        evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        return EOperationBehaviour::AbortWriteLock;
     }
 
     if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {

@@ -425,7 +425,7 @@ message TTenants {
 
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
-    repeated string Errors = 2;
+    repeated string Problems = 2;
     uint32 Version = 3;
 }
 
@@ -435,20 +435,21 @@ message TStoragePDisk {
     string Type = 3;
     string Guid = 4;
     uint64 Category = 5;
-    uint64 TotalSize = 6;
-    uint64 AvailableSize = 7;
+    optional uint64 TotalSize = 6;
+    optional uint64 AvailableSize = 7;
     string Status = 8;
     EFlag DiskSpace = 9;
     string DecommitStatus = 10;
     uint64 SlotSize = 11;
+    uint64 SlotCount = 12;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 
 message TStorageVDisk {
     string VDiskId = 1;
     uint32 NodeId = 2;
-    uint64 AllocatedSize = 3;
-    uint64 AvailableSize = 4;
+    optional uint64 AllocatedSize = 3;
+    optional uint64 AvailableSize = 4;
     string Kind = 5;
     string Status = 6;
     EFlag DiskSpace = 7;

@@ -2280,6 +2280,7 @@ TString TIndexBuildInfo::TKMeans::DebugString() const {
         << ", Level = " << Level << " / " << Levels
         << ", K = " << K
         << ", Round = " << Round
+        << (IsEmpty ? ", IsEmpty = true" : "")
         << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
         << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
         << ", TableSize = " << TableSize
@@ -2323,9 +2324,10 @@ void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
 void TIndexBuildInfo::TKMeans::Set(ui32 level,
     NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
     NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-    ui32 state, ui64 tableSize, ui32 round) {
+    ui32 state, ui64 tableSize, ui32 round, bool isEmpty) {
     Level = level;
     Round = round;
+    IsEmpty = isEmpty;
     ParentBegin = parentBegin;
     Parent = parent;
     ChildBegin = childBegin;

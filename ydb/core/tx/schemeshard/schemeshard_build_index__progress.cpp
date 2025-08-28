@@ -65,6 +65,8 @@ protected:
     ui32 UploadBytes = 0;
     const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
+    const TString EmptyVector;
+    const ui32 EmptyLevels;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -76,7 +78,9 @@ public:
                    TIndexBuildId buildId,
                    TIndexBuildInfo::TSample::TRows sample,
                    NTableIndex::TClusterId parent,
-                   NTableIndex::TClusterId child)
+                   NTableIndex::TClusterId child,
+                   const TString& emptyVector,
+                   ui32 emptyLevels)
         : TargetTable(std::move(targetTable))
         , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
@@ -85,11 +89,13 @@ public:
         , Sample(std::move(sample))
         , Parent(parent)
         , Child(child)
+        , EmptyVector(emptyVector)
+        , EmptyLevels(emptyLevels)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Sample.empty());
+        Y_ENSURE(!Sample.empty() || EmptyLevels > 0);
         Y_ENSURE(Parent < Child);
         Y_ENSURE(Child != 0);
     }
@@ -130,6 +136,19 @@ public:
             UploadRows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
         Sample = {}; // release memory
+
+        if (EmptyLevels > 0) {
+            // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
+            TVector<TCell> emptyCells = {TCell(EmptyVector.data(), EmptyVector.size())};
+            auto emptyRow = TSerializedCellVec::Serialize(emptyCells);
+            Y_ENSURE(!UploadRows->size());
+            for (ui32 level = 1; level <= EmptyLevels; level++) {
+                pk[0] = TCell::Make((ui64)(level-1));
+                pk[1] = TCell::Make(level == EmptyLevels ? SetPostingParentFlag((ui64)level) : (ui64)level);
+                UploadBytes += NDataShard::CountRowCellBytes(pk, emptyCells);
+                UploadRows->emplace_back(TSerializedCellVec{pk}, emptyRow);
+            }
+        }
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -871,7 +890,9 @@ private:
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
-            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
+            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child,
+            buildInfo.KMeans.IsEmpty ? buildInfo.Clusters->GetEmptyRow() : "",
+            buildInfo.KMeans.IsEmpty ? buildInfo.KMeans.Levels : 0);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -1080,16 +1101,7 @@ private:
 
     void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         NIceDb::TNiceDb db{txc.DB};
-        db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Round>(buildInfo.KMeans.Round)
-        );
+        Self->PersistBuildIndexKMeansState(db, buildInfo);
     }
 
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -1217,7 +1229,15 @@ private:
             }
             ClearDoneShards(txc, buildInfo);
             if (buildInfo.Sample.Rows.empty()) {
-                // No samples => no data for this cluster
+                // No samples
+                if (buildInfo.KMeans.Parent == 0) {
+                    // Index is empty - add 1 leaf cluster for future index updates
+                    buildInfo.KMeans.IsEmpty = true;
+                    PersistKMeansState(txc, buildInfo);
+                    return FillVectorIndexNextParent(txc, buildInfo);
+                }
+                // No data for a specific cluster - should not happen
+                // Supported to not crash if we have duplicate clusters for some reason
                 return FillVectorIndexNextParent(txc, buildInfo);
             }
             if (buildInfo.KMeans.Rounds > 1) {
@@ -1241,6 +1261,10 @@ private:
             // Just wait until samples are uploaded (saved)
             return false;
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+            if (buildInfo.Sample.Rows.empty() && buildInfo.KMeans.Parent == 0) {
+                // Done
+                return true;
+            }
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -1271,7 +1295,7 @@ private:
             }
         }
 
-        if (buildInfo.KMeans.NextLevel()) {
+        if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.NextLevel()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
@@ -1282,6 +1306,22 @@ private:
                                     : TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
+        }
+
+        if (buildInfo.KMeans.IsEmpty) {
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadSampleKRequest(buildInfo);
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
+                // Wait
+                return false;
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                // Pass through
+            } else {
+                Y_ENSURE(false);
+            }
         }
 
         LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
@@ -2105,6 +2145,13 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     explicit TTxReplyLocalKMeans(TSelf* self, TEvDataShard::TEvLocalKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        if (Response->Get()->Record.GetIsEmpty()) {
+            buildInfo.KMeans.IsEmpty = true;
+            Self->PersistBuildIndexKMeansState(db, buildInfo);
+        }
     }
 };
 

@@ -46,7 +46,6 @@ extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitQueryJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
-extern void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers);
 
 class TViewer : public TActorBootstrapped<TViewer>, public IViewer {
 public:
@@ -189,7 +188,6 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
-            InitStorageJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
             InitQueryJsonHandlers(JsonHandlers);
             InitSchemeJsonHandlers(JsonHandlers);

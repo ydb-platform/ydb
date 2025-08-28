@@ -159,7 +159,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         threadCount = std::min(maxTerminalThreadCountAvailable, terminalsCount);
         threadCount = std::min(threadCount, recommendedThreadCount);
     } else {
-        // user provided value: don't give use a chance to break things:
+        // user provided value: don't give us a chance to break things:
         // with too many threads, we get poor result
         threadCount = Config.ThreadCount;
         if (threadCount > maxTerminalThreadCountAvailable) {

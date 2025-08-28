@@ -1,0 +1,54 @@
+--- contrib/python/black/blib2to3/pgen2/conv.py	(index)
++++ contrib/python/black/blib2to3/pgen2/conv.py	(working tree)
+@@ -35,1 +35,1 @@ without having to invoke the Python pgen C program.
+-from pgen2 import grammar, token
++from ..pgen2 import grammar, token
+--- contrib/python/black/blib2to3/pgen2/driver.py	(index)
++++ contrib/python/black/blib2to3/pgen2/driver.py	(working tree)
+@@ -47,6 +47,12 @@ from blib2to3.pgen2.grammar import Grammar
+ 
+ Path = Union[str, "os.PathLike[str]"]
+ 
++try:
++    import __res
++    IS_ARCADIA = True
++except ImportError:
++    IS_ARCADIA = False
++
+ 
+ @dataclass
+ class ReleaseRange:
+@@ -298,7 +304,7 @@ def load_packaged_grammar(
+     but preserves load_grammar's automatic regeneration behavior when possible.
+ 
+     """
+-    if os.path.isfile(grammar_source):
++    if os.path.isfile(grammar_source) or IS_ARCADIA:
+         gp = _generate_pickle_name(grammar_source, cache_dir) if cache_dir else None
+         return load_grammar(grammar_source, gp=gp)
+     pickled_name = _generate_pickle_name(os.path.basename(grammar_source), cache_dir)
+--- contrib/python/black/blib2to3/pgen2/pgen.py	(index)
++++ contrib/python/black/blib2to3/pgen2/pgen.py	(working tree)
+@@ -24,6 +24,9 @@ import os
+ 
+ Path = Union[str, "os.PathLike[str]"]
+ 
++import pkgutil
++import io
++
+ 
+ class PgenGrammar(grammar.Grammar):
+     pass
+@@ -39,7 +42,11 @@ class ParserGenerator(object):
+     def __init__(self, filename: Path, stream: Optional[IO[Text]] = None) -> None:
+         close_stream = None
+         if stream is None:
+-            stream = open(filename, encoding="utf-8")
++            data = pkgutil.get_data("blib2to3", os.path.basename(filename))
++            if data:
++                stream = io.StringIO(data.decode("utf-8"))
++            else:
++                stream = open(filename, encoding="utf-8")
+             close_stream = stream.close
+         self.filename = filename
+         self.stream = stream

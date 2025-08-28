@@ -1,0 +1,21 @@
+commit 1705999115f86418b781e33eeecc969dd169cb86
+Author: Samuel Neves <sneves@users.noreply.github.com>
+Date:   Thu Apr 6 00:02:47 2023 +0100
+
+    fix macro name
+    
+    Suggested by @maxbachmann
+
+diff --git a/src/blake2-config.h b/src/blake2-config.h
+index f5dd6fa..c09cb4b 100644
+--- a/src/blake2-config.h
++++ b/src/blake2-config.h
+@@ -53,7 +53,7 @@
+ #endif
+ #endif
+ 
+-#ifdef HAVE_SSE41
++#ifdef HAVE_SSE4_1
+ #ifndef HAVE_SSSE3
+ #define HAVE_SSSE3
+ #endif

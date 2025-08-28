@@ -139,6 +139,20 @@
             "uri": "https://{canondata_backend}/1936997/8d728312965766d523a9418384175f6559ed62d4/resource.tar.gz#test.test_Casts-SafeCastOverResource--Results_/results.txt"
         }
     ],
+    "test.test[EquiJoin-YQL-20278-default.txt-Debug]": [
+        {
+            "checksum": "43a5c8170bfd73598d66e6df16b1c727",
+            "size": 1524,
+            "uri": "https://{canondata_backend}/1900335/3df4326eaf0e835e6dcfaa923615c56d4fb9757f/resource.tar.gz#test.test_EquiJoin-YQL-20278-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[EquiJoin-YQL-20278-default.txt-Results]": [
+        {
+            "checksum": "75a63145bd73f1ceeb0abee9bd7e25db",
+            "size": 2200,
+            "uri": "https://{canondata_backend}/1900335/3df4326eaf0e835e6dcfaa923615c56d4fb9757f/resource.tar.gz#test.test_EquiJoin-YQL-20278-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[ImplictCasts-AutoConvertCoalesce-default.txt-Debug]": [
         {
             "checksum": "9f7a8475ecff8bd4a26ffb1b4a50a75f",
@@ -473,6 +487,20 @@
             "checksum": "04fde3d25ba9219e0953f927af1e51c5",
             "size": 209,
             "uri": "https://{canondata_backend}/1942415/9fad3ce3e91e30529937a7e90c1c9c5e144ec28e/resource.tar.gz#test.test_Optimizers-FoldConstMax-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Optimizers-FuseLambdasWithDependsOn-default.txt-Debug]": [
+        {
+            "checksum": "357650f111c3df45d8a092269f8b0954",
+            "size": 2441,
+            "uri": "https://{canondata_backend}/1775319/d62ebd42aa2b3a234ff874daa1b60e8c20266ea5/resource.tar.gz#test.test_Optimizers-FuseLambdasWithDependsOn-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-FuseLambdasWithDependsOn-default.txt-Results]": [
+        {
+            "checksum": "b9da6970a0a71b11c36081f5a1247330",
+            "size": 10013,
+            "uri": "https://{canondata_backend}/1775319/d62ebd42aa2b3a234ff874daa1b60e8c20266ea5/resource.tar.gz#test.test_Optimizers-FuseLambdasWithDependsOn-default.txt-Results_/results.txt"
         }
     ],
     "test.test[Optimizers-GroupBySingleKeyListUnused-default.txt-Debug]": [

@@ -70,9 +70,9 @@ void TCube<T>::Add(TTagIdList tagIds)
 }
 
 template <class T>
-void TCube<T>::AddAll(const TTagIdList& tagIds, const TProjectionSet& projections)
+void TCube<T>::AddAll(const TTagIdSet& tagSet)
 {
-    projections.Range(tagIds, [this] (auto tagIds) mutable {
+    tagSet.Range([this] (auto tagIds) mutable {
         Add(std::move(tagIds));
     });
 }
@@ -94,9 +94,9 @@ void TCube<T>::Remove(TTagIdList tagIds)
 }
 
 template <class T>
-void TCube<T>::RemoveAll(const TTagIdList& tagIds, const TProjectionSet& projections)
+void TCube<T>::RemoveAll(const TTagIdSet& tagSet)
 {
-    projections.Range(tagIds, [this] (auto tagIds) mutable {
+    tagSet.Range([this] (auto tagIds) mutable {
         Remove(std::move(tagIds));
     });
 }

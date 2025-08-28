@@ -21,7 +21,7 @@
 {%-     set with_kotlinc_plugin_lombok = all_targets|selectattr('with_kotlinc_plugin_lombok')|map(attribute='with_kotlinc_plugin_lombok')|sum -%}
 {#-     KAPT -#}
 {%-     set with_kapt = target.with_kapt and target.kapt.classpaths|length -%}
-{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|sum|selectattr('classpath')|map(attribute='classpaths')|sum|length -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length -%}
 {%- endif -%}
 
 {#- ErrorProne -#}

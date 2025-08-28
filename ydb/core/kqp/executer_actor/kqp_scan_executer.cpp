@@ -177,7 +177,7 @@ private:
             }
         }
 
-        BuildAllTasks<true>(false, LlvmSettings);
+        BuildAllTasks<true>(EnableReadsMerge, LlvmSettings);
 
         TIssue validateIssue;
         if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {

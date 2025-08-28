@@ -18,8 +18,7 @@ class TKqpTransaction_TScanTaskMeta_TReadOpMeta;
 class TKqpReadRangesSourceSettings;
 }
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
@@ -256,14 +255,14 @@ struct TShardKeyRanges {
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
-
 struct TTaskMeta {
 private:
-    YDB_OPT(bool, EnableShardsSequentialScan);
+    YDB_OPT(bool, EnableShardsSequentialScan); // ScanFromShards only
+
 public:
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
-    bool ScanTask = false;
+    bool ScanTask = false; // true is ScanFromShards
     TActorId ExecuterId;
     ui32 Type = Unknown;
 
@@ -339,8 +338,8 @@ public:
     };
 
     TReadInfo ReadInfo;
-    TMaybe<TVector<TShardReadInfo>> Reads;  // if not set -> no reads
-    TMaybe<TWriteInfo> Writes;         // if not set -> no writes
+    TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
+    TMaybe<TWriteInfo> Writes;             // if not set -> no writes // TODO: not used?
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
@@ -350,18 +349,52 @@ using TTaskOutput = NYql::NDq::TTaskOutput<TTaskOutputMeta>;
 using TTaskOutputType = NYql::NDq::TTaskOutputType;
 using TTaskInput = NYql::NDq::TTaskInput<TTaskInputMeta>;
 using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta>;
-using TKqpTasksGraph = NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta>;
 
-void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs);
-void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
-void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
+class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
+public:
+    void BuildSysViewScanTasks(TStageInfo& stageInfo, const IKqpGateway::TExecPhysicalRequest& request);
+    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount);
 
-NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings);
-void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryPhysicalGraph& result);
-void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
+    void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
+    void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
+    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
+
+    NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
+    void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
+    void RestoreTasksGraphInfo(const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
+
+    void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
+        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
+
+    bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
+
+private:
+    void BuildTransformChannels(const NYql::NDq::TTransform& transform, const TTaskInputMeta& meta, const TString& name,
+        const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildSequencerChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex,
+        const NKqpProto::TKqpPhyCnSequencer& sequencer, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildChannelBetweenTasks(const TStageInfo& stageInfo, const TStageInfo& inputStageInfo, ui64 originTaskId,
+        ui64 targetTaskId, ui32 inputIndex, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildParallelUnionAllChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc, ui64& nextOriginTaskId);
+    void BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex,
+        const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildVectorResolveChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex,
+        const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+
+    void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, ui32 outputIdx,
+        bool enableSpilling, const TStageInfo& stageInfo) const;
+    void FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input,
+        bool serializeAsyncIoSettings, bool& enableMetering) const;
+
+    void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
+};
+
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
-void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
-    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling);
 
 template<typename Proto>
 TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
@@ -398,7 +431,4 @@ struct TKqpTaskOutputType {
 
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
 
-bool IsCrossShardChannel(const TKqpTasksGraph& tasksGraph, const NYql::NDq::TChannel& channel);
-
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

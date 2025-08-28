@@ -491,7 +491,7 @@ Table structure:
 | --- | --- | --- |
 | `SessionId` | Unique session identifier.<br/>Key: `0`. | `Utf8` |
 | `NodeId` | Identifier of the node where the session is running. | `Uint32` |
-| `State` | Current state of the session (e.g., "READY", "QUERY_EXECUTING"). | `Utf8` |
+| `State` | Current state of the session (e.g., "IDLE", "EXECUTING"). | `Utf8` |
 | `Query` | Text of the currently executing query, if any. | `Utf8` |
 | `QueryCount` | Total number of queries executed in this session. | `Uint32` |
 | `ClientAddress` | IP address of the client connection. | `Utf8` |

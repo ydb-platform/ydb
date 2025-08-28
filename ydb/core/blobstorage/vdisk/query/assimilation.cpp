@@ -86,20 +86,15 @@ namespace NKikimr {
                 : Iter(hullCtx, snap)
                 , SkipUpTo(skipUpTo)
             {
-                if constexpr (IsForward) {
-                    if (SkipUpTo) {
-                        Iter.Seek(*SkipUpTo);
-                        if (Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
-                            Iter.MergeAndAdvance();
-                        }
-                    } else {
-                        Iter.SeekToFirst();
-                    }
-                } else {
-                    Iter.Seek(SkipUpTo.value_or(TKey::Inf())); // seek to the end when SkipUpTo is empty
-                    if (SkipUpTo && Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
+                if (SkipUpTo) {
+                    Iter.Seek(*SkipUpTo);
+                    if (Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
                         Iter.MergeAndAdvance();
                     }
+                } else if constexpr (IsForward) {
+                    Iter.SeekToFirst();
+                } else {
+                    Iter.SeekToLast();
                 }
             }
 

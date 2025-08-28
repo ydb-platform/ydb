@@ -955,7 +955,10 @@ private:
             else if (inCross1) {
                 // leaf with table1 and subtree with table2
                 auto rest = FindRestJoin(Labels_[1]);
-                YQL_ENSURE(rest);
+                if (!rest) {
+                    return joinTree;
+                }
+
                 joinTree = MakeCrossJoin(pos, Ctx_.NewAtom(pos, foundCross1), rest, Ctx_);
                 for (auto label : CrossJoins_) {
                     if (label != foundCross1) {
@@ -968,7 +971,10 @@ private:
             else {
                 // leaf with table2 and subtree with table1
                 auto rest = FindRestJoin(Labels_[0]);
-                YQL_ENSURE(rest);
+                if (!rest) {
+                    return joinTree;
+                }
+
                 joinTree = MakeCrossJoin(pos, Ctx_.NewAtom(pos, foundCross2), rest, Ctx_);
                 for (auto label : CrossJoins_) {
                     if (label != foundCross2) {

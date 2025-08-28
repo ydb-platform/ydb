@@ -78,6 +78,10 @@ private:
         auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
+            LOG_D("Schedule retry: table=" << tablePath
+                << ", iteration=" << retry.Backoff.Iteration
+                << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
+
             TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath));
             if (schemeError) {
                 ++retry.SchemeCount;
@@ -88,7 +92,7 @@ private:
             return;
         }
 
-        ReplyErrorAndDie(std::move(ev->Get()->Issues));
+        ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
     }
 
     void Handle(NTransferPrivate::TEvRetryTable::TPtr& ev) {
@@ -128,11 +132,11 @@ private:
     void ReplyErrorAndDie(const TString& error) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndDie(std::move(issues));
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
     }
 
-    void ReplyErrorAndDie(NYql::TIssues&& issues) {
-        TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues)));
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(status, std::move(issues)));
         TThis::PassAway();
     }
 

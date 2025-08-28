@@ -1,6 +1,8 @@
 #include "schemeshard_impl.h"
 
 #include <util/string/join.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -238,8 +240,7 @@ private:
             }
 
             auto index = GetIndex(childPath);
-            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
-                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+            if (!DoesIndexSupportTTL(index->Type)) {
                 continue;
             }
 
@@ -276,7 +277,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
-        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+        Y_ABORT_UNLESS(DoesIndexSupportTTL(index->Type));
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 

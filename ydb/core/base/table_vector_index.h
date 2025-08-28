@@ -1,8 +1,9 @@
 #pragma once
 
-namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex {
+namespace NKikimr::NTableIndex {
 
 // Vector KmeansTree index tables description
+namespace NTableVectorKmeansTreeIndex {
 
 // Level and Posting tables
 inline constexpr const char* ParentColumn = "__ydb_parent";
@@ -22,5 +23,13 @@ inline constexpr const char* BuildSuffix1 = "1build";
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+
+}
+
+namespace NTableFulltextIndex {
+
+inline constexpr const char* TokenColumn = "__ydb_token";
+
+}
 
 }

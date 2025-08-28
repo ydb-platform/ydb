@@ -31,7 +31,7 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     return scheme;
 }
 
-static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -50,11 +50,23 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
         *operation->MutableDataColumnNames()->Add() = dataColumn;
     }
 
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *operation->MutableVectorIndexKmeansTreeDescription() =
-            std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-    } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-        return {};
+    switch (indexInfo->Type) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            Y_ENSURE(false, "Invalid index type");
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *operation->MutableVectorIndexKmeansTreeDescription() =
+                std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *operation->MutableFulltextIndexDescription() =
+                std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
     }
 
     return scheme;
@@ -200,12 +212,7 @@ bool CreateConsistentCopyTables(
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
-            if (!scheme) {
-                result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                       TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
-                return false;
-            }
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
+            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
                 TPath srcImplTable = srcIndexPath.Child(srcImplTableName);

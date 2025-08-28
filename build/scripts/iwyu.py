@@ -198,14 +198,14 @@ def filter_facade_to_private_replacements_for_file(iwyu_output, file_name):
 
     full_lines = sections.get('full', [])
     content_lines = []
-    trailing_lines = []
 
     for line in full_lines:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith('(') and 'has correct' in stripped:
-            trailing_lines.append(line)
+        if stripped.startswith('(') and 'has correct #includes/fwd-decls' in stripped:
+            # Skip lines with "has correct #includes/fwd-decls"
+            continue
         elif parse_include_line(line) not in removed_from_add:
             content_lines.append(line)
 
@@ -226,14 +226,9 @@ def filter_facade_to_private_replacements_for_file(iwyu_output, file_name):
         result_parts.extend(
             [f"{file_name} should remove these lines:", *[line for line in filtered_remove if line.strip()], ""]
         )
-    if content_lines or trailing_lines:
+    if content_lines:
         result_parts.append(f"The full include-list for {file_name}:")
         result_parts.extend([line for line in content_lines if line.strip()])
-
-        if trailing_lines:
-            result_parts.append("")
-            result_parts.extend([line for line in trailing_lines if line.strip()])
-
         result_parts.append("")
 
     return '\n'.join(result_parts).rstrip()

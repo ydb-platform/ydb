@@ -12,7 +12,7 @@ static void ValidateResultSet(const std::vector<NYdb::TColumn>& columns,
                               const std::vector<std::vector<NYdb::TValue>>& values,
                               const NYdb::TResultSet& rs) {
     Ydb::ResultSet protoResultSet;
-    if (auto version = std::getenv("YDB_VERSION"); version && std::string(version) == "trunk") {
+    if (auto version = std::getenv("YDB_VERSION"); !version || std::string(version) == "trunk") {
         protoResultSet.set_format(Ydb::ResultSet::FORMAT_VALUE);
     }
 

@@ -13,6 +13,22 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+namespace {
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TImportInfo& importInfo) {
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    record.SetPeerName(importInfo.PeerName);
+    record.SetSanitizedToken(importInfo.SanitizedToken);
+    if (importInfo.UserSID) {
+        record.SetOwner(*importInfo.UserSID);
+        record.SetUserSID(*importInfo.UserSID);
+    }
+    return propose;
+}
+
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -24,7 +40,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Table);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
@@ -135,9 +151,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Table);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRestore);
     modifyScheme.SetInternal(true);
 
@@ -255,6 +272,7 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
+    const TImportInfo& importInfo,
     const TImportInfo::TItem& item,
     TString& error
 ) {
@@ -264,8 +282,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     const auto& changefeed = importChangefeedTopic.GetChangefeed();
     const auto& topic = importChangefeedTopic.GetTopic();
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
@@ -316,6 +335,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,
     TTxId txId,
+    const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
@@ -323,8 +343,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
     const auto& topic = importChangefeedTopic.GetTopic();
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
@@ -377,8 +398,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Topic);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);

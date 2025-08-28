@@ -54,8 +54,9 @@ public:
     // Alloc ibv work request and set callback to notify complition.
     // returns TBusy in case of no prepare requests
     // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
-    virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept = 0;
+    virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb, ui32 revokeId) noexcept = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
+    virtual void Revoke(ui32 revokeId) noexcept = 0;
 
     static bool IsWrSuccess(const TAllocResult& ar) {
         return std::holds_alternative<IWr*>(ar);
@@ -87,16 +88,19 @@ public:
     TQueuePair() = default;
     ~TQueuePair();
     int Init(TRdmaCtx* ctx, ICq* cq, int maxWr) noexcept;
-    int ToResetState() noexcept;
+    int ToResetState(bool error = false) noexcept;
     int ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
     ui32 GetQpNum() const noexcept;
     void Output(IOutputStream&) const noexcept;
     TRdmaCtx* GetCtx() const noexcept;
+    int GetState(bool forseUpdate) const noexcept;
 
 private:
+    static const int UnknownQpState; 
     ibv_qp* Qp = nullptr;
     TRdmaCtx* Ctx = nullptr;
+    mutable int LastState = UnknownQpState;
 };
 
 }

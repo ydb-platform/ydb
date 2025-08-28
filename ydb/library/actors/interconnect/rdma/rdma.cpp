@@ -105,9 +105,19 @@ public:
         }
     }
 
-    void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
+    void Attach(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb, ui32 revokeId) noexcept {
         std::lock_guard<std::mutex> guard(Lock);
         Cb = std::move(cb);
+        RevokeId = revokeId;
+    }
+
+    void DoRevoke(NActors::TActorSystem* as, ui32 revokeId) {
+        if (RevokeId != revokeId) {
+            return;
+        }
+        ReplyErr(as);
+        RevokeId = 0;
+        CqCommon->ReturnWr(this);
     }
 
 private:
@@ -116,6 +126,7 @@ private:
     TCqCommon* const CqCommon;
     using TCb = std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)>;
     TCb Cb;
+    ui32 RevokeId = 0;
 };
 
 class TSimpleCqBase : public TCqCommon {
@@ -164,6 +175,24 @@ public:
         };
     }
 
+    void Revoke(ui32 revokeId) noexcept override {
+        //Cerr << "Revoke: " << revokeId << Endl;
+        if (revokeId == 0)
+            return;
+        RevokationQueue.Enqueue(revokeId);
+    }
+
+    void HandleRevokation() {
+        ui32 revokeId = 0;
+        RevokationQueue.Dequeue(&revokeId);
+        if (revokeId) {
+            for (size_t i = 0; i < WrBuf.size(); i++) {
+                TWr* wr = WrBuf[i].get();
+                wr->DoRevoke(As,  revokeId);
+            }
+        }
+    }
+
     void Loop() noexcept {
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
@@ -178,6 +207,7 @@ public:
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
                     Idle();
+                    HandleRevokation();
                 } else {
                     Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");
                     HandleWc(wcs.data(), rv);
@@ -214,6 +244,7 @@ public:
         return 0;
     }
 
+
 protected:
     std::optional<std::thread> Thread;
     std::atomic<bool> Cont;
@@ -227,20 +258,22 @@ protected:
     std::atomic<bool> Err;
     std::atomic<ui64> Allocated;
     alignas(64) std::atomic<ui64> Returned; 
+private:
+    TLockFreeQueue<ui32> RevokationQueue;
 };
 
 class TSimpleCq: public TSimpleCqBase {
 public:
     using TSimpleCqBase::TSimpleCqBase;
 
-    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
+    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb, ui32 revokeId) noexcept override  {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }
         TWr* wr = nullptr;
         Queue.Dequeue(&wr);
         if (wr) {
-            wr->AttachCb(std::move(cb));
+            wr->Attach(std::move(cb), revokeId);
             if (Err.load(std::memory_order_relaxed)) {
                 return TErr();
             }
@@ -256,7 +289,7 @@ class TSimpleCqMock: public TSimpleCqBase, public ICqMockControl {
 public:
     using TSimpleCqBase::TSimpleCqBase;
 
-    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
+    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb, ui32 revokeId) noexcept override  {
         if (Err.load(std::memory_order_relaxed)) {
             return TErr();
         }
@@ -266,7 +299,7 @@ public:
         TWr* wr = nullptr;
         Queue.Dequeue(&wr);
         if (wr) {
-            wr->AttachCb(std::move(cb));
+            wr->Attach(std::move(cb), revokeId);
             if (Err.load(std::memory_order_relaxed)) {
                 return TErr();
             }
@@ -319,6 +352,7 @@ ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int
     return CreateCq<TSimpleCqMock>(ctx, as, max_cqe);
 }
 
+const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;
 
 TQueuePair::~TQueuePair() {
     if (Qp) {
@@ -357,14 +391,21 @@ int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
     }
 }
 
-int TQueuePair::ToResetState() noexcept {
+int TQueuePair::ToResetState(bool error) noexcept {
     struct ibv_qp_attr qpAttr;
     memset(&qpAttr, 0, sizeof(qpAttr));
 
-    qpAttr.qp_state = IBV_QPS_RESET;
+    qpAttr.qp_state = error ? IBV_QPS_ERR : IBV_QPS_RESET;
     qpAttr.port_num = Ctx->GetPortNum();
 
-    return ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE);
+    int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE);
+    if (err) {
+        return err;
+    }
+
+    LastState = error ? IBV_QPS_ERR : IBV_QPS_RESET; 
+
+    return 0;
 }
 
 int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept {
@@ -422,6 +463,8 @@ int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mt
         }
     }
 
+    LastState = IBV_QPS_RTS; 
+
     return 0;
 } 
 
@@ -465,6 +508,24 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     } else {
         os << attr.qp_state;
     }
+}
+
+int TQueuePair::GetState(bool forseUpdate) const noexcept {
+    static_assert(sizeof(ibv_qp_state) <= sizeof(int));
+    struct ibv_qp_attr attr;
+    struct ibv_qp_init_attr init_attr;
+
+    if (LastState != UnknownQpState && !forseUpdate) {
+        return LastState;
+    }
+
+    int err = ibv_query_qp(Qp, &attr,
+        IBV_QP_STATE, &init_attr);
+    Y_ABORT_UNLESS(!err);
+
+    LastState = attr.qp_state; 
+
+    return attr.qp_state; 
 }
 
 TRdmaCtx* TQueuePair::GetCtx() const noexcept {

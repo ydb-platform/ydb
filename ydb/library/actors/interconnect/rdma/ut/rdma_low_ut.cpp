@@ -46,6 +46,46 @@ TEST(RdmaLow, ReadInOneProcessIpV6) {
     DoReadInOneProcess("::1");
 }
 
+TEST(RdmaLow, WrRevocation) {
+    TString addr = "127.0.0.1";
+
+    auto rdma = InitLocalRdmaStuff(addr);
+
+    THolder<IThreadPool> pool = CreateThreadPool(2, 2);
+    const int intialAttempts = 50000;
+
+    // Use attempt as timeout to delay to run mem corrupter 
+    int attempt = intialAttempts;
+
+    // bin search works unstable here due to small ammount of time to trigger race
+    while (attempt--) {
+        auto reg1 = AllocSourceRegion(rdma->MemPool);
+        auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ, 0);
+        auto readResult = ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()),
+            MEM_REG_SZ, reg2, std::function<void()>(), true);
+
+        Y_UNUSED(readResult);
+
+        Cerr << "done: " << attempt << Endl;
+        {
+            rdma->Qp1.ToResetState(); 
+            rdma->Qp2.ToResetState(); 
+
+            auto qp1num = rdma->Qp1.GetQpNum();
+
+            {
+                int err = rdma->Qp2.ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                EXPECT_TRUE(err == 0);
+            }
+
+            {
+                int err = rdma->Qp1.ToRtsState(rdma->Ctx, rdma->Qp2.GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                EXPECT_TRUE(err == 0);
+            }
+        }
+    }
+}
+
 /*
  * This test cover the sutuation when sender going to reuse memory but has no
  * information about remote reading in progress.
@@ -84,7 +124,7 @@ TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
             virtual void Process(void*) override {
                 // Delay to get a chanse to triger memset just during the RDMA read.
                 Sleep(TDuration::MicroSeconds(Attempt / 128));
-                Qp->ToResetState();
+                Qp->ToResetState(true);
                 memset(Mem, 'Q', Sz);
                 Promise.SetValue();
             }
@@ -201,7 +241,7 @@ TEST(RdmaLow, CqOverflow) {
                 delete ioDone; // Clean up the event
             };
             while (wr == nullptr) {
-                auto allocResult = cqPtr->AllocWr(cb);
+                auto allocResult = cqPtr->AllocWr(cb, 0);
                 if (ICq::IsWrSuccess(allocResult)) {
                     wasAlloc = true;
                     wr = std::get<0>(allocResult);

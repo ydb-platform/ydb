@@ -104,7 +104,7 @@ namespace NActors {
     }
 
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
-        NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
         std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel, std::atomic<int>& rdmaReadInflight
     ) {
@@ -119,7 +119,9 @@ namespace NActors {
                 as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
         };
 
-        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply, &rdmaReadInflight](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+        //NInterconnect::NRdma::TMemRegionSlice x = memReg; 
+
+        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply, &rdmaReadInflight, qp](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
             rdmaReadInflight.fetch_sub(1);
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
@@ -134,8 +136,10 @@ namespace NActors {
             } else {
                 delete ioDone; // Clean up the event
             }
+            Y_UNUSED(qp);
+           // Y_UNUSED(x);
         };
-        auto allocResult = cq->AllocWr(cb);
+        auto allocResult = cq->AllocWr(cb, qp->GetQpNum());
         if (auto *busy = std::get_if<NInterconnect::NRdma::ICq::TBusy>(&allocResult)) {
             return *busy;
         } else if (auto *err = std::get_if<NInterconnect::NRdma::ICq::TErr>(&allocResult)) {
@@ -145,8 +149,8 @@ namespace NActors {
 
         void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
         //Cerr << "SendRdmaReadWr: " << eventId << " " << cred.GetSize();
-        auto err = qp.SendRdmaReadWr(wr->GetId(),
-            addr, memReg.GetLKey(qp.GetCtx()->GetDeviceIndex()),
+        auto err = qp->SendRdmaReadWr(wr->GetId(),
+            addr, memReg.GetLKey(qp->GetCtx()->GetDeviceIndex()),
             reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
         );
 
@@ -161,7 +165,7 @@ namespace NActors {
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
-        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
+        const NActorsInterconnect::TRdmaCreds& creds, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
         NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel, std::atomic<int>& rdmaReadInflight
     ) {
         auto& pendingEvent = PendingEvents.back();
@@ -314,7 +318,8 @@ namespace NActors {
         if (termEv) {
             if (RdmaQp) {
                 Cerr << "input session move to reset state: " << RdmaReadInflight.load() << Endl;
-                //RdmaQp->ToResetState();
+                //RdmaQp->ToResetState(true);
+
                 while (false && RdmaReadInflight.load() != 0) {
                     TStringStream ss;
                     RdmaQp->Output(ss);
@@ -725,8 +730,10 @@ namespace NActors {
     TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
-            auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::BLOCK_MODE);
-            Y_ABORT_UNLESS(buffer);
+            auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
+            if (!buffer) {
+                return {};
+            }
             buffer->TrimFront(size + tailroom);
             buffer->TrimBack(size);
             return buffer.value();
@@ -764,6 +771,10 @@ namespace NActors {
                             // allocate buffer and push it into the payload
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                             auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            if (!buffer) {
+                                LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
+                                throw TExDestroySession{TDisconnectReason::FormatError()};
+                            }
                             if (isRdma) {
                                 if (size) {
                                     pendingEvent.RdmaBuffers.push_back(NInterconnect::NRdma::TryExtractFromRcBuf(buffer));
@@ -828,13 +839,22 @@ namespace NActors {
 
                 case NActors::EXdcCommand::RDMA_READ: {
                     if (!RdmaQp || !RdmaCq) {
-                        LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
+                        LOG_CRIT_IC_SESSION("ICRDMA", "unexpected XDC RDMA_READ command without RDMA QP");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+                    NInterconnect::NRdma::TQueuePair& qp = *RdmaQp.get();
+                    enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(qp.GetState(false));
+                    if (qpState != IBV_QPS_RTS) {
+                        TStringStream ss;
+                        ss << qpState;
+                        LOG_ERROR_IC_SESSION("ICRDMA", "qp is not ready, unable to submit rdma READ, %d state is: %s",
+                            qp.GetQpNum(), ss.Data());
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
-                        LOG_CRIT_IC_SESSION("ICIS02", "XDC RDMA_READ command with zero size");
+                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC RDMA_READ command with zero size");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     NActorsInterconnect::TRdmaCreds creds;
@@ -843,12 +863,12 @@ namespace NActors {
                     // const ui64 checkSum = ReadUnaligned<ui64>(ptr);
                     context.PendingEvents.back().CheckSum = ReadUnaligned<ui32>(ptr);
                     ptr += sizeof(ui32);
-                    auto err = context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel, RdmaReadInflight);
+                    auto err = context.ScheduleRdmaReadRequests(creds, RdmaQp, RdmaCq, SelfId(), channel, RdmaReadInflight);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
+                        LOG_CRIT_IC_SESSION("ICRDMA", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     } else if (std::holds_alternative<NInterconnect::NRdma::ICq::TErr>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
+                        LOG_CRIT_IC_SESSION("ICRDMA", "RDMA_READ error: can not allocate cq work request: error");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     auto& packet = InboundPacketQ.back();
@@ -1284,6 +1304,13 @@ namespace NActors {
 
     void TInputSessionTCP::PassAway() {
         Metrics->SetClockSkewMicrosec(0);
+
+        LOG_CRIT_IC_SESSION("ICRDMA", "PassAway session %d %d %d",
+            (bool)RdmaQp, (bool)RdmaCq, (RdmaQp ? RdmaQp->GetState(false) : -1));
+        if (RdmaQp && RdmaCq && RdmaQp->GetState(false) == IBV_QPS_RESET) {
+            Cerr << "PASS AWAY: " <<  RdmaQp->GetQpNum() << Endl;     
+            //RdmaCq->Revoke(RdmaQp->GetQpNum());
+        }
         TActorBootstrapped::PassAway();
     }
 

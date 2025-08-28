@@ -296,6 +296,13 @@ namespace NActors {
 
         }
 
+        //~THandshakeActor() {
+        //    if (RdmaQp && RdmaCq) {
+        //        //Cerr << "~THandshakeActor" << Endl;
+        //        RdmaCq->Revoke(RdmaQp->GetQpNum());
+        //    }
+        //}
+
         void UpdatePrefix() {
             SetPrefix(Sprintf("Handshake %s [node %" PRIu32 "]", SelfActorId.ToString().data(), PeerNodeId));
         }
@@ -407,6 +414,7 @@ namespace NActors {
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()), std::move(RdmaQp), RdmaCq));
+                //RdmaCq.reset();
             }
 
             MainChannel.Reset();
@@ -749,7 +757,7 @@ namespace NActors {
             };
 
             NInterconnect::NRdma::ICq::IWr* wr;
-            auto allocResult = RdmaCq->AllocWr(cb);
+            auto allocResult = RdmaCq->AllocWr(cb, RdmaQp->GetQpNum());
             if (!NInterconnect::NRdma::ICq::IsWrSuccess(allocResult)) {
                 TStringBuilder sb;
                 sb << "Unable to allocate work reqeust, cq is " << NInterconnect::NRdma::ICq::IsWrBusy(allocResult) ? TString("full") : TString("err");
@@ -764,7 +772,7 @@ namespace NActors {
             int err = RdmaQp->SendRdmaReadWr(wr->GetId(), mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
             if (err) {
                 TStringBuilder sb;
-                sb << "Unable to post rdma READ work request, error " << err;
+                sb << "Unable to post rdma READ work request, error " << err << ", qp: " << RdmaQp->GetQpNum();
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     sb.c_str());
                     rdmaReadAck.SetErr(sb);
@@ -986,6 +994,7 @@ namespace NActors {
                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                         "Non success qp response from remote side");
                     RdmaQp.reset();
+                    HandShakeMemRegion.reset();
                 }
 
                 // recover peer process info from peer's reply
@@ -1362,7 +1371,7 @@ namespace NActors {
                     auto addr = std::get<0>(sockname).GetV6CompatAddr(); 
                     RdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(addr);
                     if (RdmaCtx) {
-                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_DEBUG,
                             "Found verbs fontext for address %s", std::get<0>(sockname).ToString().data());
                     } else {
                         LOG_ERROR_IC("ICRDMA", "Unable to find verbs context using address %s",

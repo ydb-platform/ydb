@@ -99,7 +99,10 @@ namespace NActors {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
 
-                        SendViaRdma =  Params.UseRdma && RdmaMemPool;
+                        if (SerializationInfo->Sections.size() >= 32) {
+                            Cerr << "Too much sections for rdma " << SerializationInfo->Sections.size() << " " << (event.Event ? event.Event->Type() : 0) << Endl;
+                        }
+                        SendViaRdma =  Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() < 32;
                         // SendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
                         // for (const auto& section : SerializationInfo->Sections) {
                         //    SendViaRdma &= section.IsRdma;
@@ -381,7 +384,7 @@ namespace NActors {
             TStringBuilder sb;
             if (event.Buffer) {
                 for (const auto& si : event.Buffer->GetSerializationInfo().Sections) {
-                    sb << "serializationInfo: " << si.Alignment << " " << si.Headroom << " " << si.IsRdma << " " << si.Size << Endl;
+                    sb << "serializationInfo: " << si.Alignment << " " << si.Headroom << " " << si.IsRdma << " " << si.Size << " | " << Endl;
                 }
             }
             Cerr << rdmaCreds.DebugString() << '\n' << sb << Endl;

@@ -106,7 +106,7 @@ enum class EReadResult {
     READ_ERR
 };
 
-inline EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src, std::function<void()> hook = {}) {
+inline EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src, std::function<void()> hook = {}, bool resetAfterPost = false) {
     auto asptr = rdma->ActorSystem->GetActorSystem(0);
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
     auto future = promise.GetFuture();
@@ -116,7 +116,7 @@ inline EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueu
         delete ioDone; // Clean up the event
     };
 
-    auto allocResult = rdma->CqPtr->AllocWr(cb);
+    auto allocResult = rdma->CqPtr->AllocWr(cb, qp.GetQpNum());
     ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
 
     RDMA_UT_EXPECT_TRUE(wr);
@@ -125,6 +125,11 @@ inline EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueu
         hook();
 
     int err = qp.SendRdmaReadWr(wr->GetId(), src->GetAddr(), src->GetLKey(rdma->Ctx->GetDeviceIndex()), dstAddr, dstRkey, dstSize);
+    if (resetAfterPost) {
+        qp.ToResetState();
+        rdma->CqPtr->Revoke(qp.GetQpNum()); 
+    }
+
     if (err) {
         wr->Release();
         Cerr << "Unable to post wr" << Endl;

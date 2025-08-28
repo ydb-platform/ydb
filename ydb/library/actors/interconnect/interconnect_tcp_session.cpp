@@ -96,7 +96,8 @@ namespace NActors {
         LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
 
         if (Qp) {
-            Qp->ToResetState();
+            LOG_ERROR_IC_SESSION("ICRDMA", "move qp: %d to reset state", Qp->GetQpNum());
+            Qp->ToResetState(true);
         }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));

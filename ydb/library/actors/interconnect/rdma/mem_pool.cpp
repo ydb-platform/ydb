@@ -36,11 +36,11 @@ namespace NInterconnect::NRdma {
                     region = pool->AllocImpl(size, flags);
                 }
             }
-            int s = 'Z';
+            //int s = 'Z';
             //if (NActors::TlsActivationContext) {
             //    s |= ((NActors::TlsActivationContext->AsActorContext().SelfID.NodeId()) << 1);
             //}
-            memset(region->GetAddr(), s, region->GetSize());
+            //memset(region->GetAddr(), s, region->GetSize());
             return region;
         }
     };

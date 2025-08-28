@@ -5,12 +5,10 @@
 namespace NKikimr {
 
 IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconnectLoad& cmd, const NActors::TActorId& parent,
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 tag) {
-    Y_UNUSED(parent, counters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>&, ui64 tag) {
     NInterconnect::TLoadParams params {
         .Name = cmd.HasName() ? cmd.GetName() : TString("Interconnect load #") += ToString(tag),
         .Channel = 0U,
-        .NodeHops = {1U, 50000U},
         .SizeMin = cmd.HasSizeMin() ? cmd.GetSizeMin() : 0U,
         .SizeMax = cmd.HasSizeMax() ? cmd.GetSizeMax() : 0U,
         .InFlyMax = cmd.GetInFlyMax(),
@@ -20,7 +18,18 @@ IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconn
         .Duration = TDuration::Seconds(cmd.GetDurationSeconds()),
         .UseProtobufWithPayload = cmd.HasUseProtobufWithPayload() && cmd.GetUseProtobufWithPayload()
     };
-    return CreateLoadActor(params);
+
+    for (const auto& node : cmd.GetNodeHops())
+        params.NodeHops.emplace_back(node);
+
+    const auto callback = [tag, parent] (const TActorContext& ctx, TString&& html) {
+        TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
+        auto finishEv = new TEvLoad::TEvLoadTestFinished(tag, report, "Load test finished.");
+        finishEv->LastHtmlPage = std::move(html);
+        ctx.Send(parent, finishEv);
+    };
+
+    return CreateLoadActor(params, callback);
 }
 
 } // NKikimr

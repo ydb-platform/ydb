@@ -73,6 +73,13 @@ TVector<TConfigTemplate> BuildExamples() {
             .Template = R"_(InterconnectLoad: {
     DurationSeconds: 101
     InFlyMax: 3
+    NodeHops: [1, 50000]
+    SizeMin: 0
+    SizeMax: 0
+    IntervalMinUs: 0
+    IntervalMaxUs: 0
+    SoftLoad: false
+    UseProtobufWithPayload: false
 })_"
         }
     };

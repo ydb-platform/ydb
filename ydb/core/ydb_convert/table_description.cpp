@@ -1379,7 +1379,7 @@ void FillStorageSettingsImpl(TYdbProto& out,
                     settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
                 }
 
-                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount()) {
+                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount(); externalChannelsCount > 1U) {
                     settings->set_external_data_channels_count(externalChannelsCount);
                 }
             }

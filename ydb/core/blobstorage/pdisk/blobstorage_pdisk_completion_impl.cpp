@@ -53,7 +53,7 @@ void TCompletionChunkWritePiece::Exec(TActorSystem *actorSystem) {
 
 void TCompletionChunkWritePiece::Release(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
-    Span.EndError("Release");
+    Span.EndError("PDisk.CompletionChunkWritePart.Release");
     delete this;
 }
 

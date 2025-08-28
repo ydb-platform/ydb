@@ -38,6 +38,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             cfg->DeviceInFlight)
     , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx, cfg->SeparateHugePriorities)
     , ReorderingMs(cfg->ReorderingMs)
+    , JointChunkWrites(cfg->EncryptionThreadsCount)
     , LogSeekCostLoop(2)
     , ExpectedDiskGuid(cfg->PDiskGuid)
     , PDiskCategory(cfg->PDiskCategory)
@@ -108,8 +109,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     JointLogReads.reserve(16 << 10);
     JointChunkForgets.reserve(16 << 10);
 
-    //TODO: initialize ThreadPool from config
-    ChunkEncoder = CreateThreadPool(2);
+    ChunkEncoder = CreateThreadPool(cfg->EncryptionThreadsCount);
 
     DebugInfoGenerator = [id = cfg->PDiskId, type = PDiskCategory]() {
         return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
@@ -312,6 +312,13 @@ void TPDisk::Stop() {
 
     P_LOG(PRI_NOTICE, BPD01, "Shutdown", (OwnerInfo, StartupOwnerInfo()));
 
+    // BlockDevice->Stop() frees all completion events that are released and sent to device
+    BlockDevice->Stop();
+
+    // BlockDevice is stopped, the data will NOT hit the disk.
+    if (CommonLogger.Get()) {
+        ObliterateCommonLogSectorSet();
+    }
     // Drain Forseti
     while (!ForsetiScheduler.IsEmpty()) {
         ForsetiTimeNs += 1000000000ull;
@@ -344,24 +351,12 @@ void TPDisk::Stop() {
         ChunkEncoder->Stop();
 
         while (!JointChunkWrites.IsEmpty()) {
-            TRequestBase* req;
-            JointChunkWrites.Dequeue(&req);
-            Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
-                    PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(req));
+            auto piece = JointChunkWrites.Dequeue();
             //When control reaches this function, req->Completion is already freed by
             //TCompletionChunkWritePiece::Release() calls
-            TRequestBase::AbortDelete(req, PCtx->ActorSystem);
+            TRequestBase::AbortDelete(piece, PCtx->ActorSystem);
         }
     }
-
-    // BlockDevice->Stop() should delete all completion events that are released and sent to device
-    BlockDevice->Stop();
-
-    // BlockDevice is stopped, the data will NOT hit the disk.
-    if (CommonLogger.Get()) {
-        ObliterateCommonLogSectorSet();
-    }
-
 
     for (; JointLogWrites.size(); JointLogWrites.pop()) {
         auto* req = JointLogWrites.front();
@@ -956,6 +951,11 @@ void TPDisk::PushChunkWrite(TChunkWritePiece *piece) {
 }
 
 TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
+    P_LOG(PRI_DEBUG, BPD01, "TPDisk::ChunkWritePiece",
+        (ChunkIdx, piece->ChunkWrite->ChunkIdx),
+        (Offset, piece->PieceShift),
+        (Size, piece->PieceSize)
+    );
     auto evChunkWrite = piece->ChunkWrite.Get();
     if (evChunkWrite->IsReplied) {
         return {nullptr, true};
@@ -995,16 +995,15 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
         Y_VERIFY_S(chunkIdx != 0, PCtx->PDiskLogPrefix);
 
         const TChunkState &state = ChunkState[chunkIdx];
-        auto currentOnce = state.Nonce + (ui64)desiredSectorIdx;
+        auto currentNonce = state.Nonce + (ui64)desiredSectorIdx;
 
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
-        auto writer = MakeHolder<TChunkWriter>(Mon, *BlockDevice.Get(), Format, currentOnce, Format.ChunkKey, BufferPool.Get(),
+        auto writer = MakeHolder<TChunkWriter>(Mon, *BlockDevice.Get(), Format, currentNonce, Format.ChunkKey, BufferPool.Get(),
                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
                 nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption, true);
 
         piece->Span.Event("PDisk.ChunkWritePiece.EncryptionStart");
         bool end = ChunkWritePieceEncrypted(piece, writer.GetRef(), piece->PieceSize);
-        LWTRACK(PDiskChunkWriteLastPieceSendToDevice, piece->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, piece->PieceShift, piece->PieceSize);
         return {std::move(writer), end};
     } else {
         ChunkWritePiecePlain(piece);
@@ -2483,19 +2482,13 @@ void TPDisk::Slay(TSlay &evSlay) {
 void TPDisk::ProcessChunkWriteQueue() {
     auto start = HPNow();
 
-    //TODO: Get JointChunkWrites.Size() somehow. Maintain a counter
-    //or look for another interface
-    size_t initialSize = 10;
+    size_t initialSize = JointChunkWrites.Size();
     size_t processed = 0;
     size_t processedBytes = 0;
     double processedCostMs = 0;
 
-
     while (!JointChunkWrites.IsEmpty()) {
-        TRequestBase *req;
-        JointChunkWrites.Dequeue(&req);
-
-        TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
+        auto piece = JointChunkWrites.Dequeue();
         processed++;
         processedBytes += piece->PieceSize;
         processedCostMs += piece->GetCostMs();
@@ -2508,13 +2501,14 @@ void TPDisk::ProcessChunkWriteQueue() {
                 (PieceShift, piece->PieceShift),
                 (PieceSize, piece->PieceSize),
             );
-            //TODO: Span? LWTRACK?
+            LWTRACK(PDiskChunkWritePieceSendToDevice,
+                piece->Orbit, PCtx->PDiskId, piece->ChunkWrite->Owner, piece->ChunkWrite->ChunkIdx,
+                piece->PieceShift, piece->PieceSize
+            );
             piece->ChunkWriteResult->ChunkWriter->WriteToBlockDevice();
         }
 
-        // Last flush happens here.
-        // TODO: Do we want to change TSectorWriter destructor for flush
-        // to happen in ChunkWriter->WriteToBlockDevice?
+        // One more flush is sent to BlockDevice from TSectorWriter destructor.
         delete piece;
 
         // prevent the thread from being stuck for long
@@ -3673,14 +3667,6 @@ void TPDisk::RouteRequest(TRequestBase *request) {
                     << " TypeName# " << TypeName(*request) << " in ChunkEncoder");
 
                 TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(request);
-
-                //TODO: is it better to log it when ->Process actually starts?
-                //do we also need to log "added to queue" event?
-                P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece->Process",
-                    (ChunkIdx, piece->ChunkWrite->ChunkIdx),
-                    (Offset, piece->PieceShift),
-                    (Size, piece->PieceSize)
-                );
 
                 bool res = ChunkEncoder->Add(piece);
 

@@ -22,7 +22,7 @@ EXTERNAL_PREFIXES = frozenset(
 INCLUDE_PATTERN = re.compile(r'#\s*include\s*[<"]([^">]+)[">]')
 COMMENT_PATTERN = re.compile(r'//.*')
 FILE_PATTERN = re.compile(r'^([^\s]+) should (add|remove) these lines:$', re.MULTILINE)
-ERROR_PATTERNS = frozenset(['error', 'failed'])
+ERROR_PATTERNS = frozenset(['error:', 'failed'])
 
 SECTION_MARKERS = (
     (' should add these lines:', 'add'),

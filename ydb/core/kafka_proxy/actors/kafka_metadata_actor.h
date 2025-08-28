@@ -80,7 +80,7 @@ private:
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
-    THashSet<ui64> AllClusterNodes;
+    THashSet<ui64> AddedNodes;
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
@@ -89,7 +89,7 @@ private:
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
 
-    THashMap<ui64, TNodeInfo> Nodes;
+    TMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
     THashSet<ui64> HaveBrokers;
 

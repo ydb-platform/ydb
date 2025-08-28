@@ -236,7 +236,11 @@ jobs:
         echo             print(f"DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
         echo         else: >> patch_script.py
         echo             print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
-        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr)''' >> patch_script.py
+        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr) >> patch_script.py
+        echo     if len(args) ^>= 1 and args[0] == 'link' and original_had_none: >> patch_script.py
+        echo         args.insert(1, 'C:/Program Files/LLVM/bin/lld-link.exe') >> patch_script.py
+        echo         print(f"DEBUG: Using LLVM lld-link.exe instead of system link", file=sys.stderr) >> patch_script.py
+        echo         print(f"DEBUG: Fixed link args = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py
         echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py

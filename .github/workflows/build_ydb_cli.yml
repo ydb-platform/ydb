@@ -111,35 +111,14 @@ jobs:
         REM Create lib.exe symlink (required by ya make)
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" 2>nul || echo lib.exe symlink exists
         
-        REM Find and use Microsoft ml64.exe if available (better ASM compatibility than LLVM)
-        set "ML64_PATH="
-        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files\Microsoft Visual Studio\2022\Professional" "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools") do (
-          if exist "%%p\VC\Tools\MSVC\" (
-            for /d %%v in ("%%p\VC\Tools\MSVC\*") do (
-              if exist "%%v\bin\Hostx64\x64\ml64.exe" set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe" & goto :found
-            )
-          )
-        )
-        :found
-        if defined ML64_PATH (
-          echo Using Microsoft ml64.exe for assembler
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" 2>nul || echo ml.exe symlink exists
-        ) else (
-          echo Using LLVM ml.exe for assembler
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 2>nul || echo ml.exe symlink exists
-          echo YA_USE_LLVM_ML=1 >> %GITHUB_ENV%
-        )
-        
-        REM Fix Git Bash link.exe conflict in fix_msvc_output.py and add ml.exe handling
-        python -c "import re,os; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")\n        if os.environ.get(\"YA_USE_LLVM_ML\"): args.insert(2,\"--m64\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close()"
+        REM Fix Git Bash link.exe conflict in fix_msvc_output.py
+        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close()"
 
     # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      env:
-        YA_USE_LLVM_ML: ${{ env.YA_USE_LLVM_ML }}
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

@@ -447,6 +447,7 @@ class TExecutor
 
     TWaitingSnaps WaitingSnapshots;
 
+    ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
     THolder<TExecutorCounters> Counters;

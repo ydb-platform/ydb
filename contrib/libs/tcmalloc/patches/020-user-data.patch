@@ -167,17 +167,38 @@ index a74e3c7..5887249 100644
  };
  
 diff --git a/tcmalloc/internal/sampled_allocation_recorder.h b/tcmalloc/internal/sampled_allocation_recorder.h
-index 8e1ec85..7f9818f 100644
+index 8e1ec85..1b75f0c 100644
 --- a/tcmalloc/internal/sampled_allocation_recorder.h
 +++ b/tcmalloc/internal/sampled_allocation_recorder.h
-@@ -169,6 +169,7 @@ void SampleRecorder<T, Allocator>::PushDead(T* sample) {
+@@ -169,6 +169,19 @@ void SampleRecorder<T, Allocator>::PushDead(T* sample) {
    if (auto* dispose = dispose_.load(std::memory_order_relaxed)) {
      dispose(*sample);
    }
-+  sample->sampled_stack.user_data.Reset();
++  {
++    // Here we need to synchronize with any possible Copy call on the same
++    // user_data object.
++    // Currently there is only one source of such calls: from callback in Iterate()
++    // (i.e. user has requested a profile concurently with
++    // deallocation of a sampled allocation).
++    // That one holds sample->lock, so we acquire it here too.
++    // This critical section can not be merged with next, because
++    // graveyard_.lock is too constraining (e.g. if destroy callback tries to
++    // deallocate something, it may try to lock graveyard again and deadlock).
++    AllocationGuardSpinLockHolder sample_lock(&sample->lock);
++    sample->sampled_stack.user_data.Reset();
++  }
  
    AllocationGuardSpinLockHolder graveyard_lock(&graveyard_.lock);
    AllocationGuardSpinLockHolder sample_lock(&sample->lock);
+@@ -235,6 +248,8 @@ void SampleRecorder<T, Allocator>::Iterate(
+     const absl::FunctionRef<void(const T& sample)>& f) {
+   T* s = all_.load(std::memory_order_acquire);
+   while (s != nullptr) {
++    // Note that this lock also protects Unregister from
++    // creating a Reset-Copy data race.
+     AllocationGuardSpinLockHolder l(&s->lock);
+     if (s->dead == nullptr) {
+       f(*s);
 diff --git a/tcmalloc/internal_malloc_extension.h b/tcmalloc/internal_malloc_extension.h
 index 190d742..0a93995 100644
 --- a/tcmalloc/internal_malloc_extension.h
@@ -235,7 +256,7 @@ index cee8ba3..47008d0 100644
  
  // Default implementation just returns size. The expectation is that
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 36fd433..644731b 100644
+index 36fd433..3534226 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
 @@ -214,6 +214,8 @@ class Profile final {
@@ -247,7 +268,7 @@ index 36fd433..644731b 100644
      // The following vars are used by the lifetime (deallocation) profiler.
      uint64_t profile_id;
  
-@@ -664,6 +666,24 @@ class MallocExtension final {
+@@ -664,6 +666,32 @@ class MallocExtension final {
    // Enables fork support.
    // Allocator will continue to function correctly in the child, after calling fork().
    static void EnableForkSupport();
@@ -257,7 +278,15 @@ index 36fd433..644731b 100644
 +  using DestroySampleUserDataCallback = void(void*);
 +  using ComputeSampleUserDataHashCallback = size_t(void*);
 +
-+  // Sets callbacks for lifetime control of custom user data attached to allocation samples
++  // Sets callbacks for lifetime control of custom user data attached to allocation samples.
++  // In general, create, copy and destroy callbacks are used with shared_ptr-like semantics:
++  // - Each non-null user_data returned will be result of the create or copy callbacks.
++  // - For each create or copy call (with result R), there will be matching destroy call with argument R.
++  // - Copy and compute_hash callbacks can be called concurrently, but any such call happens before matching destroy call.
++  // Provided functions must satisfy following requirements:
++  // - create and destroy callbacks may not call back into the allocator except for allocating or deallocating memory.
++  // - copy callback may not call back into the allocator at all.
++  // - only compute_hash may throw exceptions (TODO: can this be relaxed safely?)
 +  static void SetSampleUserDataCallbacks(
 +    CreateSampleUserDataCallback create,
 +    CopySampleUserDataCallback copy,

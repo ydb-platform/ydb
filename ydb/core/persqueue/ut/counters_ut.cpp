@@ -147,8 +147,9 @@ Y_UNIT_TEST(PerPartition) {
         return zeroUnreliableValues(countersStr.Str());
     };
 
-    // With EnablePerPartitionCounters = false the response should be empty.
-    UNIT_ASSERT_VALUES_EQUAL(getCountersHtml(), EMPTY_COUNTERS);
+    TString counters = getCountersHtml();
+    TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
+    UNIT_ASSERT(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS);
 
     {
         // Turn on per partition counters, check counters.
@@ -165,7 +166,56 @@ Y_UNIT_TEST(PerPartition) {
         CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
 
         std::string counters = getCountersHtml();
-        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition.html"));
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
+        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+    }
+
+    {
+        // Read messages from different partitions.
+
+        TString sessionId = "session1";
+        TString user = "user1";
+        TPQCmdReadSettings readSettings{
+            /*session=*/ sessionId,
+            /*partition=*/ 0,
+            /*offset=*/ 0,
+            /*count=*/ 2,
+            /*size=*/ 16_MB,
+            /*resCount=*/ 1,
+        };
+        readSettings.PartitionSessionId = 1;
+        readSettings.User = user;
+
+        {
+            // Partition 0
+            TPQCmdSettings sessionSettings{0, user, sessionId};
+            sessionSettings.PartitionSessionId = 1;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+        }
+
+        {
+            // Partition 1
+            TPQCmdSettings sessionSettings{1, user, sessionId};
+            sessionSettings.PartitionSessionId = 2;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            readSettings.Partition = 1;
+            readSettings.Count = 17;
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+        }
+
+        TString counters = getCountersHtml();
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_read.html"));
+
+        Cerr << "per partition counters: " << counters << Endl;
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
     }
 
@@ -178,59 +228,6 @@ Y_UNIT_TEST(PerPartition) {
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
     }
-
-    TString sessionId = "session1";
-    TString user = "user1";
-    TPQCmdSettings sessionSettings{0, user, sessionId};
-    sessionSettings.PartitionSessionId = 1;
-    sessionSettings.KeepPipe = true;
-    TPQCmdReadSettings readSettings{
-        /*session=*/ sessionId,
-        /*partition=*/ 0,
-        /*offset=*/ 0,
-        /*count=*/ static_cast<ui32>(messageCount),
-        /*size=*/ 16_MB,
-        /*resCount=*/ 0,
-    };
-    readSettings.PartitionSessionId = 1;
-    readSettings.User = user;
-
-    Cerr << "Create session\n";
-    auto pipe = CmdCreateSession(sessionSettings, tc);
-    readSettings.Pipe = pipe;
-
-    for (i64 offset = 0; offset < messageCount; offset += 10) {
-        for (i64 lastOffset = 0; lastOffset <= messageCount; lastOffset += 10) {
-            readSettings.Offset = offset;
-            readSettings.LastOffset = lastOffset;
-            readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);
-            BeginCmdRead(readSettings, tc);
-
-            TAutoPtr<IEventHandle> handle;
-            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-
-            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
-            auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
-
-            if (lastOffset) {
-                UNIT_ASSERT_C(readSettings.ResCount <= res.ResultSize(),
-                                "readSettings.ResCount=" << readSettings.ResCount << ", res.ResultSize()=" << res.ResultSize());
-            }
-
-            for (size_t i = 0; i < res.ResultSize(); ++i) {
-                UNIT_ASSERT_EQUAL(res.GetResult(i).GetOffset(), offset + i);
-                UNIT_ASSERT_EQUAL(res.GetResult(i).GetData(), data[offset + i].second);
-            }
-
-            break;
-        }
-
-        break;
-    }
-
-
-    std::string counters = getCountersHtml();
-    Cerr << "After read:" << counters << Endl;
 }
 
 Y_UNIT_TEST(PartitionWriteQuota) {

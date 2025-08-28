@@ -157,6 +157,52 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     return it->second;
 }
 
+::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
+    if (!Config.GetEnablePerPartitionCounters()) {
+        return nullptr;
+    }
+    auto counters = AppData(ctx)->Counters;
+    if (!counters) {
+        return nullptr;
+    }
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return counters
+            ->GetSubgroup("counters", IsServerless ? "topic_per_partition_serverless" : "topic_per_partition")
+            ->GetSubgroup("host", "")
+            ->GetSubgroup("database", Config.GetYdbDatabasePath())
+            ->GetSubgroup("cloud_id", CloudId)
+            ->GetSubgroup("folder_id", FolderId)
+            ->GetSubgroup("database_id", DbId)
+            ->GetSubgroup("topic", TopicConverter->GetPrimaryPath())  // TODO(qyryq) Is it a correct value?
+            ->GetSubgroup("partition_id", ToString(Partition));
+    } else {
+        return counters
+            ->GetSubgroup("counters", "topic_per_partition")
+            ->GetSubgroup("host", "cluster")
+            ->GetSubgroup("Account", TopicConverter->GetAccount())
+            ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
+            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+            ->GetSubgroup("Partition", ToString(Partition));
+    }
+}
+
+
+void TUsersInfoStorage::SetupPerPartitionCounters(const TActorContext& ctx) {
+    auto subgroup = GetPartitionCounterSubgroup(ctx);
+    if (!subgroup) {
+        return;  // TODO(qyryq) Y_ABORT_UNLESS?
+    }
+    for (auto& userInfo : GetAll()) {
+        userInfo.second.SetupPerPartitionCounters(subgroup);
+    }
+}
+
+void TUsersInfoStorage::ResetPerPartitionCounters() {
+    for (auto& userInfo : GetAll()) {
+        userInfo.second.ResetPerPartitionCounters();
+    }
+}
+
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {
     auto it = UsersInfo.find(user);
     return it != UsersInfo.end() ? &it->second : nullptr;
@@ -193,7 +239,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
     return {
-        ctx, StreamCountersSubgroup,
+        ctx, StreamCountersSubgroup, GetPartitionCounterSubgroup(ctx),
         user, readRuleGeneration, important, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata

@@ -112,6 +112,7 @@ struct TUserInfo: public TUserInfoBase {
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
 
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
@@ -157,6 +158,9 @@ struct TUserInfo: public TUserInfoBase {
         if (BytesReadPerPartition) {
             BytesReadPerPartition->Add(readSize);
         }
+        if (MessagesReadPerPartition) {
+            MessagesReadPerPartition->Add(readCount);
+        }
         if (BytesRead && !clientDC.empty()) {
             BytesRead.Inc(readSize);
             if (!isExternalRead && BytesReadGrpc) {
@@ -201,13 +205,13 @@ struct TUserInfo: public TUserInfoBase {
     TUserInfo(
         const TActorContext& ctx,
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
+        NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
         const TString& user,
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
         const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
-        const std::optional<TString>& committedMetadata = std::nullopt,
-        const bool enablePerPartitionCounters = false
+        const std::optional<TString>& committedMetadata = std::nullopt
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient, committedMetadata}
@@ -233,8 +237,8 @@ struct TUserInfo: public TUserInfoBase {
         , MeterRead(meterRead)
     {
         if (AppData(ctx)->Counters) {
-            if (enablePerPartitionCounters) {
-                SetupPerPartitionCounters();
+            if (partitionCountersSubgroup) {
+                SetupPerPartitionCounters(partitionCountersSubgroup);
             }
 
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -252,40 +256,11 @@ struct TUserInfo: public TUserInfoBase {
         }
     }
 
-    ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const {
-        auto counters = AppData(ActorContext())->Counters;
-        if (!counters) {
-            return nullptr;
-        }
-        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            return counters
-                ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
-                ->GetSubgroup("host", "")
-                ->GetSubgroup("database", Config.GetYdbDatabasePath())
-                ->GetSubgroup("cloud_id", CloudId)
-                ->GetSubgroup("folder_id", FolderId)
-                ->GetSubgroup("database_id", DbId)
-                ->GetSubgroup("topic", EscapeBadChars(TopicName()))
-                ->GetSubgroup("partition_id", ToString(Partition.InternalPartitionId));
-        } else {
-            return counters
-                ->GetSubgroup("counters", "topics_per_partition")
-                ->GetSubgroup("host", "cluster")
-                ->GetSubgroup("Account", TopicConverter->GetAccount())
-                ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
-                ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
-                ->GetSubgroup("Partition", ToString(Partition.InternalPartitionId));
-        }
-    }
+    void SetupPerPartitionCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        Y_ABORT_UNLESS(subgroup);
 
-    void SetupPerPartitionCounters() {
         if (BytesReadPerPartition) {
             // Don't recreate the counters if they already exist.
-            return;
-        }
-
-        auto subgroup = GetPerPartitionCounterSubgroup();
-        if (!subgroup) {
             return;
         }
 
@@ -298,6 +273,12 @@ struct TUserInfo: public TUserInfoBase {
         };
 
         BytesReadPerPartition = getCounter("topic.partition.read.bytes", "BytesReadPerPartition", true);
+        MessagesReadPerPartition = getCounter("topic.partition.read.messages", "MessagesReadPerPartition", true);
+    }
+
+    void ResetPerPartitionCounters() {
+        BytesReadPerPartition.Reset();
+        MessagesReadPerPartition.Reset();
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
@@ -464,6 +445,10 @@ public:
     void Clear(const TActorContext& ctx);
 
     void Remove(const TString& user, const TActorContext& ctx);
+
+    ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
+    void SetupPerPartitionCounters(const TActorContext& ctx);
+    void ResetPerPartitionCounters();
 
 private:
 

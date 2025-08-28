@@ -115,25 +115,25 @@ class WorkloadManagerWorkload:
                 raise e
             return (str(e), False)
 
-    def validate_resource_pool(self, throw_exception = False):
+    def validate_resource_pool(self, throw_exception=False):
         value, result = self.get_resource_pool(throw_exception)
         assert result, f"Failed to get resource pool: {value}"
         assert value["ConcurrentQueryLimit"] == 20
         assert value["QueueSize"] == 1000
 
-    def validate_altered_resource_pool(self, throw_exception = False):
+    def validate_altered_resource_pool(self, throw_exception=False):
         value, result = self.get_resource_pool(throw_exception)
         assert result, f"Failed to get resource pool: {value}"
         assert value["ConcurrentQueryLimit"] == 30
         assert value["QueueSize"] == 100
 
-    def validate_resource_pool_classifier(self, throw_exception = False):
+    def validate_resource_pool_classifier(self, throw_exception=False):
         value, result = self.get_resource_pool_classifier(throw_exception)
         assert result, f"Failed to get resource pool classifier: {value}"
         assert value["ResourcePool"] == "TestResourcePool"
         assert value["Rank"] == 20
 
-    def validate_altered_resource_pool_classifier(self, throw_exception = False):
+    def validate_altered_resource_pool_classifier(self, throw_exception=False):
         value, result = self.get_resource_pool_classifier(throw_exception)
         assert result, f"Failed to get resource pool classifier: {value}"
         assert value["ResourcePool"] == "TestResourcePool"

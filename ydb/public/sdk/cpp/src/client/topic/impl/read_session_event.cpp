@@ -183,7 +183,7 @@ const std::string& TMessage::GetBrokenData() const {
     if (DecompressionException) {
         return TMessageBase::GetData();
     }
-    ythrow yexception() << "Can not get broken data after succesful decompression";
+    ythrow yexception() << "Can not get broken data after successful decompression";
 }
 
 bool TMessage::HasException() const {

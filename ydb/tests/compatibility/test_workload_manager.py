@@ -209,7 +209,7 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
             try:
                 workload.validate_resource_pool(True)
                 workload.validate_resource_pool_classifier(True)
-            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError):
+            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.TimeoutError):
                 assert workload.wait_for_connection(), "Failed to restore connection after rolling upgrade"
             step_count += 1
 

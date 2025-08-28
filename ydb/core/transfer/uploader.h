@@ -4,8 +4,8 @@
 #include "logging.h"
 #include "scheme.h"
 
-#include <ydb/core/tx/replication/common/backoff.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -78,7 +78,7 @@ private:
         auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            LOG_D("Schedule retry: table=" << tablePath
+            LOG_E("Schedule retry: table=" << tablePath
                 << ", iteration=" << retry.Backoff.Iteration
                 << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
 
@@ -153,7 +153,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff = TBackoff(Max<size_t>(), TDuration::Seconds(1), TDuration::Minutes(1));
+        TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
         size_t SchemeCount = 0;
     };
     std::unordered_map<TString, Retry> Retries;

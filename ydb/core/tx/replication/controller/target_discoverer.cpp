@@ -7,8 +7,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/replication/common/backoff.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 

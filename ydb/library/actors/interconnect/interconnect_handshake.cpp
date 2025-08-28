@@ -379,6 +379,7 @@ namespace NActors {
                                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                         "RDMA memory read failed, disable rdma on the initiator");
                                     RdmaQp.reset();
+                                    HandShakeMemRegion.reset();
                                 } else {
                                     Params.UseRdma = true;
                                 }
@@ -986,6 +987,7 @@ namespace NActors {
                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                         "Non success qp response from remote side");
                     RdmaQp.reset();
+                    HandShakeMemRegion.reset();
                 }
 
                 // recover peer process info from peer's reply

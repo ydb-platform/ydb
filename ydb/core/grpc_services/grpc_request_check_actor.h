@@ -78,24 +78,22 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForCluster
         return {};
     }
 
-    const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
-    if (accessServiceType == "Nebius_v1") {
-        static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
-            "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
-        });
-        auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
-        [](const std::pair<TString, TString>& p) {
-            return p.first == "folder_id";
-        });
-        if (it == rootAttributes.end()) {
-            return {};
+    static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
+        "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
+    });
+    static const std::vector<TString> allowedAttributes = {"cloud_id", "folder_id"};
+    TVector<std::pair<TString, TString>> attributes;
+    for (const auto& attr : rootAttributes) {
+        if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.first) != allowedAttributes.end()) {
+            attributes.emplace_back(attr);
         }
-        return {
-            {permissions, {{"folder_id", it->second}}}
-        };
-    } else {
+    }
+    if (attributes.empty()) {
         return {};
     }
+    return {
+        {permissions, {attributes}}
+    };
 }
 
 template <typename TEvent>

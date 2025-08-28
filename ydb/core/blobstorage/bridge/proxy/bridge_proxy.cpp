@@ -740,7 +740,7 @@ namespace NKikimr {
                     }
                     [[fallthrough]];
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if (std::is_same_v<TEvents, TEvBlobStorage::TEvCollectGarbage>) {
+                    if (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         break; // allow any garbage collection commands at this stage
                     }
                     [[fallthrough]];

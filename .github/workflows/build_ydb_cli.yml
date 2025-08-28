@@ -95,193 +95,48 @@ jobs:
         version: "18.1.8"
         cached: false
 
-    - name: Debug clang installation for Windows
-      if: ${{ matrix.os == 'windows-amd' }}
-      shell: bash
-      run: |
-        echo "=== Clang Debug Information ==="
-        echo "PATH: $PATH"
-        echo "LLVM_PATH: $LLVM_PATH"
-        echo ""
-        echo "=== Which clang ==="
-        which clang || echo "clang not found in PATH"
-        which clang++ || echo "clang++ not found in PATH"
-        which clang-cl || echo "clang-cl not found in PATH"
-        echo ""
-        echo "=== Clang version ==="
-        clang --version || echo "clang --version failed"
-        echo ""
-        echo "=== Clang-cl version ==="
-        clang-cl --version || echo "clang-cl --version failed"
-        echo ""
-
-    # Create LLVM tool symlinks and patch fix_msvc_output.py to handle None arguments
-    - name: Setup LLVM symlinks with Microsoft ml64.exe
+    - name: Show LLVM/Clang version for Windows
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
-        echo === Finding Microsoft ml64.exe ===
-        where ml64.exe 2>nul || echo ml64.exe not found in PATH
+        echo === LLVM/Clang version info ===
+        clang-cl --version
+        echo.
+
+    # Fix Windows build issues: Git Bash conflicts + Microsoft assembler
+    - name: Setup Windows build environment
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: |
+        REM Create lib.exe symlink (required by ya make)
+        mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" 2>nul || echo lib.exe symlink exists
         
+        REM Find and use Microsoft ml64.exe if available (better ASM compatibility than LLVM)
         set "ML64_PATH="
-        echo Searching in Visual Studio paths...
-        
-        REM Check VS 2022 Enterprise first
-        if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\" (
-          echo Found Visual Studio Enterprise
-          for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
-            if exist "%%v\bin\Hostx64\x64\ml64.exe" (
-              echo Found ml64.exe in Enterprise
-              set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
-              goto :found
+        for %%p in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise" "C:\Program Files\Microsoft Visual Studio\2022\Professional") do (
+          if exist "%%p\VC\Tools\MSVC\" (
+            for /d %%v in ("%%p\VC\Tools\MSVC\*") do (
+              if exist "%%v\bin\Hostx64\x64\ml64.exe" set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe" & goto :found
             )
-            if exist "%%v\bin\Hostx64\x64\ml.exe" (
-              echo Found ml.exe in Enterprise
-              if not defined ML64_PATH (
-                set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
-              )
-            )
-          )
-        ) else (
-          echo VS Enterprise not found
-        )
-        
-        REM Check VS 2022 Professional if not found
-        if not defined ML64_PATH (
-          if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\" (
-            echo Found Visual Studio Professional
-            for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\*") do (
-              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
-                echo Found ml64.exe in Professional
-                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
-                goto :found
-              )
-              if exist "%%v\bin\Hostx64\x64\ml.exe" (
-                echo Found ml.exe in Professional
-                if not defined ML64_PATH (
-                  set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
-                )
-              )
-            )
-          ) else (
-            echo VS Professional not found
-          )
-        )
-        
-        REM Check Build Tools if still not found
-        if not defined ML64_PATH (
-          if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\" (
-            echo Found Visual Studio Build Tools
-            for /d %%v in ("C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*") do (
-              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
-                echo Found ml64.exe in Build Tools
-                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
-                goto :found
-              )
-              if exist "%%v\bin\Hostx64\x64\ml.exe" (
-                echo Found ml.exe in Build Tools
-                if not defined ML64_PATH (
-                  set "ML64_PATH=%%v\bin\Hostx64\x64\ml.exe"
-                )
-              )
-            )
-          ) else (
-            echo VS Build Tools not found
           )
         )
         :found
-        
-        echo === Creating symbolic links ===
-        mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe"
-        mklink "C:\Program Files\LLVM\bin\lib" "C:\Program Files\LLVM\bin\llvm-lib.exe"
-        
         if defined ML64_PATH (
-          echo Using Microsoft assembler
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%"
-          mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%"
-          echo YA_ASSEMBLER_TYPE=MICROSOFT >> %GITHUB_ENV%
+          echo Using Microsoft ml64.exe for assembler
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" 2>nul || echo ml.exe symlink exists
         ) else (
-          echo Using LLVM assembler as fallback
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe"
-          mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe"
-          echo YA_ASSEMBLER_TYPE=LLVM >> %GITHUB_ENV%
+          echo Using LLVM ml.exe for assembler
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" 2>nul || echo ml.exe symlink exists
         )
-
-    - name: Create patch script for fix_msvc_output.py
-      if: ${{ matrix.os == 'windows-amd' }}
-      shell: cmd
-      env:
-        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
-      run: |
-        echo import sys > patch_script.py
-        echo import re >> patch_script.py
-        echo with open('build/scripts/fix_msvc_output.py', 'r') as f: >> patch_script.py
-        echo     content = f.read() >> patch_script.py
-        echo. >> patch_script.py
-        echo # Fix None handling for assembler >> patch_script.py
-        echo content = content.replace( >> patch_script.py
-        echo     'args = sys.argv[1:]', >> patch_script.py
-        echo     '''args = sys.argv[1:] >> patch_script.py
-        echo     print(f"DEBUG: Original sys.argv[1:] = {args}", file=sys.stderr) >> patch_script.py
-        echo     original_had_none = len(args) ^> 1 and args[1] == 'None' >> patch_script.py
-        echo     args = [arg for arg in args if arg != 'None'] >> patch_script.py
-        echo     print(f"DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
-        echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
-        echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
-        echo         # Check assembler type via environment variable >> patch_script.py
-        echo         import os >> patch_script.py
-        echo         assembler_type = os.environ.get('YA_ASSEMBLER_TYPE', 'LLVM') >> patch_script.py
-        echo         if assembler_type == 'LLVM': >> patch_script.py
-        echo             args.insert(2, '--m64') >> patch_script.py
-        echo             print(f"DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
-        echo         else: >> patch_script.py
-        echo             print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
-        echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr) >> patch_script.py
-        echo     if len(args) ^>= 2 and args[0] == 'link' and args[1].endswith('/usr/bin/link.exe'): >> patch_script.py
-        echo         args[1] = 'C:/Program Files/LLVM/bin/lld-link.exe' >> patch_script.py
-        echo         print(f"DEBUG: Replaced Git Bash link with LLVM lld-link.exe", file=sys.stderr) >> patch_script.py
-        echo         print(f"DEBUG: Fixed link args = {args}", file=sys.stderr)''' >> patch_script.py
-        echo ) >> patch_script.py
-        echo. >> patch_script.py
-        echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py
-        echo     f.write(content) >> patch_script.py
-        python patch_script.py
-
-    - name: Verify patch and assembler setup
-      if: ${{ matrix.os == 'windows-amd' }}
-      shell: cmd
-      env:
-        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
-      run: |
-        echo === Verifying patch ===
-        type build\scripts\fix_msvc_output.py | findstr "original_had_none" >nul && echo Patch applied successfully || echo Patch verification failed
         
-        echo === Verifying assembler setup ===
-        echo Assembler type: ${{ env.YA_ASSEMBLER_TYPE }}
-        if exist "C:\Program Files\LLVM\bin\ml.exe" (
-          echo Assembler symlink created successfully
-        ) else (
-          echo ERROR: Assembler symlink not created
-        )
+        REM Fix Git Bash link.exe conflict in fix_msvc_output.py
+        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close()"
 
-    - name: Build windows binary with ya make using LLVM toolchain (with ASM)
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      continue-on-error: true
-      id: build_with_asm
-      env:
-        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
-
-    - name: Build windows binary without ASM optimizations (fallback)
-      if: ${{ matrix.os == 'windows-amd' && steps.build_with_asm.outcome == 'failure' }}
-      shell: cmd
-      env:
-        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
-      run: |
-        echo === First build failed, trying without ASM optimizations ===
-        echo Disabling OpenSSL ASM optimizations for compatibility
-        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

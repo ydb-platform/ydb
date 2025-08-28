@@ -48,6 +48,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TBlobStorageGroupType GType;
     TInstant ConnectionFailureTime;
+    ui32 RaceNotifiedGeneration = 0;
 
     constexpr static TDuration MinimumReconnectTimeout = TDuration::Seconds(1);
     constexpr static TDuration ReconnectTimeoutPerRequest = TDuration::Seconds(1) / 100'000;
@@ -193,7 +194,6 @@ private:
     // FORWARD SECTOR
     ////////////////////////////////////////////////////////////////////////
 
-
     template <typename P, typename T, typename R>
     void HandleRequest(P &ev, const TActorContext &ctx) {
         const auto& record = ev->Get()->Record;
@@ -216,6 +216,17 @@ private:
             reply->MakeError(NKikimrProto::NOTREADY, "BS_QUEUE is not ready", record);
             ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
         }
+    }
+
+    void SendToVDisk(const TActorContext& ctx, std::unique_ptr<IEventBase>&& ev, ui64 cookie = 0,
+            NWilson::TTraceId&& traceId = {}) {
+        auto handle = std::make_unique<IEventHandle>(RemoteVDisk, SelfId(), ev.release(),
+            IEventHandle::MakeFlags(InterconnectChannel, IEventHandle::FlagTrackDelivery), cookie,
+            nullptr, std::move(traceId));
+        if (SessionId) {
+            handle->Rewrite(TEvInterconnect::EvForward, SessionId);
+        }
+        ctx.Send(handle.release());
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -277,7 +288,7 @@ private:
         }
 
         auto *msg = ev->Get();
-        using TEv = decltype(*msg);
+        using TEv = std::decay_t<decltype(*msg)>;
         const auto& record = msg->Record;
         NKikimrProto::EReplyStatus status;
         ui64 msgId, sequenceId;
@@ -328,6 +339,23 @@ private:
 
                 case NKikimrProto::VDISK_ERROR_STATE:
                     return ResetConnection(ctx, status, "VDISK_ERROR_STATE status in response", TDuration::Seconds(10));
+
+                case NKikimrProto::RACE:
+                    if constexpr (!std::is_same_v<TEv, TEvBlobStorage::TEvVPatchXorDiffResult>) {
+                        if (RecentGroup && Max(RaceNotifiedGeneration, record.GetVDiskID().GetGroupGeneration()) <
+                                RecentGroup->GetGroupGeneration()) {
+                            // just issue notifying TEvVCheckReadiness with new group content
+                            auto ev = std::make_unique<TEvBlobStorage::TEvVCheckReadiness>();
+                            VDiskIDFromVDiskID(VDiskId, ev->Record.MutableVDiskID());
+                            ev->Record.MutableRecentGroup()->CopyFrom(*RecentGroup);
+                            auto *qos = ev->Record.MutableQoS();
+                            qos->SetExtQueueId(QueueId);
+                            Queue.GetClientId().Serialize(qos);
+                            RaceNotifiedGeneration = RecentGroup->GetGroupGeneration();
+                            SendToVDisk(ctx, std::move(ev));
+                        }
+                    }
+                    break;
 
                 case NKikimrProto::TRYLATER_SIZE: // watermark overflow
                     ResetWatchdogTimer(ctx.Now());
@@ -654,8 +682,7 @@ private:
         QLOG_DEBUG_S("BSQ33", "RemoteVDisk# " << RemoteVDisk
             << " VDiskId# " << VDiskId
             << " Cookie# " << cookie);
-        const ui32 flags = IEventHandle::MakeFlags(InterconnectChannel, IEventHandle::FlagTrackDelivery);
-        ctx.Send(RemoteVDisk, new TEvBlobStorage::TEvVStatus(VDiskId), flags, cookie);
+        SendToVDisk(ctx, std::make_unique<TEvBlobStorage::TEvVStatus>(VDiskId), cookie);
     }
 
     void DrainStatus(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
@@ -699,8 +726,7 @@ private:
     void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
         if (IsReady()) {
             const ui64 id = NextAssimilateRequestCookie++;
-            ctx.Send(RemoteVDisk, ev->Release().Release(), IEventHandle::MakeFlags(InterconnectChannel,
-                IEventHandle::FlagTrackDelivery), id, std::move(ev->TraceId));
+            SendToVDisk(ctx, std::unique_ptr<IEventBase>(ev->Release().Release()), id, std::move(ev->TraceId));
             AssimilateRequests.emplace(id, std::make_pair(ev->Sender, ev->Cookie));
         } else {
             ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::NOTREADY, "no connection",

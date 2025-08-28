@@ -65,6 +65,7 @@ struct TEnvironmentSetup {
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
+        const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
     };
 
     const TSettings Settings;
@@ -285,6 +286,9 @@ struct TEnvironmentSetup {
         TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
+        }
+        if (Settings.StateStorageInfoGenerator) {
+            Runtime->StateStorageInfoGenerator = Settings.StateStorageInfoGenerator;
         }
         SetupLogging();
         Runtime->Start();
@@ -540,7 +544,7 @@ config:
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
 
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
-                
+
 #undef ADD_ICB_CONTROL
 
                 {
@@ -701,7 +705,7 @@ config:
             host->SetHostConfigId(numStorageNodes == 0 || index < numStorageNodes ? 1 : 2);
             ++index;
         }
-        
+
         cmd1->SetItemConfigGeneration(itemConfigGeneration);
 
         auto response = Invoke(request);
@@ -1126,7 +1130,7 @@ config:
     }
 
     ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue, 
+            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue,
             TString counter, bool derivative = false) {
         ui64 ctr = 0;
 
@@ -1179,13 +1183,13 @@ config:
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
         const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
             "subsystem", subsystem, counter, derivative);
     }
 
     ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
         const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
             "handleclass", handleclass, counter);
     }
 

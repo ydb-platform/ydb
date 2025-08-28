@@ -351,6 +351,8 @@ private:
 
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
+        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -391,7 +393,8 @@ private:
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
-            TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
+            TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
+            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate)
         {
 
             QueryCache->Clear();

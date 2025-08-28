@@ -1,4 +1,5 @@
 RECURSE(
+    add_column
     async_replication
     dml
     dump_restore

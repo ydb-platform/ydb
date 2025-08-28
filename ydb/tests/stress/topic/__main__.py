@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
-from ydb.tests.stress.topic.workload.workload_topic import YdbTopicWorkload
+from ydb.tests.stress.topic.workload import YdbTopicWorkload
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

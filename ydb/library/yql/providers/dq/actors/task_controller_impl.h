@@ -32,6 +32,7 @@
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/types.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 namespace NYql {
 
@@ -546,7 +547,7 @@ public:
                     actorId
                 };
                 event->Tasks.emplace_back(std::move(task));
-            }                
+            }
             Send(CheckpointCoordinatorId, event.release());
         }
     }

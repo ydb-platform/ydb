@@ -280,7 +280,7 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::ProcessRestoreQueue() {
-        while (IndexGetsInFlight < MaxIndexGetsInFlight && DataGetsInFlight < MaxDataGetsInFlight && !RestoreQueue.empty()) {
+        while (!RestoreQueue.empty() && QueriesInFlight < MaxQueriesInFlight) {
             std::optional<ui64> tabletId;
             ui32 dataSize = 0;
             auto it = RestoreQueue.begin();
@@ -300,7 +300,6 @@ namespace NKikimr::NBridge {
             }
             IssueQuery(true, std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
                 NKikimrBlobStorage::FastRead, true, true));
-            ++IndexGetsInFlight;
 
             RestoreQueue.erase(RestoreQueue.begin(), it);
         }
@@ -309,8 +308,9 @@ namespace NKikimr::NBridge {
     void TSyncerActor::CheckIfDone() {
         ProcessRestoreQueue();
 
-        if (Finished && Payloads.empty()) {
-            Y_ABORT_UNLESS(RestoreQueue.empty()); // ensure we haven't missed something
+        if (Finished && !QueriesInFlight) {
+            Y_VERIFY_S(Payloads.empty() && RestoreQueue.empty(), " Payloads.size# " << Payloads.size()
+                << " RestoreQueue.size# " << RestoreQueue.size());
             if (Errors) {
                 Terminate("errors encountered during sync");
             } else if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP && Step == 1) {
@@ -448,9 +448,6 @@ namespace NKikimr::NBridge {
             errorReason = TStringBuilder() << "TEvGet failed Status# " << msg.Status
                 << " ErrorReason# " << msg.ErrorReason;
         } else if (msg.GroupId == SourceGroupId.GetRawId()) { // it was a data query for copying
-            Y_ABORT_UNLESS(DataGetsInFlight);
-            --DataGetsInFlight;
-
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // rewrite this blob with keep flag, if set
@@ -472,9 +469,6 @@ namespace NKikimr::NBridge {
                 }
             }
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
-            Y_ABORT_UNLESS(IndexGetsInFlight);
-            --IndexGetsInFlight;
-
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored
@@ -484,7 +478,6 @@ namespace NKikimr::NBridge {
                     // we have to query this blob and do full rewrite -- there was no data for it
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::FastRead));
-                    ++DataGetsInFlight;
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;

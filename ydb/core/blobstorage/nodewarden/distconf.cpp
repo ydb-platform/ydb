@@ -410,7 +410,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigUnbind, Handle);
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
-            hFunc(TEvNodeConfigInvokeOnRoot, Handle);
+            hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
             IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);

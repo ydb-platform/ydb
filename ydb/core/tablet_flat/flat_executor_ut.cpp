@@ -3811,6 +3811,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         UNIT_ASSERT_C(!blockedSnapshot.empty(), "expected tablet to make a log snapshot after part switch");
     }
 
+    Y_UNIT_TEST(FollowerPromoteToLeaderWhileLoadingPages) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the source tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "... initializing schema" << Endl;
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        Cerr << "... inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(10, 0, 10));
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "... starting follower" << Endl;
+        TActorId followerSysActor;
+        auto followerBootObserver = env->AddObserver<TEvTablet::TEvFBoot>([&](auto& ev) {
+            followerSysActor = ev->Sender;
+            Cerr << "... observed TEvTablet::TEvFBoot" << Endl;
+        });
+        TBlockEvents<NSharedCache::TEvRequest> blockedFollowerRequests(env.Env);
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+        env->WaitFor("follower shared cache requests", [&]{ return blockedFollowerRequests.size() > 0; });
+
+        Cerr << "... stopping leader" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        blockedFollowerRequests.Stop();
+        TBlockEvents<NSharedCache::TEvRequest> blockedLeaderRequests(env.Env);
+
+        TActorId leaderSysActor;
+        auto leaderBootObserver = env->AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
+            leaderSysActor = ev->Sender;
+            Cerr << "... observed TEvTablet::TEvBoot" << Endl;
+        });
+        Cerr << "... promoting follower" << Endl;
+        {
+            NFake::TStarter starter;
+            auto* info = starter.MakeTabletInfo(env.Tablet, env.StorageGroupCount);
+            auto* promote = new TEvTablet::TEvPromoteToLeader(0, info);
+            env->Send(new IEventHandle(followerSysActor, followerSysActor, promote), 0, /* viaActorSystem */ true);
+        }
+        env->WaitFor("promoted shared cache requests", [&]{ return blockedLeaderRequests.size() > 0; });
+
+        Cerr << "... unblocking promoted requests" << Endl;
+        blockedLeaderRequests.Stop().Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+
+        // Simulate reordering replies by reordering requests
+        Cerr << "... unblocking earlier requests" << Endl;
+        blockedFollowerRequests.Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {

@@ -178,10 +178,10 @@ class TestBindings:
     @pytest.mark.parametrize(
         "kikimr_settings", [{"is_replace_if_exists": True}, {"is_replace_if_exists": False}], indirect=True
     )
+    @pytest.mark.skip("Ticket: YQ-2972")
     def test_modify_connection_with_a_lot_of_bindings(
         self, kikimr, s3, client: FederatedQueryClient, yq_version, unique_prefix
     ):
-        pytest.skip("Tiket: YQ-2972")
 
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"

@@ -1,0 +1,3 @@
+RECURSE(
+    pile_promotion
+)

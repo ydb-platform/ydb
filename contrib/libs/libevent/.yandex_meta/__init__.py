@@ -12,7 +12,6 @@ def libevent_post_install(self):
         if own_compat in m.ADDINCL:
             m.ADDINCL.remove(own_compat)
         m.PEERDIR.add("contrib/libs/libc_compat")
-        m.CFLAGS.append("-DEVENT__HAVE_STRLCPY=1")
 
     shutil.rmtree(os.path.join(self.dstdir, "compat"))
     os.remove(os.path.join(self.dstdir, "strlcpy.c"))

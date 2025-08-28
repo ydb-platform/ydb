@@ -132,7 +132,7 @@ public:
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
-        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
+        static std::vector<TString> allowedAttributes = {"cloud_id", "folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
         for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {

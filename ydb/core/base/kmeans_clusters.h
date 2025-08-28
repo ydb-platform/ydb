@@ -39,6 +39,8 @@ public:
     virtual void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight = 1) = 0;
 
     virtual bool IsExpectedSize(const TArrayRef<const char>& data) = 0;
+
+    virtual TString GetEmptyRow() const = 0;
 };
 
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error);

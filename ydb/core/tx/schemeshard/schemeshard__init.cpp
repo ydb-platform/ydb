@@ -4715,7 +4715,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::State>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::TableSize>(),
-                            rowset.GetValue<Schema::KMeansTreeProgress::Round>()
+                            rowset.GetValue<Schema::KMeansTreeProgress::Round>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::IsEmpty>()
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
                         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {

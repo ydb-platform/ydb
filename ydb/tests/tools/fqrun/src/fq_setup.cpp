@@ -2,6 +2,7 @@
 #include "actors.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
@@ -291,6 +292,10 @@ private:
         content.set_type(query.Type);
         content.set_text(query.Query);
         SetupAcl(content.mutable_acl());
+
+        if (const auto timeout = query.Timeout) {
+            *content.mutable_limits()->mutable_execution_deadline() = NProtoInterop::CastToProto(TInstant::Now() + timeout);
+        }
 
         return request;
     }

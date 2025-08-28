@@ -44,6 +44,7 @@ struct TExecutionOptions {
     std::vector<EExecutionCase> ExecutionCases;
     std::vector<FederatedQuery::ExecuteMode> QueryActions;
     std::vector<TString> Scopes;
+    std::vector<TDuration> Timeouts;
 
     bool HasResults() const {
         for (size_t i = 0; i < Queries.size(); ++i) {
@@ -95,6 +96,7 @@ struct TExecutionOptions {
             .Action = GetQueryAction(index),
             .Type = isAnalytics ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
             .QueryId = queryId,
+            .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .FqOptions = {
                 .Scope = GetScope(index)
             }
@@ -473,6 +475,12 @@ protected:
             .Handler1([this, queryAction](const NLastGetopt::TOptsParser* option) {
                 TString choice(option->CurValOrDef());
                 ExecutionOptions.QueryActions.emplace_back(queryAction(choice));
+            });
+
+        options.AddLongOption("timeout", "Timeout in milliseconds for -p queries")
+            .RequiredArgument("uint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.Timeouts.emplace_back(TDuration::MilliSeconds<ui64>(FromString(option->CurValOrDef())));
             });
 
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")

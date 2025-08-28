@@ -79,6 +79,7 @@ struct TRequestOptions {
     FederatedQuery::ExecuteMode Action = FederatedQuery::ExecuteMode::RUN;
     FederatedQuery::QueryContent::QueryType Type = FederatedQuery::QueryContent::STREAMING;
     ui64 QueryId = 0;
+    TDuration Timeout;
     TFqOptions FqOptions;
 };
 

@@ -4168,6 +4168,8 @@ void TPartition::SetupPerPartitionCounters() {
         return;
     }
 
+    UsersInfoStorage->SetupPerPartitionCounters(ActorContext());
+
     auto subgroup = GetPerPartitionCounterSubgroup();
     if (!subgroup) {
         return;
@@ -4194,6 +4196,8 @@ void TPartition::SetupPerPartitionCounters() {
 }
 
 void TPartition::ResetPerPartitionCounters() {
+    UsersInfoStorage->ResetPerPartitionCounters();
+
     WriteTimeLagMsByLastWritePerPartition.Reset();
     SourceIdCountPerPartition.Reset();
     TimeSinceLastWriteMsPerPartition.Reset();

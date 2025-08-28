@@ -12,11 +12,23 @@ namespace NKikimr {
 
 namespace NDiscovery {
     struct TCachedMessageData {
-        TString CachedMessage;
-        TString CachedMessageSsl;
+        mutable TString CachedMessage;
+        mutable TString CachedMessageSsl;
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
         TBridgeInfo::TPtr BridgeInfo;
         TEvStateStorage::TEvBoardInfo::EStatus Status = TEvStateStorage::TEvBoardInfo::EStatus::Ok;
+        
+        // Lazy serialization support
+        mutable bool SerializationValid = false;
+        TSet<TString> Services;
+        TString EndpointId;
+        
+        // Method to ensure serialization is performed when needed
+        void EnsureSerialized() const;
+        
+        // Method that allows passing current nameservice and bridge info for lazy serialization
+        void EnsureSerializedWith(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                                  const TBridgeInfo::TPtr& bridgeInfo) const;
     };
 }
 
@@ -58,6 +70,15 @@ struct TEvDiscovery {
 
 namespace NDiscovery {
     NDiscovery::TCachedMessageData CreateCachedMessage(
+        const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
+        TSet<TString>,
+        TString,
+        const THolder<TEvInterconnect::TEvNodeInfo>&,
+        const TBridgeInfo::TPtr& bridgeInfo);
+        
+    // New function that supports lazy serialization
+    NDiscovery::TCachedMessageData CreateCachedMessageLazy(
         const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
         TSet<TString>,

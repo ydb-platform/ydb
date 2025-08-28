@@ -163,6 +163,87 @@ namespace NDiscovery {
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
         return out;
     }
+    
+    // Helper function to perform the actual serialization logic
+    void DoSerialization(const TCachedMessageData& data, const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                         const TBridgeInfo::TPtr& bridgeInfo, TString& outMessage, TString& outMessageSsl) {
+        if (!nameserviceResponse) {
+            outMessage = "";
+            outMessageSsl = "";
+            return;
+        }
+
+        TStackVec<const TString*> entries;
+        entries.reserve(data.InfoEntries.size());
+        for (auto& xpair : data.InfoEntries) {
+            entries.emplace_back(&xpair.second.Payload);
+        }
+        Shuffle(entries.begin(), entries.end());
+
+        Ydb::Discovery::ListEndpointsResult cachedMessage;
+        cachedMessage.mutable_endpoints()->Reserve(data.InfoEntries.size());
+        cachedMessage.mutable_pile_states()->Reserve(bridgeInfo ? bridgeInfo->Piles.size() : 0);
+
+        Ydb::Discovery::ListEndpointsResult cachedMessageSsl;
+        cachedMessageSsl.mutable_endpoints()->Reserve(data.InfoEntries.size());
+        cachedMessageSsl.mutable_pile_states()->Reserve(bridgeInfo ? bridgeInfo->Piles.size() : 0);
+
+        THashMap<TEndpointKey, TEndpointState> states;
+        THashMap<TEndpointKey, TEndpointState> statesSsl;
+
+        NKikimrStateStorage::TEndpointBoardEntry entry;
+        for (const TString *xpayload : entries) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload);
+            if (!CheckServices(data.Services, entry)) {
+                continue;
+            }
+
+            if (!CheckEndpointId(data.EndpointId, entry)) {
+                continue;
+            }
+            if (entry.GetSsl()) {
+                AddEndpoint(cachedMessageSsl, statesSsl, entry);
+            } else {
+                AddEndpoint(cachedMessage, states, entry);
+            }
+        }
+
+        const auto &nodeInfo = nameserviceResponse->Node;
+        if (nodeInfo && nodeInfo->Location.GetDataCenterId()) {
+            const auto &location = nodeInfo->Location.GetDataCenterId();
+            if (IsSafeLocationMarker(location)) {
+                cachedMessage.set_self_location(location);
+                cachedMessageSsl.set_self_location(location);
+            }
+        }
+
+        if (bridgeInfo) {
+            for (const auto& pile : bridgeInfo->Piles) {
+                AddPileState(cachedMessage, pile);
+                AddPileState(cachedMessageSsl, pile);
+            }
+        }
+
+        outMessage = SerializeResult(cachedMessage);
+        outMessageSsl = SerializeResult(cachedMessageSsl);
+    }
+    
+    void TCachedMessageData::EnsureSerialized() const {
+        if (!SerializationValid) {
+            // Use the BridgeInfo stored in this structure - fallback implementation
+            THolder<TEvInterconnect::TEvNodeInfo> emptyNameservice;
+            DoSerialization(*this, emptyNameservice, BridgeInfo, CachedMessage, CachedMessageSsl);
+            SerializationValid = true;
+        }
+    }
+    
+    void TCachedMessageData::EnsureSerializedWith(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                                                  const TBridgeInfo::TPtr& bridgeInfo) const {
+        if (!SerializationValid) {
+            DoSerialization(*this, nameserviceResponse, bridgeInfo, CachedMessage, CachedMessageSsl);
+            SerializationValid = true;
+        }
+    }
 
     NDiscovery::TCachedMessageData CreateCachedMessage(
                 const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& prevInfoEntries,
@@ -241,6 +322,44 @@ namespace NDiscovery {
         }
 
         return {SerializeResult(cachedMessage), SerializeResult(cachedMessageSsl), std::move(infoEntries), bridgeInfo};
+    }
+
+    NDiscovery::TCachedMessageData CreateCachedMessageLazy(
+                const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& prevInfoEntries,
+                TMap<TActorId, TEvStateStorage::TBoardInfoEntry> newInfoEntries,
+                TSet<TString> services,
+                TString endpointId,
+                const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                const TBridgeInfo::TPtr& bridgeInfo) {
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries;
+        if (prevInfoEntries.empty()) {
+            infoEntries = std::move(newInfoEntries);
+        } else {
+            infoEntries = prevInfoEntries;
+            for (auto& [actorId, info] : newInfoEntries) {
+                if (info.Dropped) {
+                    infoEntries.erase(actorId);
+                } else {
+                    infoEntries[actorId].Payload = std::move(info.Payload);
+                }
+            }
+        }
+
+        TCachedMessageData result;
+        result.InfoEntries = std::move(infoEntries);
+        result.BridgeInfo = bridgeInfo;
+        result.SerializationValid = false;
+        result.Services = std::move(services);
+        result.EndpointId = std::move(endpointId);
+        
+        // If nameservice response is not available, mark as serialized with empty messages
+        if (!nameserviceResponse) {
+            result.CachedMessage = "";
+            result.CachedMessageSsl = "";
+            result.SerializationValid = true;
+        }
+        
+        return result;
     }
 }
 
@@ -351,9 +470,9 @@ namespace NDiscoveryPrivate {
             co_await WaitForNameserviceAndBridgeInfo();
 
             currentCachedMessage.get() = std::make_shared<NDiscovery::TCachedMessageData>(
-                NDiscovery::CreateCachedMessage(
+                NDiscovery::CreateCachedMessageLazy(
                     currentCachedMessage.get()->InfoEntries, std::move(msg->Updates),
-                    {}, EndpointId.GetOrElse({}), NameserviceResponse, BridgeInfo)
+                    currentCachedMessage.get()->Services, currentCachedMessage.get()->EndpointId, NameserviceResponse, BridgeInfo)
             );
 
             auto it = Requested.find(path);
@@ -388,6 +507,7 @@ namespace NDiscoveryPrivate {
             }
 
             if (auto it = Requested.find(path); it != Requested.end()) {
+                newCachedData->EnsureSerializedWith(NameserviceResponse, BridgeInfo);
                 for (const auto& waiter : it->second) {
                     Send(waiter.ActorId,
                         new TEvDiscovery::TEvDiscoveryData(newCachedData), 0, waiter.Cookie);
@@ -449,6 +569,7 @@ namespace NDiscoveryPrivate {
                 }
             }
 
+            (*cachedData)->EnsureSerializedWith(NameserviceResponse, BridgeInfo);
             Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(*cachedData), 0, ev->Cookie);
         }
 

@@ -10,6 +10,7 @@ PY3TEST()
     ENV(OLAP_WORKLOAD_BINARY="ydb/tests/stress/olap_workload/olap_workload")
     ENV(TOPIC_WORKLOAD_BINARY="ydb/tests/stress/topic/workload_topic")
     ENV(LOG_WORKLOAD_BINARY="ydb/tests/stress/log/workload_log")
+    ENV(KV_WORKLOAD_BINARY="ydb/tests/stress/kv/workload_kv")
     ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (
@@ -24,6 +25,8 @@ PY3TEST()
         test_workload_oltp.py
         test_workload_olap.py
         test_workload_topic.py
+        test_workload_log.py
+        test_workload_kv.py
     )
 
     PEERDIR (
@@ -35,6 +38,8 @@ PY3TEST()
             ydb/apps/ydb
             ydb/tests/stress/simple_queue
             ydb/tests/stress/topic
+            ydb/tests/stress/log
+            ydb/tests/stress/kv
             ydb/tests/stress/oltp_workload
             ydb/tests/stress/olap_workload
             ydb/tests/tools/nemesis/driver

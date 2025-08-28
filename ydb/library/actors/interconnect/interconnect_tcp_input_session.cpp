@@ -61,6 +61,41 @@ namespace NActors {
         }
     }
 
+    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
+        return !region.Empty();
+    }
+
+    static void ReallocPayload(TRope& rope) {
+        bool needRealloc = false;
+        for (TRope::TConstIterator it = rope.Begin(); it != rope.End(); ++it) {
+            const TRcBuf& chunk = it.GetChunk();
+            const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+            if (NeedReallocateRdma(region)) {
+                needRealloc = true;
+            }
+        }
+
+        if (!needRealloc) {
+            return;
+        }
+
+        TRope newRope;
+
+        for (TRope::TIterator it = rope.Begin(); it != rope.End(); ++it) {
+            TRcBuf chunk = it.GetChunk();
+            const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+            if (NeedReallocateRdma(region)) {
+                auto newBuf = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
+                newRope.Insert(newRope.End(), TRope(std::move(newBuf)));
+            } else {
+                newRope.Insert(newRope.End(), TRope(std::move(chunk)));
+            }
+        }
+
+        rope.clear();
+        rope = newRope;
+    }
+
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
         NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
@@ -754,6 +789,8 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
+                    context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                    ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, qp, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
@@ -834,17 +871,22 @@ namespace NActors {
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
 #endif
-            if (descr.Checksum) {
+
+            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
+            if (expectedChecksum) {
                 ui32 checksum = 0;
                 for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
-                if (checksum != descr.Checksum) {
+                if (checksum != expectedChecksum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
             pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
+
+            ReallocPayload(payload);
+
             auto ev = std::make_unique<IEventHandle>(SessionId,
                 descr.Type,
                 descr.Flags & ~IEventHandle::FlagExtendedFormat,

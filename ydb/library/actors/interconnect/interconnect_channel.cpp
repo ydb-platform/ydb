@@ -308,7 +308,9 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex) {
+    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds,
+        ui32& checkSum, ssize_t rdmaDeviceIndex)
+    {
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
                 //TODO: !!! handle allocation error
@@ -331,6 +333,7 @@ namespace NActors {
                     // TODO: may be copy to RDMA buffer ?????
                     return false;
                 }
+                checkSum = Crc32cExtendMSanCompatible(checkSum, buf.GetData(), buf.GetSize());
                 auto cred = rdmaCreds.AddCreds();
                 cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
                 cred->SetSize(memReg.GetSize());
@@ -343,13 +346,14 @@ namespace NActors {
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
         NActorsInterconnect::TRdmaCreds rdmaCreds;
-        if (!SerializeEventRdma(event, rdmaCreds, rdmaDeviceIndex)) {
+        ui32 checkSum = 0;
+        if (!SerializeEventRdma(event, rdmaCreds, checkSum, rdmaDeviceIndex)) {
             Y_ABORT("RDMA payload serialization failed for event");
             return std::nullopt; // serialization failed
         }
 
-        // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds |
-        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong();
+        // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds | checkSum |
+        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong() + sizeof(ui32);
         Y_ABORT_UNLESS(partSize < 4096);
 
         if (partSize > Max<ui16>() || partSize > task.GetInternalFreeAmount()) {
@@ -369,6 +373,8 @@ namespace NActors {
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
         Y_ABORT_UNLESS(rdmaCreds.SerializePartialToArray(ptr, credsSerializedSize));
+        ptr += credsSerializedSize;
+        WriteUnaligned<ui32>(ptr, checkSum);
         OutputQueueSize -= event.EventSerializedSize;
 
         task.Write<false>(buffer, partSize);

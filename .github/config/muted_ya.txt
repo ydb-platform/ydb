@@ -7,6 +7,7 @@ ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/client/ut TFlatTest.AutoSplitBySize
 ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *
+ydb/core/external_sources/hive_metastore/ut sole chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
@@ -35,6 +36,7 @@ ydb/core/kqp/ut/tx KqpSnapshotRead.ReadWriteTxFailsOnConcurrentWrite1+withSink
 ydb/core/kqp/ut/tx KqpSnapshotRead.ReadWriteTxFailsOnConcurrentWrite2+withSink
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns

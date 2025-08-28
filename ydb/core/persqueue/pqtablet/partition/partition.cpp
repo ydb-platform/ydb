@@ -1979,13 +1979,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     {
-        ui64 ts = Max<i64>();
-        if (MIN_TIMESTAMP_MS < WriteTimestamp.MilliSeconds()) {
-            ts = WriteTimestamp.MilliSeconds();
-            if (TimeSinceLastWriteMsPerPartition) {
-                TimeSinceLastWriteMsPerPartition->Set((Now() - WriteTimestamp).MilliSeconds());
-            }
+        ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();
+
+        if (TimeSinceLastWriteMsPerPartition) {
+            TimeSinceLastWriteMsPerPartition->Set(ts == Max<i64>() ? 0 : (Now().MilliSeconds() - ts));
         }
+
         if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
             haveChanges = true;
             PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);

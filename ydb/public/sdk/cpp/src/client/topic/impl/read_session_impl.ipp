@@ -3040,8 +3040,6 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
             minOffset = Min(minOffset, static_cast<i64>(data.offset()));
             maxOffset = Max(maxOffset, static_cast<i64>(data.offset()));
 
-            DecompressedSize += data.data().size();
-
             try {
                 if constexpr (UseMigrationProtocol) {
                     if (parent->DoDecompress
@@ -3070,6 +3068,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();
                 }
             }
+
+            DecompressedSize += data.data().size();
         }
     }
 

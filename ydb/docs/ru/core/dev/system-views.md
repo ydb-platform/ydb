@@ -546,3 +546,89 @@ WHERE Sid = "user3"
 |---------|----------|
 | `Path` | Путь к объекту доступа.<br />Тип: `Utf8`.<br />Ключ: `0`. |
 | `Sid` | SID владельца объекта доступа.<br />Тип: `Utf8`. |
+
+## Сессии запросов {#query-sessions}
+
+Следующее системное представление хранит информацию об активных сессиях запросов в базе данных:
+
+* `query_sessions`: Содержит подробную информацию о текущих активных сессиях, включая метаданные сессии, информацию о клиенте, детали запросов и данные о времени выполнения.
+
+Это представление полезно для мониторинга активных сессий базы данных, выявления долго выполняющихся запросов, отслеживания клиентских подключений и анализа паттернов сессий.
+
+Структура таблицы:
+
+| Колонка | Описание | Тип данных |
+| --- | --- | --- |
+| `SessionId` | Уникальный идентификатор сессии.<br/>Ключ: `0`. | `Utf8` |
+| `NodeId` | Идентификатор узла, на котором выполняется сессия. | `Uint32` |
+| `State` | Текущее состояние сессии (например, "READY", "QUERY_EXECUTING"). | `Utf8` |
+| `Query` | Текст выполняемого в данный момент запроса, если есть. | `Utf8` |
+| `QueryCount` | Общее количество запросов, выполненных в этой сессии. | `Uint32` |
+| `ClientAddress` | IP-адрес клиентского подключения. | `Utf8` |
+| `ClientPID` | Информация об идентификаторе процесса от клиента. | `Utf8` |
+| `ClientUserAgent` | Строка user agent, предоставленная клиентом. | `Utf8` |
+| `ClientSdkBuildInfo` | Информация о сборке SDK от клиента. | `Utf8` |
+| `ApplicationName` | Имя приложения, указанное клиентом. | `Utf8` |
+| `SessionStartAt` | Временная метка создания сессии. | `Timestamp` |
+| `QueryStartAt` | Временная метка начала выполнения текущего запроса (если есть). | `Timestamp` |
+| `StateChangeAt` | Временная метка последнего изменения состояния сессии. | `Timestamp` |
+| `UserSID` | Идентификатор безопасности пользователя, связанного с сессией. | `Utf8` |
+
+### Примеры запросов {#query-sessions-examples}
+
+Список всех активных сессий с основной информацией:
+
+```yql
+SELECT
+    SessionId,
+    NodeId,
+    State,
+    ApplicationName,
+    SessionStartAt
+FROM `.sys/query_sessions`
+ORDER BY SessionStartAt DESC
+```
+
+Поиск сессий, которые выполняют запросы более 5 минут:
+
+```yql
+SELECT
+    SessionId,
+    Query,
+    QueryStartAt,
+    ClientAddress,
+    ApplicationName
+FROM `.sys/query_sessions`
+WHERE QueryStartAt IS NOT NULL
+    AND QueryStartAt < CurrentUtcTimestamp() - Interval("PT5M")
+ORDER BY QueryStartAt ASC
+```
+
+Получение статистики сессий по приложениям:
+
+```yql
+SELECT
+    ApplicationName,
+    COUNT(*) as SessionCount,
+    SUM(QueryCount) as TotalQueries,
+    MIN(SessionStartAt) as EarliestSession,
+    MAX(SessionStartAt) as LatestSession
+FROM `.sys/query_sessions`
+GROUP BY ApplicationName
+ORDER BY SessionCount DESC
+```
+
+Поиск сессий с определенных клиентских адресов:
+
+```yql
+SELECT
+    SessionId,
+    ClientAddress,
+    UserSID,
+    State,
+    Query,
+    SessionStartAt
+FROM `.sys/query_sessions`
+WHERE ClientAddress LIKE "192.168.%"
+ORDER BY SessionStartAt DESC
+```

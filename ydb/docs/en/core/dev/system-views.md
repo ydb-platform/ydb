@@ -476,3 +476,89 @@ Table structure:
 |--------|-------------|
 | `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
 | `Sid` | SID of the access object owner.<br />Type: `Utf8`. |
+
+## Query sessions {#query-sessions}
+
+The following system view stores information about active query sessions in the database:
+
+* `query_sessions`: Contains detailed information about currently active sessions, including session metadata, client information, query details, and timing data.
+
+This view is useful for monitoring active database sessions, identifying long-running queries, tracking client connections, and analyzing session patterns.
+
+Table structure:
+
+| Column | Description | Data type |
+| --- | --- | --- |
+| `SessionId` | Unique session identifier.<br/>Key: `0`. | `Utf8` |
+| `NodeId` | Identifier of the node where the session is running. | `Uint32` |
+| `State` | Current state of the session (e.g., "READY", "QUERY_EXECUTING"). | `Utf8` |
+| `Query` | Text of the currently executing query, if any. | `Utf8` |
+| `QueryCount` | Total number of queries executed in this session. | `Uint32` |
+| `ClientAddress` | IP address of the client connection. | `Utf8` |
+| `ClientPID` | Process ID information from the client. | `Utf8` |
+| `ClientUserAgent` | User agent string provided by the client. | `Utf8` |
+| `ClientSdkBuildInfo` | SDK build information from the client. | `Utf8` |
+| `ApplicationName` | Application name specified by the client. | `Utf8` |
+| `SessionStartAt` | Timestamp when the session was created. | `Timestamp` |
+| `QueryStartAt` | Timestamp when the current query started executing (if any). | `Timestamp` |
+| `StateChangeAt` | Timestamp of the last session state change. | `Timestamp` |
+| `UserSID` | Security identifier of the user associated with the session. | `Utf8` |
+
+### Example queries {#query-sessions-examples}
+
+List all active sessions with basic information:
+
+```yql
+SELECT
+    SessionId,
+    NodeId,
+    State,
+    ApplicationName,
+    SessionStartAt
+FROM `.sys/query_sessions`
+ORDER BY SessionStartAt DESC
+```
+
+Find sessions that have been running queries for more than 5 minutes:
+
+```yql
+SELECT
+    SessionId,
+    Query,
+    QueryStartAt,
+    ClientAddress,
+    ApplicationName
+FROM `.sys/query_sessions`
+WHERE QueryStartAt IS NOT NULL
+    AND QueryStartAt < CurrentUtcTimestamp() - Interval("PT5M")
+ORDER BY QueryStartAt ASC
+```
+
+Get session statistics by application:
+
+```yql
+SELECT
+    ApplicationName,
+    COUNT(*) as SessionCount,
+    SUM(QueryCount) as TotalQueries,
+    MIN(SessionStartAt) as EarliestSession,
+    MAX(SessionStartAt) as LatestSession
+FROM `.sys/query_sessions`
+GROUP BY ApplicationName
+ORDER BY SessionCount DESC
+```
+
+Find sessions from specific client addresses:
+
+```yql
+SELECT
+    SessionId,
+    ClientAddress,
+    UserSID,
+    State,
+    Query,
+    SessionStartAt
+FROM `.sys/query_sessions`
+WHERE ClientAddress LIKE "192.168.%"
+ORDER BY SessionStartAt DESC
+```

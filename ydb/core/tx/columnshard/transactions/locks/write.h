@@ -11,11 +11,13 @@ private:
 
     virtual bool DoCheckInteraction(
         const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build()("tx_id", selfTxId));
         THashSet<ui64> txIds = context.GetAffectedTxIds(PathId, RecordBatch);
         txIds.erase(selfTxId);
         TTxConflicts result;
         for (auto&& i : txIds) {
             result.Add(selfTxId, i);
+            result.Add(i, selfTxId);
         }
         std::swap(result, conflicts);
         return true;

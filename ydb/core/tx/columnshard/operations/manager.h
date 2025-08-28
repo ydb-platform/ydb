@@ -1,9 +1,11 @@
 #pragma once
 #include "write.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 class TManager;
@@ -47,6 +49,7 @@ public:
     }
 
     ui64 GetInternalGenerationCounter() const {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "internal_generation_counter")("is_broken", IsBroken());
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
 };
@@ -78,7 +81,6 @@ public:
         return SharingInfo->GetInternalGenerationCounter();
     }
 
-
     void AddWriteOperation(const TWriteOperation::TPtr op) {
         WriteOperations.push_back(op);
         SharingInfo->Writes = true;
@@ -103,13 +105,24 @@ public:
     void AddNotifyCommit(const ui64 lockId) {
         AFL_VERIFY(NotifyOnCommit.erase(lockId));
         Committed.emplace(lockId);
+        if (BrokeOnCommit.contains(lockId)) {
+            SetBroken();
+        }
     }
 
     void AddBrokeOnCommit(const THashSet<ui64>& lockIds) {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "broke_on_commit")("conflicted", GetLockId())("broke", JoinSeq(",", lockIds));
+        for (auto&& i : lockIds) {
+            if (Committed.contains(i)) {
+                SetBroken();
+            }
+        }
         BrokeOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
     void AddNotificationsOnCommit(const THashSet<ui64>& lockIds) {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "notify_on_commit")("conflicted", GetLockId())(
+            "broke", JoinSeq(",", lockIds));
         NotifyOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
@@ -142,6 +155,8 @@ class TOperationsManager: public IResolveWriteIdToLockId {
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
+    void CheckBrokenOnCommit(const TLockFeatures& lock);
+
 public:   //IResolveWriteIdToLockId
     virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const override {
         if (const auto operationWriteId = InsertWriteIdToOpWriteId.FindPtr(writeId)) {
@@ -153,7 +168,6 @@ public:   //IResolveWriteIdToLockId
     }
 
 public:
-
     void StopWriting() {
         for (auto&& i : Operations) {
             i.second->StopWriting();
@@ -194,8 +208,7 @@ public:
     }
     void CommitTransactionOnExecute(
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
-    void CommitTransactionOnComplete(
-        TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
+    void CommitTransactionOnComplete(TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
     void AddTemporaryTxLink(const ui64 lockId) {
         AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
     }
@@ -226,8 +239,8 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
-        const NEvWrite::EModificationType mType, const bool isBulk);
+    TWriteOperation::TPtr CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
+        const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool isBulk);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
             return false;

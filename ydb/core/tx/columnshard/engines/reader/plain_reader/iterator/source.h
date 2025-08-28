@@ -168,9 +168,9 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
-        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+        const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin,
+        const TSnapshot& recordSnapshotMax, const ui32 recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(type, sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
@@ -293,8 +293,13 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(EType::PlainPortion, portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
-              portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
-              portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+              portion->IsRemovedFor(context->GetReadMetadata()->GetRequestSnapshot())
+                  ? context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()
+                  : portion->RecordSnapshotMin(context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()),
+              portion->IsRemovedFor(context->GetReadMetadata()->GetRequestSnapshot())
+                  ? context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()
+                  : portion->RecordSnapshotMax(context->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot()),
+              portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
     }

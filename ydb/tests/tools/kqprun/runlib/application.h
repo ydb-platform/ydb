@@ -35,6 +35,8 @@ protected:
 
     void ReplaceYqlTokenTemplate(TString& text) const;
 
+    void SetupActorSystemConfig(NKikimrConfig::TActorSystemConfig& config) const;
+
 protected:
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
@@ -49,6 +51,7 @@ private:
     TString UdfsDirectory;
     TVector<TString> UdfsPaths;
     bool ExcludeLinkedUdfs;
+    std::optional<ui64> UserPoolSize;
 };
 
 }  // namespace NKikimrRun

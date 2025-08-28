@@ -592,7 +592,8 @@ protected:
         RunnerOptions.FqSettings.YqlToken = YqlToken;
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
-        auto& fqConfig = *RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig();
+        auto& appConfig = RunnerOptions.FqSettings.AppConfig;
+        auto& fqConfig = *appConfig.MutableFederatedQueryConfig();
         auto& gatewayConfig = *fqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
         FillTokens(gatewayConfig.mutable_s3());
@@ -603,6 +604,7 @@ protected:
         fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
         SetupLogsConfig();
+        SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();

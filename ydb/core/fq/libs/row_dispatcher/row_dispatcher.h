@@ -5,8 +5,6 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>

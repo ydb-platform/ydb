@@ -4,8 +4,6 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>

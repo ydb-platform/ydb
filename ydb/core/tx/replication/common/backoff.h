@@ -8,6 +8,7 @@ namespace NKikimr::NReplication {
 struct TBackoff {
 
     static constexpr TDuration MinDelay = TDuration::MilliSeconds(5);
+    static constexpr size_t MaxShift = sizeof(TDuration::TValue) * 8 - 1;
 
     TBackoff(size_t maxRetries = 10, TDuration initialDelay = TDuration::Seconds(1), TDuration maxDelay = TDuration::Minutes(15))
         : MaxRetries(maxRetries)
@@ -18,7 +19,7 @@ struct TBackoff {
     }
 
     TDuration Next() {
-        TDuration delay = TDuration::MilliSeconds(InitialDelay.MilliSeconds() << Iteration++);
+        TDuration delay = TDuration::MilliSeconds(InitialDelay.MilliSeconds() << std::min(Iteration++, MaxShift));
         delay = delay == TDuration::Zero() ? MaxDelay : std::min(MaxDelay, delay);
         delay += TDuration::MilliSeconds(RandomNumber<size_t>(delay.MilliSeconds() / 4));
         return delay;

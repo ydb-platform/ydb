@@ -61,13 +61,38 @@ constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
 
+constexpr std::string_view GlobalFulltextImplTables[] = {
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
+
+bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            Y_ENSURE(false, "Invalid index type");
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return false;
+    }
 }
 
-TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index) {
+}
+
+TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
     TTableColumns result;
 
-    const bool isSecondaryIndex = type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-    std::for_each(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1), [&] (const auto& ik) {
+    const bool isSecondaryIndex = IsSecondaryIndex(indexType);
+
+    auto takeKeyColumns = index.KeyColumns.size();
+    if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
+        takeKeyColumns--;
+    }
+
+    std::for_each(index.KeyColumns.begin(), index.KeyColumns.begin() + takeKeyColumns, [&] (const auto& ik) {
         result.Keys.push_back(ik);
         result.Columns.emplace(ik);
     });
@@ -127,7 +152,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         return false;
     }
 
-    const bool isSecondaryIndex = indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+    const bool isSecondaryIndex = IsSecondaryIndex(indexType);
 
     if (index.KeyColumns.size() < 1) {
         explain = "should be at least single index key column";
@@ -157,7 +182,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     if (isSecondaryIndex) {
         tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
     } else {
-        // Vector indexes allow to add all columns both to index & data
+        // Vector and fulltext indexes allow to add all columns both to index & data
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -167,15 +192,36 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
+bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexTypeInvalid:
+        Y_ENSURE(false, "Invalid index type");
+    case NKikimrSchemeOp::EIndexTypeGlobal:
+    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        return true;
+    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        return false;
+    }
+}
+
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        if (indexKeys.size() == 1) {
-            return GlobalKMeansTreeImplTables;
-        } else {
-            return PrefixedGlobalKMeansTreeImplTables;
-        }
-    } else {
-        return GlobalSecondaryImplTables;
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            Y_ENSURE(false, "Invalid index type");
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return GlobalSecondaryImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (indexKeys.size() == 1) {
+                return GlobalKMeansTreeImplTables;
+            } else {
+                return PrefixedGlobalKMeansTreeImplTables;
+            }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return GlobalFulltextImplTables;
     }
 }
 

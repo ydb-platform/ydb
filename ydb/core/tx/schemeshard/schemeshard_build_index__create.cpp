@@ -5,6 +5,7 @@
 #include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
 namespace NKikimr::NSchemeShard {
@@ -234,7 +235,7 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex: {
             if (!Self->EnableAddUniqueIndex) {
                 explain = "Adding a unique index to an existing table is disabled";
                 return false;
@@ -242,6 +243,7 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
             if (!Self->EnableVectorIndex) {
                 explain = "Vector index support is disabled";
@@ -264,8 +266,13 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
-            explain = "Fulltext index support is disabled";
-            return false;
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            break;
         }
         };
 

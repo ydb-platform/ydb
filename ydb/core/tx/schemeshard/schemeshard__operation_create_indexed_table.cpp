@@ -262,6 +262,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
                 }
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                if (!context.SS->EnableFulltextIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
+                }
+                break;
         }
 
         {
@@ -292,32 +297,50 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
-        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
-            NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
-            if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
-                // This description provided by user to override partition policy
-                userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
-                if (prefixVectorIndex) {
-                    userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
+        switch (indexDescription.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                Y_ENSURE(false, "Invalid index type");
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize()) {
+                    // This description provided by user to override partition policy
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
+                result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
+                break;
             }
-            const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
-            if (prefixVectorIndex) {
-                const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
-                result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
+                NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
+                    // This description provided by user to override partition policy
+                    userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                    userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                    if (prefixVectorIndex) {
+                        userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                    }
+                }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+                if (prefixVectorIndex) {
+                    const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
+                    result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+                }
+                break;
             }
-        } else {
-            NKikimrSchemeOp::TTableDescription userIndexDesc;
-            if (indexDescription.IndexImplTableDescriptionsSize()) {
-                // This description provided by user to override partition policy
-                userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize()) {
+                    // This description provided by user to override partition policy
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
+                break;
             }
-
-            result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
         }
     }
 

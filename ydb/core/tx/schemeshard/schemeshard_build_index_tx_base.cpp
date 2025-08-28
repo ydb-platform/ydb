@@ -291,6 +291,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         };
 
         switch (info.IndexType) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
@@ -301,8 +303,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
-        default:
-            Y_ABORT("Unreachable");
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
+            *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
+            break;
         }
     } else if (info.IsBuildColumns()) {
         for(const auto& column : info.BuildColumns) {

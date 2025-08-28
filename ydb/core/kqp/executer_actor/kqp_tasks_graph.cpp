@@ -1453,7 +1453,7 @@ void TKqpTasksGraph::SerializeTaskToProto(
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
-    result->SetCreateSuspended(tasksGraph.GetMeta().CreateSuspended);
+    result->SetCreateSuspended(GetMeta().CreateSuspended);
     FillTaskMeta(stageInfo, task, *result);
 }
 

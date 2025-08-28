@@ -86,7 +86,13 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId)("reason", "absent operation");
-            } else if (!op->WaitShardsBrokenFlags.erase(TabletId)) {
+                // looks like it is the only place where we delete shards from the set
+                // we see in the logs that we had all the shards in the set, and later there is nothing in the set
+                // what if we do delete the shards from the set here?
+                // but we get to the DoComplete method (look at the next method) for slow shards later (when the tx is finished), for some reason
+                // when and how DoExecute is called, and how and when DoComplete is called?
+            //} else if (!op->WaitShardsBrokenFlags.erase(TabletId)) {
+            } else if (!op->WaitShardsBrokenFlags.contains(TabletId)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
             } else {
                 op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
@@ -99,7 +105,7 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId)("reason", "absent operator");
-            } else if (!SendAckFlag) {
+            } else if (!SendAckFlag || !op->WaitShardsBrokenFlags.erase(TabletId)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
             } else {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(

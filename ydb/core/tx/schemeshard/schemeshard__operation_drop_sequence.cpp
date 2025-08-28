@@ -259,7 +259,7 @@ public:
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+            : TPath::Resolve(parentPathStr, context.SS).Child(name, TPath::TSplitChildTag{});
 
         {
             TPath::TChecker checks = path.Check();

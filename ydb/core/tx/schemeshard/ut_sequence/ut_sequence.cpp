@@ -798,4 +798,82 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )", {{NKikimrScheme::StatusInvalidParameter, "Column 'value' is of type Bool but default expression is of type Int64"}});
     }
 
+    Y_UNIT_TEST(AlterSequenceWithRelativePath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        // Create a subdirectory
+        TestMkDir(runtime, ++txId, "/MyRoot", "subdir");
+        env.TestWaitNotification(runtime, txId);
+
+        // Test CREATE SEQUENCE with relative path
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "subdir/seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/subdir/seq", false, NLs::PathExist);
+
+        // Verify initial value
+        auto value = DoNextVal(runtime, "/MyRoot/subdir/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        // Test ALTER SEQUENCE with relative path from /MyRoot
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "subdir/seq"
+            Increment: 5
+            MaxValue: 100
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the alter worked by checking the new increment
+        value = DoNextVal(runtime, "/MyRoot/subdir/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 6);  // 1 + 5 = 6
+
+        value = DoNextVal(runtime, "/MyRoot/subdir/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 11);  // 6 + 5 = 11
+
+        // Test altering with a different relative path pattern
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "root_seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try altering root_seq from within subdir using ../
+        TestAlterSequence(runtime, ++txId, "/MyRoot/subdir", R"(
+            Name: "../root_seq"
+            Increment: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the alter worked
+        value = DoNextVal(runtime, "/MyRoot/root_seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        value = DoNextVal(runtime, "/MyRoot/root_seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 4);  // 1 + 3 = 4
+
+        // Test DROP SEQUENCE with relative path
+        TestDropSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "subdir/seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify sequence is dropped
+        TestLs(runtime, "/MyRoot/subdir/seq", false, NLs::PathNotExist);
+
+        // Test DROP SEQUENCE with ../ relative path  
+        TestDropSequence(runtime, ++txId, "/MyRoot/subdir", R"(
+            Name: "../root_seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify sequence is dropped
+        TestLs(runtime, "/MyRoot/root_seq", false, NLs::PathNotExist);
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequence)

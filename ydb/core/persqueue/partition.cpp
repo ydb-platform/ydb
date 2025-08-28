@@ -2160,43 +2160,40 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         return;
     }
     PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-    while (true) {
-        if (CanProcessUserActionAndTransactionEvents()) {
-            ContinueProcessTxsAndUserActs(ctx);
-        }
-        if (BatchingState == ETxBatchingState::PreProcessing) {
-            PQ_LOG_D("Still preprocessing - waiting for something");
-            return; // Still preprocessing - waiting for something;
-        }
-        PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-
-        // Preprocessing complete;
-        if (CurrentBatchSize > 0) {
-            PQ_LOG_D("Batch completed (" << CurrentBatchSize << ")");
-            Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
-        }
-        CurrentBatchSize = 0;
-
-        if (UserActionAndTxPendingCommit.empty()) {
-            // Processing stopped and nothing to commit - finalize
-            BatchingState = ETxBatchingState::Finishing;
-        } else {
-            // Process commit queue
-            ProcessCommitQueue();
-        }
-        if (!UserActionAndTxPendingCommit.empty()) {
-            // Still pending for come commits
-            PQ_LOG_D("Still pending for come commits");
-            return;
-        }
-        // Commit queue processing complete. Now can either swith to persist or continue preprocessing;
-        if (BatchingState == ETxBatchingState::Finishing) { // Persist required;
-            RunPersist();
-            return;
-        }
-        Y_ABORT_UNLESS(BatchingState != ETxBatchingState::Executing);
-        BatchingState = ETxBatchingState::PreProcessing;
+    if (CanProcessUserActionAndTransactionEvents()) {
+        ContinueProcessTxsAndUserActs(ctx);
     }
+    // Still preprocessing? Waiting for something
+    if (CanProcessUserActionAndTransactionEvents()) {
+        PQ_LOG_D("Still preprocessing - waiting for something");
+        return;
+    }
+    PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+
+    // Preprocessing complete;
+    if (CurrentBatchSize > 0) {
+        PQ_LOG_D("Batch completed (" << CurrentBatchSize << ")");
+        Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
+    }
+    CurrentBatchSize = 0;
+
+    if (UserActionAndTxPendingCommit.empty()) {
+        // Processing stopped and nothing to commit - finalize
+        BatchingState = ETxBatchingState::Finishing;
+    } else {
+        // Process commit queue
+        ProcessCommitQueue();
+    }
+    // BatchingState can go to Finishing in ContinueProcessTxsAndUserActs. Therefore, it is necessary to check
+    // the size of the UserActionAndTxPendingCommit queue here.
+    if (!UserActionAndTxPendingCommit.empty()) {
+        // Still pending for come commits
+        PQ_LOG_D("Still pending for come commits");
+        return;
+    }
+    PQ_LOG_D("Try persist");
+    // Here we have an empty UserActionAndTxPendingCommit queue and BatchingState is equal to Finishing.
+    RunPersist();
 }
 
 bool TPartition::CanProcessUserActionAndTransactionEvents() const

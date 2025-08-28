@@ -6,13 +6,13 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
-    ISubOperation::TPtr CreateSetConstraintLock(TOperationId opId, const TTxTransaction& tx) {
-        // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
-        Y_UNUSED(opId);
-        Y_UNUSED(tx);
-        return {};
-    }
-} // namespace NKikimr
-} // namespace NSchemeShard
+namespace NKikimr::NSchemeShard {
+
+ISubOperation::TPtr CreateSetConstraintLock(TOperationId opId, const TTxTransaction& tx) {
+    // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
+    Y_UNUSED(opId);
+    Y_UNUSED(tx);
+    return {};
+}
+
+} // namespace NKikimr::NSchemeShard

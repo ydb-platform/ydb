@@ -1751,7 +1751,7 @@ message TSetColumnConstraintSettings {
     optional EConstraint Constraint = 2;
 }
 
-message TSetColumnConstraintsRequest {
+message TSetColumnConstraintsInitiate {
     optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
@@ -1894,7 +1894,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsRequest SetColumnConstraintsRequest = 87;
+    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
 
     // Some entries are grouped by semantics, so are out of order
 }

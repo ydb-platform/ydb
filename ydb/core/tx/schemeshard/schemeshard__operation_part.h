@@ -405,7 +405,7 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxT
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state);
 
 
-TVector<ISubOperation::TPtr> CreateSetConstraint(TOperationId, const TTxTransaction&, TOperationContext&);
+TVector<ISubOperation::TPtr> CreateSetConstraintInitiate(TOperationId, const TTxTransaction&, TOperationContext&);
 ISubOperation::TPtr CreateSetConstraintLock(TOperationId, const TTxTransaction&);
 ISubOperation::TPtr CreateSetConstraintCheck(TOperationId, const TTxTransaction&);
 ISubOperation::TPtr CreateSetConstraintFinalize(TOperationId, const TTxTransaction&);

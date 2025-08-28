@@ -6,14 +6,14 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
-    TVector<ISubOperation::TPtr> CreateSetConstraint(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-        Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
-        Y_UNUSED(context);
-        auto tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsRequest().GetTableName()});
-        TString error = "CreateSetConstraint is not implemented. TablePath = '" + tablePath + "'";
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, std::move(error))};
-    }
-} // namespace NKikimr
-} // namespace NSchemeShard
+namespace NKikimr::NSchemeShard {
+
+TVector<ISubOperation::TPtr> CreateSetConstraintInitiate(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
+    Y_UNUSED(context);
+    auto tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()});
+    TString error = "CreateSetConstraintInitiate is not implemented. TablePath = '" + tablePath + "'";
+    return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, std::move(error))};
+}
+
+} // namespace NKikimr::NSchemeShard

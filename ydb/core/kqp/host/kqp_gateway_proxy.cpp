@@ -650,18 +650,18 @@ public:
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
-            NKikimrSchemeOp::TSetColumnConstraintsRequest setColumnConstraintsRequest;
+            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
             for (auto& setting : settings) {
-                auto* add = setColumnConstraintsRequest.AddConstraintSettings();
+                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
                 add->Swap(&setting);
             }
 
-            setColumnConstraintsRequest.SetTableName(tableName);
+            setColumnConstraintsInitiate.SetTableName(tableName);
 
             NKikimrSchemeOp::TModifyScheme modifyScheme;
-            *modifyScheme.MutableSetColumnConstraintsRequest() = std::move(setColumnConstraintsRequest);
+            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
             modifyScheme.SetWorkingDir(std::move(dirname));
-            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
 
             return Gateway->ModifyScheme(std::move(modifyScheme));
         }

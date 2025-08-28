@@ -151,7 +151,8 @@ void TPQWriteServiceImpl::InitClustersUpdater()
     TAppData* appData = ActorSystem->AppData<TAppData>();
     NeedDiscoverClusters = !appData->PQConfig.GetTopicsAreFirstClassCitizen();
     if (NeedDiscoverClusters) {
-        ActorSystem->Register(new TClustersUpdater(this));
+        ClustersUpdaterStatus = std::make_shared<TClustersUpdater::TStatus>();
+        ActorSystem->Register(new TClustersUpdater(this, ClustersUpdaterStatus));
     }
 }
 

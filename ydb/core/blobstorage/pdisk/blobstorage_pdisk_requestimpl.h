@@ -576,6 +576,7 @@ public:
 class TChunkWritePiece : public TRequestBase, public IObjectInQueue {
 public:
     TPDisk *PDisk;
+
     TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;

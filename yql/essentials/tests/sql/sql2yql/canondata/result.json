@@ -3394,6 +3394,34 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_expr-minmax_for_complex_types_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-nth_no_optional_no_tagged]": [
+        {
+            "checksum": "36232aa724068d894eeca9410ed12929",
+            "size": 2106,
+            "uri": "https://{canondata_backend}/1784826/00cd6cd2ba7605aef48f862f0ad2c01f28cb09a0/resource.tar.gz#test_sql2yql.test_expr-nth_no_optional_no_tagged_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-nth_no_optional_no_tagged_no_cache]": [
+        {
+            "checksum": "9458795820ac9991b7a29c0b6f321332",
+            "size": 4594,
+            "uri": "https://{canondata_backend}/1880306/ceb9f028cc97a068c8b4060a3d97985d50af7310/resource.tar.gz#test_sql2yql.test_expr-nth_no_optional_no_tagged_no_cache_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-nth_no_tagged]": [
+        {
+            "checksum": "2f8a7a89dfa82ce26e4cd0be03fa57f1",
+            "size": 2139,
+            "uri": "https://{canondata_backend}/1784826/00cd6cd2ba7605aef48f862f0ad2c01f28cb09a0/resource.tar.gz#test_sql2yql.test_expr-nth_no_tagged_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-nth_no_tagged_no_cache]": [
+        {
+            "checksum": "bcc91b82a8c0d29fc1c832895d5a0be0",
+            "size": 4627,
+            "uri": "https://{canondata_backend}/1880306/ceb9f028cc97a068c8b4060a3d97985d50af7310/resource.tar.gz#test_sql2yql.test_expr-nth_no_tagged_no_cache_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-opt_list_map]": [
         {
             "checksum": "cbe8c7680e62a2d67eaa35c727e9895e",
@@ -3532,6 +3560,34 @@
             "checksum": "7837ee5f76b91332ab32381c321d878c",
             "size": 1018,
             "uri": "https://{canondata_backend}/1923547/26d32eb789592629a387bffbe3c29af93fc60786/resource.tar.gz#test_sql2yql.test_expr-tablename_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-tagged_nth]": [
+        {
+            "checksum": "5880af1da4ebf2cf9a0bf32565bbaf41",
+            "size": 2219,
+            "uri": "https://{canondata_backend}/1784826/00cd6cd2ba7605aef48f862f0ad2c01f28cb09a0/resource.tar.gz#test_sql2yql.test_expr-tagged_nth_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-tagged_nth_no_cache]": [
+        {
+            "checksum": "77bf5801970db30bf78bdae7353dc6b6",
+            "size": 4707,
+            "uri": "https://{canondata_backend}/1880306/ceb9f028cc97a068c8b4060a3d97985d50af7310/resource.tar.gz#test_sql2yql.test_expr-tagged_nth_no_cache_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-tagged_nth_no_optional]": [
+        {
+            "checksum": "d6e13d2443925261e815f63f98a1816b",
+            "size": 2186,
+            "uri": "https://{canondata_backend}/1784826/00cd6cd2ba7605aef48f862f0ad2c01f28cb09a0/resource.tar.gz#test_sql2yql.test_expr-tagged_nth_no_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-tagged_nth_no_optional_no_cache]": [
+        {
+            "checksum": "23eca92c148f9e2f55012169bff06ab9",
+            "size": 4674,
+            "uri": "https://{canondata_backend}/1880306/ceb9f028cc97a068c8b4060a3d97985d50af7310/resource.tar.gz#test_sql2yql.test_expr-tagged_nth_no_optional_no_cache_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-to_dict_from_nothing]": [
@@ -10502,6 +10558,26 @@
             "uri": "file://test_sql_format.test_expr-minmax_for_complex_types_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-nth_no_optional_no_tagged]": [
+        {
+            "uri": "file://test_sql_format.test_expr-nth_no_optional_no_tagged_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-nth_no_optional_no_tagged_no_cache]": [
+        {
+            "uri": "file://test_sql_format.test_expr-nth_no_optional_no_tagged_no_cache_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-nth_no_tagged]": [
+        {
+            "uri": "file://test_sql_format.test_expr-nth_no_tagged_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-nth_no_tagged_no_cache]": [
+        {
+            "uri": "file://test_sql_format.test_expr-nth_no_tagged_no_cache_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-opt_list_map]": [
         {
             "uri": "file://test_sql_format.test_expr-opt_list_map_/formatted.sql"
@@ -10600,6 +10676,26 @@
     "test_sql_format.test[expr-tablename]": [
         {
             "uri": "file://test_sql_format.test_expr-tablename_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-tagged_nth]": [
+        {
+            "uri": "file://test_sql_format.test_expr-tagged_nth_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-tagged_nth_no_cache]": [
+        {
+            "uri": "file://test_sql_format.test_expr-tagged_nth_no_cache_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-tagged_nth_no_optional]": [
+        {
+            "uri": "file://test_sql_format.test_expr-tagged_nth_no_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-tagged_nth_no_optional_no_cache]": [
+        {
+            "uri": "file://test_sql_format.test_expr-tagged_nth_no_optional_no_cache_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-to_dict_from_nothing]": [

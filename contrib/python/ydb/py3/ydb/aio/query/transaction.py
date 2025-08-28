@@ -11,6 +11,7 @@ from ...query.transaction import (
     BaseQueryTxContext,
     QueryTxStateEnum,
 )
+from ..._errors import stream_error_converter
 
 logger = logging.getLogger(__name__)
 
@@ -181,8 +182,8 @@ class QueryTxContext(BaseQueryTxContext):
         )
 
         self._prev_stream = AsyncResponseContextIterator(
-            stream_it,
-            lambda resp: base.wrap_execute_query_response(
+            it=stream_it,
+            wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
                 session_state=self._session_state,
@@ -190,5 +191,6 @@ class QueryTxContext(BaseQueryTxContext):
                 commit_tx=commit_tx,
                 settings=self.session._settings,
             ),
+            error_converter=stream_error_converter,
         )
         return self._prev_stream

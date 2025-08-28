@@ -53,7 +53,7 @@ public:
     TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
         AFL_VERIFY(sources.size());
         SortingSchema = sources.begin()->second.GetSchema();
-
+        Borders.reserve(sources.size() * 2 + 2);
         for (const auto& [id, specials] : sources) {
             AFL_VERIFY(specials.GetSchema()->Equals(SortingSchema))("lhs", specials.GetSchema()->ToString())("rhs", SortingSchema->ToString());
             if (specials.GetFirst() > bounds.GetFirst()) {
@@ -86,6 +86,7 @@ public:
         AFL_VERIFY(!Borders.empty());
 
         std::vector<ui64> borderOffsets;
+        borderOffsets.reserve(Borders.size());
         ui64 offset = 0;
 
         auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
@@ -102,6 +103,7 @@ public:
         }
 
         std::vector<TRowRange> segments;
+        segments.reserve(borderOffsets.size());
         for (ui64 i = 1; i < borderOffsets.size(); ++i) {
             segments.emplace_back(TRowRange(borderOffsets[i - 1], borderOffsets[i]));
         }

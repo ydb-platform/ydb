@@ -226,6 +226,10 @@ public:
     {
     }
 
+    void Reserve(const ui64 portionCount) {
+        RangeByPortion.reserve(portionCount);
+    }
+
     void AddRange(const ui64 portion, const TRowRange& range) {
         if (range.NumRows() == 0) {
             return;
@@ -248,6 +252,7 @@ std::vector<TDuplicateManager::TPortionsSlice> TDuplicateManager::FindIntervalBo
     const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
     const std::shared_ptr<TInternalFilterConstructor>& context) const {
     THashMap<ui64, NArrow::TFirstLastSpecialKeys> borders;
+    borders.reserve(dataByPortion.size());
     for (const auto& [portionId, _] : dataByPortion) {
         const auto& portion = GetPortionVerified(portionId);
         borders.emplace(
@@ -258,8 +263,9 @@ std::vector<TDuplicateManager::TPortionsSlice> TDuplicateManager::FindIntervalBo
         borders, NArrow::TFirstLastSpecialKeys(mainSource->IndexKeyStart(), mainSource->IndexKeyEnd(), mainSource->IndexKeyStart().GetSchema()));
 
     std::vector<TDuplicateManager::TPortionsSlice> slices;
+    slices.reserve(splitter.NumIntervals());
     for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-        slices.emplace_back(TPortionsSlice(splitter.GetIntervalFinish(i)));
+        slices.emplace_back(TPortionsSlice(splitter.GetIntervalFinish(i))).Reserve(dataByPortion.size());
     }
     for (const auto& [id, data] : dataByPortion) {
         auto intervals = splitter.SplitPortion(data);
@@ -286,14 +292,61 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , FiltersCache(FILTER_CACHE_SIZE)
 {
+    const auto& columnShardConfig = AppDataVerified().ColumnShardConfig;
+    UsePortionsCache = columnShardConfig.GetDeduplicationCacheEnabled();
+    MaxInFlightRequests = columnShardConfig.GetMaxDeduplicationInFlightRequests();
+}
+
+void TDuplicateManager::HandleNextRequest() {
+    if (RequestsQueue.empty()) {
+        return;
+    }
+
+    if (MaxInFlightRequests) {
+        if (CurrentInFlightRequests >= MaxInFlightRequests) {
+            return;
+        }
+    }
+
+    ++CurrentInFlightRequests;
+
+    auto constructor = RequestsQueue.front();
+    RequestsQueue.pop();
+
+    auto& request = constructor->GetRequest();
+    AFL_VERIFY(request);
+    if (UsePortionsCache) {
+        if (auto foundPortionCache = PortionsCache.find(request->Get()->GetSourceId()); foundPortionCache != PortionsCache.end()) {
+            for (auto& mapInfo : foundPortionCache->second) {
+                if (auto foundFilter = FiltersCache.Find(mapInfo); foundFilter != FiltersCache.End()) {
+                    constructor->AddFilter(mapInfo, *foundFilter);
+                }
+            }
+        }
+
+        if (constructor->IsDone()) {
+            Counters->OnFilterPortionsCacheHit();
+            return;
+        }
+
+        Counters->OnFilterPortionsCacheMiss();
+    }
+
+    NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
+        constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
+        {std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor,
+            ExpectedIntersectionCount * sizeof(TPortionInfo::TConstPtr))},
+        (ui64)TInternalFilterConstructor::EFetchingStage::INTERSECTIONS);
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
-    auto constructor = std::make_shared<TInternalFilterConstructor>(ev);
-    NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
-        constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
-        { std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor,
-            ExpectedIntersectionCount * sizeof(TPortionInfo::TConstPtr)) }, (ui64)TInternalFilterConstructor::EFetchingStage::INTERSECTIONS);
+    auto constructor = std::make_shared<TInternalFilterConstructor>(ev, [this]() {
+        --CurrentInFlightRequests;
+        HandleNextRequest();
+    });
+    RequestsQueue.push(constructor);
+
+    HandleNextRequest();
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
@@ -436,6 +489,9 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
         BuildingFilters.erase(findWaiting);
 
         FiltersCache.Insert(key, filter);
+        if (UsePortionsCache) {
+            PortionsCache[key.GetSourceId()].emplace(key);
+        }
     }
 }
 

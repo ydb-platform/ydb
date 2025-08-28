@@ -9,6 +9,8 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , IntersectingPortionsPerRequest(TBase::GetHistogram("DuplicateFiltering/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 8)))
     , FilterCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Hits"))
     , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
+    , FilterPortionsCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterPortionsCache/Hits"))
+    , FilterPortionsCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterPortionsCache/Misses"))
 {
 }
 }   // namespace NKikimr::NColumnShard

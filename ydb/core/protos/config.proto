@@ -1175,7 +1175,7 @@ message TCheckpointsConfig {
     message TLocalStorage {
         optional string TablePrefix = 1;
     }
-    
+
     optional bool Enabled = 1;
     oneof Storage {
         TExternalStorage ExternalStorage = 2;
@@ -2119,6 +2119,8 @@ message TColumnShardConfig {
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
+    optional bool DeduplicationCacheEnabled = 48 [default = true];
+    optional uint32 MaxDeduplicationInFlightRequests = 49 [default = 5];
 }
 
 message TSchemeShardConfig {

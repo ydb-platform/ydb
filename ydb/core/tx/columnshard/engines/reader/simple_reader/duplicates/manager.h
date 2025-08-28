@@ -54,6 +54,13 @@ private:
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     ui64 ExpectedIntersectionCount = 0;
 
+    ui64 MaxInFlightRequests = 0;
+    ui64 CurrentInFlightRequests = 0;
+    TQueue<std::shared_ptr<TInternalFilterConstructor>> RequestsQueue;
+
+    THashMap<ui64, THashSet<TDuplicateMapInfo>> PortionsCache;
+    bool UsePortionsCache = false;
+
 private:
     static TPortionIntervalTree MakeIntervalTree(const std::deque<NSimple::TSourceConstructor>& portions) {
         TPortionIntervalTree intervals;
@@ -92,6 +99,8 @@ private:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
+
+    void HandleNextRequest();
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);

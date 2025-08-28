@@ -215,6 +215,11 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
 }
 
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+    if (evWrite.Record.HasLocks() &&
+        evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback &&
+        evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        return EOperationBehaviour::AbortWriteLock;
+    }
     if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks()) {
         if (evWrite.Record.GetLocks().GetLocks().size() < 1) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "undefined behaviour");
@@ -238,13 +243,6 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
         if (evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
             return EOperationBehaviour::CommitWriteLock;
         }
-    }
-
-    if (!evWrite.Record.HasTxId() &&
-        evWrite.Record.HasLocks() &&
-        evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback &&
-        evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
-        return EOperationBehaviour::AbortWriteLock;
     }
 
     if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {

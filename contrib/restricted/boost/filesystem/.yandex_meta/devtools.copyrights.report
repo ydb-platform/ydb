@@ -216,21 +216,6 @@ BELONGS ya.make
     Files with this license:
         src/windows_tools.hpp [3:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 6d59e81fdd72b00433694c8efadc38af
-BELONGS ya.make
-    License text:
-        //  Copyright Beman Dawes 2002-2009
-        //  Copyright Jan Langer 2002
-        //  Copyright Dietmar Kuehl 2001
-        //  Copyright Vladimir Prus 2002
-        //  Copyright Andrey Semashev 2019, 2022
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/filesystem/directory.hpp [3:7]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 7594bc6afcdef4c27932b42df772d631
 BELONGS ya.make
     License text:
@@ -427,7 +412,7 @@ BELONGS ya.make
         //  Copyright Jan Langer 2002
         //  Copyright Dietmar Kuehl 2001
         //  Copyright Vladimir Prus 2002
-        //  Copyright Andrey Semashev 2019, 2022
+        //  Copyright Andrey Semashev 2019-2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -445,7 +430,7 @@ BELONGS ya.make
         //  Copyright Jan Langer 2002
         //  Copyright Dietmar Kuehl 2001
         //  Copyright Vladimir Prus 2002
-        //  Copyright Andrey Semashev 2019, 2022
+        //  Copyright Andrey Semashev 2019-2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -462,7 +447,7 @@ BELONGS ya.make
         //  Copyright Jan Langer 2002
         //  Copyright Dietmar Kuehl 2001
         //  Copyright Vladimir Prus 2002
-        //  Copyright Andrey Semashev 2019, 2022
+        //  Copyright Andrey Semashev 2019-2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -471,6 +456,21 @@ BELONGS ya.make
         include/boost/filesystem/directory.hpp [3:7]
         include/boost/filesystem/file_status.hpp [3:7]
         include/boost/filesystem/operations.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e6e42ce85ae6ae4da4c52a160cd6b31c
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2002-2009
+        //  Copyright Jan Langer 2002
+        //  Copyright Dietmar Kuehl 2001
+        //  Copyright Vladimir Prus 2002
+        //  Copyright Andrey Semashev 2019-2025
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/filesystem/directory.hpp [3:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eb3a0ca480ae49d67ca93db4d779aa0f
 BELONGS ya.make
@@ -492,7 +492,7 @@ BELONGS ya.make
         //  Copyright Jan Langer 2002
         //  Copyright Dietmar Kuehl 2001
         //  Copyright Vladimir Prus 2002
-        //  Copyright Andrey Semashev 2019, 2022
+        //  Copyright Andrey Semashev 2019-2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00

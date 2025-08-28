@@ -281,6 +281,12 @@ public:
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transcationId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) = 0;
+
     virtual std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,

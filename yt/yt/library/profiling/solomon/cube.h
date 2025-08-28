@@ -74,9 +74,9 @@ public:
     TCube(int windowSize, i64 nextIteration);
 
     void Add(TTagIdList tagIds);
-    void AddAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void AddAll(const TTagIdSet& tagSet);
     void Remove(TTagIdList tagIds);
-    void RemoveAll(const TTagIdList& tagIds, const TProjectionSet& projections);
+    void RemoveAll(const TTagIdSet& tagSet);
 
     void Update(TTagIdList tagIds, T value);
     void StartIteration();

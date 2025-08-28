@@ -13,10 +13,12 @@
 /// \brief Contains helper macros and implementation details of boost::typeindex::ctti_type_index.
 /// Not intended for inclusion from user's code.
 
-#include <boost/config.hpp>
+#include <boost/type_index/detail/config.hpp>
 
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <cstring>
 #include <type_traits>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once

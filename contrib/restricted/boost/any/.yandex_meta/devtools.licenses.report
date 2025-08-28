@@ -45,9 +45,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/any.hpp [363:365]
+        include/boost/any.hpp [376:378]
         include/boost/any/bad_any_cast.hpp [3:5]
         include/boost/any/basic_any.hpp [4:6]
+        include/boost/any/detail/config.hpp [3:5]
         include/boost/any/detail/placeholder.hpp [3:5]
         include/boost/any/fwd.hpp [3:5]
         include/boost/any/unique_any.hpp [3:5]

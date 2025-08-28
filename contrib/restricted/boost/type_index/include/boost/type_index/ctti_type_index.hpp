@@ -18,12 +18,19 @@
 /// It is used in situations when typeid() method is not available or 
 /// BOOST_TYPE_INDEX_FORCE_NO_RTTI_COMPATIBILITY macro is defined.
 
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
 #include <boost/type_index/type_index_facade.hpp>
 #include <boost/type_index/detail/compile_time_type_info.hpp>
 
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <cstring>
 #include <type_traits>
+
 #include <boost/container_hash/hash.hpp>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
@@ -63,6 +70,8 @@ public:
 };
 
 } // namespace detail
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 /// Helper method for getting detail::ctti_data of a template parameter T.
 template <class T>
@@ -132,6 +141,8 @@ public:
     inline static ctti_type_index type_id_runtime(const T& variable) noexcept;
 };
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 
 inline const ctti_type_index::type_info_t& ctti_type_index::type_info() const noexcept {
     return *reinterpret_cast<const detail::ctti_data*>(data_);
@@ -197,8 +208,9 @@ inline std::size_t ctti_type_index::hash_code() const noexcept {
     return boost::hash_range(raw_name(), raw_name() + get_raw_name_length());
 }
 
-
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_CTTI_TYPE_INDEX_HPP
 

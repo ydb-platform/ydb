@@ -338,18 +338,18 @@ void TYtState::LeaveEvaluation(ui64 id) {
     }
 }
 
-std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
+std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
     const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper)
 {
-    auto ytState = MakeIntrusive<TYtState>(typeCtx.Get());
+    auto ytState = std::make_shared<TYtState>(typeCtx.Get());
     ytState->SessionId = sessionId;
     ytState->Gateway = gateway;
-    ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
+    ytState->DqIntegration_ = CreateYtDqIntegration(ytState);
     ytState->OptimizerFactory_ = optFactory;
     ytState->DqHelper = helper;
-    ytState->YtflowIntegration_ = CreateYtYtflowIntegration(ytState.Get());
-    ytState->YtflowOptimization_ = CreateYtYtflowOptimization(ytState.Get());
+    ytState->YtflowIntegration_ = CreateYtYtflowIntegration(ytState);
+    ytState->YtflowOptimization_ = CreateYtYtflowOptimization(ytState);
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;
@@ -372,7 +372,14 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
         ytState->Configuration->Init(*ytGatewayConfig, filter, *typeCtx);
     }
 
-    TStatWriter statWriter = [ytState](ui32 publicId, const TVector<TOperationStatistics::TEntry>& stat) {
+    TYtState::TWeakPtr weakState = ytState;
+
+    TStatWriter statWriter = [weakState](ui32 publicId, const TVector<TOperationStatistics::TEntry>& stat) {
+        auto ytState = weakState.lock();
+        if (!ytState) {
+            return;
+        }
+
         with_lock(ytState->StatisticsMutex) {
             for (size_t i = 0; i < stat.size(); ++i) {
                 ytState->Statistics[publicId].Entries.push_back(stat[i]);
@@ -411,7 +418,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         info.SupportsHidden = true;
 
         const TYtGatewayConfig* ytGatewayConfig = gatewaysConfig ? &gatewaysConfig->GetYt() : nullptr;
-        TIntrusivePtr<TYtState> ytState;
+        TYtState::TPtr ytState;
         TStatWriter statWriter;
         std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper);
         ytState->PlanLimits = planLimits;

@@ -187,6 +187,8 @@ private:
     TGauge TagCount_;
 
     friend class TRemoteRegistry;
+
+    TTagIdSet EncodeTagSet(const TTagSet& tagSet);
 };
 
 DEFINE_REFCOUNTED_TYPE(TSolomonRegistry)

@@ -173,7 +173,7 @@ class Slice:
             for tenant in domain.tenants:
                 opts = []
                 for storage in tenant.storage_units:
-                    opts.append(f"{{}}:{{}}".format(storage.kind, storage.count))
+                    opts.append(':'.join([storage.kind, storage.count]))
                 if tenant.shared_database_path:
                     if serverless:
                         opts.append("--serverless")
@@ -248,7 +248,7 @@ class Slice:
         self._start_dynamic()
 
         if 'kikimr' in self.components:
-            self.__create_databases(serverless=True) # create serverless databases if any
+            self.__create_databases(serverless=True)  # create serverless databases if any
 
     def _get_available_slots(self):
         if 'dynamic_slots' not in self.components:

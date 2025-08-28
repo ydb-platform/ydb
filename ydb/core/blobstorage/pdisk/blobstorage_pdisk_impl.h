@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_chunk_write_queue.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
@@ -84,7 +85,7 @@ public:
     TVector<TRequestBase*> JointLogReads;
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
     THolder<IThreadPool> ChunkEncoder;
-    TLockFreeQueue<TRequestBase*> JointChunkWrites;
+    TChunkWritePieceQueue JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;

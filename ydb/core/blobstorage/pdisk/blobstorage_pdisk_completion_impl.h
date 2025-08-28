@@ -76,12 +76,12 @@ class TCompletionChunkWrite : public TCompletionAction {
     std::function<void()> OnDestroy;
     TReqId ReqId;
     NWilson::TSpan Span;
-    std::atomic<ui8> PartsStarted;
-    std::atomic<ui8> PartsRemoved;
-    std::atomic<ui8> PartsWritten;
+    std::atomic<ui32> PartsStarted;
+    std::atomic<ui32> PartsRemoved;
+    std::atomic<ui32> PartsWritten;
 public:
     bool IsReplied = false;
-    ui8 Pieces;
+    ui32 Pieces;
     TEvChunkWrite::TPartsPtr Parts;
     std::optional<TAlignedData> Buffer;
     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
@@ -190,7 +190,7 @@ public:
     }
 
     void RemovePart(TActorSystem *actorSystem) {
-        int old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
+        ui32 old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
         if (old + 1 == Pieces) {
             if (PartsWritten.load(std::memory_order_seq_cst) == Pieces) {
                 Exec(actorSystem);

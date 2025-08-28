@@ -110,7 +110,7 @@ namespace NKikimr::NStorage {
         void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
-        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesStatus);
         bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

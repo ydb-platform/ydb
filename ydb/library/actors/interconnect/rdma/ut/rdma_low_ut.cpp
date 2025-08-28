@@ -84,7 +84,7 @@ TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
             virtual void Process(void*) override {
                 // Delay to get a chanse to triger memset just during the RDMA read.
                 Sleep(TDuration::MicroSeconds(Attempt / 128));
-                Qp->ToResetState();
+                Qp->ToErrorState();
                 memset(Mem, 'Q', Sz);
                 Promise.SetValue();
             }

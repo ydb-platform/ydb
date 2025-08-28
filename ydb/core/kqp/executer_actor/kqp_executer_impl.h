@@ -1555,7 +1555,7 @@ protected:
         bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
-            auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = PartitionPruner.MakeVirtualTablePartition(source, stageInfo);
 
             YQL_ENSURE(Stats);
 

@@ -5,6 +5,7 @@
 #include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
 namespace NKikimr::NSchemeShard {
@@ -223,6 +224,9 @@ private:
         const auto& index = settings.index();
 
         switch (index.type_case()) {
+        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+            explain = "Invalid or unset index type";
+            return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
@@ -232,15 +236,18 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
-                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
-                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
-                break;
-            } else {
-                explain = "building global unique index is disabled";
+            if (!Self->EnableAddUniqueIndex) {
+                explain = "Unique index support is disabled";
                 return false;
             }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            if (!Self->EnableVectorIndex) {
+                explain = "Vector index support is disabled";
+                return false;
+            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
@@ -258,12 +265,17 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
-            explain = "unsupported index type to build";
-            return false;
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+            break;
         }
-        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
-            explain = "invalid or unset index type";
-            return false;
         };
 
         buildInfo.IndexName = index.name();

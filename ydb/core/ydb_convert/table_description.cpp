@@ -1083,7 +1083,16 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         }
-        default:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
         };
 
@@ -1136,7 +1145,6 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
-        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -1154,17 +1162,22 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
-
-        default:
-            // pass through
-            // TODO: maybe return BAD_REQUEST?
+            
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();
             break;
-        }
 
-        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            error = "Invalid index type";
             return false;
         }
-        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
+
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptions;
+        if (!FillIndexTablePartitioning(indexImplTableDescriptions, index, status, error)) {
+            return false;
+        }
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptions.begin(), indexImplTableDescriptions.end()};
     }
 
     return true;

@@ -38,8 +38,10 @@ struct TIndexColumns {
 
 inline constexpr const char* ImplTable = "indexImplTable";
 
-bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index, TString& explain);
-TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index);
+bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
+TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
+
+bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
 bool IsImplTable(std::string_view tableName);
@@ -48,6 +50,9 @@ bool IsBuildImplTable(std::string_view tableName);
 using TClusterId = ui64;
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
+
+// TODO: support utf-8 in fulltext index
+inline constexpr const char* TokenTypeName = "String";
 
 inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 

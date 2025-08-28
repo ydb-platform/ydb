@@ -8,6 +8,8 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
+#include <util/generic/yexception.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -2442,9 +2444,29 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         , Type(type)
         , State(state)
     {
-        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            Y_ENSURE(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
-                               .ParseFromString(description));
+        switch (type) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                Y_ENSURE(false, "Invalid index type");
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                Y_ASSERT(description.empty());
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
         }
     }
 
@@ -2493,8 +2515,21 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
-        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        switch (config.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                errMsg += "Invalid index type";
+                return nullptr;
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+                break;
         }
 
         return result;
@@ -2509,7 +2544,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     TTableIndexInfo::TPtr AlterData = nullptr;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {
@@ -3108,6 +3145,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildPrefixedVectorIndex = 12,
         BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
+        BuildFulltext = 30,
     };
 
     TActorId CreateSender;
@@ -3136,7 +3174,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
@@ -3586,11 +3626,17 @@ public:
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
-                } break;
+                    break;
+                }
+                case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
+                    auto& desc = *creationConfig.MutableFulltextIndexDescription();
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
-            }
+                }
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,

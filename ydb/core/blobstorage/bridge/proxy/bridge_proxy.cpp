@@ -706,6 +706,10 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
 
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
+                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
+                (GroupPileInfo, groupPileInfo));
+
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
             const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, BridgeInfo,

@@ -12,6 +12,8 @@ items:
     mode: link
 - name: Топология кластера
   href: topology.md
+- name: Основные технологии
+  href: cluster_structure.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы

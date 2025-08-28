@@ -237,9 +237,9 @@ jobs:
         echo         else: >> patch_script.py
         echo             print(f"DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
         echo         print(f"DEBUG: Fixed ml args = {args}", file=sys.stderr) >> patch_script.py
-        echo     if len(args) ^>= 1 and args[0] == 'link' and original_had_none: >> patch_script.py
-        echo         args.insert(1, 'C:/Program Files/LLVM/bin/lld-link.exe') >> patch_script.py
-        echo         print(f"DEBUG: Using LLVM lld-link.exe instead of system link", file=sys.stderr) >> patch_script.py
+        echo     if len(args) ^>= 2 and args[0] == 'link' and args[1].endswith('/usr/bin/link.exe'): >> patch_script.py
+        echo         args[1] = 'C:/Program Files/LLVM/bin/lld-link.exe' >> patch_script.py
+        echo         print(f"DEBUG: Replaced Git Bash link with LLVM lld-link.exe", file=sys.stderr) >> patch_script.py
         echo         print(f"DEBUG: Fixed link args = {args}", file=sys.stderr)''' >> patch_script.py
         echo ) >> patch_script.py
         echo. >> patch_script.py

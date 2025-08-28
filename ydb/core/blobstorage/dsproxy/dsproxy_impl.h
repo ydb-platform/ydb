@@ -99,6 +99,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount];
     static constexpr ui64 PutBatchecBucketCount = PutHandleClassCount * PutTacticCount;
     TStackVec<TPutBatchedBucket, PutBatchecBucketCount> PutBatchedBucketQueue;
+    THashSet<TLogoBlobID> BatchedPutIds;
 
     TEvStopBatchingGetRequests::TPtr StopGetBatchingEvent;
     ui64 BatchedGetRequestCount = 0;

@@ -158,6 +158,11 @@ public:
                 return makeReply(explain);
             }
 
+            if (tableInfo->IsTTLEnabled() && !DoesIndexSupportTTL(buildInfo->IndexType)) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+                    TStringBuilder() << "index " << buildInfo->IndexType << " doesn't support TTL");
+            }
+
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
             buildInfo->SerializeToProto(Self, &tmpConfig);
             const auto indexDesc = tmpConfig.GetIndex();

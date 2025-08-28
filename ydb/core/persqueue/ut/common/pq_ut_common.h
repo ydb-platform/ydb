@@ -349,6 +349,12 @@ void PQGetPartInfo(
     ui64 endOffset,
     TTestContext& tc);
 
+void PQGetPartInfo(
+    std::function<bool(ui64)> firstOffsetMatcher,
+    ui64 endOffset,
+    TTestContext& tc
+);
+
 void ReserveBytes(
     TTestContext& tc,
     const ui32 partition,
@@ -495,10 +501,10 @@ std::pair<TString, TActorId> CmdSetOwner(
 
 TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc);
 
-void CmdGetOffset(
+i64 CmdGetOffset(
     const ui32 partition,
     const TString& user,
-    i64 expectedOffset,
+    const TMaybe<i64>& expectedOffset,
     TTestContext& tc,
     i64 ctime = -1,
     ui64 writeTime = 0);

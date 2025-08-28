@@ -189,7 +189,7 @@ public:
         TString Status;
         TInstant StatusChangeTimestamp;
         ui64 EnforcedDynamicSlotSize = 0;
-        ui32 ExpectedSlotCount = 0;
+        ui32 SlotCount = 0;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -213,16 +213,15 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (EnforcedDynamicSlotSize) {
-                return EnforcedDynamicSlotSize;
+            if (SlotCount) {
+                return TotalSize / SlotCount;
+            } else {
+                // temporary solution because EnforcedDynamicSlotSize is not reliable
+                return TotalSize / 16;
             }
-            if (ExpectedSlotCount) {
-                return TotalSize / ExpectedSlotCount;
-            }
-            if (NumActiveSlots) {
-                return TotalSize / NumActiveSlots;
-            }
-            return TotalSize;
+            //if (EnforcedDynamicSlotSize) {
+            //    return EnforcedDynamicSlotSize;
+            //}
         }
 
         float GetDiskSpaceUsage() const {
@@ -310,7 +309,8 @@ public:
         TString GetUsageForGroup() const {
             //return TStringBuilder() << std::ceil(std::clamp<float>(Usage, 0, 100) / 5) * 5 << '%';
             // we want 0%-95% groups instead of 5%-100% groups
-            return TStringBuilder() << std::floor(std::clamp<float>(Usage, 0, 100) / 5) * 5 << '%';
+            // we allow usage > 100%
+            return TStringBuilder() << std::floor(std::max<float>(Usage, 0) / 5) * 5 << '%';
         }
 
         TString GetDiskUsageForGroup() const {
@@ -354,8 +354,6 @@ public:
 
         void CalcState() {
             MissingDisks = 0;
-            ui64 allocated = 0;
-            ui64 limit = 0;
             ui32 startingDisks = 0;
             ui32 replicatingDisks = 0;
             static_assert(sizeof(TVDiskID::FailDomain) == 1, "expecting byte");
@@ -380,9 +378,6 @@ public:
                 if (!vdisk.Present) { // no data about disk
                     ++MissingDisks;
                 }
-                allocated += vdisk.AllocatedSize;
-                limit += vdisk.AllocatedSize + vdisk.AvailableSize;
-                DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
             }
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
@@ -460,6 +455,30 @@ public:
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
                 }
             }
+        }
+
+        void CalcAvailableAndDiskSpace(const std::unordered_map<TPDiskId, TPDisk>& pDisks) {
+            ui64 allocated = 0;
+            ui64 available = 0;
+            ui64 limit = 0;
+            DiskSpace = NKikimrViewer::EFlag::Grey;
+            DiskSpaceUsage = 0;
+            for (TVDisk& vdisk : VDisks) {
+                auto itPDisk = pDisks.find(vdisk.VSlotId);
+                if (itPDisk != pDisks.end()) {
+                    DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
+                    DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize();
+                    ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
+                    if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
+                        vdisk.AvailableSize = slotAvailable;
+                    }
+                    limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
+                    available += vdisk.AvailableSize;
+                }
+                allocated += vdisk.AllocatedSize;
+            }
+            Available = available;
             Used = allocated;
             Limit = limit;
             Usage = Limit ? 100.0 * Used / Limit : 0;
@@ -472,21 +491,6 @@ public:
             } else {
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Green);
             }
-        }
-
-        void CalcAvailableAndDiskSpace(const std::unordered_map<TPDiskId, TPDisk>& pDisks) {
-            ui64 available = 0;
-            DiskSpace = NKikimrViewer::EFlag::Grey;
-            DiskSpaceUsage = 0;
-            for (const TVDisk& vdisk : VDisks) {
-                available += vdisk.AvailableSize;
-                auto itPDisk = pDisks.find(vdisk.VSlotId);
-                if (itPDisk != pDisks.end()) {
-                    DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
-                    DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
-                }
-            }
-            Available = available;
         }
 
         void CalcReadWrite() {
@@ -648,11 +652,11 @@ public:
                                                     .set(+EGroupFields::VDisk);
     const TFieldsType FieldsBsPDisks = TFieldsType().set(+EGroupFields::PDisk);
     const TFieldsType FieldsGroupState = TFieldsType().set(+EGroupFields::Used)
-                                                      .set(+EGroupFields::Limit)
-                                                      .set(+EGroupFields::Usage)
                                                       .set(+EGroupFields::MissingDisks)
                                                       .set(+EGroupFields::State);
     const TFieldsType FieldsGroupAvailableAndDiskSpace = TFieldsType().set(+EGroupFields::Available)
+                                                                      .set(+EGroupFields::Limit)
+                                                                      .set(+EGroupFields::Usage)
                                                                       .set(+EGroupFields::DiskSpaceUsage);
     const TFieldsType FieldsHive = TFieldsType().set(+EGroupFields::AllocationUnits);
     const TFieldsType FieldsWbGroups = TFieldsType().set(+EGroupFields::GroupId)
@@ -668,14 +672,16 @@ public:
 
     const std::unordered_map<EGroupFields, TFieldsType> DependentFields = {
         { EGroupFields::DiskSpaceUsage, TFieldsType().set(+EGroupFields::PDisk)
-                                                      .set(+EGroupFields::VDisk) },
+                                                     .set(+EGroupFields::VDisk) },
         { EGroupFields::Available, TFieldsType().set(+EGroupFields::PDisk)
                                                 .set(+EGroupFields::VDisk) },
         { EGroupFields::Read, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::Write, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::Used, TFieldsType().set(+EGroupFields::VDisk) },
-        { EGroupFields::Limit, TFieldsType().set(+EGroupFields::VDisk) },
-        { EGroupFields::Usage, TFieldsType().set(+EGroupFields::VDisk) },
+        { EGroupFields::Limit, TFieldsType().set(+EGroupFields::PDisk)
+                                            .set(+EGroupFields::VDisk) },
+        { EGroupFields::Usage, TFieldsType().set(+EGroupFields::PDisk)
+                                            .set(+EGroupFields::VDisk) },
         { EGroupFields::MissingDisks, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::State, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::Encryption, TFieldsType().set(+EGroupFields::VDisk) },
@@ -1294,7 +1300,9 @@ public:
                                 static_cast<ui8>(info.GetVDisk()));
         vDisk.VSlotId = vSlotId;
         vDisk.AllocatedSize = info.GetAllocatedSize();
-        vDisk.AvailableSize = info.GetAvailableSize();
+        if (vDisk.AvailableSize == 0) {
+            vDisk.AvailableSize = info.GetAvailableSize();
+        }
         //vDisk.Kind = info.GetKind();
         vDisk.Status = info.GetStatusV2();
         NKikimrBlobStorage::EVDiskStatus vDiskStatus;
@@ -1464,7 +1472,7 @@ public:
                     pDisk.Status = info.GetStatusV2();
                     pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
                     pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
-                    pDisk.ExpectedSlotCount = info.GetExpectedSlotCount();
+                    pDisk.SlotCount = info.GetExpectedSlotCount();
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -1477,21 +1485,17 @@ public:
             GetPDisksResponseProcessed = true;;
         }
         if (FieldsAvailable.test(+EGroupFields::VDisk)) {
-            if (FieldsNeeded(FieldsGroupState)) {
-                for (TGroup* group : GroupView) {
-                    group->CalcState();
-                }
-                FieldsAvailable |= FieldsGroupState;
-                ApplyEverything();
+            for (TGroup* group : GroupView) {
+                group->CalcState();
             }
+            FieldsAvailable |= FieldsGroupState;
+            ApplyEverything();
             if (FieldsAvailable.test(+EGroupFields::PDisk)) {
-                if (FieldsNeeded(FieldsGroupAvailableAndDiskSpace)) {
-                    for (TGroup* group : GroupView) {
-                        group->CalcAvailableAndDiskSpace(PDisks);
-                    }
-                    FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
-                    ApplyEverything();
+                for (TGroup* group : GroupView) {
+                    group->CalcAvailableAndDiskSpace(PDisks);
                 }
+                FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
+                ApplyEverything();
             }
         }
         if (AreBSControllerRequestsDone()) {
@@ -1752,7 +1756,9 @@ public:
         vDisk.VDiskId = VDiskIDFromVDiskID(info.GetVDiskId());
         vDisk.VSlotId = vSlotId;
         vDisk.AllocatedSize = info.GetAllocatedSize();
-        vDisk.AvailableSize = info.GetAvailableSize();
+        if (vDisk.AvailableSize == 0) {
+            vDisk.AvailableSize = info.GetAvailableSize();
+        }
         vDisk.Read = info.GetReadThroughput();
         vDisk.Write = info.GetWriteThroughput();
         switch (info.GetVDiskState()) {
@@ -1828,8 +1834,8 @@ public:
                     if (pDisk.EnforcedDynamicSlotSize < info.GetEnforcedDynamicSlotSize()) {
                         pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
                     }
-                    if (pDisk.ExpectedSlotCount < info.GetExpectedSlotCount()) {
-                        pDisk.ExpectedSlotCount = info.GetExpectedSlotCount();
+                    if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
+                        pDisk.SlotCount = info.GetExpectedSlotCount();
                     }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();
@@ -1854,20 +1860,16 @@ public:
             group->CalcReadWrite();
         }
         ApplyEverything();
-        if (FieldsNeeded(FieldsGroupState)) {
-            for (TGroup* group : GroupView) {
-                group->CalcState();
-            }
-            FieldsAvailable |= FieldsGroupState;
-            ApplyEverything();
+        for (TGroup* group : GroupView) {
+            group->CalcState();
         }
-        if (FieldsNeeded(FieldsGroupAvailableAndDiskSpace)) {
-            for (TGroup* group : GroupView) {
-                group->CalcAvailableAndDiskSpace(PDisks);
-            }
-            FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
-            ApplyEverything();
+        FieldsAvailable |= FieldsGroupState;
+        ApplyEverything();
+        for (TGroup* group : GroupView) {
+            group->CalcAvailableAndDiskSpace(PDisks);
         }
+        FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
+        ApplyEverything();
     }
 
     void BSGroupRequestDone() {
@@ -2080,6 +2082,7 @@ public:
                 jsonPDisk.SetStatus(pdisk.Status);
                 jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
                 jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
+                jsonPDisk.SetSlotCount(pdisk.SlotCount);
                 if (pdisk.DiskSpace != NKikimrViewer::Grey) {
                     jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
                 }

@@ -524,12 +524,17 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TActorCoordinator::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-    NodesCount = ev->Get()->Nodes.size();
     LOG_ROW_DISPATCHER_DEBUG("Updated node info, node count: " <<  ev->Get()->Nodes.size());
+    NodesCount = ev->Get()->Nodes.size();
+    if (!NodesCount) {
+        ScheduleNodeInfoRequest();
+        return;
+    }
     UpdatePendingReadActors();
 }
 
 void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
+    LOG_ROW_DISPATCHER_INFO("Send TEvInterconnect::TEvListNodes to " << NameserviceId);
     Send(NameserviceId, new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
 }
 

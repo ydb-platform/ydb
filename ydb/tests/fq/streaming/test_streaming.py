@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import pytest
 
 from ydb.tests.fq.streaming.base import StreamingImportTestBase
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -35,8 +36,8 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
-    def test_read_topic_shared_reading(self):
-        self.init_topics("test_read_topic_shared_reading", create_output=False)
+    def test_read_topic_shared_reading_limit(self):
+        self.init_topics("test_read_topic_shared_reading", create_output=False, partitions_count=10)
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
@@ -55,10 +56,39 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
 
         future1 = self.ydb_client.query_async(sql)
         future2 = self.ydb_client.query_async(sql)
-        time.sleep(1)
+        time.sleep(3)
         data = ['{"time": "lunch time"}']
         self.write_stream(data)
         result_sets1 = future1.result()
         result_sets2 = future2.result()
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.skip(reason="How to cancel queries?")
+    def test_read_topic_shared_reading_insert_to_topic(self):
+        sourceName = "source3"
+        self.init_topics(sourceName, partitions_count=10)
+        self.ydb_client.query(f"""
+            CREATE EXTERNAL DATA SOURCE `{sourceName}` WITH (
+                SOURCE_TYPE="Ydb",
+                LOCATION="{os.getenv("YDB_ENDPOINT")}",
+                DATABASE_NAME="{os.getenv("YDB_DATABASE")}",
+                SHARED_READING="TRUE",
+                AUTH_METHOD="NONE");""")
+
+        sql = f"""
+            $in = SELECT time FROM {sourceName}.`{self.input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+
+            INSERT INTO {sourceName}.`{self.output_topic}` SELECT time FROM $in;"""
+
+        self.ydb_client.query_async(sql)
+        self.ydb_client.query_async(sql)
+        time.sleep(3)
+        data = ['{"time": "lunch time"}']
+        expected_data = ['lunch time', 'lunch time']
+        self.write_stream(data)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data

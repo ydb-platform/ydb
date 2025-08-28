@@ -1,8 +1,6 @@
 PY3TEST()
 
-ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(
     test_streaming.py
@@ -24,9 +22,9 @@ PEERDIR(
     ydb/tests/tools/datastreams_helpers
 )
 
-TIMEOUT(60)
 DEPENDS(
     ydb/apps/ydb
+    ydb/tests/tools/pq_read
 )
 
 END()

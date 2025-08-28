@@ -779,12 +779,15 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
-    ui32 partitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
-    ui64 currentPartition = ReadParams.front().GetPartitioningParams().GetEachTopicPartitionGroupId();
-    do {
-        res.emplace_back(currentPartition); // 0-based in topic API
-        currentPartition += ReadParams.front().GetPartitioningParams().GetDqPartitionsCount();
-    } while (currentPartition < partitionsCount);
+
+    for (const auto& readParams : ReadParams) {
+        ui32 partitionsCount = readParams.GetPartitioningParams().GetTopicPartitionsCount();
+        ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+        do {
+            res.emplace_back(currentPartition); // 0-based in topic API
+            currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
+        } while (currentPartition < partitionsCount);
+    }
     return res;
 }
 
@@ -1410,10 +1413,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     NPq::NProto::TDqPqTopicSource sourceParams = SourceParams;
     sourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
     sourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
-    TVector<NPq::NProto::TDqReadTaskParams> readParams;
-    NPq::NProto::TDqReadTaskParams param = ReadParams.front();
-    param.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
-    readParams.emplace_back(param);
+    TVector<NPq::NProto::TDqReadTaskParams> readParams = ReadParams;
     auto actor = new TDqPqRdReadActor(
         InputIndex,
         IngressStats.Level,

@@ -3,11 +3,33 @@ import logging
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.olap.common.ydb_client import YdbClient
 
+import ydb
 import yatest.common
 
 logger = logging.getLogger(__name__)
+
+
+class YdbClient:
+    def __init__(self, endpoint: str, database: str):
+        self.endpoint = endpoint
+        self.database = database
+
+        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
+        self.session_pool = ydb.QuerySessionPool(self.driver)
+
+    def stop(self):
+        self.session_pool.stop()
+        self.driver.stop()
+
+    def wait_connection(self, timeout=5):
+        self.driver.wait(timeout, fail_fast=True)
+
+    def query(self, statement):
+        return self.session_pool.execute_with_retries(statement)
+
+    def query_async(self, statement):
+        return self.session_pool.execute_with_retries_async(statement)
 
 
 class StreamingImportTestBase(object):
@@ -61,7 +83,6 @@ class StreamingImportTestBase(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(
             database=f"/{config.domain_name}",
-            endpoint=f"grpc://{node.host}:{node.port}",
-            ydb_cli_path=yatest.common.build_path(os.environ.get("YDB_CLI_BINARY"))
+            endpoint=f"grpc://{node.host}:{node.port}"
         )
         cls.ydb_client.wait_connection()

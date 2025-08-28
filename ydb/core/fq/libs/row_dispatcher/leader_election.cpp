@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
 namespace NFq {
@@ -101,12 +102,12 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     NYdb::TDriver Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;
+    const TString Tenant;
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
     TActorId CoordinatorId;
     TString LogPrefix;
-    const TString Tenant;
     EState State = EState::Init;
     bool CoordinationNodeCreated = false;
     bool SemaphoreCreated = false;
@@ -184,10 +185,10 @@ TLeaderElection::TLeaderElection(
     , Driver(driver)
     , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
-    , CoordinationNodePath(JoinPath(TablePathPrefix, tenant))
+    , Tenant(JoinSeq("_", NKikimr::SplitPath(tenant)))
+    , CoordinationNodePath(JoinPath(TablePathPrefix, Tenant))
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
-    , Tenant(tenant)
     , Metrics(counters) {
 }
 
@@ -223,7 +224,8 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString() << ", local mode " << Config.GetLocalMode());
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
+         << ", tenant " << Tenant << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;

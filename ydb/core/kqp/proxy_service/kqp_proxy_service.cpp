@@ -330,7 +330,7 @@ public:
                 QueryServiceConfig.GetSharedReading(),
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 FederatedQuerySetup->CredentialsFactory,
-                "tenant",
+                AppData()->TenantName,
                 Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
                 FederatedQuerySetup->PqGateway,
                 *FederatedQuerySetup->Driver,

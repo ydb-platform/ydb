@@ -539,6 +539,9 @@ void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
 }
 
 bool TActorCoordinator::IsReady() const {
+    if (Config.GetLocalMode()) {
+        return true;
+    }
     if (!NodesCount) {
         return false;
     }

@@ -520,6 +520,7 @@ TRowDispatcher::TRowDispatcher(
     , Driver(driver)
     , Monitoring(monitoring)
 {
+    Y_ENSURE(!Tenant.empty());
 }
 
 void TRowDispatcher::Bootstrap() {

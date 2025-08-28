@@ -66,6 +66,9 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
+ydb/core/viewer/tests test.py.test_topic_data_cdc
+ydb/core/viewer/tests test.py.test_viewer_query_long
+ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
 ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
@@ -187,6 +190,7 @@ ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario sole chunk chunk
+ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/ttl_tiering data_correctness.py.TestDataCorrectness.test

@@ -212,5 +212,5 @@ message TFeatureFlags {
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
     optional bool EnableCompactionOverloadDetection = 197 [default = false];
-    optional bool DisableColumnShardBulkUpsertRequireAllColumns = 198 [default = false];
+    reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
 }

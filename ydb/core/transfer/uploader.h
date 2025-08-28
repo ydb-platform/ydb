@@ -59,8 +59,9 @@ private:
         }
 
         auto& tablePath = it->second.first;
+        const auto status = ev->Get()->Status;
 
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+        if (status == Ydb::StatusIds::SUCCESS) {
             Data.erase(tablePath);
             if (Data.empty()) {
                 return ReplyOkAndDie();
@@ -70,11 +71,17 @@ private:
             return;
         }
 
-        const auto schemeError = ev->Get()->Status == Ydb::StatusIds::SCHEME_ERROR;
+        const auto schemeError = status == Ydb::StatusIds::SCHEME_ERROR
+            || status == Ydb::StatusIds::BAD_REQUEST
+            || status == Ydb::StatusIds::UNAUTHORIZED;
 
         auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
+            LOG_D("Schedule retry: table=" << tablePath
+                << ", iteration=" << retry.Backoff.Iteration
+                << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
+
             TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath));
             if (schemeError) {
                 ++retry.SchemeCount;
@@ -85,7 +92,7 @@ private:
             return;
         }
 
-        ReplyErrorAndDie(std::move(ev->Get()->Issues));
+        ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
     }
 
     void Handle(NTransferPrivate::TEvRetryTable::TPtr& ev) {
@@ -125,11 +132,13 @@ private:
     void ReplyErrorAndDie(const TString& error) {
         NYql::TIssues issues;
         issues.AddIssue(error);
-        ReplyErrorAndDie(std::move(issues));
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
     }
 
-    void ReplyErrorAndDie(NYql::TIssues&& issues) {
-        TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues)));
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        LOG_E("Upload error: error=" << status << " " << issues.ToOneLineString());
+
+        TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(status, std::move(issues)));
         TThis::PassAway();
     }
 
@@ -144,7 +153,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff;
+        TBackoff Backoff = TBackoff(Max<size_t>());
         size_t SchemeCount = 0;
     };
     std::unordered_map<TString, Retry> Retries;

@@ -43,6 +43,8 @@ namespace NActors {
         ui64 FileRss;
         ui64 AnonRss;
         ui64 CGroupMemLim = 0;
+        ui64 MemTotal;
+        ui64 MemAvailable;
 
         TDuration Uptime;
         TDuration SystemUptime;

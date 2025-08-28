@@ -5,14 +5,14 @@ import os
 import pytest
 import time
 
-from contrib.ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from contrib.ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
-from contrib.ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from contrib.ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
-from contrib.ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
-from contrib.ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
+from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
+from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
+from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 
-import contrib.ydb.public.api.protos.draft.fq_pb2 as fq
+import ydb.public.api.protos.draft.fq_pb2 as fq
 
 
 YDS_CONNECTION = "yds"

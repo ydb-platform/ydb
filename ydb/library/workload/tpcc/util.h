@@ -85,4 +85,8 @@ inline void RequestStop() {
     GetGlobalInterruptSource().request_stop();
 }
 
+//-----------------------------------------------------------------------------
+
+size_t NumberOfMyCpus();
+
 } // namespace NYdb::NTPCC

@@ -34,6 +34,54 @@ To connect to {{ ydb-short-name }} from Apache Superset **version 5.0.0 and high
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 
+1. Indeed, to provide additional security, you can specify credentials parameters in the `Secure Extra` field at `Advanced / Security` tab.
+
+    Define the parameters as follows:
+
+    {% list tabs group=auth-type %}
+
+    - Password {#static-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "username": "...",
+                "password": "..."
+            }
+        }
+        ```
+
+    - Access Token {#access-token-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "token": "...",
+            }
+        }
+        ```
+
+
+
+    - Service Account {#service-account-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "service_account_json": {
+                    "id": "...",
+                    "service_account_id": "...",
+                    "created_at": "...",
+                    "key_algorithm": "...",
+                    "public_key": "...",
+                    "private_key": "..."
+                }
+            }
+        }
+        ```
+
+    {% endlist %}
+
 1. Click **CONNECT**.
 
 1. To save the database connection, click **FINISH**.

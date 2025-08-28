@@ -34,6 +34,54 @@
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 
+1. Опцонально, с помощью поля `Secure Extra` во вкладке `Advanced / Security` возможно указать параметры аутентификации.
+
+    Определите параметры следующим образом:
+
+    {% list tabs group=auth-type %}
+
+    - Пароль {#static-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "username": "...",
+                "password": "..."
+            }
+        }
+        ```
+
+    - Токен {#access-token-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "token": "...",
+            }
+        }
+        ```
+
+
+
+    - Сервисный аккаунт {#service-account-credentials}
+
+        ```json
+        {
+            "credentials": {
+                "service_account_json": {
+                    "id": "...",
+                    "service_account_id": "...",
+                    "created_at": "...",
+                    "key_algorithm": "...",
+                    "public_key": "...",
+                    "private_key": "..."
+                }
+            }
+        }
+        ```
+
+    {% endlist %}
+
 1. Нажмите кнопку **CONNECT**.
 1. Нажмите кнопку **FINISH**, чтобы сохранить подключение.
 

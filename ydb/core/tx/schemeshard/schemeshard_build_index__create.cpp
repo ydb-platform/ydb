@@ -263,6 +263,10 @@ private:
             }
             break;
         }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
+            explain = "Fulltext index support is disabled";
+            return false;
+        }
         };
 
         buildInfo.IndexName = index.name();

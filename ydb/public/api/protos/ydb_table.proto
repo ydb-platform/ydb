@@ -208,12 +208,12 @@ message FulltextIndexSettings {
     // Minimum length of n-grams to generate (inclusive)
     // Must be used with use_filter_ngram or use_filter_edge_ngram
     // Default value is 3
-    uint32 filter_ngram_min_length = 122;
+    int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
 
     // Maximum length of n-grams to generate (inclusive)
     // Must be used with use_filter_ngram or use_filter_edge_ngram
     // Default value is 4
-    uint32 filter_ngram_max_length = 123;
+    int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
 
     // Whether to filter tokens by their length
     // Must be used with filter_length_min or filter_length_max
@@ -224,11 +224,11 @@ message FulltextIndexSettings {
 
     // Minimum token length to keep (inclusive)
     // Must be used with use_filter_length
-    uint32 filter_length_min = 131;
+    int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
 
     // Maximum token length to keep (inclusive)
     // Must be used with use_filter_length
-    uint32 filter_length_max = 132;
+    int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
 }
 
 message GlobalFulltextIndex {

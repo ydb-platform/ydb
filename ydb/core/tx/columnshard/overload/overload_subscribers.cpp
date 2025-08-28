@@ -161,4 +161,13 @@ void TOverloadSubscribers::RemoveOverloadSubscriber(TSeqNo seqNo, const TActorId
     }
 }
 
+ bool TOverloadSubscribers::IsEmpty() const {
+    for (int i = 0; i < RejectReasonCount; ++i) {
+        if (OverloadSubscribersByReason[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+ }
+
 } // namespace NKikimr::NColumnShard::NOverload

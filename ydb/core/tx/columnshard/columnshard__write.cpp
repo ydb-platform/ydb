@@ -497,6 +497,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
 
         if (!outOfSpace && record.HasOverloadSubscribe()) {
+            if (OverloadSubscribers.IsEmpty()) {
+                ctx.Schedule(TDuration::MilliSeconds(200), new NActors::TEvents::TEvWakeup(1));
+            }
             const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
             OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
         }

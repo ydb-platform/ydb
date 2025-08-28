@@ -36,6 +36,8 @@ public:
         }
     }
 
+    bool IsEmpty() const;
+
 private:
     struct TPipeServerInfoOverloadSubscribersTag {};
 

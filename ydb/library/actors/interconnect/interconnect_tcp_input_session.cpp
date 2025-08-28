@@ -736,6 +736,15 @@ namespace NActors {
                         LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
+                    NInterconnect::NRdma::TQueuePair& qp = *RdmaQp.get();
+                    enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(qp.GetState(false));
+                    if (qpState != IBV_QPS_RTS) {
+                        TStringStream ss;
+                        ss << qpState;
+                        LOG_ERROR_IC_SESSION("ICRDMA", "qp is not ready, unable to submit rdma READ, %d state is: %s",
+                            qp.GetQpNum(), ss.Data());
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
@@ -745,7 +754,7 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
-                    auto err = context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    auto err = context.ScheduleRdmaReadRequests(creds, qp, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};

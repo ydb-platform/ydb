@@ -311,6 +311,7 @@ ICq::TPtr CreateSimpleCqMock(const TRdmaCtx* ctx, NActors::TActorSystem* as, int
     return CreateCq<TSimpleCqMock>(ctx, as, max_cqe);
 }
 
+const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;
 
 TQueuePair::~TQueuePair() {
     if (Qp) {
@@ -467,6 +468,23 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     } else {
         os << attr.qp_state;
     }
+}
+
+int TQueuePair::GetState(bool forseUpdate) const noexcept {
+    static_assert(sizeof(ibv_qp_state) <= sizeof(int));
+    struct ibv_qp_attr attr;
+    struct ibv_qp_init_attr init_attr;
+
+    if (LastState != UnknownQpState && !forseUpdate) {
+        return LastState;
+    }
+
+    int err = ibv_query_qp(Qp, &attr, IBV_QP_STATE, &init_attr);
+    Y_ABORT_UNLESS(!err);
+
+    LastState = attr.qp_state;
+
+    return attr.qp_state;
 }
 
 TRdmaCtx* TQueuePair::GetCtx() const noexcept {

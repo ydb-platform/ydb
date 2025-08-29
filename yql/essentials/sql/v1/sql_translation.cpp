@@ -2310,11 +2310,11 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         }
     } else if (to_lower(id.Name) == "external_data_channels_count") {
         if (reset) {
-            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreInt(*value, settings.ExternalDataChannelsCount, Ctx_)) {
-            Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
+        if (!StoreInt(*value, settings.ExternalDataChannelsCount, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
     } else {

@@ -9,6 +9,8 @@
 #include <util/generic/set.h>
 #include <util/ysaveload.h>
 
+#include <queue>
+
 namespace NKikimr {
 
     namespace NHuge {
@@ -91,13 +93,82 @@ namespace NKikimr {
         // It manages all slots of some fixed size.
         ////////////////////////////////////////////////////////////////////////////
         class TChain {
+            using TChunkID = ui32;
             struct TFreeSpaceItem {
+                TChunkID ChunkId;
                 TMask FreeSlots;
                 ui32 NumFreeSlots = 0;
+
+                TChunkID GetKey() const {
+                    return ChunkId;
+                }
+                ui32 GetValue() const {
+                    return NumFreeSlots;
+                }
             };
 
-            using TChunkID = ui32;
-            using TFreeSpace = TMap<TChunkID, TFreeSpaceItem>;
+            template<class T>
+            class TAddressableHeap {
+            public:
+                using TKey = decltype(std::declval<T>().GetKey());  // unique
+                using TValue = decltype(std::declval<T>().GetValue());
+                using iterator = typename std::map<TKey, T>::const_iterator;
+            
+                bool Contains(const TKey& key) {
+                    return ValuesByKey.find(key) != ValuesByKey.end();
+                }
+                void Push(T value) {
+                    const auto key = value.GetKey();
+                    const auto val = value.GetValue();
+                    Y_VERIFY_S(!Contains(key), "TAddressableHeap: duplicate key# " << key);
+                    OrderedValues.emplace(std::make_pair(val, key), value);
+                    ValuesByKey[key] = value;
+                }
+                std::optional<T> ExtractMinByValue() {
+                    if (OrderedValues.empty()) {
+                        return std::nullopt;
+                    }
+                    auto it = OrderedValues.begin();
+                    T res = std::move(it->second);
+                    OrderedValues.erase(it);
+                    ValuesByKey.erase(res.GetKey());
+                    return res;
+                }
+                std::optional<T> ExtractByKey(const TKey& key) {
+                    auto it = ValuesByKey.find(key);
+                    if (it == ValuesByKey.end()) {
+                        return std::nullopt;
+                    }
+                    T res = std::move(it->second);
+                    OrderedValues.erase(std::make_pair(res.GetValue(), key));
+                    ValuesByKey.erase(it);
+                    return res;
+                }
+                std::optional<T> GetByKey(const TKey& key) {
+                    auto it = ValuesByKey.find(key);
+                    if (it == ValuesByKey.end()) {
+                        return std::nullopt;
+                    }
+                    return it->second;
+                }
+                bool Empty() const {
+                    return OrderedValues.empty();
+                }
+                size_t Size() const {
+                    return OrderedValues.size();
+                }
+                iterator begin() const {
+                    return ValuesByKey.begin();
+                }
+                iterator end() const {
+                    return ValuesByKey.end();
+                }
+
+            private:
+                std::map<std::pair<TValue, TKey>, T> OrderedValues; // ordered by value, then by key
+                std::map<TKey, T> ValuesByKey; // for fast access by key, should be sorted by key
+            };
+            using TFreeSpace = TAddressableHeap<TFreeSpaceItem>;
 
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
             TString VDiskLogPrefix;

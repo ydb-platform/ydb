@@ -97,7 +97,7 @@ namespace NActors {
     }
 
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
-        NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
         std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel
     ) {
@@ -112,7 +112,8 @@ namespace NActors {
                 as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
         };
 
-        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+        // We need to capture qp to guarantee it will be alive until we have rdma reads inflight
+        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply, qp](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
                 return;
@@ -125,18 +126,22 @@ namespace NActors {
             } else {
                 delete ioDone; // Clean up the event
             }
+            Y_UNUSED(qp);
         };
+
         auto allocResult = cq->AllocWr(cb);
+
         if (auto *busy = std::get_if<NInterconnect::NRdma::ICq::TBusy>(&allocResult)) {
             return *busy;
         } else if (auto *err = std::get_if<NInterconnect::NRdma::ICq::TErr>(&allocResult)) {
             return *err;
         }
+
         auto* wr = std::get<ICq::IWr*>(allocResult);
 
         void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-        qp.SendRdmaReadWr(wr->GetId(),
-            addr, memReg.GetLKey(qp.GetCtx()->GetDeviceIndex()),
+        qp->SendRdmaReadWr(wr->GetId(),
+            addr, memReg.GetLKey(qp->GetCtx()->GetDeviceIndex()),
             reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
         );
 
@@ -144,7 +149,7 @@ namespace NActors {
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
-        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
+        const NActorsInterconnect::TRdmaCreds& creds, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
         NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel
     ) {
         auto& pendingEvent = PendingEvents.back();
@@ -797,7 +802,7 @@ namespace NActors {
                     ptr += credsSerializedSize;
                     context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
                     ptr += sizeof(ui32);
-                    auto err = context.ScheduleRdmaReadRequests(creds, qp, RdmaCq, SelfId(), channel);
+                    auto err = context.ScheduleRdmaReadRequests(creds, RdmaQp, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};

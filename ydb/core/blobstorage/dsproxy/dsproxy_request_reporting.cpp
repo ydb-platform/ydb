@@ -1,10 +1,11 @@
 #include "dsproxy_request_reporting.h"
+#include <atomic>
 
 namespace NKikimr {
 
 struct TReportLeakBucket {
     std::atomic<i64> Level;
-    TInstant LastUpdate;
+    std::atomic<ui64> LastUpdateMs;
 };
 
 static std::array<TReportLeakBucket, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
@@ -56,33 +57,33 @@ public:
 private:
     void InitPermission(TReportLeakBucket& permission, const TInstant& now, i64 bucketSize) {
         permission.Level.store(bucketSize);
-        permission.LastUpdate = now;
+        permission.LastUpdateMs.store(now.MilliSeconds(), std::memory_order_relaxed);
 
     }
 
-    void Update(const TInstant& now, TInstant& lastUpdate, std::atomic<i64>& bucketLevel) {
+    void Update(const TInstant& now, std::atomic<ui64>& lastUpdate, std::atomic<i64>& bucketLevel) {
         i64 bucketSize = BucketSize.Update(now);
         i64 leakRate = LeakRate.Update(now);
         i64 leakDurationMs = LeakDurationMs.Update(now);
 
         auto level = bucketLevel.load();
         if (level >= bucketSize) {
-            lastUpdate = now;
+            lastUpdate.store(now.MilliSeconds(), std::memory_order_relaxed);
             return;
         }
-        i64 msSinceLastUpdate = (now - lastUpdate).MilliSeconds();
+        i64 msSinceLastUpdate = now.MilliSeconds() - lastUpdate.load(std::memory_order_relaxed);
         i64 intervalsCount = msSinceLastUpdate / leakDurationMs;
         bucketLevel += std::min(leakRate * intervalsCount, bucketSize - level);
-        lastUpdate += TDuration::MilliSeconds(intervalsCount * leakDurationMs);
+        lastUpdate.fetch_add(intervalsCount * leakDurationMs, std::memory_order_relaxed);
     }
 
     void HandleWakeup(const TActorContext& ctx) {
         TInstant now = ctx.Now();
         for (auto& permission : ReportPutPermissions) {
-            Update(now, permission.LastUpdate, permission.Level);
+            Update(now, permission.LastUpdateMs, permission.Level);
         }
         for (auto& permission : ReportGetPermissions) {
-            Update(now, permission.LastUpdate, permission.Level);
+            Update(now, permission.LastUpdateMs, permission.Level);
         }
         Schedule(TDuration::MilliSeconds(LeakDurationMs.Update(now)), new TEvents::TEvWakeup);
     }   

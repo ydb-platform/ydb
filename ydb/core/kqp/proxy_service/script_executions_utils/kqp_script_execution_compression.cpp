@@ -59,7 +59,7 @@ TScriptArtifacts CompressScriptArtifacts(const std::optional<TString>& ast, cons
             return;
         }
 
-        std::tie(resultValue, resultCompressionMethod) = compressor.Compress(*value);
+        std::tie(resultCompressionMethod, resultValue) = compressor.Compress(*value);
         if (resultValue->size() > NDataShard::NLimits::MaxWriteValueSize) {
             result.Issues.AddIssue(
                 NYql::TIssue(TStringBuilder() << "Query " << name << " size is " << resultValue->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, " << name << " was truncated")

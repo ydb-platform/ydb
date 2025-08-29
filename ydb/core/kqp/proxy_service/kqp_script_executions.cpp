@@ -4098,7 +4098,7 @@ public:
                 .OptionalString(artifacts.Plan)
                 .Build()
             .AddParam("$plan_compression_method")
-                .OptionalString(artifacts.PlanCompressionMethod)
+                .OptionalUtf8(artifacts.PlanCompressionMethod)
                 .Build()
             .AddParam("$execution_status")
                 .Int32(Ydb::Query::EXEC_STATUS_RUNNING)

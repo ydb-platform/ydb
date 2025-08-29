@@ -78,7 +78,7 @@ private:
         auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            LOG_E("Schedule retry: table=" << tablePath
+            LOG_D("Schedule retry: table=" << tablePath
                 << ", iteration=" << retry.Backoff.GetIteration()
                 << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
 

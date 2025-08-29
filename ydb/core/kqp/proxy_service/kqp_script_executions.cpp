@@ -4058,7 +4058,12 @@ public:
     {}
 
     void OnRunQuery() override {
-        TString sql = R"(
+        const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
+        if (artifacts.Issues) {
+            KQP_PROXY_LOG_N("Compress script artifacts finished with issues: " << artifacts.Issues.ToOneLineString());
+        }
+
+        auto parameters = TStringBuilder() << R"(
             -- TScriptProgressActor::OnRunQuery
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
@@ -4066,25 +4071,15 @@ public:
             DECLARE $plan_compression_method AS Optional<Text>;
             DECLARE $execution_status AS Int32;
             DECLARE $lease_generation AS Int64;
-            DECLARE $ast_compressed AS Optional<String>;
-            DECLARE $ast_compression_method AS Optional<Text>;
+        )";
 
+        auto sql = TStringBuilder() << R"(
             UPDATE `.metadata/script_executions`
             SET
                 plan_compressed = $plan_compressed,
                 plan_compression_method = $plan_compression_method,
-                execution_status = $execution_status,
-                ast_compressed = $ast_compressed,
-                ast_compression_method = $ast_compression_method
-            WHERE database = $database
-              AND execution_id = $execution_id
-              AND (lease_generation IS NULL OR lease_generation = $lease_generation);
+                execution_status = $execution_status
         )";
-
-        const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
-        if (artifacts.Issues) {
-            KQP_PROXY_LOG_N("Compress script artifacts finished with issues: " << artifacts.Issues.ToOneLineString());
-        }
 
         NYdb::TParamsBuilder params;
         params
@@ -4105,15 +4100,35 @@ public:
                 .Build()
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
-                .Build()
-            .AddParam("$ast_compressed")
-                .OptionalString(artifacts.Ast)
-                .Build()
-            .AddParam("$ast_compression_method")
-                .OptionalUtf8(artifacts.AstCompressionMethod)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        if (artifacts.Ast) {
+            params
+                .AddParam("$ast_compressed")
+                    .OptionalString(artifacts.Ast)
+                    .Build()
+                .AddParam("$ast_compression_method")
+                    .OptionalUtf8(artifacts.AstCompressionMethod)
+                    .Build();
+
+            parameters << R"(
+                DECLARE $ast_compressed AS Optional<String>;
+                DECLARE $ast_compression_method AS Optional<Text>;
+            )";
+
+            sql << R"(
+                , ast_compressed = $ast_compressed,
+                ast_compression_method = $ast_compression_method
+            )";
+        }
+
+        sql << R"(
+            WHERE database = $database
+              AND execution_id = $execution_id
+              AND (lease_generation IS NULL OR lease_generation = $lease_generation);
+        )";
+
+        RunDataQuery(parameters << sql, &params);
     }
 
     void OnQueryResult() override {

@@ -41,6 +41,7 @@ public:
         description.QueryAstCompressionMethod = artifacts.AstCompressionMethod;
         description.QueryPlan = artifacts.Plan;
         description.QueryPlanCompressionMethod = artifacts.PlanCompressionMethod;
+        description.Issues.AddIssues(artifacts.Issues);
 
         Register(CreateSaveScriptFinalStatusActor(SelfId(), std::move(Request)));
         Become(&TScriptFinalizerActor::FetchState);

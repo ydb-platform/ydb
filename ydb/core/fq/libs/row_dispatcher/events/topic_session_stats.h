@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
+
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace NFq {

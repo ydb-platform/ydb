@@ -786,7 +786,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
                     UpdateCacheModesForPartStore(partView, cacheModes);
                 }
                 if (requestStickyColumns) {
-                    RequestInMemPagesForPartStore(partView, stickyColumns);
+                    RequestStickyPagesForPartStore(partView, stickyColumns);
                 }
             }
         }
@@ -1476,7 +1476,7 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     }
 }
 
-void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
+void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
@@ -1492,7 +1492,7 @@ void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const
             auto partStore = partView.As<NTable::TPartStore>();
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
                 NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
-                0, ui64(ESharedCacheRequestType::InMemPages));
+                0, ui64(ESharedCacheRequestType::StickyPages));
         }
     }
 }
@@ -1554,7 +1554,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
         AddPartStorePageCollections(stage->PartView, cacheModes);
         if (stickyColumns) {
-            RequestInMemPagesForPartStore(stage->PartView, stickyColumns);
+            RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
         }
         newParts.push_back(std::move(stage->PartView));
     }
@@ -3015,7 +3015,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
     switch (requestType) {
     case ESharedCacheRequestType::Transaction:
-    case ESharedCacheRequestType::InMemPages:
+    case ESharedCacheRequestType::StickyPages:
     case ESharedCacheRequestType::TryKeepInMemPages:
         {
             TPrivatePageCache::TPageCollection *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
@@ -3038,7 +3038,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            if (requestType == ESharedCacheRequestType::InMemPages) {
+            if (requestType == ESharedCacheRequestType::StickyPages) {
                 for (auto& loaded : msg->Pages) {
                     PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
                 }

@@ -242,8 +242,7 @@ public:
     }
 
     bool PreserveOrder() const {
-        return true;
-        // Settings.KeepRowsOrder;
+        return Settings.KeepRowsOrder;
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
@@ -684,9 +683,7 @@ public:
         std::vector<THolder<TEvDataShard::TEvRead>> readRequests;
 
         if (!unprocessedPoints.empty()) {
-            auto readState = TReadState(0, std::move(unprocessedPoints));
-            THolder<TEvDataShard::TEvRead> request = readState.FillReadRequest(++newReadId, Settings, ReadColumns);
-            readRequests.emplace_back(std::move(request));
+            ++newReadId;
 
             for (const auto& point : unprocessedPoints) {
                 auto rowIt = PendingLeftRowsByKey.find(point.From);
@@ -694,13 +691,15 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
+            auto readState = TReadState(0, std::move(unprocessedPoints));
+            THolder<TEvDataShard::TEvRead> request = readState.FillReadRequest(newReadId, Settings, ReadColumns);
+            readRequests.emplace_back(std::move(request));
+
             YQL_ENSURE(ReadStateByReadId.emplace(newReadId, std::move(readState)).second);
         }
 
         if (!unprocessedRanges.empty()) {
-            auto readState = TReadState(0, std::move(unprocessedRanges));
-            auto request = readState.FillReadRequest(++newReadId, Settings, ReadColumns);
-            readRequests.emplace_back(std::move(request));
+            ++newReadId;
 
             for (const auto& range : unprocessedRanges) {
                 auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
@@ -708,9 +707,10 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState(0, std::move(unprocessedRanges))).second);
+            auto readState = TReadState(0, std::move(unprocessedRanges));
+            auto request = readState.FillReadRequest(newReadId, Settings, ReadColumns);
+            readRequests.emplace_back(std::move(request));
+            YQL_ENSURE(ReadStateByReadId.emplace(newReadId, std::move(readState)).second);
         }
 
         return readRequests;
@@ -799,9 +799,7 @@ public:
         requests.reserve(rangesPerShard.size() + pointsPerShard.size());
 
         for (auto& [shardId, points] : pointsPerShard) {
-            auto readState = TReadState(0, std::move(points));
-            auto request = readState.FillReadRequest(++readId, Settings, ReadColumns);
-            requests.emplace_back(shardId, std::move(request));
+            ++readId;
 
             for (const auto& point : points) {
                 auto rowIt = PendingLeftRowsByKey.find(point.From);
@@ -809,19 +807,26 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
+            auto readState = TReadState(0, std::move(points));
+            auto request = readState.FillReadRequest(readId, Settings, ReadColumns);
+            requests.emplace_back(shardId, std::move(request));
+
             YQL_ENSURE(ReadStateByReadId.emplace(readId, std::move(readState)).second);
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            auto readState = TReadState(0, std::move(ranges));
-            auto request = readState.FillReadRequest(++readId, Settings, ReadColumns);
-            requests.emplace_back(shardId, std::move(request));
+            ++readId;
 
             for (const auto& range : ranges) {
                 auto rowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
                 YQL_ENSURE(rowIt != PendingLeftRowsByKey.end());
                 rowIt->second.PendingReads.insert(readId);
             }
+
+            auto readState = TReadState(0, std::move(ranges));
+            auto request = readState.FillReadRequest(readId, Settings, ReadColumns);
+            requests.emplace_back(shardId, std::move(request));
+
 
             YQL_ENSURE(ReadStateByReadId.emplace(readId, std::move(readState)).second);
         }

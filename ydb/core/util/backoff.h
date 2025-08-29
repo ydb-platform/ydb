@@ -9,8 +9,8 @@ namespace NKikimr {
 // TBackoffTimer
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TBackoffTimer {
-    ui64 InitialBackoffMs;
-    ui64 MaxBackoffMs;
+    const ui64 InitialBackoffMs;
+    const ui64 MaxBackoffMs;
     ui64 CurrentBackoffMs;
     ui64 PreviousBackoffMs;
 
@@ -22,9 +22,11 @@ public:
 
 
 struct TBackoff {
+    static constexpr TDuration DefaultInitialDelay = TDuration::Seconds(1);
+    static constexpr TDuration DefaultMaxDelay = TDuration::Minutes(15);
 
-    TBackoff(TDuration initialDelay = TDuration::Seconds(1), TDuration maxDelay = TDuration::Minutes(15));
-    TBackoff(size_t maxRetries, TDuration initialDelay = TDuration::Seconds(1), TDuration maxDelay = TDuration::Minutes(15));
+    TBackoff(TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
+    TBackoff(size_t maxRetries, TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
 
     bool HasMore() const;
     TDuration Next();
@@ -32,9 +34,8 @@ struct TBackoff {
 
     explicit operator bool() const;
 
+    TBackoffTimer Timer;
     const size_t MaxRetries;
-    const TDuration InitialDelay;
-    const TDuration MaxDelay;
     size_t Iteration;
 };
 

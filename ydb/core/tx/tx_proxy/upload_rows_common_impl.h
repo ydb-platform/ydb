@@ -122,7 +122,7 @@ private:
     struct TShardUploadRetryState {
         // Contains basic request settings like table ids and columns
         NKikimrTxDataShard::TEvUploadRowsRequest Headers;
-        TVector<std::pair<TString, TString>> Rows;
+        TVector<std::pair<TSerializedCellVec, TString>> Rows;
         ui64 LastOverloadSeqNo = 0;
         ui64 SentOverloadSeqNo = 0;
     };
@@ -1085,7 +1085,7 @@ private:
         ev->Record = state->Headers;
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
-            row->SetKeyColumns(pr.first);
+            row->SetKeyColumns(pr.first.GetBuffer());
             row->SetValueColumns(pr.second);
         }
 
@@ -1151,15 +1151,16 @@ private:
                 retryState->Headers = ev->Record;
             }
 
-            TString keyColumns = keyValue.first.GetBuffer();
-            TString valueColumns = keyValue.second;
-
-            // We expect to keep a reference to existing key and value data here
-            uploadRetryStates[shardIdx]->Rows.emplace_back(keyColumns, valueColumns);
+            auto keyColumns = keyValue.first;
+            auto valueColumns = keyValue.second;
 
             auto* row = ev->Record.AddRows();
-            row->SetKeyColumns(std::move(keyColumns));
-            row->SetValueColumns(std::move(valueColumns));
+            row->SetKeyColumns(keyColumns.GetBuffer());
+            row->SetValueColumns(valueColumns);
+
+            // We expect to keep a reference to existing key and value data here
+            uploadRetryStates[shardIdx]->Rows.emplace_back(std::move(keyColumns), std::move(valueColumns));
+
         }
 
         // Send requests to the shards
@@ -1330,7 +1331,7 @@ private:
 
         for (auto& [_, v] : ShardUploadRetryStates) {
             for (auto& r : v.Rows) {
-                rows.emplace_back(TSerializedCellVec(std::move(r.first)), std::move(r.second));
+                rows.emplace_back(std::move(r.first), std::move(r.second));
             }
         }
 

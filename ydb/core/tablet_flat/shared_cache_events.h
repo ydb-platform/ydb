@@ -37,7 +37,7 @@ namespace NKikimr::NSharedCache {
         /* +1024 range is reserved for scan events */
     };
 
-    enum class ESharedCacheRequestType : ui64 {
+    enum class ERequestTypeCookie : ui64 {
         Undefined = 0,
         Transaction = 1,
         StickyPages,

@@ -189,7 +189,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
             std::move(fetch.PageCollection),
             std::move(fetch.Pages),
             BootAttempt),
-        0, (ui64)ESharedCacheRequestType::BootLogic);
+        0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);
 }
@@ -271,7 +271,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (ESharedCacheRequestType(ev.Cookie) != ESharedCacheRequestType::BootLogic)
+        if (ERequestTypeCookie(ev.Cookie) != ERequestTypeCookie::BootLogic)
             return OpResultUnhandled;
 
         if (msg->Cookie != BootAttempt)

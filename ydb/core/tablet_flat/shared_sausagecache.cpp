@@ -1,6 +1,5 @@
 #include "flat_bio_actor.h"
 #include "flat_bio_events.h"
-#include "flat_executor.h"
 #include "shared_cache_events.h"
 #include "shared_cache_pages.h"
 #include "shared_cache_tiered.h"
@@ -996,7 +995,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void NotifyOwners(TInMemNotification& notification) {
         TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(notification.PageCollection), NKikimrProto::OK, 0);
         result->Pages = std::move(notification.ReadyPages);
-        Send(notification.Owner, result.Release(), 0, static_cast<ui64>(ESharedCacheRequestType::TryKeepInMemPages));
+        Send(notification.Owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
 
         notification.MarkSent();
     }

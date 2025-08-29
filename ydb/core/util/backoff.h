@@ -21,16 +21,21 @@ public:
     void Reset();
 };
 
-
+// exponential backoff with jitter and the iteration counter
 struct TBackoff {
     static constexpr TDuration DefaultInitialDelay = TDuration::Seconds(1);
     static constexpr TDuration DefaultMaxDelay = TDuration::Minutes(15);
 
+    // backoff with unlimited retries
     TBackoff(TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
+    // backoff with limited retries
     TBackoff(size_t maxRetries, TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
 
+    // current retry iteration
     size_t GetIteration() const;
+    // checks if there are more retries left
     bool HasMore() const;
+    // next retry delay
     TDuration Next();
     void Reset();
 

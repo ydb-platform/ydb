@@ -1804,10 +1804,15 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);
         }
 
-        ui64 timeLag = userInfo.GetWriteLagMs();
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Get() != timeLag) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Set(timeLag);
+        {
+            ui64 timeLag = userInfo.GetWriteLagMs();
+            if (userInfo.WriteTimeLagMsByLastReadPerPartition) {
+                userInfo.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
+            }
+            if (userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Get() != timeLag) {
+                haveChanges = true;
+                userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Set(timeLag);
+            }
         }
 
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != snapshot.ReadLag.MilliSeconds()) {
@@ -1815,12 +1820,21 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != BlobEncoder.EndOffset - userInfo.Offset) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(BlobEncoder.EndOffset - userInfo.Offset);
+        {
+            auto lag = BlobEncoder.EndOffset - userInfo.Offset;
+            if (userInfo.MessageLagByCommittedPerPartition) {
+                userInfo.MessageLagByCommittedPerPartition->Set(lag);
+            }
+            if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != lag) {
+                haveChanges = true;
+                userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(lag);
+            }
         }
 
         auto readMessageLag = BlobEncoder.EndOffset - snapshot.ReadOffset;
+        if (userInfo.MessageLagByLastReadPerPartition) {
+            userInfo.MessageLagByLastReadPerPartition->Set(readMessageLag);
+        }
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != readMessageLag) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(readMessageLag);

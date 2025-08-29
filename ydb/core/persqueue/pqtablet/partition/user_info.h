@@ -113,6 +113,10 @@ struct TUserInfo: public TUserInfoBase {
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
 
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
@@ -273,17 +277,25 @@ struct TUserInfo: public TUserInfoBase {
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
             return consumerSubgroup->GetExpiringNamedCounter(
                 fcc ? "name" : "sensor",
-                fcc ? forFCC : forFederation,
+                fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
                 deriv);
         };
 
-        BytesReadPerPartition = getCounter("topic.partition.read.bytes", "BytesReadPerPartition", true);
-        MessagesReadPerPartition = getCounter("topic.partition.read.messages", "MessagesReadPerPartition", true);
+        BytesReadPerPartition = getCounter("read.bytes", "BytesRead", true);
+        MessagesReadPerPartition = getCounter("read.messages", "MessagesRead", true);
+        MessageLagByLastReadPerPartition = getCounter("read.lag_messages", "MessageLagByLastRead", false);
+        MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
+        WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
+        WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds_max", "WriteTimeLagMsByCommitted", false);
     }
 
     void ResetPerPartitionCounters() {
         BytesReadPerPartition.Reset();
         MessagesReadPerPartition.Reset();
+        MessageLagByLastReadPerPartition.Reset();
+        MessageLagByCommittedPerPartition.Reset();
+        WriteTimeLagMsByLastReadPerPartition.Reset();
+        WriteTimeLagMsByCommittedPerPartition.Reset();
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {

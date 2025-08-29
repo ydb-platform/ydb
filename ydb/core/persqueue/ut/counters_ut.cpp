@@ -166,7 +166,6 @@ Y_UNIT_TEST(PerPartition) {
         CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
 
         std::string counters = getCountersHtml();
-        Cerr << "counters after write: " << counters << "\n";
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
     }
@@ -215,8 +214,6 @@ Y_UNIT_TEST(PerPartition) {
 
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_read.html"));
-
-        Cerr << "per partition counters: " << counters << Endl;
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
     }
 
@@ -224,7 +221,6 @@ Y_UNIT_TEST(PerPartition) {
         // Disable per partition counters, the counters should be empty.
 
         PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
-
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);

@@ -10,6 +10,8 @@ namespace NScheme {
 
 namespace NConsoleClient {
 
+bool IsSystemDir(const NScheme::TSchemeEntry& entry);
+
 bool IsSystemObject(const NScheme::TSchemeEntry& entry);
 
 } // NConsoleClient

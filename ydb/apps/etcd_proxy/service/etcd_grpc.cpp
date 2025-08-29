@@ -40,6 +40,10 @@ private:
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         Ctx_->GetAuthState().State = state;
     }

@@ -73,10 +73,6 @@ namespace NKikimr::NBridge {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blob restoration
 
-        ui32 IndexGetsInFlight = 0;
-        ui32 DataGetsInFlight = 0;
-        static constexpr ui32 MaxIndexGetsInFlight = 3;
-        static constexpr ui32 MaxDataGetsInFlight = 32;
         static constexpr ui32 MaxDataPerIndexQuery = 10_MB;
 
         void ProcessRestoreQueue();

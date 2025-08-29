@@ -206,6 +206,9 @@ namespace NKikimr::NStorage {
         }
 
         SendEvent(*Binding, std::move(ev));
+
+        std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot, this,
+            std::placeholders::_1));
     }
 
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
@@ -383,6 +386,9 @@ namespace NKikimr::NStorage {
             }
 
             UnsubscribeQueue.insert(binding.NodeId);
+
+            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
+                this, std::placeholders::_1));
         }
     }
 

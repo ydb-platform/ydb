@@ -172,7 +172,7 @@ private:
 struct TPartitionConfigMerger {
     static constexpr ui32 MaxFollowersCount = 3;
 
-    static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData);
+    static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind);
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
@@ -3153,6 +3153,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         };
         ui32 Level = 1;
         ui32 Round = 0;
+        bool IsEmpty = false;
 
         EState State = Sample;
 
@@ -3181,7 +3182,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Set(ui32 level,
             NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
             NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-            ui32 state, ui64 tableSize, ui32 round);
+            ui32 state, ui64 tableSize, ui32 round, bool isEmpty);
 
         NKikimrTxDataShard::EKMeansState GetUpload() const;
 

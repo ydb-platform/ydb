@@ -1712,17 +1712,18 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
     const TVector<TString>* workingDir = nullptr;
-    bool lookupError = true;
+    bool lookupError = false;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
-        lookupError &= (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError);
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;
+        } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            lookupError = true;
         }
     }
 
     auto parts = GetFullPath(GetModifyScheme());
-    if (!resultSet.empty() && lookupError) {
+    if (!workingDir && lookupError) {
         const auto errText = TStringBuilder()
             << "Cannot resolve working dir, lookup error"
             << " path# " << JoinPath(parts);

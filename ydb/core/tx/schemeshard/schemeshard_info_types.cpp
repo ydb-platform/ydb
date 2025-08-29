@@ -815,11 +815,20 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
 }
 
-NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
+NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind) {
     NKikimrSchemeOp::TPartitionConfig cfg;
 
     TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> compactionPolicy = appData->DomainsInfo->GetDefaultUserTablePolicy();
     compactionPolicy->Serialize(*cfg.MutableCompactionPolicy());
+
+    if (defaultPoolKind) {
+        auto& dafaultColumnFamily = *cfg.AddColumnFamilies();
+        dafaultColumnFamily.SetId(0);
+        auto& storageConfig = *dafaultColumnFamily.MutableStorageConfig();
+        storageConfig.MutableSysLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableData()->SetPreferredPoolKind(*defaultPoolKind);
+    }
 
     return cfg;
 }
@@ -2280,6 +2289,7 @@ TString TIndexBuildInfo::TKMeans::DebugString() const {
         << ", Level = " << Level << " / " << Levels
         << ", K = " << K
         << ", Round = " << Round
+        << (IsEmpty ? ", IsEmpty = true" : "")
         << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
         << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
         << ", TableSize = " << TableSize
@@ -2323,9 +2333,10 @@ void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
 void TIndexBuildInfo::TKMeans::Set(ui32 level,
     NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
     NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-    ui32 state, ui64 tableSize, ui32 round) {
+    ui32 state, ui64 tableSize, ui32 round, bool isEmpty) {
     Level = level;
     Round = round;
+    IsEmpty = isEmpty;
     ParentBegin = parentBegin;
     Parent = parent;
     ChildBegin = childBegin;

@@ -215,6 +215,7 @@ public:
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
         , TopicPartitionsCount(topicPartitionsCount)
+        , WithoutConsumer(SourceParams.GetConsumerName().empty())
     {
         Y_UNUSED(TDuration::TryParse(SourceParams.GetReconnectPeriod(), ReconnectPeriod));
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -253,8 +254,10 @@ public:
 public:
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         TDqPqReadActorBase::SaveState(checkpoint, state);
-        DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
-        CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
+        if (!WithoutConsumer) {
+            DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
+            CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
+        }
     }
 
     void LoadState(const TSourceState& state) override {
@@ -268,10 +271,12 @@ public:
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         const auto checkpointId = checkpoint.GetId();
-        while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
-            auto& deferredCommit = DeferredCommits.front().second;
-            deferredCommit.Commit();
-            DeferredCommits.pop();
+        if (!WithoutConsumer) {
+            while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
+                auto& deferredCommit = DeferredCommits.front().second;
+                deferredCommit.Commit();
+                DeferredCommits.pop();
+            }
         }
     }
 
@@ -636,9 +641,8 @@ private:
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(StartingMessageTimestamp);
         
-        TString consumer(SourceParams.GetConsumerName());
-        if (!consumer.empty()) {
-            settings.ConsumerName(consumer);
+        if (!WithoutConsumer) {
+            settings.ConsumerName(SourceParams.GetConsumerName());
         } else {
             settings.WithoutConsumer();
         }
@@ -696,8 +700,10 @@ private:
 
         for (const auto& [partitionSession, clusterRanges] : readyBatch.OffsetRanges) {
             const auto& [cluster, ranges] = clusterRanges;
-            for (const auto& [start, end] : ranges) {
-                CurrentDeferredCommit.Add(partitionSession, start, end);
+            if (!WithoutConsumer) {
+                for (const auto& [start, end] : ranges) {
+                    CurrentDeferredCommit.Add(partitionSession, start, end);
+                }
             }
             PartitionToOffset[MakePartitionKey(TString(cluster), partitionSession)] = ranges.back().second;
         }
@@ -751,6 +757,7 @@ private:
                 curBatch.UsedSpace += size;
 
                 auto& [cluster, offsets] = curBatch.OffsetRanges[message.GetPartitionSession()];
+                cluster = Cluster;
                 if (!offsets.empty() && offsets.back().second == message.GetOffset()) {
                     offsets.back().second = message.GetOffset() + 1;
                 } else {
@@ -880,6 +887,7 @@ private:
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
+    bool WithoutConsumer = false;
 };
 
 ui32 ExtractPartitionsFromParams(

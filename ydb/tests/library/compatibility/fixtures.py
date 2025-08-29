@@ -17,7 +17,7 @@ def string_version_to_tuple(s):
     for idx, elem in enumerate(version_components):
         if idx == 0:
             # skipping 'stable' in stable-25-1-1 version
-            if elem == 'stable':
+            if elem in ['stable', 'prestable']:
                 continue
             elif elem == 'current':
                 result.append(float('+inf'))

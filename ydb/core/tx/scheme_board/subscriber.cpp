@@ -499,6 +499,9 @@ public:
 template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
     void Sleep() {
+        SBS_LOG_T("Sleep"
+            << ": delay# " << Delay);
+
         ReplicaSubscriber = TActorId();
         this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
@@ -529,10 +532,19 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
+        SBS_LOG_T("HandleSleep " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
+            << ", cookie# " << ev->Cookie);
+
         this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
+        SBS_LOG_T("Handle " << ev->Get()->ToString()
+            << ": sender# " << ev->Sender
+            << ", cookie# " << ev->Cookie
+            << ", current sync request# " << CurrentSyncRequest);
+
         if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) {
             return;
         }
@@ -777,6 +789,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool MaybeRunVersionSync() {
+        SBS_LOG_T("MaybeRunVersionSync"
+            << ": delayed sync request# " << DelayedSyncRequest);
         if (!DelayedSyncRequest) {
             return false;
         }
@@ -858,8 +872,13 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         if (!record.GetIsDeletion()) {
             NKikimrScheme::TEvDescribeSchemeResult proto = selectedNotify->GetDescribeSchemeResult();
+            SBS_LOG_T("Send notification to the owner"
+                << ": owner# " << Owner
+                << ", proto# " << proto.ShortDebugString());
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(proto)));
         } else {
+            SBS_LOG_T("Send deletion notification to the owner"
+                << ": owner# " << Owner);
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyDelete>(record, record.GetStrong()));
         }
     }
@@ -878,7 +897,12 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         EnqueueSyncRequest(ev);
 
-        if (PendingSync || !IsMajorityReached()) {
+        if (PendingSync) {
+            SBS_LOG_T("Pending sync");
+            return;
+        }
+        if (!IsMajorityReached()) {
+            SBS_LOG_T("Haven't reached the majority");
             return;
         }
 

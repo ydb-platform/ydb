@@ -6,8 +6,6 @@ IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/tools/black_linter/bin/ya.make)
 ENDIF()
 
-IF (NOT OPENSOURCE)
-    RECURSE(
-        bin
-    )
-ENDIF()
+RECURSE(
+    bin
+)

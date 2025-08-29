@@ -38,8 +38,8 @@ TClientCommandOption& TClientCommandOptions::AddCharOption(char c, const TString
     return AddClientOption(Opts.AddCharOption(c, help));
 }
 
-TAuthMethodOption& TClientCommandOptions::AddAuthMethodOption(const TString& name, const TString& help) {
-    return AddAuthMethodClientOption(Opts.AddLongOption(name, help));
+TAuthMethodOption& TClientCommandOptions::AddAuthMethodOption(const TString& name, const TString& help, bool mainAuthOption) {
+    return AddAuthMethodClientOption(Opts.AddLongOption(name, help), mainAuthOption);
 }
 
 void TClientCommandOptions::AddAnonymousAuthMethodOption() {
@@ -50,8 +50,8 @@ TClientCommandOption& TClientCommandOptions::AddClientOption(NLastGetopt::TOpt& 
     return *ClientOpts.emplace_back(MakeIntrusive<TClientCommandOption>(opt, this));
 }
 
-TAuthMethodOption& TClientCommandOptions::AddAuthMethodClientOption(NLastGetopt::TOpt& opt) {
-    return static_cast<TAuthMethodOption&>(*ClientOpts.emplace_back(MakeIntrusive<TAuthMethodOption>(opt, this)));
+TAuthMethodOption& TClientCommandOptions::AddAuthMethodClientOption(NLastGetopt::TOpt& opt, bool mainAuthOption) {
+    return static_cast<TAuthMethodOption&>(*ClientOpts.emplace_back(MakeIntrusive<TAuthMethodOption>(opt, this, mainAuthOption)));
 }
 
 void TClientCommandOptions::SetCustomUsage(const TString& usage) {
@@ -378,9 +378,10 @@ bool TClientCommandOption::TryParseFromProfile(const std::shared_ptr<IProfile>& 
 }
 
 
-TAuthMethodOption::TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions)
+TAuthMethodOption::TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions, bool mainAuthOption)
     : TClientCommandOption(opt, clientOptions)
 {
+    MainAuthOption = mainAuthOption;
 }
 
 TAuthMethodOption& TAuthMethodOption::AuthMethod(const TString& methodName) {
@@ -441,7 +442,7 @@ bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& pro
 
 
 TAnonymousAuthMethodOption::TAnonymousAuthMethodOption(TClientCommandOptions* clientOptions)
-    : TAuthMethodOption(*this, clientOptions)
+    : TAuthMethodOption(*this, clientOptions, true)
 {
     TOpt::NoArgument();
     AuthMethod("anonymous-auth");
@@ -456,7 +457,7 @@ TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, i
     for (const auto& clientOption : ClientOptions->ClientOpts) {
         if (const auto* optResult = ParseFromCommandLineResult.FindOptParseResult(&clientOption->GetOpt())) {
             Opts.emplace_back(clientOption, optResult);
-            if (dynamic_cast<const TAuthMethodOption*>(clientOption.Get())) {
+            if (clientOption->IsMainAuthOption()) {
                 AuthMethodOpts.push_back(Opts.size() - 1); // insert index
             }
         }
@@ -527,13 +528,8 @@ const TString& TOptionsParseResult::Get(const TString& name, bool includeDefault
 
 std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionParamsLogger& logger) {
     std::vector<TString> messages;
-    auto getProfileOpt = [&](const TIntrusivePtr<TClientCommandOption>& opt, const std::shared_ptr<IProfile>& profile) -> TString {
-        TString value;
-        if (opt->TryParseFromProfile(profile, &value, nullptr, &messages, true)) {
-            return value;
-        }
-        return {};
-    };
+    std::optional<TString> passwordSource = std::nullopt;
+    bool noPassword = false;
     auto processValue = [&](const TIntrusivePtr<TClientCommandOption>& opt, const TString& value, const TString& sourceDescription, bool validate) {
         if (validate && opt->ValidatorHandler) {
             if (std::vector<TString> msgs = opt->ValidatorHandler(value); !msgs.empty()) {
@@ -541,9 +537,15 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             }
         }
         logger(opt->ConnectionParamName, value, sourceDescription);
+        if (opt->ConnectionParamName == "password" && !passwordSource.has_value()) {
+            passwordSource = sourceDescription;
+        }
     };
     for (const TOptionParseResult& result : Opts) {
         const TIntrusivePtr<TClientCommandOption>& opt = result.Opt;
+        if (opt->GetOpt().ToShortString() == "--no-password") {
+            noPassword = true;
+        }
         if (opt->ConnectionParamName) {
             // Log all available sources for current option
             for (EOptionValueSource src = result.ValueSource; ; src = static_cast<EOptionValueSource>(static_cast<int>(src) + 1)) {
@@ -552,20 +554,15 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                 case EOptionValueSource::Explicit: {
                     // already have parsed in that source
                     TStringBuilder txt;
-                    txt << "explicit";
-                    if (auto name = opt->GetOpt().GetLongNames()) {
-                        txt << " --" << name[0];
-                    } else if (auto shortNames = opt->GetOpt().GetShortNames()) {
-                        txt << " -" << shortNames[0];
-                    }
-                    txt << " option";
+                    txt << "explicit " << opt->GetOpt().ToShortString() << " option";
                     for (const TString& value : result.OptValues) {
                         processValue(opt, value, txt, validate);
                     }
                     break;
                 }
                 case EOptionValueSource::ExplicitProfile: {
-                    if (TString value = getProfileOpt(opt, ExplicitProfile)) {
+                    TString value;
+                    if (opt->TryParseFromProfile(ExplicitProfile, &value, nullptr, &messages, true)) {
                         TStringBuilder txt;
                         txt << "profile \"" << ExplicitProfile->GetName() << "\" from explicit --profile option";
                         processValue(opt, value, txt, validate);
@@ -573,7 +570,8 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                     break;
                 }
                 case EOptionValueSource::ActiveProfile: {
-                    if (TString value = getProfileOpt(opt, ActiveProfile)) {
+                    TString value;
+                    if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
                         TStringBuilder txt;
                         txt << "active profile \"" << ActiveProfile->GetName() << "\"";
                         processValue(opt, value, txt, validate);
@@ -582,7 +580,8 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                 }
                 case EOptionValueSource::EnvironmentVariable: {
                     for (const auto& envInfo : opt->EnvInfo) {
-                        if (TString value = GetEnv(envInfo.EnvName)) {
+                        if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
+                            const TString& value = mbValue.GetRef();
                             TStringBuilder txt;
                             txt << envInfo.EnvName << " enviroment variable";
                             processValue(opt, value, txt, validate);
@@ -609,12 +608,7 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
         Cerr << "Using auth method \"" << ChosenAuthMethod << "\"";
         switch (opt.ValueSource) {
         case EOptionValueSource::Explicit:
-            Cerr << " from explicit command line option ";
-            if (auto name = opt.Opt->GetOpt().GetLongNames()) {
-                Cerr << "--" << name[0];
-            } else if (auto shortNames = opt.Opt->GetOpt().GetShortNames()) {
-                Cerr << "-" << shortNames[0];
-            }
+            Cerr << " from explicit command line option " << opt.GetOpt()->GetOpt().ToShortString();
             break;
         case EOptionValueSource::ExplicitProfile:
             Cerr << " from explicitly specified profile \"" << ExplicitProfile->GetName() << "\"";
@@ -624,7 +618,7 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             break;
         case EOptionValueSource::EnvironmentVariable:
             for (const auto& envInfo : opt.Opt->EnvInfo) {
-                if (TString value = GetEnv(envInfo.EnvName)) {
+                if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
                     TStringBuilder txt;
                     Cerr << " from " << envInfo.EnvName << " enviroment variable";
                     break;
@@ -635,7 +629,20 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             Cerr << " from default value \"" << opt.Opt->DefaultOptionValue << "\"";
             break;
         }
+        if (opt.GetOpt()->GetOpt().ToShortString() == "--user") {
+            auto& values = opt.Values();
+            if (values.size()) {
+                Cerr << " with username \"" << values[0] << "\"";
+            }
+        }
         Cerr << Endl;
+        if (opt.GetOpt()->GetOpt().ToShortString() == "--user") {
+            if (noPassword) {
+                Cerr << "Using no password due to explicit --no-password option" << Endl;
+            } else if (passwordSource.has_value()) {
+                Cerr << "Using password from " << passwordSource.value() << Endl;
+            }
+        }
     } else {
         Cerr << "No authentication methods were found. Going without authentication" << Endl;
     }
@@ -651,7 +658,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
     auto applyOption = [&](const TIntrusivePtr<TClientCommandOption>& clientOption, const TString& value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource) {
         if (clientOption->HandlerImpl(value, isFileName, humanReadableFileName, valueSource)) { // returns false only when loading from default value from file
             Opts.emplace_back(clientOption, value, valueSource);
-            if (dynamic_cast<const TAuthMethodOption*>(clientOption.Get())) {
+            if (clientOption->IsMainAuthOption()) {
                 AuthMethodOpts.push_back(Opts.size() - 1);
             }
             if (clientOption->ValidatorHandler) {
@@ -666,8 +673,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
         if (FindResult(clientOption.Get())) {
             continue;
         }
-        const bool isAuthOption = dynamic_cast<const TAuthMethodOption*>(clientOption.Get()) != nullptr;
-        if (isAuthOption && !AuthMethodOpts.empty()) { // Parsed from command line or from profile
+        if (clientOption->IsMainAuthOption() && !AuthMethodOpts.empty()) { // Parsed from command line or from profile
             continue;
         }
 
@@ -676,13 +682,14 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ExplicitProfile);
             continue;
         }
-        if (isAuthOption) {
+        if (clientOption->IsMainAuthOption()) {
             continue;
         }
 
         bool envApplied = false;
         for (const auto& envInfo : clientOption->EnvInfo) {
-            if (TString value = GetEnv(envInfo.EnvName)) {
+            if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
+                const TString& value = mbValue.GetRef();
                 applyOption(clientOption, value, envInfo.IsFileName, envInfo.HumanReadableFileName, EOptionValueSource::EnvironmentVariable);
                 envApplied = true;
                 break;
@@ -707,7 +714,8 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
     if (AuthMethodOpts.empty()) { // have not parsed from command line and from explicit profile. Try from env
         for (const TIntrusivePtr<TAuthMethodOption>& clientOption : ClientOptions->EnvAuthPriority) {
             for (const auto& envInfo : clientOption->EnvInfo) {
-                if (TString value = GetEnv(envInfo.EnvName)) {
+                if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
+                    const TString& value = mbValue.GetRef();
                     applyOption(clientOption, value, envInfo.IsFileName, envInfo.HumanReadableFileName, EOptionValueSource::EnvironmentVariable);
                     break;
                 }
@@ -720,7 +728,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
 
     if (AuthMethodOpts.empty()) { // try active profile
         for (const TIntrusivePtr<TClientCommandOption>& clientOption : ClientOptions->ClientOpts) {
-            if (!dynamic_cast<const TAuthMethodOption*>(clientOption.Get())) {
+            if (!clientOption->IsMainAuthOption()) {
                 continue;
             }
 
@@ -740,7 +748,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
 
     if (AuthMethodOpts.empty()) { // try default
         for (const TIntrusivePtr<TClientCommandOption>& clientOption : ClientOptions->ClientOpts) {
-            if (!dynamic_cast<const TAuthMethodOption*>(clientOption.Get())) {
+            if (!clientOption->IsMainAuthOption()) {
                 continue;
             }
 

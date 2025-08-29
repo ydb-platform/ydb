@@ -125,7 +125,7 @@ public:
 
     static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
-        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;

@@ -33,6 +33,7 @@
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
+#include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -418,6 +419,9 @@ TProgram::TProgram(
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 
     if (QContext_) {
+        if (UrlListerManager_) {
+            UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
+        }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanRead()) {
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();

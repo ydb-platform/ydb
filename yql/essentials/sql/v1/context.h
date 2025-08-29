@@ -245,6 +245,8 @@ namespace NSQLTranslationV1 {
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
         void WarnUnusedHints();
 
+        TScopedStatePtr CreateScopedState() const;
+
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
 

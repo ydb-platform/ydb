@@ -60,7 +60,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
 
 struct TTestBootstrap : public TTestActorRuntime {
     NYql::NDqProto::TReadyState GraphState;
-    NConfig::TCheckpointCoordinatorConfig Settings;
+    NKikimrConfig::TCheckpointsConfig Settings;
     NActors::TActorId StorageProxy;
     NActors::TActorId CheckpointCoordinator;
     NActors::TActorId RunActor;
@@ -105,7 +105,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId();
         ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
 
-        Settings = NConfig::TCheckpointCoordinatorConfig();
+        Settings = NKikimrConfig::TCheckpointsConfig();
         Settings.SetEnabled(true);
         Settings.SetCheckpointingPeriodMillis(TDuration::Hours(1).MilliSeconds());
         Settings.SetCheckpointingSnapshotRotationPeriod(snaphotRotationPeriod);

@@ -673,10 +673,12 @@ namespace NKikimr {
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (Request, originalRequest.ToString()));
+                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
+                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
+                (Request, originalRequest.ToString()));
 
-            Y_ABORT_UNLESS(Info->Group);
-            const auto& state = Info->Group->GetBridgeGroupState();
+            Y_ABORT_UNLESS(request->Info->Group);
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             for (size_t i = 0; i < state.PileSize(); ++i) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
@@ -696,13 +698,17 @@ namespace NKikimr {
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
-            const auto& state = Info->Group->GetBridgeGroupState();
+            const auto& state = request->Info->Group->GetBridgeGroupState();
             const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
             const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
 
             auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
+
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
+                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
+                (GroupPileInfo, groupPileInfo));
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
@@ -734,7 +740,7 @@ namespace NKikimr {
                     }
                     [[fallthrough]];
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if (std::is_same_v<TEvents, TEvBlobStorage::TEvCollectGarbage>) {
+                    if (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         break; // allow any garbage collection commands at this stage
                     }
                     [[fallthrough]];
@@ -804,10 +810,22 @@ namespace NKikimr {
                     ++common->RestartCounter;
                     Y_DEBUG_ABORT_UNLESS(common->RestartCounter < 100); // too often restarts do not make sense
                     auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
-                    if (Info->Group->GetBridgeGroupState().GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration() <
-                            msg->RacingGeneration) {
+
+                    const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
+                    const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
+
+                    if (myGeneration < msg->RacingGeneration) {
                         PendingByGeneration[Info->GroupGeneration + 1].push_back(std::move(handle));
+                    } else if (msg->RacingGeneration < myGeneration) {
+                        // our generation is higher than the recipient's; we have to route this message through node warden
+                        // to ensure proxy's configuration gets in place
+                        SendToBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(), handle->Cookie,
+                            std::move(handle->TraceId));
                     } else {
+                        // we can retry this message (obviously, we HAD request executed at incorrect generation, but
+                        // now generation is correct)
+                        Y_DEBUG_ABORT_UNLESS(request->Info->Group->GetBridgeGroupState().GetPile(
+                            pile.BridgePileId.GetPileIndex()).GetGroupGeneration() < myGeneration);
                         TActivationContext::Send(handle.release());
                     }
                     request->Finished = true;

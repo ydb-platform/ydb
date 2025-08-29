@@ -158,6 +158,25 @@ void ApplyPartitioning(TTxId txId,
     ss->SetPartitioning(pathId, tableInfo, std::move(partitions));
 }
 
+std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
+    // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
+    for (const auto& changesFamily : changes.GetColumnFamilies()) {
+        if (changesFamily.HasStorage()) {
+            return std::nullopt;
+        }
+    }
+
+    // If all pool kinds are the same in storagePools we can infer the one pool kind and use it in default StorageConfig
+    std::optional<TString> result = std::nullopt;
+    for (const auto& storagePool : storagePools) {
+        if (!result) {
+            result = storagePool.GetKind();
+        } else if (*result != storagePool.GetKind()) {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -559,8 +578,9 @@ public:
             return result;
         }
 
+        std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

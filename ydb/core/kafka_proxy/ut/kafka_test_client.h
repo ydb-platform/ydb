@@ -59,7 +59,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
 
-        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, std::optional<bool> allowAutoTopicCreation = std::nullopt);
+        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 

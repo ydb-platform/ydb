@@ -664,6 +664,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui64 LockedFor;
     TMap<TActorId, TActorId> Followers;
 
+    bool Replied = false;
+
     TEvStateStorage::TSignature Signature;
 
 
@@ -720,12 +722,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Signature.Merge(msg->Signature);
     }
 
-    void Reply(NKikimrProto::EReplyStatus status) {
-        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
-        BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
-        Send(Source, msg, 0, SourceCookie);
-    }
-
     bool ShouldReply() {
         for(ui32 i : xrange(Info->RingGroups.size())) {
             auto& rg = Info->RingGroups[i];
@@ -736,20 +732,38 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         return true;
     }
 
+    void Reply(NKikimrProto::EReplyStatus status) {
+        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
+        BLOG_D("RingGroupProxyRequest::Reply TEvInfo ev: " << msg->ToString());
+        Send(Source, msg, 0, SourceCookie);
+        Replied = true;
+    }
+
+    void MaybeReply(NKikimrProto::EReplyStatus status) {
+        if (!ShouldReply()) {
+            return;
+        }
+        if (Replied) {
+            auto* msg = new TEvStateStorage::TEvUpdateSignature(TabletID, Signature);
+            BLOG_D("RingGroupProxyRequest::Reply TEvUpdateSignature ev: " << msg->ToString());
+            Send(Source, msg, 0, SourceCookie);
+        } else {
+            Reply(status);
+        }
+    }
+
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
         Replies.insert(ev->Sender);
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         BLOG_D("RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
-        if (ShouldReply()) {
-            Reply(msg->Status);
-        }
+        MaybeReply(msg->Status);
     }
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature), 0, SourceCookie);
+        MaybeReply(NKikimrProto::OK);
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {

@@ -4,7 +4,7 @@
 
 YDB поддерживает работу в режиме [Bridge](https://ydb.tech/docs/ru/concepts/bridge?version=main). CLI утилита `keeper.py` реализует демо-версию `Bridge keeper'a`: выполняет мониторинг состояния кластера, управляет частями кластера, называемыми [pile](https://ydb.tech/docs/ru/concepts/glossary?version=main#pile), и отображает состояние кластера в TUI.
 
-По умолчанию утилита автоматически выполняет failover, отказавших частей кластера:
+По умолчанию утилита автоматически выполняет failover отказавших частей кластера:
 * переводит в режим `DISCONNECTED`
 * при необходимости назначает здоровый pile `PRIMARY`
 

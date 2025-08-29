@@ -66,7 +66,8 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 
 //! A small container to allow reader to selectively apply expressions based on
 //! their InapplicableExpressionMode.
-//! RLACE stands for Row-Level Access Control Entry.
+//! NB: You may encounter occurences of an "RL ACE" term.
+//! It stands for Row-Level Access Control Entry.
 struct TRowLevelAccessControlEntry
 {
     std::string Expression;

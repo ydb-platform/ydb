@@ -1,0 +1,5 @@
+--- contrib/python/marisa-trie/py3/ya.make	(index)
++++ contrib/python/marisa-trie/py3/ya.make	(working tree)
+@@ -32,1 +32,1 @@ SRCS(
+-    src/marisa_trie.pyx
++    src/marisa_trie.pyx=marisa_trie

@@ -372,7 +372,11 @@ void TBlobStorageController::StartRequiredSyncers() {
             return;
         }
         const auto& state = bridgeGroupInfo->GetBridgeGroupState();
-        for (const auto& pile : state.GetPile()) {
+        for (size_t pileIndex = 0; pileIndex < state.PileSize(); ++pileIndex) {
+            if (BridgeInfo->GetPile(TBridgePileId::FromPileIndex(pileIndex))->State != NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2) {
+                continue; // can't start syncing yet
+            }
+            const auto& pile = state.GetPile(pileIndex);
             if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
                 continue; // this group is synced
             }

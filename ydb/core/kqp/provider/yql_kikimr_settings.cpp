@@ -83,6 +83,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
@@ -211,4 +212,7 @@ ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
 }
 
+bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+}
 }

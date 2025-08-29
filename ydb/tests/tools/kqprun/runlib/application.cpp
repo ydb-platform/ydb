@@ -147,6 +147,30 @@ void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
                 ythrow yexception() << "Got duplicated log service name: " << component;
             }
         });
+
+    options.AddLongOption("log-fq", "FQ components log priority")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&FqLogPriority, GetLogPrioritiesMap("log-fq"));
+
+    options.AddLongOption("log-kqp", "KQP components log priority")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&KqpLogPriority, GetLogPrioritiesMap("log-kqp"));
+
+    options.AddLongOption("log-runtime", "DQ and MKQL components log priority")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&RuntimeLogPriority, GetLogPrioritiesMap("log-runtime"));
+
+    options.AddLongOption("log-tablets", "Log priority for all tablet services (HIVE / SS / DS / CS and etc.)")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&TabletsLogPriority, GetLogPrioritiesMap("log-tablets"));
+
+    options.AddLongOption("log-blob-storage", "Blob storage components log priority")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&BsLogPriority, GetLogPrioritiesMap("log-blob-storage"));
+
+    options.AddLongOption("log-server-io", "Server IO components log priority (http / grpc / viewer and etc.)")
+        .RequiredArgument("priority")
+        .StoreMappedResultT<TString>(&ServerIoLogPriority, GetLogPrioritiesMap("log-server-io"));
 }
 
 IOutputStream* TMainBase::GetDefaultOutput(const TString& file) {
@@ -244,6 +268,69 @@ void TMainBase::SetupActorSystemConfig(NKikimrConfig::TActorSystemConfig& config
     auto& serviceExecutor = *serviceExecutors.Add();
     serviceExecutor.SetServiceName("Interconnect");
     serviceExecutor.SetExecutorId(4);
+}
+
+void TMainBase::SetupLogsConfig(NKikimrConfig::TLogConfig& config) const {
+    if (DefaultLogPriority) {
+        config.SetDefaultLevel(*DefaultLogPriority);
+    }
+
+    const auto setupLogPriority = [&config](const std::unordered_set<TString>& prefixes, std::optional<NActors::NLog::EPriority> priority) {
+        if (!priority) {
+            return;
+        }
+
+        std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities;
+
+        const auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
+        for (int i = 0; i < descriptor->value_count(); ++i) {
+            const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
+            const auto& servicceStr = NKikimrServices::EServiceKikimr_Name(service);
+
+            for (const auto& prefix : prefixes) {
+                if (servicceStr.StartsWith(prefix)) {
+                    logPriorities.emplace(service, *priority);
+                    break;
+                }
+            }
+        }
+
+        ModifyLogPriorities(logPriorities, config);
+    };
+
+    setupLogPriority({
+        "PUBLIC_HTTP", "DB_POOL", "STREAMS", "YQL_", "YQ_", "FQ_"
+    }, FqLogPriority);
+
+    setupLogPriority({
+        "KQP_", "METADATA_"
+    }, KqpLogPriority);
+
+    setupLogPriority({
+        "MINIKQL_ENGINE", "KQP_TASKS_RUNNER", "KQP_COMPUTE", "DQ_TASK_RUNNER", "OBJECT_STORAGE_INFERENCINATOR", "SSA_GRAPH_EXECUTION"
+    }, RuntimeLogPriority);
+
+    setupLogPriority({
+        "TABLET_", "TX_", "OPS_", "PIPE_", "KEYVALUE", "PERSQUEUE", "PQ_", "BOARD_", "QUOTER_", "DATASHARD_", "CMS", "KESUS_",
+        "CONFIGS_", "SCHEME_", "SEQUENCE", "COLUMNSHARD_", "REPLICATION_", "TRANSFER", "NAMESERVICE", "DATA_INTEGRITY", "MEMORY_",
+        "GROUPED_MEMORY_LIMITER", "STATISTICS", "OBJECTS_MONITORING", "ARROW_HELPER", "EXT_INDEX", "DISCOVERY", "BLOB_CACHE",
+        "DISCOVERY_CACHE", "BG_TASKS", "GENERAL_CACHE", "LOCAL_YDB_PROXY", "CHANGE_EXCHANGE", "SYSTEM_VIEWS", "BUILD_INDEX",
+        "EXPORT", "IMPORT", "S3_WRAPPER", "CONTINUOUS_BACKUP", "NET_CLASSIFIER", "KESYS_PROXY_REQUEST", "NODE_BROKER", "FLAT_TX_SCHEMESHARD",
+        "TENANT_SLOT_BROKER", "SQS", "CHOOSE_PROXY", "LB_CONFIG_MANAGER", "LONG_TX_SERVICE", "SAUSAGE_BIO", "RESOURCE_BROKER",
+        "STATESTORAGE", "HIVE", "LOCAL", "BOOTSTRAPPER", "TENANT_POOL", "LABELS_MAINTAINER", "GRAPH", "SCHEMESHARD_DESCRIBE",
+    }, TabletsLogPriority);
+
+    setupLogPriority({
+        "BRIDGE", "DS_PROXY_NODE_MON", "BLOBSTORAGE", "BSCONFIG", "BS_", "BLOB_"
+    }, BsLogPriority);
+
+    setupLogPriority({
+        "TOKEN_", "KAFKA_PROXY", "YDB_SDK", "TICKET_PARSER", "BLACKBOX_VALIDATOR", "LDAP_AUTH_PROVIDER", "RPC_REQUEST", "HEALTH",
+        "DB_METADATA_CACHE", "HTTP_PROXY", "PGWIRE", "LOCAL_PGWIRE", "PGYDB", "AUDIT_LOG_WRITER", "METERING_WRITER", "VIEWER",
+        "MSGBUS_", "GRPC_"
+    }, ServerIoLogPriority);
+
+    ModifyLogPriorities(LogPriorities, config);
 }
 
 }  // namespace NKikimrRun

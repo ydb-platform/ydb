@@ -296,14 +296,6 @@ class TMain : public TMainBase {
     using EVerbose = TFqSetupSettings::EVerbose;
 
 protected:
-    void RegisterLogOptions(NLastGetopt::TOpts& options) override {
-        TBase::RegisterLogOptions(options);
-
-        options.AddLongOption("log-fq", "FQ components log priority")
-            .RequiredArgument("priority")
-            .StoreMappedResultT<TString>(&FqLogPriority, GetLogPrioritiesMap("log-fq"));
-    }
-
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("FqRun -- tool to execute stream queries through FQ proxy");
         options.AddHelpOption('h');
@@ -611,7 +603,7 @@ protected:
 
         fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
-        SetupLogsConfig();
+        SetupLogsConfig(*appConfig.MutableLogConfig());
         SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
 
         if (!PqFilesMapping.empty()) {
@@ -668,35 +660,6 @@ private:
         }
     }
 
-    void SetupLogsConfig() {
-        auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
-
-        if (DefaultLogPriority) {
-            logConfig.SetDefaultLevel(*DefaultLogPriority);
-        }
-
-        if (FqLogPriority) {
-            std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> fqLogPriorities;
-            std::unordered_set<TString> prefixes = {
-                "FQ_", "YQ_", "STREAMS", "PUBLIC_HTTP"
-            };
-            auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-            for (int i = 0; i < descriptor->value_count(); ++i) {
-                const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
-                const auto& servicceStr = NKikimrServices::EServiceKikimr_Name(service);
-                for (const auto& prefix : prefixes) {
-                    if (servicceStr.StartsWith(prefix)) {
-                        fqLogPriorities.emplace(service, *FqLogPriority);
-                        break;
-                    }
-                }
-            }
-            ModifyLogPriorities(fqLogPriorities, logConfig);
-        }
-
-        ModifyLogPriorities(LogPriorities, logConfig);
-    }
-
 private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
@@ -706,8 +669,6 @@ private:
     };
     std::unordered_map<TString, TTopicSettings> TopicsSettings;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
-
-    std::optional<NActors::NLog::EPriority> FqLogPriority;
 
     struct TFileContent {
         TString FileName;

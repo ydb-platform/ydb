@@ -931,7 +931,7 @@ protected:
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
         SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
-        SetupLogsConfig();
+        SetupLogsConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -989,14 +989,6 @@ private:
         if (ExecutionOptions.UseTemplates) {
             ReplaceYqlTokenTemplate(sql);
         }
-    }
-
-    void SetupLogsConfig() {
-        auto& logConfig = *RunnerOptions.YdbSettings.AppConfig.MutableLogConfig();
-        if (DefaultLogPriority) {
-            logConfig.SetDefaultLevel(*DefaultLogPriority);
-        }
-        ModifyLogPriorities(LogPriorities, logConfig);
     }
 };
 

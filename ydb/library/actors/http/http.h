@@ -494,7 +494,7 @@ public:
         Stage = GetInitialStage();
         Line.Clear();
         Content.clear();
-        if (Content.capacity() > MAX_RECYCLED_REQUEST_BODY_CAPACITY) {
+        if (Content.capacity() > MAX_RECYCLED_BODY_CAPACITY) {
             TString().swap(Content);
         }
     }
@@ -811,6 +811,9 @@ public:
     void Clear() {
         TSocketBuffer::Clear();
         HeaderType::Clear();
+        if (Content.capacity() > MAX_RECYCLED_BODY_CAPACITY) {
+            TString().swap(Content);
+        }
     }
 
     void Reparse() {

@@ -15,7 +15,7 @@ struct THttpConfig {
     static constexpr TDuration SOCKET_TIMEOUT = TDuration::MilliSeconds(60000);
     static constexpr TDuration CONNECTION_TIMEOUT = TDuration::MilliSeconds(60000);
     static constexpr size_t MAX_REUSABLE_CONNECTIONS = 100;
-    static constexpr size_t  MAX_RECYCLED_REQUEST_BODY_CAPACITY = 1024 * 1024;
+    static constexpr size_t  MAX_RECYCLED_BODY_CAPACITY = 1024 * 1024;
     using SocketType = TInet64StreamSocket;
     using SocketAddressType = std::shared_ptr<ISockAddr>;
 };

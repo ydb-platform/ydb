@@ -185,14 +185,14 @@ private:
 
 Y_UNIT_TEST_SUITE(YtNativeGateway) {
 
-std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TPortHolder& port, TTypeAnnotationContext* types) {
+std::pair<std::shared_ptr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TPortHolder& port, TTypeAnnotationContext* types) {
     TYtNativeServices nativeServices;
     auto gatewaysConfig = MakeGatewaysConfig(port);
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
 
     auto ytGateway = CreateYtNativeGateway(nativeServices);
-    auto ytState = MakeIntrusive<TYtState>(types);
+    auto ytState = std::make_shared<TYtState>(types);
     ytState->Gateway = ytGateway;
 
     InitializeYtGateway(ytGateway, ytState);

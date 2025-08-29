@@ -29,7 +29,10 @@ protected:
 private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
     public:
-        TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller, TAsyncRpc rpc)
+        TImpl(const TIamEndpoint& iamEndpoint,
+              const TRequestFiller& requestFiller,
+              TAsyncRpc rpc,
+              TCredentialsProviderPtr authTokenProvider = nullptr)
             : Rpc_(rpc)
             , Ticket_("")
             , NextTicketUpdate_(TInstant::Zero())
@@ -40,6 +43,7 @@ private:
             , NeedStop_(false)
             , BackoffTimeout_(BACKOFF_START)
             , Lock_()
+            , AuthTokenProvider_(authTokenProvider)
         {
             std::shared_ptr<grpc::ChannelCredentials> creds = nullptr;
             if (IamEndpoint_.EnableSsl) {
@@ -82,15 +86,18 @@ private:
 
             RequestFiller_(req);
 
-            grpc::ClientContext context;
+            Context_ = std::make_unique<grpc::ClientContext>();
 
             auto deadline = gpr_time_add(
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
-            context.set_deadline(deadline);
+            Context_->set_deadline(deadline);
+            if (AuthTokenProvider_) {
+                Context_->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
+            }
 
-            (Stub_->async()->*Rpc_)(&context, &req, response.get(), std::move(cb));
+            (Stub_->async()->*Rpc_)(Context_.get(), &req, response.get(), std::move(cb));
 
             if (sync) {
                 resultPromise.GetFuture().Wait(2 * IamEndpoint_.RequestTimeout);
@@ -125,6 +132,7 @@ private:
 
     private:
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result, bool sync) {
+            Context_.reset();
             if (!status.ok()) {
                 TDuration sleepDuration;
                 {
@@ -163,6 +171,8 @@ private:
         std::shared_ptr<grpc::Channel> Channel_;
         std::shared_ptr<typename TService::Stub> Stub_;
         TAsyncRpc Rpc_;
+        std::unique_ptr<grpc::ClientContext> Context_;
+
         std::string Ticket_;
         TInstant NextTicketUpdate_;
         const TIamEndpoint IamEndpoint_;
@@ -172,11 +182,15 @@ private:
         bool NeedStop_;
         TDuration BackoffTimeout_;
         TAdaptiveLock Lock_;
+        TCredentialsProviderPtr AuthTokenProvider_;
     };
 
 public:
-    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint, const TRequestFiller& requestFiller, TAsyncRpc rpc)
-        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc))
+    TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint,
+                                const TRequestFiller& requestFiller,
+                                TAsyncRpc rpc,
+                                TCredentialsProviderPtr authTokenProvider = nullptr)
+        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc, authTokenProvider))
     {
         Impl_->UpdateTicket(true);
     }

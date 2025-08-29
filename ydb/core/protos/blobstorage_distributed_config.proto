@@ -222,7 +222,7 @@ message TEvNodeConfigInvokeOnRoot {
     message TGetStateStorageConfig {
         optional bool Recommended = 1;
         optional bool PileupReplicas = 2;
-        optional bool NodesStatus = 3;
+        optional bool NodesState = 3;
     }
 
     message TSelfHealStateStorage {

@@ -3,48 +3,51 @@
 class StateStorageState {
 
     constructor() {
-        this.fetchInterval = 5000;
+        this.fetchInterval = 2000;
         this.nodes = {};
         this.stateStorageConfig = {};
         this.boardConfig = {};
         this.schemeBoardConfig = {};
         this.states = {};
-
+        this.sentinelStates = {};
+        this.ssData = undefined;
+        this.ssbData = undefined;
+        this.sbData = undefined;
         this.initTab();
     }
 
     buildPVHeader(table, header) {
-        var headers = [header, "", "", "", "", ""];
+        var headers = [header, "", "", "", "", "", ""];
         var row = table.addRow(headers);
         row[0].setHeader(true);
-        table.merge(0, 0, 0, 5);
-        headers = ["Pile", "Group", "Ring", "NodeId", "Location", "Status"];
+        table.merge(0, 0, 0, 6);
+        headers = ["Pile", "Group", "Ring", "NodeId", "Location", "Distconf Status", "Sentinel Status"];
         row = table.addRow(headers);
-        for(let i = 0; i < 6; i++)
+        for(let i = 0; i < 7; i++)
             row[i].setHeader(true);
         return row;
     }
 
-    updateColor(cell, value) {
+    updateColor(cell, value, isSentinel) {
         cell.elem.removeClass("red");
         cell.elem.removeClass("yellow");
         cell.elem.removeClass("green");
-        cell.elem.addClass(this.codeToColor(value[3]));
+        cell.elem.addClass(this.codeToColor(value[3], isSentinel));
     }
 
     addPVEntry(table, value) {
         var row = table.addRow(value);
-        this.updateColor(row[5], value);
+        this.updateColor(row[5], value, false);
+        this.updateColor(row[6], value, true);
         return row;
     }
 
     updatePVEntry(row, value, prevValue) {
         if(value.join() !== prevValue.join()) {
-            for(let i = 0; i < 5; i++)
+            for(let i = 0; i < 7; i++)
                 row[i].setText(value[i]);
-            let cell = row[5];
-            cell.setText(value[5]);
-            this.updateColor(cell, value);
+            this.updateColor(row[5], value, false);
+            this.updateColor(row[6], value, true);
         }
     }
 
@@ -87,11 +90,12 @@ class StateStorageState {
         el.remove()
     }
 
-    codeToColor(nodeId) {
-        if (!this.states.hasOwnProperty(nodeId)) {
+    codeToColor(nodeId, isSentinel) {
+        let st = isSentinel ? this.sentinelStates : this.states;
+        if (!st.hasOwnProperty(nodeId)) {
             return "yellow";
         }
-        switch (this.states[nodeId].State) {
+        switch (st[nodeId].State) {
             case 0: return "green";
             case 1: return "yellow";
             case 2: return "yellow";
@@ -101,11 +105,12 @@ class StateStorageState {
         }
     }
 
-    codeToNodeState(nodeId) {
-        if (!this.states.hasOwnProperty(nodeId)) {
+    codeToNodeState(nodeId, isSentinel) {
+        let st = isSentinel ? this.sentinelStates : this.states;
+        if (!st.hasOwnProperty(nodeId)) {
             return "UNKNOWN";
         }
-        switch (this.states[nodeId].State) {
+        switch (st[nodeId].State) {
             case 0: return "GOOD";
             case 1: return "PRETTY GOOD";
             case 2: return "MAYBE GOOD";
@@ -133,7 +138,7 @@ class StateStorageState {
         if (data.hasOwnProperty("Ring")) {
             rgs.push(data["Ring"]);
         }
-        let rgId = 0;
+        let rgId = 1;
         for (let rg of rgs) {
             let ringId = 1;
             let rgName = rgId + " NToSelect: " + rg.NToSelect;
@@ -150,14 +155,14 @@ class StateStorageState {
                         ringname += " UseRingSpecificNodeSelection";
                     }
                     for (let n of r["Node"]) {
-                        res.push(["", rgName, ringName, n, this.getNodeName(n), this.codeToNodeState(n)]);
+                        res.push(["", rgName, ringName, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
                     }
                     ringId++;
                 }
             }
             if (rg.hasOwnProperty("Node")) {
                 for (let n of rg["Node"]) {
-                    res.push(["", rgName, ringId, n, this.getNodeName(n), this.codeToNodeState(n)]);
+                    res.push(["", rgName, ringId, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
                     ringId++;
                 }
             }
@@ -166,7 +171,15 @@ class StateStorageState {
         return res;
     }
 
-    onThisLoaded(data) {
+    tryRender() {
+        if (this.ssData && this.ssbData && this.sbData) {
+            this.renderPVEntry(this.stateStorageConfig, this.ssData);
+            this.renderPVEntry(this.boardConfig, this.ssbData);
+            this.renderPVEntry(this.schemeBoardConfig, this.sbData);
+        }
+    }
+
+    onDistconfLoaded(data) {
         if (data && data.hasOwnProperty("StateStorageConfig")) {
             $("#state-storage-error").empty();
             if (data["StateStorageConfig"].hasOwnProperty("NodesState")) {
@@ -174,25 +187,73 @@ class StateStorageState {
                     this.states[state.NodeId] = state;
                 }
             }
-            this.renderPVEntry(this.stateStorageConfig, this.prepareData(data["StateStorageConfig"]["StateStorageConfig"]));
-            this.renderPVEntry(this.boardConfig, this.prepareData(data["StateStorageConfig"]["StateStorageBoardConfig"]));
-            this.renderPVEntry(this.schemeBoardConfig, this.prepareData(data["StateStorageConfig"]["SchemeBoardConfig"]));
+            this.ssData = this.prepareData(data["StateStorageConfig"]["StateStorageConfig"]);
+            this.ssbData = this.prepareData(data["StateStorageConfig"]["StateStorageBoardConfig"]);
+            this.sbData = this.prepareData(data["StateStorageConfig"]["SchemeBoardConfig"]);
+            this.tryRender();
         } else {
-            $("#state-storage-error").text("Error while updating state");
+            $("#state-storage-error").text("Error while updating distconf state");
         }
-        setTimeout(this.loadThis.bind(this), this.fetchInterval);
+        setTimeout(this.loadDistconfStatus.bind(this), this.fetchInterval);
         this.restartAnimation($("#state-storage-anim"));
     }
 
-    loadThis() {
+    onSentinelLoaded(data) {
+        if (data?.Status?.Code === "OK") {
+            $("#state-storage-error").empty();
+            if (data.hasOwnProperty("NodesState")) {
+                for (let state of data["NodesState"]) {
+                    this.sentinelStates[state.NodeId] = state;
+                }
+            }
+            this.tryRender();
+        } else {
+            $("#state-storage-error").text("Error while updating sentinel state");
+        }
+        setTimeout(this.loadSentinelStatus.bind(this), this.fetchInterval);
+    }
+
+    onError(jqXHR, exception) {
+        let msg = "Error while updating state. ";
+        if (jqXHR.status === 0) {
+            msg += 'Not connect. Verify Network.';
+        } else if (jqXHR.status == 404) {
+            msg += 'Requested page not found (404).';
+        } else if (jqXHR.status == 500) {
+            msg += 'Internal Server Error (500).';
+        } else if (exception === 'parsererror') {
+            msg += 'Requested JSON parse failed.';
+        } else if (exception === 'timeout') {
+            msg += 'Time out error.';
+        } else if (exception === 'abort') {
+            msg += 'Ajax request aborted.';
+        } else {
+            msg += 'Uncaught Error. ' + jqXHR.responseText;
+        }
+        $("#state-storage-error").text(msg);
+    }
+    loadDistconfStatus() {
         this.cleanup();
         $.ajax({
             url: '/actors/nodewarden?page=distconf',
             type: "POST",
-            data: '{"GetStateStorageConfig": {"NodesStatus": true}}',
+            data: '{"GetStateStorageConfig": {"NodesState": true}}',
             dataType: "json",
             contentType: "application/json; charset=utf-8",
-            success: this.onThisLoaded.bind(this)
+            success: this.onDistconfLoaded.bind(this),
+            error: this.onError.bind(this)
+        });
+    }
+
+    loadSentinelStatus() {
+        this.cleanup();
+        $.ajax({
+            url: 'cms/api/json/sentinel',
+            type: "GET",
+            dataType: "json",
+            contentType: "application/json; charset=utf-8",
+            success: this.onSentinelLoaded.bind(this),
+            error: this.onError.bind(this)
         });
     }
 
@@ -246,7 +307,8 @@ class StateStorageState {
 
         this.cleanup();
 
-        this.loadThis();
+        this.loadDistconfStatus();
+        this.loadSentinelStatus();
     }
 }
 

@@ -68,12 +68,12 @@ namespace NKikimr::NStorage {
         #undef F
     }
 
-    void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesStatus) {
+    void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesState) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
         currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
         currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
-        if (!getNodesStatus) {
+        if (!getNodesState) {
             return;
         }
         for (const auto& node : config.GetAllNodes()) {
@@ -97,7 +97,7 @@ namespace NKikimr::NStorage {
                 GetRecommendedStateStorageConfig(currentConfig, cmd.GetPileupReplicas());
                 AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(currentConfig);
             } else {
-                GetCurrentStateStorageConfig(currentConfig, cmd.GetNodesStatus());
+                GetCurrentStateStorageConfig(currentConfig, cmd.GetNodesState());
             }
         });
     }

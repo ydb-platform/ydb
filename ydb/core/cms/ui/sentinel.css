@@ -2,7 +2,7 @@
 #sentinel-state th,
 #sentinel-state td {
   font: 12px/18px Arial, Sans-serif;
-  border: #cdcdcd 1px solid;
+  border-bottom: #dee2e6 1px solid;
 }
 
 .sentinel-checkbox {
@@ -31,7 +31,7 @@
 
 #sentinel-state .yellow {
     font-weight: bold;
-    color: yellow;
+    color: goldenrod;
 }
 
 #sentinel-state .green {
@@ -73,7 +73,7 @@ circle {
 
 @keyframes highlight {
     0% {
-        background: green;
+        background: grey;
     }
     100% {
         background: none;

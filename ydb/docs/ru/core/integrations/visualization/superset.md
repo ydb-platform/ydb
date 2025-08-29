@@ -26,11 +26,11 @@
 
     Откроется окно мастера **Connect a database**.
 
-1. На первом шаге мастера выберите **YDB** из списка **Supported databases**. Если опция **YDB** недоступна, удостоверьтесь что выполнены все шаги из [пререквизитов](#prerequisites).
+1. На первом шаге мастера выберите **YDB** из списка **Supported databases**. Если опция **YDB** недоступна, проверьте, что  [установлены всё необходимое](#prerequisites).
 1. На втором шаге мастера введите данные для подключения к {{ ydb-short-name }} в следующие поля:
 
     * **Display Name** — наименование соединения с {{ ydb-short-name }} в Apache Superset.
-    * **SQLAlchemy URI** — строка вида `ydb://{host}:{port}/{database_name}`, где **host** и **port** это часть [эндпоинта](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение, **database_name** - путь к [базе данных](../../concepts/glossary.md#database)
+    * **SQLAlchemy URI** — строка вида `ydb://{host}:{port}/{database_name}`, где **host** и **port** это соответствующие значения **host** и **port** из [эндпоинта](../../concepts/connect.md#endpoint) кластера {{ ydb-short-name }}, к которому осуществляется подключение, **database_name** - путь к [базе данных](../../concepts/glossary.md#database)
 
     ![](_assets/superset-ydb-connection-details.png =400x)
 

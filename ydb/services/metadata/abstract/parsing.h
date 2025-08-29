@@ -12,7 +12,7 @@ namespace NYql {
 
 namespace NObjectOptionsParsing {
 Y_HAS_MEMBER(ExistingOk); // for create
-Y_HAS_MEMBER(MissingOk); // for drop
+Y_HAS_MEMBER(MissingOk); // for alter, drop
 Y_HAS_MEMBER(ReplaceIfExists); // for create
 Y_HAS_MEMBER(ResetFeatures); // for alter
 } // namespace NObjectOptionsParsing
@@ -26,7 +26,7 @@ private:
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(bool, ExistingOk); // for create
-    YDB_READONLY_DEF(bool, MissingOk); // for drop
+    YDB_READONLY_DEF(bool, MissingOk); // for alter, drop
     YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
     TFeatures Features;
     TResetFeatures ResetFeatures;

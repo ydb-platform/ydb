@@ -67,6 +67,11 @@ public:
 
     std::shared_ptr<TKikimrRunner> GetKikimrRunner() {
         if (!Kikimr) {
+            if (!AppConfig) {
+                AppConfig.emplace();
+            }
+
+            AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
             Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .PqGateway = PqGateway
             });
@@ -419,6 +424,23 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToOneLineString());
 
         return graph->Get()->PhysicalGraph;
+    }
+
+    void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount) {
+        const auto& result = ExecQuery(R"(
+            SELECT COUNT(*) FROM `.metadata/script_executions`;
+            SELECT COUNT(*) FROM `.metadata/script_execution_leases`;
+            )");
+
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 2);
+
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), expectedExecutionsCount);
+        });
+
+        CheckScriptResult(result[1], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), expectedLeasesCount);
+        });
     }
 
     // Utils
@@ -860,6 +882,191 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             Sleep(TDuration::MilliSeconds(100));
         }
         CancelScriptExecution(operationId);
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE
+            ) AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT value || key FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key":"key2", "value": "value2"})");
+        ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(2, 0);
+    }
+
+    Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndDropStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndDropStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
+    }
+
+    Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
+        constexpr ui64 executionsLimit = 5;
+        SetupAppConfig().MutableQueryServiceConfig()->MutableStreamingQueries()->SetMaxQueryExecutions(executionsLimit);
+
+        constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
+        constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key String NOT NULL,
+                        value String  NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        TVector<TString> messages = {"key1value1"};
+        messages.reserve(2 * executionsLimit + 1);
+        for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    FORCE = TRUE
+                ) AS
+                DO BEGIN
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT value || key FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String  NOT NULL
+                        )
+                    )
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "output_topic"_a = outputTopicName
+            ));
+
+            const ui64 id = i + 2;
+            CheckScriptExecutionsCount(std::min(id, executionsLimit + 1), 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, TStringBuilder() << "{\"key\":\"key" << id << "\", \"value\": \"value" << id << "\"}");
+
+            messages.emplace_back(TStringBuilder() << "value" << id << "key" << id);
+            ReadTopicMessages(outputTopicName, messages);
+        }
     }
 }
 

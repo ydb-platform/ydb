@@ -6,6 +6,8 @@ TPC-C is an industry-standard [On-Line Transaction Processing (OLTP)](https://en
 
 As a result, the benchmark generates a workload of concurrent distributed transactions with varying types and complexities.
 
+In TPC-C, the warehouse is the basic scale unit: the more warehouses you configure, the larger the dataset and the higher the transaction volume. Each warehouse holds roughly 100 MiB of data. The maximum number of warehouses a {{ ydb-short-name }} cluster can sustain depends on hardware capacity, configuration, and inter-node network latency. As a rule of thumb, allocating about 50 warehouses per compute CPU core is a good starting point.
+
 Here is a quick start snippet:
 
 ```bash

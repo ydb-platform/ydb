@@ -236,7 +236,7 @@ private:
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             if (!Self->EnableAddUniqueIndex) {
-                explain = "Unique index support is disabled";
+                explain = "Unique index creation is disabled";
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;

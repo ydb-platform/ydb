@@ -22,7 +22,10 @@ private:
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
     bool Done = false;
 
+    THashSet<TRowRange> InsertedRanges;
     std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
+    std::vector<TPortionInfo::TConstPtr> AdditionalSources;
+    std::function<void()> FinishedCallback;
 
 private:
     bool IsReady() const {
@@ -35,6 +38,9 @@ private:
         AFL_VERIFY(IsReady());
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(FiltersByRange.begin()->second));
         Done = true;
+        if (FinishedCallback) {
+            FinishedCallback();
+        }
         AFL_VERIFY(IsDone());
     }
 
@@ -49,9 +55,15 @@ public:
     }
 
     void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filterExt) {
+        if (IsDone()) {
+            return;
+        }
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRows().NumRows())("filter", filterExt.GetRecordsCountVerified())(
                                                             "info", info.GetRows().NumRows());
+        if (!InsertedRanges.emplace(info.GetRows()).second) {
+            return;
+        }
         AFL_VERIFY(FiltersByRange.emplace(info.GetRows(), filterExt).second)("info", info.DebugString());
         AFL_VERIFY(info.GetRows().GetEnd() <= OriginalRequest->Get()->GetRecordsCount())("range", info.GetRows().DebugString())(
                                                 "requested", OriginalRequest->Get()->GetRecordsCount());
@@ -82,10 +94,17 @@ public:
     void Abort(const TString& error) {
         OriginalRequest->Get()->GetSubscriber()->OnFailure(error);
         Done = true;
+        if (FinishedCallback) {
+            FinishedCallback();
+        }
     }
 
     const TEvRequestFilter::TPtr& GetRequest() const {
         return OriginalRequest;
+    }
+
+    void SetFinishedCallback(std::function<void()> callback) {
+        FinishedCallback = callback;
     }
 
     TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
@@ -116,6 +135,14 @@ public:
     }
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
+    }
+
+    void SetAdditionalSources(std::vector<TPortionInfo::TConstPtr> sources) {
+        AdditionalSources = std::move(sources);
+    }
+
+    const std::vector<TPortionInfo::TConstPtr>& GetAdditionalSources() const {
+        return AdditionalSources;
     }
 };
 

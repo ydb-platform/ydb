@@ -80,6 +80,8 @@ struct TEvPrivate {
         EvFilterRequestResourcesAllocated,
         EvDuplicateSourceCacheResult,
         EvFilterConstructionResult,
+        EvFindIntervalsResult,
+        EvFilterBuildFinished,
 
         EvEnd
     };

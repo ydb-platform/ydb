@@ -9,42 +9,6 @@
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class TColumnDataSplitter {
-public:
-    class TBorder {
-    private:
-        YDB_READONLY_DEF(bool, IsLast);
-        NArrow::NMerger::TSortableBatchPosition Key;
-
-        TBorder(const bool isLast, const NArrow::TSimpleRow key)
-            : IsLast(isLast)
-            , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false))
-        {
-        }
-
-    public:
-        static TBorder First(NArrow::TSimpleRow&& key) {
-            return TBorder(false, std::move(key));
-        }
-        static TBorder Last(NArrow::TSimpleRow&& key) {
-            return TBorder(true, std::move(key));
-        }
-
-        std::partial_ordering operator<=>(const TBorder& other) const {
-            return std::tie(Key, IsLast) <=> std::tie(other.Key, other.IsLast);
-        };
-        bool operator==(const TBorder& other) const {
-            return (*this <=> other) == std::partial_ordering::equivalent;
-        };
-
-        const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
-            return Key;
-        }
-
-        TString DebugString() const {
-            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
-        }
-    };
-
 private:
     std::vector<TBorder> Borders;
     std::shared_ptr<arrow::Schema> SortingSchema;
@@ -53,7 +17,7 @@ public:
     TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
         AFL_VERIFY(sources.size());
         SortingSchema = sources.begin()->second.GetSchema();
-
+        Borders.reserve(sources.size() * 2 + 2);
         for (const auto& [id, specials] : sources) {
             AFL_VERIFY(specials.GetSchema()->Equals(SortingSchema))("lhs", specials.GetSchema()->ToString())("rhs", SortingSchema->ToString());
             if (specials.GetFirst() > bounds.GetFirst()) {
@@ -86,6 +50,7 @@ public:
         AFL_VERIFY(!Borders.empty());
 
         std::vector<ui64> borderOffsets;
+        borderOffsets.reserve(Borders.size());
         ui64 offset = 0;
 
         auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
@@ -102,6 +67,7 @@ public:
         }
 
         std::vector<TRowRange> segments;
+        segments.reserve(borderOffsets.size());
         for (ui64 i = 1; i < borderOffsets.size(); ++i) {
             segments.emplace_back(TRowRange(borderOffsets[i - 1], borderOffsets[i]));
         }

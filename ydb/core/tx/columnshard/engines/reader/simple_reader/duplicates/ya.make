@@ -4,6 +4,7 @@ SRCS(
     manager.cpp
     events.cpp
     merge.cpp
+    interval_borders.cpp
     common.cpp
     private_events.cpp
     splitter.cpp

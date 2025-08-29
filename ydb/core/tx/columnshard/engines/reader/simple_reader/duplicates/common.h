@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -93,6 +94,72 @@ public:
 
     const TRowRange& GetRows() const {
         return Rows;
+    }
+};
+
+class TBorder {
+private:
+    YDB_READONLY_DEF(bool, IsLast);
+    NArrow::NMerger::TSortableBatchPosition Key;
+
+    TBorder(const bool isLast, const NArrow::TSimpleRow key)
+        : IsLast(isLast)
+        , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false)) {
+    }
+
+public:
+    static TBorder First(NArrow::TSimpleRow&& key) {
+        return TBorder(false, std::move(key));
+    }
+    static TBorder Last(NArrow::TSimpleRow&& key) {
+        return TBorder(true, std::move(key));
+    }
+
+    std::partial_ordering operator<=>(const TBorder& other) const {
+        return std::tie(Key, IsLast) <=> std::tie(other.Key, other.IsLast);
+    };
+    bool operator==(const TBorder& other) const {
+        return (*this <=> other) == std::partial_ordering::equivalent;
+    };
+
+    const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
+        return Key;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
+    }
+};
+
+class TPortionsSlice {
+private:
+    THashMap<ui64, TRowRange> RangeByPortion;
+    TBorder IntervalEnd;
+
+public:
+    TPortionsSlice(const TBorder& end)
+        : IntervalEnd(end) {
+    }
+
+    void Reserve(const ui64 portionCount) {
+        RangeByPortion.reserve(portionCount);
+    }
+
+    void AddRange(const ui64 portion, const TRowRange& range) {
+        if (range.NumRows() == 0) {
+            return;
+        }
+        AFL_VERIFY(RangeByPortion.emplace(portion, range).second);
+    }
+
+    const TRowRange* GetRangeOptional(const ui64 portion) const {
+        return RangeByPortion.FindPtr(portion);
+    }
+    THashMap<ui64, TRowRange> GetRanges() const {
+        return RangeByPortion;
+    }
+    const TBorder& GetEnd() const {
+        return IntervalEnd;
     }
 };
 

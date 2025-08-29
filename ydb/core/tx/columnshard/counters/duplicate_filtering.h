@@ -19,6 +19,11 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FilterCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr FilterCacheMisses;
 
+    NMonitoring::TDynamicCounters::TCounterPtr FilterPortionsCacheHits;
+    NMonitoring::TDynamicCounters::TCounterPtr FilterPortionsCacheMisses;
+
+    NMonitoring::TDynamicCounters::TCounterPtr FetchedSources;
+
 public:
     TDuplicateFilteringCounters();
 
@@ -37,6 +42,17 @@ public:
     }
     void OnFilterCacheMiss(const ui64 count = 1) const {
         FilterCacheMisses->Add(count);
+    }
+
+    void OnFilterPortionsCacheHit(const ui64 count = 1) const {
+        FilterPortionsCacheHits->Add(count);
+    }
+    void OnFilterPortionsCacheMiss(const ui64 count = 1) const {
+        FilterPortionsCacheMisses->Add(count);
+    }
+
+    void OnFetchedSources(const ui64 count = 1) const {
+        FetchedSources->Add(count);
     }
 };
 }   // namespace NKikimr::NColumnShard

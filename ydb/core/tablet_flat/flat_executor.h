@@ -285,6 +285,7 @@ enum class ESharedCacheRequestType : ui64 {
     InMemPages,
     PendingInit,
     BootLogic,
+    TryKeepInMemPages,
 };
 
 struct TExecutorStatsImpl : public TExecutorStats {

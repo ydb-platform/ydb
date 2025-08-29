@@ -3016,6 +3016,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     switch (requestType) {
     case ESharedCacheRequestType::Transaction:
     case ESharedCacheRequestType::InMemPages:
+    case ESharedCacheRequestType::TryKeepInMemPages:
         {
             TPrivatePageCache::TPageCollection *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
             if (!pageCollection) {
@@ -3041,11 +3042,13 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 for (auto& loaded : msg->Pages) {
                     PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
                 }
-            } else { // requestType == ESharedCacheRequestType::Transaction
+            } else { // requestType == ESharedCacheRequestType::Transaction or ESharedCacheRequestType::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
                     PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
                 }
-                TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
+                if (requestType == ESharedCacheRequestType::Transaction) {
+                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
+                }
             }
         }
         return;

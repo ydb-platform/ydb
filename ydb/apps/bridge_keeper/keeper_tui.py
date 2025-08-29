@@ -30,10 +30,10 @@ class MarkupFormatter:
     def format(self, record: logging.LogRecord) -> str:
         try:
             message = self._fmt % {
-                'asctime': self._format_time(record),
-                'levelname': record.levelname,
-                'name': record.name,
-                'message': record.getMessage(),
+                "asctime": self._format_time(record),
+                "levelname": record.levelname,
+                "name": record.name,
+                "message": record.getMessage(),
             }
         except Exception:
             message = record.getMessage()
@@ -42,9 +42,9 @@ class MarkupFormatter:
         try:
             # Escape message except the level token we will colorize separately
             level_color = {
-                'CRITICAL': 'red',
-                'ERROR': '#ff0000',
-                'WARNING': '#ffff00',
+                "CRITICAL": "red",
+                "ERROR": "#ff0000",
+                "WARNING": "#ffff00",
             }.get(record.levelname)
             if level_color is None:
                 return escape(message)
@@ -182,7 +182,7 @@ class KeeperApp(App):
             # Compute statuses and colors
             current_status_color: Dict[str, [str, str]] = {}
             if state:
-                for pile_name, pile_state in state.Piles.items():
+                for pile_name, pile_state in state.piles.items():
                     current_status_color[pile_name] = [pile_state.get_state(), pile_state.get_color(),]
 
                 # Ensure widgets exist for all piles
@@ -221,5 +221,5 @@ class KeeperApp(App):
         if len(new_records) > 0:
             formatter = MarkupFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
             lines = [formatter.format(r) for r in new_records]
-            joined_lines = '\n'.join(lines)
+            joined_lines = "\n".join(lines)
             self.log_view.write(joined_lines)

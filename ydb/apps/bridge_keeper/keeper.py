@@ -1,4 +1,16 @@
 #! /usr/bin/python3
+#
+#             o7
+#            /|
+#     .--.  / |        Skipper
+#    / _  \   |     "Smile and wave, boys."
+#   | (o)(o)  |
+#   |   __    |
+#   |  (__)   |
+#  /|         |\
+# /_|  ___    |_\
+#   |_/___\__|
+#
 
 import argparse
 import atexit
@@ -11,10 +23,23 @@ import time
 import threading
 
 import bridge
+import health
 import keeper_tui
 
 
 logger = logging.getLogger(__name__)
+
+# Add custom TRACE log level (lower than DEBUG)
+TRACE_LEVEL_NUM = 5
+if not hasattr(logging, "TRACE"):
+    logging.TRACE = TRACE_LEVEL_NUM
+    logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+
+    def trace(self, message, *args, **kws):
+        if self.isEnabledFor(TRACE_LEVEL_NUM):
+            self._log(TRACE_LEVEL_NUM, message, args, **kws)
+
+    logging.Logger.trace = trace
 
 LOG_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -93,6 +118,7 @@ def _get_log_interceptor():
 # Basic ANSI color support for logs printed to TTY
 class _ColorFormatter(logging.Formatter):
     COLORS = {
+        logging.TRACE: "\x1b[37m",      # grey
         logging.DEBUG: "\x1b[37m",      # grey
         logging.INFO: "\x1b[0m",        # reset/default
         logging.WARNING: "\x1b[33m",    # yellow
@@ -114,11 +140,11 @@ def _ensure_color_logging_no_tui(logger_obj):
 
     def _supports_color(stream):
         try:
-            if os.environ.get('NO_COLOR'):
+            if os.environ.get("NO_COLOR"):
                 return False
-            if hasattr(stream, 'isatty') and stream.isatty():
-                term = os.environ.get('TERM', '')
-                if term and term != 'dumb':
+            if hasattr(stream, "isatty") and stream.isatty():
+                term = os.environ.get("TERM", "")
+                if term and term != "dumb":
                     return True
         except Exception:
             return False
@@ -159,27 +185,28 @@ def _setup_logging(args):
         _ensure_color_logging_no_tui(logging.getLogger())
 
 
-    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
     logging.getLogger(__name__).setLevel(getattr(logging, args.log_level))
-    logging.getLogger('bridge').setLevel(getattr(logging, args.log_level))
+    logging.getLogger("bridge").setLevel(getattr(logging, args.log_level))
+    logging.getLogger("health").setLevel(getattr(logging, args.log_level))
 
     # Silence noisy libraries explicitly
-    logging.getLogger('urllib3').setLevel(logging.ERROR)
-    logging.getLogger('requests').setLevel(logging.ERROR)
+    logging.getLogger("urllib3").setLevel(logging.ERROR)
+    logging.getLogger("requests").setLevel(logging.ERROR)
 
 
 def _parse_args():
-    log_choices = ['DEBUG','INFO','WARNING','ERROR','CRITICAL']
+    log_choices = ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--endpoint', '-e', required=True,
-                        help='Single endpoint used to resolve piles and their endpoints')
+    parser.add_argument("--endpoint", "-e", required=True,
+                        help="Single endpoint used to resolve piles and their endpoints")
 
-    parser.add_argument('--ydb', required=False, help='Path to ydb cli')
+    parser.add_argument("--ydb", required=False, help="Path to ydb cli")
     parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")
 
-    parser.add_argument('--log-level', default='INFO', choices=log_choices, help='Logging level')
+    parser.add_argument("--log-level", default="INFO", choices=log_choices, help="Logging level")
 
     parser.add_argument("--cluster", default="cluster", help="Cluster name to display")
     parser.add_argument("--tui", action="store_true", help="Enable TUI")
@@ -189,14 +216,14 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _run_no_tui(endpoints, path_to_cli, piles, use_https, auto_failover):
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
+def _run_no_tui(path_to_cli, piles, use_https, auto_failover):
+    keeper = bridge.Bridgekeeper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
     keeper.run()
 
 
-def _run_tui(args, endpoints, path_to_cli, piles):
+def _run_tui(args, path_to_cli, piles):
     auto_failover = not args.disable_auto_failover
-    keeper = bridge.Bridgekeeper(endpoints, path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
+    keeper = bridge.Bridgekeeper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
     app = keeper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
@@ -230,37 +257,51 @@ def main():
             logger.error(f"Specified --ydb '{path_to_cli}' not found or not executable")
             sys.exit(2)
     else:
-        found = shutil.which('ydb')
+        found = shutil.which("ydb")
         if not found:
-            logger.error('ydb cli not found in PATH. Install YDB CLI or specify path to the executable using --ydb')
+            logger.error("ydb cli not found in PATH. Install YDB CLI or specify path to the executable using --ydb")
             sys.exit(2)
         path_to_cli = found
-        logger.debug(f'Found ydb CLI: {path_to_cli}')
+        logger.debug(f"Found ydb CLI: {path_to_cli}")
 
-    endpoints = None
     piles = None
-
     try:
         piles = bridge.resolve(args.endpoint, path_to_cli)
-        if piles:
-            endpoints = [h for hosts in piles.values() for h in hosts]
     except Exception as e:
         # ignore, result is checked below
-        logger.debug(f'Resolve throw exception: {e}')
+        logger.debug(f"Resolve throw exception: {e}")
 
     if not piles or len(piles) == 0:
-        logger.error(f'No piles resilved')
+        logger.error(f"No piles resolved")
 
-    if not endpoints or len(endpoints) == 0:
-        logger.error(f'No endpoints resolved from {args.endpoint}')
+    resolve_summary = ", ".join(f"{pile}: {len(hosts)}" for pile, hosts in piles.items())
+    logger.info(f"Piles host counts: {resolve_summary}")
+
+    pile_count = len(piles)
+    if pile_count > 2:
+        logger.error(f"This is a demo keeper and more than 2 piles is not supported: you have {pile_count} piles")
+        sys.exit(2)
+
+    total_endpoints = 0
+    for pile_name, endpoints in piles.items():
+        endpoint_count = len(endpoints)
+        if endpoint_count == 0:
+            logger.error(f"No endpoints resolved for pile '{pile_name}'")
+        if endpoint_count < health.MINIMAL_EXPECTED_ENDPOINTS_PER_PILE:
+            logger.warning(f"Resolved {endpoint_count} endpoints for pile '{pile_name}', "
+                           f"which is less than required {health.MINIMAL_EXPECTED_ENDPOINTS_PER_PILE}")
+        total_endpoints += len(endpoints)
+
+    if total_endpoints == 0:
+        logger.error(f"No endpoints resolved from {args.endpoint}")
         sys.exit(1)
 
     if args.tui:
-        _run_tui(args, endpoints, path_to_cli, piles)
+        _run_tui(args, path_to_cli, piles)
     else:
         auto_failover = not args.disable_auto_failover
-        _run_no_tui(endpoints, path_to_cli, piles, args.https, auto_failover)
+        _run_no_tui(path_to_cli, piles, args.https, auto_failover)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

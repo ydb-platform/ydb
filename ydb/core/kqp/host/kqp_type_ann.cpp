@@ -1097,6 +1097,75 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
     return false;
 }
 
+TStatus AnnotateOlapProjection(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* olapOperation = node->Child(TKqpOlapProjection::idx_OlapOperation);
+    // Exptecting that type annotation is supported for olap operation.
+    if (!olapOperation->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(olapOperation->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapProjections(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapProjections::idx_Input);
+    const TTypeAnnotationNode* inputType;
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &inputType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *inputType, ctx)) {
+        return TStatus::Error;
+    }
+
+    // For each `Projection` we want to replace a type annotation for column
+    // which associated with a `Projection`.
+    // For example: JsonDocument -> UTF8.
+    THashMap<TString, const TTypeAnnotationNode*> projectionsTypes;
+    const auto* projections = node->Child(TKqpOlapProjections::idx_Projections);
+    for (const auto& expr : TExprBase(projections).Cast<TExprList>()) {
+        auto projection = TExprBase(expr).Cast<TKqpOlapProjection>();
+        const auto* projectionTypeAnn = projection.Ptr()->GetTypeAnn();
+        // Expecting annotation for projection.
+        if (!projectionTypeAnn) {
+            return TStatus::Repeat;
+        }
+        projectionsTypes.emplace(TString(projection.ColumnName()), projectionTypeAnn);
+    }
+
+    THashSet<TString> takenColumns;
+    TVector<const TItemExprType*> newItemTypes;
+    const auto* originalStructType = inputType->Cast<TStructExprType>();
+    for (const auto* originalItemType : originalStructType->GetItems()) {
+        const auto& itemName = originalItemType->GetName();
+        if (projectionsTypes.contains(itemName)) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(itemName, projectionsTypes[itemName]));
+            takenColumns.insert(TString(itemName));
+        } else {
+            newItemTypes.push_back(originalItemType);
+        }
+    }
+
+    for (const auto &projectionType : projectionsTypes) {
+        if (!takenColumns.contains(projectionType.first)) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(projectionType.first, projectionType.second));
+        }
+    }
+
+    // Create a final type (Flow(Struct{items}))
+    node->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TStructExprType>(newItemTypes)));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -2034,6 +2103,14 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapPredicateClosure::Match(input.Get())) {
                 return AnnotateKqpOlapPredicateClosure(input, ctx);
+            }
+
+            if (TKqpOlapProjection::Match(input.Get())) {
+                return AnnotateOlapProjection(input, ctx);
+            }
+
+            if (TKqpOlapProjections::Match(input.Get())) {
+                return AnnotateOlapProjections(input, ctx);
             }
 
             if (TKqpOlapFilter::Match(input.Get())) {

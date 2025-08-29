@@ -606,6 +606,23 @@
             ]
         },
         {
+            "Name": "TKqpOlapProjection",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOlapProjection"},
+            "Children": [
+                {"Index": 0, "Name": "OlapOperation", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapProjections",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapProjections"},
+            "Children": [
+                {"Index": 1, "Name": "Projections", "Type": "TExprList"}
+            ]
+        },
+        {
             "Name": "TKqpOlapFilter",
             "Base": "TKqpOlapOperationBase",
             "Match": {"Type": "Callable", "Name": "KqpOlapFilter"},

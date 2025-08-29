@@ -24,6 +24,7 @@ private:
 
     THashSet<TRowRange> InsertedRanges;
     std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
+    std::vector<TPortionInfo::TConstPtr> AdditionalSources;
     std::function<void()> FinishedCallback;
 
 private:
@@ -37,6 +38,9 @@ private:
         AFL_VERIFY(IsReady());
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(FiltersByRange.begin()->second));
         Done = true;
+        if (FinishedCallback) {
+            FinishedCallback();
+        }
         AFL_VERIFY(IsDone());
     }
 
@@ -90,16 +94,22 @@ public:
     void Abort(const TString& error) {
         OriginalRequest->Get()->GetSubscriber()->OnFailure(error);
         Done = true;
+        if (FinishedCallback) {
+            FinishedCallback();
+        }
     }
 
     const TEvRequestFilter::TPtr& GetRequest() const {
         return OriginalRequest;
     }
 
-    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, std::function<void()> finishedCallback);
+    void SetFinishedCallback(std::function<void()> callback) {
+        FinishedCallback = callback;
+    }
+
+    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
 
     ~TInternalFilterConstructor() {
-        FinishedCallback();
         AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()))(
                                                                              "state", DebugString());
     }
@@ -125,6 +135,14 @@ public:
     }
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
+    }
+
+    void SetAdditionalSources(std::vector<TPortionInfo::TConstPtr> sources) {
+        AdditionalSources = std::move(sources);
+    }
+
+    const std::vector<TPortionInfo::TConstPtr>& GetAdditionalSources() const {
+        return AdditionalSources;
     }
 };
 

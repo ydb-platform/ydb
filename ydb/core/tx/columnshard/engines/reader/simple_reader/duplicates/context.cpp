@@ -2,12 +2,11 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, std::function<void()> finishedCallback)
+TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
     , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(GetStageFeatures()))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
     , GroupGuard(ScopeGuard->BuildGroupGuard())
-    , FinishedCallback(std::move(finishedCallback))
 {
     AFL_VERIFY(!!OriginalRequest);
 }

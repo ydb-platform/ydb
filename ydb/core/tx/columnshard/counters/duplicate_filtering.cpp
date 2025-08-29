@@ -11,6 +11,7 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
     , FilterPortionsCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterPortionsCache/Hits"))
     , FilterPortionsCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterPortionsCache/Misses"))
+    , FetchedSources(TBase::GetDeriviative("DuplicateFiltering/FetchedSources/Count"))
 {
 }
 }   // namespace NKikimr::NColumnShard

@@ -2120,7 +2120,8 @@ message TColumnShardConfig {
     optional bool DeduplicationEnabled = 46 [default = true];
     optional bool BulkUpsertRequireAllColumns = 47 [default = true];
     optional bool DeduplicationCacheEnabled = 48 [default = true];
-    optional uint32 MaxDeduplicationInFlightRequests = 49 [default = 5];
+    optional uint32 MaxDeduplicationInFlightRequests = 49 [default = 10];
+    optional bool DeduplicationLoadAdditionalPortions = 50 [default = false];
 }
 
 message TSchemeShardConfig {

@@ -22,6 +22,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FilterPortionsCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr FilterPortionsCacheMisses;
 
+    NMonitoring::TDynamicCounters::TCounterPtr FetchedSources;
+
 public:
     TDuplicateFilteringCounters();
 
@@ -47,6 +49,10 @@ public:
     }
     void OnFilterPortionsCacheMiss(const ui64 count = 1) const {
         FilterPortionsCacheMisses->Add(count);
+    }
+
+    void OnFetchedSources(const ui64 count = 1) const {
+        FetchedSources->Add(count);
     }
 };
 }   // namespace NKikimr::NColumnShard

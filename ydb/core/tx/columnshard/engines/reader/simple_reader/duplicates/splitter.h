@@ -9,42 +9,6 @@
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class TColumnDataSplitter {
-public:
-    class TBorder {
-    private:
-        YDB_READONLY_DEF(bool, IsLast);
-        NArrow::NMerger::TSortableBatchPosition Key;
-
-        TBorder(const bool isLast, const NArrow::TSimpleRow key)
-            : IsLast(isLast)
-            , Key(NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, false))
-        {
-        }
-
-    public:
-        static TBorder First(NArrow::TSimpleRow&& key) {
-            return TBorder(false, std::move(key));
-        }
-        static TBorder Last(NArrow::TSimpleRow&& key) {
-            return TBorder(true, std::move(key));
-        }
-
-        std::partial_ordering operator<=>(const TBorder& other) const {
-            return std::tie(Key, IsLast) <=> std::tie(other.Key, other.IsLast);
-        };
-        bool operator==(const TBorder& other) const {
-            return (*this <=> other) == std::partial_ordering::equivalent;
-        };
-
-        const NArrow::NMerger::TSortableBatchPosition& GetKey() const {
-            return Key;
-        }
-
-        TString DebugString() const {
-            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
-        }
-    };
-
 private:
     std::vector<TBorder> Borders;
     std::shared_ptr<arrow::Schema> SortingSchema;

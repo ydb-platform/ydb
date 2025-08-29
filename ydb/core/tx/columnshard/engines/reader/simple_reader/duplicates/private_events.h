@@ -55,6 +55,58 @@ public:
     }
 };
 
+class TEvFindIntervalsResult
+    : public NActors::TEventLocal<TEvFindIntervalsResult, NColumnShard::TEvPrivate::EvFindIntervalsResult> {
+private:
+    using TIntervals = std::vector<TPortionsSlice>;
+    TConclusion<TIntervals> Result;
+    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> DataByPortion;
+    std::vector<std::pair<TPortionInfo::TConstPtr, TIntervals>> AdditionalResults;
+
+public:
+    TEvFindIntervalsResult(TConclusion<TIntervals>&& result, const std::shared_ptr<TInternalFilterConstructor>& context,
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
+        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>&& dataByPortion,
+        std::vector<std::pair<TPortionInfo::TConstPtr, TIntervals>>&& additionalResults)
+        : Result(std::move(result))
+        , Context(context)
+        , AllocationGuard(std::move(allocationGuard))
+        , DataByPortion(std::move(dataByPortion))
+        , AdditionalResults(additionalResults)
+    {
+        AFL_VERIFY(AllocationGuard);
+    }
+
+    const TConclusion<TIntervals>& GetConclusion() const {
+        return Result;
+    }
+
+    TIntervals&& ExtractResult() {
+        return Result.DetachResult();
+    }
+
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> ExtractAllocationGuard() {
+        AFL_VERIFY(AllocationGuard);
+        auto result = std::move(AllocationGuard);
+        AllocationGuard.reset();
+        return result;
+    }
+
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>&& ExtractDataByPortion() {
+        return std::move(DataByPortion);
+    }
+
+    std::vector<std::pair<TPortionInfo::TConstPtr, TIntervals>>&& ExtractAdditionalResults() {
+        return std::move(AdditionalResults);
+    }
+};
+
+class TEvFilterBuildFinished
+    : public NActors::TEventLocal<TEvFilterBuildFinished, NColumnShard::TEvPrivate::EvFilterBuildFinished> {
+};
+
 class TDuplicateSourceCacheResult {
 private:
     using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;

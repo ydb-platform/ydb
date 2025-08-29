@@ -248,7 +248,7 @@ class AsyncHealthcheckRunner:
             this_pile = data['location']['pile']['name']
             failed_groups = filter(
                 lambda issue: 'GROUP' in issue.get('type', '') and 'pile' in issue.get('location', {}).get('storage', {}).get('pool', {}).get('group', {})
-                    and issue.get('status') == 'RED',
+                    and (issue.get('status') == 'RED' or issue.get('status') == 'YELLOW'),
                 issues,
             )
             failed_piles = set(
@@ -326,24 +326,20 @@ class PileState:
         self.synced_since = None
 
     def is_healthy(self):
-        if self.admin_reported_state in ['PRIMARY', 'SYNCHRONIZED']:
-            # TODO: remove responsive from the check!!!
-            # shouldn't be checked as the only condition
-            if not self.responsive:
-                return False
-
+        if self.admin_reported_state == 'PRIMARY':
             if not self.self_reported_alive:
                 return False
-
-            if self.reported_bad and self.admin_reported_state == 'SYNCHRONIZED':
+            return not self.reported_bad
+        elif self.admin_reported_state == 'SYNCHRONIZED':
+            if self.reported_bad:
                 if not self.synced_since:
                     # sanity check, shouldn't happen
                     return False
                 if time.monotonic() - self.synced_since < TO_SYNC_TRANSITION_GRACE_PERIOD:
                     return True
-
-            return not self.reported_bad and self.responsive
-        return True
+            return not self.reported_bad
+        else:
+            return True
 
     def can_vote_for_bad_piles(self):
         if not self.self_reported_alive:
@@ -398,7 +394,7 @@ class PileState:
 
         if self.synced_since:
             synced_elapsed = time.monotonic() - self.synced_since
-            s += f", synced for {synced_elapsed}s"
+            s += f", synced for {synced_elapsed:.3f}s"
 
         s += ")"
 
@@ -565,8 +561,11 @@ class Bridgekeeper:
 
         for pile_name, pile in new_state.Piles.items():
             if pile.admin_reported_state == 'SYNCHRONIZED' and pile_name in current_piles:
-                if current_piles[pile_name].admin_reported_state != 'SYNCHRONIZED':
+                current_pile = current_piles[pile_name]
+                if current_pile.admin_reported_state != 'SYNCHRONIZED':
                     pile.synced_since = new_state.MonotonicTs
+                else:
+                    pile.synced_since = current_pile.synced_since
 
     def _do_healthcheck(self):
         # TODO: it seems that sometimes this calls takes too long for unknown yet reason,

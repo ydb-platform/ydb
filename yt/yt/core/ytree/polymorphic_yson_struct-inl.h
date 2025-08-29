@@ -46,6 +46,16 @@ CreateInstance(TEnum value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CPolymorphicEnumMapping TMapping>
+TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct()
+{
+    if constexpr (DefaultType_) {
+        HeldType_ = *DefaultType_;
+    } else {
+        HeldType_ = {};
+    }
+}
+
+template <CPolymorphicEnumMapping TMapping>
 TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct(TKey key)
     : TPolymorphicYsonStruct(key, TMapping::CreateInstance(key))
 { }
@@ -76,11 +86,6 @@ void TPolymorphicYsonStruct<TMapping>::Load(
     // parse (unless we want to slice which we don't).
     SerializedStorage_ = TTraits::AsNode(source);
     IMapNodePtr map = SerializedStorage_->AsMap();
-
-    if (!map || map->GetChildCount() == 0) {
-        // Empty struct.
-        return;
-    }
 
     auto key = map->FindChildValue<TKey>("type");
     THROW_ERROR_EXCEPTION_UNLESS(

@@ -1,0 +1,984 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a9150140596468bf4a308cafd0e75aa
+BELONGS ya.make
+    License text:
+        Portions Copyright (c) 1994, The Regents of the University of California
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_windows.c [811:811]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b45599a01f8f51d427d0ccecca9c4e8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2008 Tim Kientzle
+         * Copyright (c) 2016 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_entry.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ee3cb695716a3e69cbbd179d27334a3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2015 Okhotnikov Kirill
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_filter_by_ext.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14fcbb88eeaab6274f603fa12170a9f0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Sean Purcell
+         * Copyright (c) 2023-2024 Klara, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_add_filter_zstd.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 156ff11352a27c9199bccf408d015ad4
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003-2007 Tim Kientzle
+        * Copyright (c) 2011 Andres Mejia
+        * Copyright (c) 2011 Michihiro NAKAJIMA
+        * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_digest.c [2:5]
+        libarchive/archive_digest_private.h [2:4]
+        libarchive/archive_entry.c [2:4]
+        libarchive/archive_entry_copy_bhfi.c [2:3]
+        libarchive/archive_entry_copy_stat.c [2:3]
+        libarchive/archive_entry_link_resolver.c [2:3]
+        libarchive/archive_entry_private.h [2:3]
+        libarchive/archive_entry_sparse.c [2:4]
+        libarchive/archive_entry_stat.c [2:3]
+        libarchive/archive_entry_strmode.c [2:3]
+        libarchive/archive_entry_xattr.c [2:3]
+        libarchive/archive_match.c [2:4]
+        libarchive/archive_openssl_evp_private.h [2:3]
+        libarchive/archive_openssl_hmac_private.h [2:3]
+        libarchive/archive_pathmatch.c [2:3]
+        libarchive/archive_pathmatch.h [2:3]
+        libarchive/archive_platform.h [2:3]
+        libarchive/archive_private.h [2:3]
+        libarchive/archive_read_data_into_fd.c [2:3]
+        libarchive/archive_read_disk_set_standard_lookup.c [2:3]
+        libarchive/archive_read_extract.c [2:3]
+        libarchive/archive_read_extract2.c [2:3]
+        libarchive/archive_read_open_fd.c [2:3]
+        libarchive/archive_read_open_file.c [2:3]
+        libarchive/archive_read_open_memory.c [2:3]
+        libarchive/archive_read_private.h [2:3]
+        libarchive/archive_read_support_filter_bzip2.c [2:3]
+        libarchive/archive_read_support_filter_compress.c [2:3]
+        libarchive/archive_read_support_filter_gzip.c [2:3]
+        libarchive/archive_read_support_filter_lrzip.c [2:3]
+        libarchive/archive_read_support_filter_lzop.c [2:4]
+        libarchive/archive_read_support_filter_none.c [2:3]
+        libarchive/archive_read_support_format_cpio.c [2:4]
+        libarchive/archive_read_support_format_empty.c [2:3]
+        libarchive/archive_read_support_format_iso9660.c [2:5]
+        libarchive/archive_read_support_format_mtree.c [2:5]
+        libarchive/archive_read_support_format_rar.c [2:4]
+        libarchive/archive_string_sprintf.c [2:3]
+        libarchive/archive_util.c [2:4]
+        libarchive/archive_version_details.c [2:4]
+        libarchive/archive_virtual.c [2:3]
+        libarchive/archive_write_add_filter_by_name.c [2:4]
+        libarchive/archive_write_add_filter_bzip2.c [2:4]
+        libarchive/archive_write_add_filter_grzip.c [2:3]
+        libarchive/archive_write_add_filter_gzip.c [2:3]
+        libarchive/archive_write_add_filter_lrzip.c [2:3]
+        libarchive/archive_write_disk_private.h [2:3]
+        libarchive/archive_write_disk_set_standard_lookup.c [2:3]
+        libarchive/archive_write_open_fd.c [2:3]
+        libarchive/archive_write_open_file.c [2:3]
+        libarchive/archive_write_open_filename.c [2:3]
+        libarchive/archive_write_open_memory.c [2:3]
+        libarchive/archive_write_private.h [2:3]
+        libarchive/archive_write_set_format.c [2:3]
+        libarchive/archive_write_set_format_by_name.c [2:3]
+        libarchive/archive_write_set_format_cpio_binary.c [2:4]
+        libarchive/archive_write_set_format_cpio_newc.c [2:5]
+        libarchive/archive_write_set_format_cpio_odc.c [2:4]
+        libarchive/archive_write_set_format_filter_by_ext.c [2:4]
+        libarchive/archive_write_set_format_pax.c [2:5]
+        libarchive/archive_write_set_format_shar.c [2:4]
+        libarchive/archive_write_set_format_ustar.c [2:4]
+        libarchive/archive_write_set_format_v7tar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 235a72d98c4ec22754dedd7def261567
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2008 Joerg Sonnenberger
+         * Copyright (c) 2011-2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_mtree.c [2:5]
+        libarchive/archive_write_add_filter_compress.c [2:3]
+        libarchive/archive_write_set_format_mtree.c [2:4]
+        libarchive/archive_write_set_format_shar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 235bf86943d0e515aa1f54fbc21405b5
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003-2007 Tim Kientzle
+        * Copyright (c) 2011 Andres Mejia
+        * Copyright (c) 2011 Michihiro NAKAJIMA
+        * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_digest.c [2:5]
+        libarchive/archive_entry_locale.h [2:3]
+        libarchive/archive_read_support_format_7zip.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23d3057ae413c7d5e762f2436388340d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2009 Andreas Henriksson <andreas@fatal.se>
+         * Copyright (c) 2009-2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_iso9660.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 265bbe3477cf796552aa1a7522c18e8e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2011 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_uu.c [2:3]
+        libarchive/archive_read_support_filter_xz.c [2:4]
+        libarchive/archive_windows.c [2:4]
+        libarchive/archive_windows.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 299fb2f535af1c7b4a362f55dc9e291f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1985, 1986, 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_compress.c [33:34]
+        libarchive/archive_write_add_filter_compress.c [27:28]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3301aa4cf034ef1e0a6a315eb3cb4db2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2011 Michihiro NAKAJIMA
+         * Copyright (c) 2003-2008 Tim Kientzle and Miklos Vajna
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_xz.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 332a696665ef259c2f8ddf504c2a07a3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004-2013 Tim Kientzle
+         * Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+         * Copyright (c) 2013 Konrad Kleine
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_zip.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e0dac04e0ba5d4ff0c439f66ab8eff6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004-2013 Tim Kientzle
+         * Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+         * Copyright (c) 2013 Konrad Kleine
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_zip.c [2:5]
+        libarchive/archive_write_set_format_zip.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 411b1cae84e5b41b557699f86f4096f7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 Ondrej Holy
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_add_filter.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49854ea0f921742cee84ee203ecf17c8
+BELONGS ya.make
+    License text:
+        The libarchive distribution as a whole is Copyright by Tim Kientzle
+        and is subject to the copyright notice reproduced at the bottom of
+        this file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b381e184707dc7f2cfc3893e71500f5
+BELONGS ya.make
+    License text:
+        	 * Copyright (C) The XZ Utils authors and contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_7zip.c [4301:4301]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c00b8c7e14fddf9966961971f051c39
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Sean Purcell
+         * Copyright (c) 2023-2024 Klara, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_add_filter_zstd.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d4dac3934317f5708a5b9f431796ebf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2011 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read.c [2:3]
+        libarchive/archive_read_support_filter_all.c [2:3]
+        libarchive/archive_read_support_format_all.c [2:3]
+        libarchive/archive_read_support_format_by_code.c [2:3]
+        libarchive/archive_string.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55be3baab2590abbc2353b2a430ea118
+BELONGS ya.make
+    License text:
+         * Copyright © 2025 ARJANEN Loïc Jean David
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_time.c [2:3]
+        libarchive/archive_time_private.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e1c871438ec2e793242f2e357fb94de
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2023 Tim Kientzle
+         * Copyright (c) 2011-2012 Michihiro NAKAJIMA
+         * Copyright (c) 2016 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_tar.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60f051c952e4baf87ae1b9457c17a929
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008 Anselm Strauss
+         * Copyright (c) 2009 Joerg Sonnenberger
+         * Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_zip.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64ad41a9da8360b4ae09a7f268770842
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996, David Mazieres <dm@uun.org>
+         * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_random.c [133:134]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c9918ecaf22d9d93015f1af4a3c984d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004-2013 Tim Kientzle
+         * Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+         * Copyright (c) 2013 Konrad Kleine
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_zip.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d09dbc04ffb3791e92bd079fc064b97
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010 Nokia Corporation and/or its subsidiary(-ies).
+         * Author: Jonas Gastal <jgastal@profusion.mobi>
+         * Copyright (c) 2011-2012 Michihiro NAKAJIMA
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_gnutar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70d87751d7e75c3bc40fbed566772d99
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2018 Grzegorz Antoniak (http://antoniak.org)
+        * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_rar5.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71c769ff8aace23ae784e02e7dce209d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2013 Marek Kubica
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_raw.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7824e8cfe49719c4870180a1fa0e54b3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008 Anselm Strauss
+         * Copyright (c) 2009 Joerg Sonnenberger
+         * Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_zip.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78bdaa8243c96f3d9cbf27f0202d4f8b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2011 Michihiro NAKAJIMA
+         * Copyright (c) 2003-2007 Kees Zeelenberg
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_windows.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78d9409f868f5ede31d297786ad58757
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2009 Andreas Henriksson <andreas@fatal.se>
+         * Copyright (c) 2009-2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_iso9660.c [2:5]
+        libarchive/archive_write_add_filter_xz.c [2:4]
+        libarchive/archive_write_set_format_iso9660.c [2:3]
+        libarchive/archive_write_set_format_mtree.c [2:4]
+        libarchive/filter_fork_windows.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a45dead3c932237bdd04a7ab2792291
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_rpm.c [2:3]
+        libarchive/archive_read_support_format_xar.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c2936cc0453639e0a55b4d9f729353c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_entry.c [1845:1846]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7f0743c43c580572718640368dce3702
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2011 Michihiro NAKAJIMA
+         * Copyright (c) 2003-2006 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_windows.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8358668c35db0b49217e7c1dc6af65dc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002 Thomas Moestl <tmm@FreeBSD.org>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_endian.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e175623eea252f2b7ce59e0fe6d2a92
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2007 Kai Wang
+         * Copyright (c) 2007 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_ar.c [2:4]
+        libarchive/archive_write_set_format_ar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8e1fc4b9d2fe6ba9f68e8f7ebd38a530
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2007 Joerg Sonnenberger
+         * Copyright (c) 2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_program.c [2:4]
+        libarchive/archive_write_add_filter_program.c [2:4]
+        libarchive/filter_fork.h [2:3]
+        libarchive/filter_fork_posix.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9356469afe65c245b4ab259b9d7dca41
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2001 The NetBSD Foundation, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_rb.c [2:3]
+        libarchive/archive_rb.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9484967e25960bc4ac6df27fe3942abb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2011-2012 libarchive Project
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_string_composition.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9502e7cc1285f49d2df7920c626c3308
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 Michihiro NAKAJIMA 
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_cmdline.c [2:3]
+        libarchive/archive_cmdline_private.h [2:3]
+        libarchive/archive_match.c [2:4]
+        libarchive/archive_read_support_filter_grzip.c [2:3]
+        libarchive/archive_read_support_filter_lzop.c [2:4]
+        libarchive/archive_read_support_filter_program.c [2:4]
+        libarchive/archive_write_add_filter_b64encode.c [2:3]
+        libarchive/archive_write_add_filter_by_name.c [2:4]
+        libarchive/archive_write_add_filter_bzip2.c [2:4]
+        libarchive/archive_write_add_filter_lzop.c [2:3]
+        libarchive/archive_write_add_filter_program.c [2:4]
+        libarchive/archive_write_add_filter_uuencode.c [2:3]
+        libarchive/archive_write_disk_posix.c [2:4]
+        libarchive/filter_fork_posix.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 952890961cdff41cde40fc920afd9228
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2010-2011 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_entry_sparse.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9640e65832f43c57ac3a8aadda800c40
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2007 Kai Wang
+         * Copyright (c) 2007 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_ar.c [2:4]
+        libarchive/archive_write_set_format_ar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a094881cc86a987af34096cd6e36ebe
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2012 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_append_filter.c [2:3]
+        libarchive/archive_read_set_format.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9a3fb0d766224c5b797117bec6fd5883
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_pack_dev.c [4:5]
+        libarchive/archive_pack_dev.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ca0387ef3b65fd2585d007e9a9aa0a3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2006 Rudolf Marek SYSGO s.r.o.
+         * Copyright (c) 2011-2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_cpio_newc.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9eaa12cf2d93ddd9a1f98dc542633e36
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003-2018 <author(s)>
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [43:44]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1c91920995daec075981f32beff43ac
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2014 Sebastian Freundt
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_warc.c [2:3]
+        libarchive/archive_write_set_format_warc.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a29ac0accd5113629b2d795bbd9e3021
+BELONGS ya.make
+    License text:
+        Copyright (C) 2012-2014, Yann Collet.
+        BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/xxhash.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a63117b384ee7525c25dbdfd40948045
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2003-2007 Tim Kientzle
+        * Copyright (c) 2011 Andres Mejia
+        * Copyright (c) 2011 Michihiro NAKAJIMA
+        * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_digest.c [2:5]
+        libarchive/archive_digest_private.h [2:4]
+        libarchive/archive_read_support_format_rar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9882ef247c64704f1b8373e7392a6b4
+BELONGS ya.make
+    License text:
+         * Portions Copyright (c) 1996-2008, PostgreSQL Global Development Group
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_windows.c [798:798]
+        libarchive/archive_windows.c [809:809]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aff3dc90bd054108716ad9ad16452926
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996, David Mazieres <dm@uun.org>
+         * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_random.c [133:134]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c79143bfb212b2f9d928062401ca6aee
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2011 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_options.c [2:3]
+        libarchive/archive_options_private.h [2:3]
+        libarchive/archive_read_set_options.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca4b8722f811e44e4d1dd056fe961042
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_write_set_format_iso9660.c [471:478]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccbb2a7a42c28f0effe7c94c37bff88b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * Copyright (c) 2008 Joerg Sonnenberger
+         * Copyright (c) 2011-2012 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_mtree.c [2:5]
+        libarchive/archive_read_support_format_tar.c [2:5]
+        libarchive/archive_string.c [2:4]
+        libarchive/archive_write_disk_windows.c [2:4]
+        libarchive/archive_write_set_format_7zip.c [2:3]
+        libarchive/archive_write_set_format_cpio_binary.c [2:4]
+        libarchive/archive_write_set_format_cpio_newc.c [2:5]
+        libarchive/archive_write_set_format_cpio_odc.c [2:4]
+        libarchive/archive_write_set_format_gnutar.c [2:4]
+        libarchive/archive_write_set_format_ustar.c [2:4]
+        libarchive/archive_write_set_format_v7tar.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cef2297a51823e848084a5572e6ae9b7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2012,2014 Michihiro NAKAJIMA
+         * Copyright (c) 2003-2007 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_util.c [2:4]
+        libarchive/archive_version_details.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2254b9f56f828c7d8954232d0e3aacf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2014 Michihiro NAKAJIMA
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_lha.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4b8aa7f95ac1256df779acea10bf25f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2010 Tim Kientzle
+         * Copyright (c) 2016 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_acl.c [2:4]
+        libarchive/archive_entry.c [2:4]
+        libarchive/archive_entry.h [2:4]
+        libarchive/archive_read_disk_entry_from_file.c [2:5]
+        libarchive/archive_read_support_format_tar.c [2:5]
+        libarchive/archive_write_set_format_pax.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dcbc881d090af4416582cff0efa40f7d
+BELONGS ya.make
+    License text:
+        	 * Copyright (C) The XZ Embedded authors and contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_format_7zip.c [4243:4243]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd64b4ef0dff30002f4c0ed2ab3d4c36
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2020 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_by_code.c [2:3]
+        libarchive/archive_write_set_format_private.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e3c15cc3b5deb17ac0067cb7d9a61a7f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_platform_acl.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9ff109784aa001443cacdfc8dac07bf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2009 Tim Kientzle
+         * Copyright (c) 2010-2012 Michihiro NAKAJIMA
+         * Copyright (c) 2016 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_disk_entry_from_file.c [2:5]
+        libarchive/archive_read_disk_posix.c [2:4]
+        libarchive/archive_read_disk_windows.c [2:4]
+        libarchive/archive_read_support_format_cab.c [2:3]
+        libarchive/archive_read_support_format_cpio.c [2:4]
+        libarchive/archive_write_set_format_pax.c [2:5]
+        libarchive/archive_write_set_format_xar.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3d277851e998a0685484ba6af69d4e2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2010 Tim Kientzle
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive.h [2:3]
+        libarchive/archive_acl.c [2:4]
+        libarchive/archive_acl_private.h [2:3]
+        libarchive/archive_check_magic.c [2:3]
+        libarchive/archive_read_open_filename.c [2:3]
+        libarchive/archive_string.h [2:3]
+        libarchive/archive_write.c [2:3]
+        libarchive/archive_write_add_filter_none.c [2:3]
+        libarchive/archive_write_add_filter_xz.c [2:4]
+        libarchive/archive_write_disk_posix.c [2:4]
+        libarchive/archive_write_disk_windows.c [2:4]
+        libarchive/archive_write_set_options.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f73cad1bd4f05101774095c817878fef
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2011 Sean Purcell
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_support_filter_zstd.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f9a6943657ec97a465da68ed1bcb409c
+BELONGS ya.make
+    License text:
+        * Copyright (c) 2014 Michihiro NAKAJIMA
+        * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_cryptor.c [2:3]
+        libarchive/archive_cryptor_private.h [2:3]
+        libarchive/archive_hmac.c [2:3]
+        libarchive/archive_hmac_private.h [2:3]
+        libarchive/archive_random.c [2:3]
+        libarchive/archive_random_private.h [2:3]
+        libarchive/archive_read_add_passphrase.c [2:3]
+        libarchive/archive_read_support_filter_lz4.c [2:3]
+        libarchive/archive_write_add_filter_lz4.c [2:3]
+        libarchive/archive_write_set_passphrase.c [2:3]
+        libarchive/archive_xxhash.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd3e12baabee61b12f98ca3a14b79d96
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2009 Tim Kientzle
+         * Copyright (c) 2010-2012 Michihiro NAKAJIMA
+         * Copyright (c) 2016 Martin Matuska
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libarchive/archive_read_disk_entry_from_file.c [2:5]
+        libarchive/archive_read_disk_posix.c [2:4]
+        libarchive/archive_read_disk_private.h [2:3]
+        libarchive/archive_read_disk_windows.c [2:4]
+        libarchive/archive_read_support_format_raw.c [2:3]

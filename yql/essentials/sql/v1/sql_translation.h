@@ -270,6 +270,12 @@ protected:
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
 
+    TMaybe<TString> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    bool ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings);
+    bool ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings);
+    bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
+    bool ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings);
+
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
 

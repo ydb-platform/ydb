@@ -4,7 +4,7 @@
 //  Copyright Jan Langer 2002
 //  Copyright Dietmar Kuehl 2001
 //  Copyright Vladimir Prus 2002
-//  Copyright Andrey Semashev 2019, 2022
+//  Copyright Andrey Semashev 2019-2025
 
 //  Distributed under the Boost Software License, Version 1.0.
 //  See http://www.boost.org/LICENSE_1_0.txt
@@ -34,6 +34,13 @@
 #include <boost/iterator/iterator_categories.hpp>
 
 #include <boost/filesystem/detail/header.hpp> // must be the last #include
+
+#if defined(BOOST_GCC) && (__GNUC__ == 12)
+#pragma GCC diagnostic push
+// 'function' redeclared without dllimport attribute: previous dllimport ignored
+// gcc bug on MinGW-w64 and Cygwin: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106395
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
 
 //--------------------------------------------------------------------------------------//
 
@@ -1033,6 +1040,10 @@ struct range_const_iterator< boost::filesystem::recursive_directory_iterator, vo
 };
 
 } // namespace boost
+
+#if defined(BOOST_GCC) && (__GNUC__ == 12)
+#pragma GCC diagnostic pop
+#endif
 
 #include <boost/filesystem/detail/footer.hpp>
 

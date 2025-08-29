@@ -708,6 +708,15 @@ TEST_P(THttpServerTest, SimpleRequest)
     ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 
+TEST_P(THttpServerTest, EmptyPath)
+{
+    Server->AddHandler("/", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto rsp = WaitFor(Client->Get(TestUrl)).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+}
+
 class TEchoHttpHandler
     : public IHttpHandler
 {

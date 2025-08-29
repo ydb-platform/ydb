@@ -172,7 +172,7 @@ private:
 struct TPartitionConfigMerger {
     static constexpr ui32 MaxFollowersCount = 3;
 
-    static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData);
+    static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind);
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
@@ -593,6 +593,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
+        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
     };
 
     static TAlterDataPtr CreateAlterData(

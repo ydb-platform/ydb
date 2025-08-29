@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
+
+import grpc
 
 from . import issues
 
@@ -52,3 +54,26 @@ def check_retriable_error(err, retry_settings, attempt):
 class ErrorRetryInfo:
     is_retriable: bool
     sleep_timeout_seconds: Optional[float]
+
+
+def stream_error_converter(exc: BaseException) -> Union[issues.Error, BaseException]:
+    """Converts gRPC stream errors to appropriate YDB exception types.
+
+    This function takes a base exception and converts specific gRPC aio stream errors
+    to their corresponding YDB exception types for better error handling and semantic
+    clarity.
+
+    Args:
+        exc (BaseException): The original exception to potentially convert.
+
+    Returns:
+        BaseException: Either a converted YDB exception or the original exception
+                      if no specific conversion rule applies.
+    """
+    if isinstance(exc, (grpc.RpcError, grpc.aio.AioRpcError)):
+        if exc.code() == grpc.StatusCode.UNAVAILABLE:
+            return issues.Unavailable(exc.details() or "")
+        if exc.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            return issues.DeadlineExceed("Deadline exceeded on request")
+        return issues.Error("Stream has been terminated. Original exception: {}".format(str(exc.details())))
+    return exc

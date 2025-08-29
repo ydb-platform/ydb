@@ -85,7 +85,7 @@ public:
 
     static void PrintTimeline(const TString& plan, IOutputStream& output);
 
-    static void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output);
+    void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, const TString& plan, IOutputStream& output) const;
 
     // Function adds thousands separators
     // 123456789 -> 123.456.789

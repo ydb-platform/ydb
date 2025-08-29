@@ -207,22 +207,24 @@ void TMainBase::ReplaceYqlTokenTemplate(TString& text) const {
     }
 }
 
-void TMainBase::SetupActorSystemConfig(NKikimrConfig::TActorSystemConfig& config) const {
+void TMainBase::SetupActorSystemConfig(NKikimrConfig::TAppConfig& config) const {
     if (!UserPoolSize) {
         return;
     }
 
-    if (!config.HasScheduler()) {
-        auto& scheduler = *config.MutableScheduler();
+    auto& asConfig = *config.MutableActorSystemConfig();
+
+    if (!asConfig.HasScheduler()) {
+        auto& scheduler = *asConfig.MutableScheduler();
         scheduler.SetResolution(64);
         scheduler.SetSpinThreshold(0);
         scheduler.SetProgressThreshold(10000);
     }
 
-    config.ClearExecutor();
+    asConfig.ClearExecutor();
 
-    const auto addExecutor = [&config](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type, std::optional<ui64> spinThreshold = std::nullopt) {
-        auto& executor = *config.AddExecutor();
+    const auto addExecutor = [&asConfig](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type, std::optional<ui64> spinThreshold = std::nullopt) {
+        auto& executor = *asConfig.AddExecutor();
         executor.SetName(name);
         executor.SetThreads(threads);
         executor.SetType(type);
@@ -240,20 +242,20 @@ void TMainBase::SetupActorSystemConfig(NKikimrConfig::TActorSystemConfig& config
     };
 
     addExecutor("System", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10);
-    config.SetSysExecutor(0);
+    asConfig.SetSysExecutor(0);
 
     addExecutor("User", *UserPoolSize, NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
-    config.SetUserExecutor(1);
+    asConfig.SetUserExecutor(1);
 
     addExecutor("Batch", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
-    config.SetBatchExecutor(2);
+    asConfig.SetBatchExecutor(2);
 
     addExecutor("IO", 1, NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-    config.SetIoExecutor(3);
+    asConfig.SetIoExecutor(3);
 
     addExecutor("IC", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10)
         .SetTimePerMailboxMicroSecs(100);
-    auto& serviceExecutors = *config.MutableServiceExecutor();
+    auto& serviceExecutors = *asConfig.MutableServiceExecutor();
     serviceExecutors.Clear();
     auto& serviceExecutor = *serviceExecutors.Add();
     serviceExecutor.SetServiceName("Interconnect");

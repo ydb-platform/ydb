@@ -930,11 +930,11 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
-        SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
-
         if (!DefaultLogPriority) {
             DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
         }
+        SetupActorSystemConfig(appConfig);
+
         SetupLogsConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {

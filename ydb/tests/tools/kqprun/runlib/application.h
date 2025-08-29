@@ -35,7 +35,7 @@ protected:
 
     void ReplaceYqlTokenTemplate(TString& text) const;
 
-    void SetupActorSystemConfig(NKikimrConfig::TActorSystemConfig& config) const;
+    void SetupActorSystemConfig(NKikimrConfig::TAppConfig& config) const;
 
     void SetupLogsConfig(NKikimrConfig::TLogConfig& config) const;
 

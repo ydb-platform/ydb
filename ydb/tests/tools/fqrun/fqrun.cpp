@@ -603,12 +603,12 @@ protected:
 
         fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
-        SetupLogsConfig(*appConfig.MutableLogConfig());
-
         if (!DefaultLogPriority) {
             DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.FqSettings.VerbosityLevel);
         }
-        SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
+        SetupLogsConfig(*appConfig.MutableLogConfig());
+
+        SetupActorSystemConfig(appConfig);
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();

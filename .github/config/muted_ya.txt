@@ -464,8 +464,6 @@ ydb/tests/postgres_integrations/go-libpq py3test.[docker_wrapper_test.py] chunk
 ydb/tests/stress/mixedpy py3test.sole chunk
 ydb/tests/stress/mixedpy test_mixed.py.TestYdbWorkload.test[column]
 ydb/tests/stress/node_broker/tests test_workload.py.TestDeltaProtocol.test
-ydb/tests/stress/olap_workload/tests py3test.sole chunk
-ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests py3test.sole chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board

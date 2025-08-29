@@ -527,6 +527,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
+        NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
     }
 }
 

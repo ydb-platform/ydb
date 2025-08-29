@@ -643,6 +643,33 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
+        try {
+            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
+            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                dirname = JoinPath({GetDatabase(), dirname});
+            }
+
+            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
+            for (auto& setting : settings) {
+                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
+                add->Swap(&setting);
+            }
+
+            setColumnConstraintsInitiate.SetTableName(tableName);
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
+            modifyScheme.SetWorkingDir(std::move(dirname));
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
             TGenericResult result;

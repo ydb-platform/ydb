@@ -225,4 +225,5 @@ message TFeatureFlags {
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
     optional bool EnableFulltextIndex = 201 [default = false];
+    optional bool EnableChangeNotNullConstraint = 202 [default = false];
 }

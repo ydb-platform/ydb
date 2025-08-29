@@ -239,7 +239,7 @@ struct TUserInfo: public TUserInfoBase {
     {
         if (AppData(ctx)->Counters) {
             if (partitionCountersSubgroup) {
-                SetupPerPartitionCounters(partitionCountersSubgroup);
+                SetupPerPartitionCounters(ctx, partitionCountersSubgroup);
             }
 
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -257,7 +257,7 @@ struct TUserInfo: public TUserInfoBase {
         }
     }
 
-    void SetupPerPartitionCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+    void SetupPerPartitionCounters(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
         Y_ABORT_UNLESS(subgroup);
 
         if (BytesReadPerPartition) {
@@ -265,9 +265,14 @@ struct TUserInfo: public TUserInfoBase {
             return;
         }
 
+        bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+        auto consumerSubgroup = fcc
+            ? subgroup->GetSubgroup("consumer", User)
+            : subgroup->GetSubgroup("Client", User)
+                      ->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+
         auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
-            bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
-            return subgroup->GetExpiringNamedCounter(
+            return consumerSubgroup->GetExpiringNamedCounter(
                 fcc ? "name" : "sensor",
                 fcc ? forFCC : forFederation,
                 deriv);

@@ -251,6 +251,7 @@ private:
     };
 
     virtual void OnTimeout(TColumnShard& owner) override {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("iurii", "TEvWriteCommitPrimaryTransactionOperator");
         InitializeRequests(owner);
     }
 

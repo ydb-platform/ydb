@@ -113,7 +113,20 @@ struct TPageTraits {
     }
 };
 
+enum class EBlockIOFetchTypeCookie {
+    NoQueue = 1,
+    AsyncQueue = 2,
+    ScanQueue = 3,
+    TryKeepInMemoryPreload = 4,
+};
+
 struct TRequestQueue {
+    explicit TRequestQueue(EBlockIOFetchTypeCookie cookie)
+        : Cookie(cookie)
+    {}
+
+    EBlockIOFetchTypeCookie Cookie;
+
     TMap<TActorId, TDeque<TIntrusivePtr<TRequest>>> Requests;
 
     ui64 Limit = 0;
@@ -134,10 +147,6 @@ static bool DoTraceLog() {
 class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
-    static const ui64 NO_QUEUE_COOKIE = 1;
-    static const ui64 ASYNC_QUEUE_COOKIE = 2;
-    static const ui64 SCAN_QUEUE_COOKIE = 3;
-
     TActorId Owner;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
@@ -146,8 +155,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, THashMap<TCollection*, TIntrusiveList<TRequest>>> Owners;
-    TRequestQueue AsyncRequests;
-    TRequestQueue ScanRequests;
+    TRequestQueue AsyncRequests{EBlockIOFetchTypeCookie::AsyncQueue};
+    TRequestQueue ScanRequests{EBlockIOFetchTypeCookie::ScanQueue};
 
     TTieredCache<TPage, TPageTraits> Cache;
 
@@ -469,7 +478,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (queue) {
                     RequestFromQueue(*queue);
                 } else {
-                    SendRequest(*request, std::move(pagesToRequest), pagesToRequestBytes, nullptr);
+                    SendRequest(*request, std::move(pagesToRequest), pagesToRequestBytes, EBlockIOFetchTypeCookie::NoQueue);
                 }
             }
         } else {
@@ -542,7 +551,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         << (&queue == &AsyncRequests ? " async" : " scan") << " queue"
                         << " pages " << toLoad);
 
-                    SendRequest(request, std::move(toLoad), sizeToLoad, &queue);
+                    SendRequest(request, std::move(toLoad), sizeToLoad, queue.Cookie);
                 }
             }
 
@@ -704,13 +713,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         RemoveInFlyPages(msg->Pages.size(), msg->Cookie);
 
+        auto fetchType = static_cast<EBlockIOFetchTypeCookie>(ev->Cookie);
         TRequestQueue *queue = nullptr;
-        if (ev->Cookie == ASYNC_QUEUE_COOKIE) {
-            queue = &AsyncRequests;
-        } else if (ev->Cookie == SCAN_QUEUE_COOKIE) {
-            queue = &ScanRequests;
-        } else {
-            Y_ENSURE(ev->Cookie == NO_QUEUE_COOKIE);
+        switch (fetchType) {
+            case EBlockIOFetchTypeCookie::NoQueue:
+                break;
+            case EBlockIOFetchTypeCookie::AsyncQueue:
+                queue = &AsyncRequests;
+                break;
+            case EBlockIOFetchTypeCookie::ScanQueue:
+                queue = &ScanRequests;
+                break;
+            case EBlockIOFetchTypeCookie::TryKeepInMemoryPreload:
+                break;
         }
         if (queue) {
             Y_ENSURE(queue->InFly >= msg->Cookie);
@@ -741,8 +756,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 loadedPages.push_back(page);
             }
 
-            for (const auto& owner : collection->InMemoryOwners) {
-                NotifyOwners(msg->PageCollection, loadedPages, owner);
+            if (loadedPages && fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
+                for (const auto& owner : collection->InMemoryOwners) {
+                    NotifyOwners(msg->PageCollection, loadedPages, owner);
+                }
             }
         }
 
@@ -973,31 +990,26 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         }
 
-        TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(pageCollection), NKikimrProto::OK, 0);
-        result->Pages = std::move(readyLoadedPages);
-        Send(owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
+        if (readyLoadedPages) {
+            TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(pageCollection), NKikimrProto::OK, 0);
+            result->Pages = std::move(readyLoadedPages);
+            Send(owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
+        }
     }
 
-    void SendRequest(TRequest& request, TVector<TPageId>&& pages, ui64 bytes, TRequestQueue *queue) {
+    void SendRequest(TRequest& request, TVector<TPageId>&& pages, ui64 bytes, EBlockIOFetchTypeCookie cookie) {
         AddInFlyPages(pages.size(), bytes);
-
-        auto queueCookie = NO_QUEUE_COOKIE;
-        if (queue) {
-            queueCookie = queue == &AsyncRequests 
-            ? ASYNC_QUEUE_COOKIE 
-            : SCAN_QUEUE_COOKIE;
-        }
 
         // fetch cookie -> requested size
         // event cookie -> queue type
         auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection, std::move(pages), bytes);
-        if (queue) {
+        if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
             fetch->TraceId = request.TraceId.GetTraceId();
         } else {
             fetch->TraceId = std::move(request.TraceId);            
         }
-        NBlockIO::Start(this, request.Sender, queueCookie, fetch);
+        NBlockIO::Start(this, request.Sender, static_cast<ui64>(cookie), fetch);
     }
 
     void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError) {
@@ -1139,7 +1151,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " pages " << pagesToRequest);
 
             // TODO: add some counters for these fetches?
-            SendRequest(request, std::move(pagesToRequest), pagesToRequestBytes, nullptr);
+            SendRequest(request, std::move(pagesToRequest), pagesToRequestBytes, EBlockIOFetchTypeCookie::TryKeepInMemoryPreload);
         }
     }
 

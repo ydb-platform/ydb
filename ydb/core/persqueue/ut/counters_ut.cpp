@@ -135,16 +135,24 @@ Y_UNIT_TEST(PerPartition) {
     auto zeroUnreliableValues = [](std::string counters) {
         // Some counters end up with a different value each run.
         // To simplify testing we set such values to 0.
-        counters = std::regex_replace(counters, std::regex("WriteTimeLagMsByLastWrite: \\d+"), "WriteTimeLagMsByLastWrite: 0");
+        auto names = TVector<std::string>{
+            "WriteTimeLagMsByLastWrite",
+            "WriteTimeLagMsByCommittedPerPartition",
+            "TimeSinceLastReadMsPerPartition",
+            "WriteTimeLagMsByLastReadPerPartition",
+        };
+        for (const auto& name : names) {
+            counters = std::regex_replace(counters, std::regex(name + ": \\d+"), name + ": 0");
+        }
         return counters;
     };
 
-    auto getCountersHtml = [&tc, &zeroUnreliableValues](const TString& group = "topics_per_partition") {
+    auto getCountersHtml = [&tc](const TString& group = "topics_per_partition") {
         auto counters = tc.Runtime->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, group);
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        return zeroUnreliableValues(countersStr.Str());
+        return countersStr.Str();
     };
 
     TString counters = getCountersHtml();
@@ -166,8 +174,10 @@ Y_UNIT_TEST(PerPartition) {
         CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
 
         std::string counters = getCountersHtml();
+        Cerr << "after write: " << counters << "\n";
+        Cerr << "after write zeroed: " << zeroUnreliableValues(counters) << "\n";
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
-        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
     }
 
     {
@@ -213,8 +223,9 @@ Y_UNIT_TEST(PerPartition) {
         }
 
         TString counters = getCountersHtml();
+        Cerr << "after read: " << counters << "\n";
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_read.html"));
-        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
     }
 
     {
@@ -223,7 +234,7 @@ Y_UNIT_TEST(PerPartition) {
         PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
-        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
     }
 }
 

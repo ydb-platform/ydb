@@ -17,7 +17,12 @@ Account=asdfgs:
 
                     ConsumerPath=shared/user:
                         sensor=BytesReadPerPartition: 0
+                        sensor=MessageLagByCommittedPerPartition: 30
+                        sensor=MessageLagByLastReadPerPartition: 29
                         sensor=MessagesReadPerPartition: 0
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
             Partition=1:
                 sensor=BytesWrittenPerPartition: 360
@@ -31,5 +36,10 @@ Account=asdfgs:
 
                     ConsumerPath=shared/user:
                         sensor=BytesReadPerPartition: 0
+                        sensor=MessageLagByCommittedPerPartition: 20
+                        sensor=MessageLagByLastReadPerPartition: 19
                         sensor=MessagesReadPerPartition: 0
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 </pre>

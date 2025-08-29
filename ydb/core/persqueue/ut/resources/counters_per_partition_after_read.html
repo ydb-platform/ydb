@@ -17,13 +17,23 @@ Account=asdfgs:
 
                     ConsumerPath=shared/user:
                         sensor=BytesReadPerPartition: 0
+                        sensor=MessageLagByCommittedPerPartition: 30
+                        sensor=MessageLagByLastReadPerPartition: 29
                         sensor=MessagesReadPerPartition: 0
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
                 Client=user1:
 
                     ConsumerPath=shared/user1:
                         sensor=BytesReadPerPartition: 106
+                        sensor=MessageLagByCommittedPerPartition: 0
+                        sensor=MessageLagByLastReadPerPartition: 0
                         sensor=MessagesReadPerPartition: 2
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
             Partition=1:
                 sensor=BytesWrittenPerPartition: 360
@@ -37,11 +47,21 @@ Account=asdfgs:
 
                     ConsumerPath=shared/user:
                         sensor=BytesReadPerPartition: 0
+                        sensor=MessageLagByCommittedPerPartition: 20
+                        sensor=MessageLagByLastReadPerPartition: 19
                         sensor=MessagesReadPerPartition: 0
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 
                 Client=user1:
 
                     ConsumerPath=shared/user1:
                         sensor=BytesReadPerPartition: 693
+                        sensor=MessageLagByCommittedPerPartition: 0
+                        sensor=MessageLagByLastReadPerPartition: 0
                         sensor=MessagesReadPerPartition: 17
+                        sensor=TimeSinceLastReadMsPerPartition: 0
+                        sensor=WriteTimeLagMsByCommittedPerPartition: 0
+                        sensor=WriteTimeLagMsByLastReadPerPartition: 0
 </pre>

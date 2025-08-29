@@ -117,6 +117,7 @@ struct TUserInfo: public TUserInfoBase {
     NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
 
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
@@ -287,6 +288,7 @@ struct TUserInfo: public TUserInfoBase {
         MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
         WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
         WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds_max", "WriteTimeLagMsByCommitted", false);
+        TimeSinceLastReadMsPerPartition = getCounter("read.idle_milliseconds_max", "TimeSinceLastReadMs", false);
     }
 
     void ResetPerPartitionCounters() {
@@ -296,6 +298,7 @@ struct TUserInfo: public TUserInfoBase {
         MessageLagByCommittedPerPartition.Reset();
         WriteTimeLagMsByLastReadPerPartition.Reset();
         WriteTimeLagMsByCommittedPerPartition.Reset();
+        TimeSinceLastReadMsPerPartition.Reset();
     }
 
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {

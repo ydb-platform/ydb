@@ -353,6 +353,8 @@ private:
 
         bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
 
+        bool enableOrderOptimizaionFSM = TableServiceConfig.GetEnableOrderOptimizaionFSM();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -394,7 +396,8 @@ private:
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
             TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
-            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate)
+            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
+            TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM)
         {
 
             QueryCache->Clear();

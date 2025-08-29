@@ -743,7 +743,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Status != NKikimrProto::OK) {
             DropCollection(*collection, msg->Status);
         } else {
-            TVector<TPage*> loadedPages(::Reserve(msg->Pages.size()));
+            bool needNotifyOwners = fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload && collection->InMemoryOwners;
+            auto loadedPages = needNotifyOwners ? TVector<TPage*>(::Reserve(msg->Pages.size())) : TVector<TPage*>();
             for (auto &paged : msg->Pages) {
                 Y_ENSURE(paged.PageId < collection->PageMap.size());
                 auto* page = collection->PageMap[paged.PageId].Get();
@@ -753,10 +754,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                loadedPages.push_back(page);
+                if (needNotifyOwners) {
+                    loadedPages.push_back(page);
+                }
             }
 
-            if (loadedPages && fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
+            if (loadedPages) {
                 for (const auto& owner : collection->InMemoryOwners) {
                     NotifyOwners(msg->PageCollection, loadedPages, owner);
                 }
@@ -1109,7 +1112,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
         TVector<TPage*> loadedPages;
         ui64 pagesToRequestBytes = 0;
-        ui64 remainBytes = Config.HasMemoryLimit() ? Min(MemLimitBytes, Config.GetMemoryLimit()) : MemLimitBytes;
+        ui64 remainBytes = Cache.GetLimit();
         for (const auto& pageId : xrange(pageCollection->Total())) {
             auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheMode::TryKeepInMemory);
             TryChangeCacheMode(page, ECacheMode::TryKeepInMemory);

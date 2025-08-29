@@ -210,6 +210,7 @@ private:
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("txid", GetTxId())("iurii", "TEvWriteCommitSecondaryTransactionOperator");
         SendResult(owner);
     }
 

@@ -48,6 +48,7 @@
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/core/tx/columnshard/statistics/reporter.h>
 
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
@@ -57,6 +58,7 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TColumnShardStatisticsReporter;
 class TRemovePortionsChange;
 class TMovePortionsChange;
 
@@ -208,6 +210,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NDataSharing::TSourceSession;
 
     friend class NOlap::TStoragesManager;
+    friend class NOlap::TColumnShardStatisticsReporter;
 
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
@@ -515,6 +518,7 @@ private:
 
     TActorId ResourceSubscribeActor;
     TActorId BufferizationPortionsWriteActorId;
+    TActorId ColumnShardStatisticsReporter;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
@@ -592,6 +596,8 @@ private:
     void SendPeriodicStats();
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+
+    void FillExecutorStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
     ui64 TabletTxCounter = 0;

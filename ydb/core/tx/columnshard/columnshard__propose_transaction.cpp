@@ -23,7 +23,7 @@ public:
         AFL_VERIFY(!!Ev);
     }
 
-    virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
+    virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
@@ -44,6 +44,8 @@ public:
         if (record.HasSchemeShardId()) {
             if (Self->CurrentSchemeShardId == 0) {
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("set", "CurrentSchemeShardId");
+                ctx.Send(Self->ColumnShardStatisticsReporter, new NOlap::TColumnShardStatisticsReporter::TEvSetSSId(record.GetSchemeShardId()));
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {
                 AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());

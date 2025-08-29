@@ -80,6 +80,10 @@ struct TEvPrivate {
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
 
+        EvReportBaseStatistics,
+        EvReportExecutorStatistics,
+        EvSetSSId,
+
         EvEnd
     };
 

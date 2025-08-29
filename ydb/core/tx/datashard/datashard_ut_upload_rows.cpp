@@ -25,7 +25,8 @@ static void DoStartUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
         const TString& tableName,
-        Ydb::Type::PrimitiveTypeId typeId)
+        Ydb::Type::PrimitiveTypeId typeId,
+        TBackoff backoff = TBackoff(0))
 {
     auto& runtime = *server->GetRuntime();
 
@@ -43,7 +44,7 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
-    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows);
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
     runtime.Register(actor);
 }
 
@@ -736,7 +737,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe) {
+    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool backoff = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -749,6 +750,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
@@ -787,7 +789,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
         observedUploadStatus.clear();
 
-        if (!overloadSubscribe) {
+        if (!overloadSubscribe && !backoff) {
             DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
             return;
         }
@@ -803,7 +805,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
         }));
 
-        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32);
+        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32, TBackoff(3, TDuration::Seconds(1)));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!blockedEnqueueRecords.empty());
@@ -843,6 +845,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
     Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetry) {
         DoShouldRejectOnChangeQueueOverflow(true);
+    }
+
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetryOnRetryableError) {
+        DoShouldRejectOnChangeQueueOverflow(false, true);
     }
 
     Y_UNIT_TEST(BulkUpsertDuringAddIndexRaceCorruption) {

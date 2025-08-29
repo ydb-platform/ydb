@@ -435,7 +435,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
-        if (Binding && !Binding->SessionId) { // binding is in progess, wait for it to complete
+        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer

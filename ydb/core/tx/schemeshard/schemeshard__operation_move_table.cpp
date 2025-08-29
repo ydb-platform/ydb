@@ -346,7 +346,7 @@ public:
     TWaitRenamedPathPublication(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     template<typename TEvent>
@@ -434,7 +434,7 @@ public:
     TDeleteTableBarrier(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     template<typename TEvent>

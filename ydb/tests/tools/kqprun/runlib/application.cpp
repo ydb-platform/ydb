@@ -275,10 +275,10 @@ void TMainBase::SetupLogsConfig(NKikimrConfig::TLogConfig& config) const {
         const auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
         for (int i = 0; i < descriptor->value_count(); ++i) {
             const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
-            const auto& servicceStr = NKikimrServices::EServiceKikimr_Name(service);
+            const auto& serviceStr = NKikimrServices::EServiceKikimr_Name(service);
 
             for (const auto& prefix : prefixes) {
-                if (servicceStr.StartsWith(prefix)) {
+                if (serviceStr.StartsWith(prefix)) {
                     logPriorities.emplace(service, *priority);
                     break;
                 }

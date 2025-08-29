@@ -898,9 +898,8 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& re
     return appConfig;
 }
 
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {
@@ -919,7 +918,16 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
         ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithConsoleProto);
     }
 
-    return regularConfig;
+    return Nothing();
+}
+
+NKikimrConfig::TAppConfig GetActualDynConfig(
+    const NKikimrConfig::TAppConfig& yamlConfig,
+    const NKikimrConfig::TAppConfig& regularConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    auto dynConfig = GetActualDynConfig(yamlConfig, ConfigUpdateTracer);
+    return dynConfig ? *dynConfig : regularConfig;
 }
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {

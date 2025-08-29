@@ -339,6 +339,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    bool ForceStartWithLocalConfig = false;
     EWorkload Workload = EWorkload::Hybrid;
     TString BridgePileName;
     TString SeedNodesFile;
@@ -348,6 +349,9 @@ struct TCommonAppOptions {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR")
             .Handler(new TWithDefaultOptHandler(&ClusterName));
+        opts.AddLongOption("force-start-with-local-config", "is set if you need to start a dynamic node in emergency no-console mode, using the configuration from --config-dir or --yaml-config")
+            .NoArgument()
+            .SetFlag(&ForceStartWithLocalConfig);
         opts.AddLongOption("log-level", "default logging level").OptionalArgument("1-7")
             .DefaultValue(ToString(DefaultLogLevel))
             .Handler(new TWithDefaultOptHandler(&LogLevel));
@@ -1028,6 +1032,9 @@ ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
+    const NKikimrConfig::TAppConfig& yamlConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
@@ -1053,6 +1060,7 @@ class TInitialConfiguratorImpl
     TString TenantName;
     TString ClusterName;
     TString NodeName;
+    TString YamlConfigString;
 
     TMap<TString, TString> Labels;
 
@@ -1134,6 +1142,14 @@ public:
         if (CommonAppOptions.IsStaticNode()) {
             InitStaticNode();
         } else {
+            if (CommonAppOptions.ForceStartWithLocalConfig) {
+                if (!FillYamlConfigString(refs)) {
+                    ythrow yexception() << "When specifying the --force-start-with-local-config option, \
+                    you should also specify either --config-dir or --yaml-config to indicate where to take the config from";
+                }
+            } else {
+                FillYamlConfigString(refs);
+            }
             InitDynamicNode();
         }
 
@@ -1381,6 +1397,25 @@ public:
         std::optional<TString> StartupConfigYaml;
         std::optional<TString> StartupStorageYaml;
     };
+    bool FillYamlConfigString(TConfigRefs refs, const TString& yamlConfigFile) {
+        IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
+        IErrorCollector& errorCollector = refs.ErrorCollector;
+        YamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+        return true;
+    }
+
+    bool FillYamlConfigString(TConfigRefs refs) {
+        if (CommonAppOptions.ConfigDirPath) {
+            auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
+            if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
+                return FillYamlConfigString(refs, path.string());
+            }
+        }
+        if (CommonAppOptions.YamlConfigFile) {
+            return FillYamlConfigString(refs, CommonAppOptions.YamlConfigFile);
+        }
+        return false;
+    }
 
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
@@ -1396,6 +1431,23 @@ public:
         NKikimrConfig::TAppConfig appConfig;
         NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);
         ApplyConfigForNode(appConfig);
+    }
+
+    void StartWithLocalConfig() {
+        Logger.Out() << "Force start with local config" << Endl;
+        NKikimrConfig::TAppConfig yamlConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(
+            YamlConfigString,
+            {},
+            Labels,
+            yamlConfig,
+            std::nullopt);
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        auto appConfig = GetActualDynConfig(yamlConfig, ConfigUpdateTracer);
+        if (!appConfig) {
+            ythrow yexception() << "Not enabled YAML config";
+        }
+        return ApplyConfigForNode(*appConfig);
     }
 
     void InitDynamicNode() {
@@ -1415,6 +1467,10 @@ public:
             return;
         }
 
+        if (CommonAppOptions.ForceStartWithLocalConfig) {
+            return StartWithLocalConfig();
+        }
+
         TVector<TString> addrs;
         CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
@@ -1430,9 +1486,8 @@ public:
         auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
-            return;
+            return StartWithLocalConfig();
         }
-
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 

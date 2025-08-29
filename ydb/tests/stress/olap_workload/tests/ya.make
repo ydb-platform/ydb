@@ -9,7 +9,7 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:48)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/stress/olap_workload

@@ -290,13 +290,13 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpUpsertRowsSettings::InplaceSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Inplace = true;
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.IsUpdate = true; 
+            settings.IsUpdate = true;
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
@@ -365,7 +365,7 @@ TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueT
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsConditionalDelete = true;
@@ -575,6 +575,15 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         );
     }
 
+    if (KeepRowsOrder) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(KeepRowsOrderSettingName)
+                .Value<TCoAtom>().Build(ToString(KeepRowsOrder))
+            .Done()
+        );
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
@@ -603,6 +612,9 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
         } else if (name == AllowNullKeysSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == KeepRowsOrderSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.KeepRowsOrder = FromString<bool>(tuple.Value().Cast<TCoAtom>().Value());
         } else {
             YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
         }

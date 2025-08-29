@@ -29,6 +29,7 @@ TKqpTable GetTable(TExprBase input, bool isReadRanges) {
     return input.Cast<TKqpReadTable>().Table();
 };
 
+
 TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeSort = node.Maybe<TCoSortBase>();
     auto maybeTopBase = node.Maybe<TCoTopBase>();
@@ -57,6 +58,17 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
     auto direction = GetSortDirection(sortDirections);
     if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
         return node;
+    }
+
+    auto maybeStreamLookup = input.Maybe<TKqlStreamLookupTable>();
+
+    if (maybeStreamLookup.IsValid()) {
+        auto settings = TKqpStreamLookupSettings::Parse(maybeStreamLookup.Cast().Settings());
+        if (settings.Strategy != NYql::EStreamLookupStrategyType::LookupRows) {
+            return node;
+        }
+
+        input = maybeStreamLookup.Cast().LookupKeys();
     }
 
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
@@ -95,6 +107,26 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
             settings.SetSorting(ERequestSorting::ASC);
             input = BuildReadNode(input.Pos(), ctx, input, settings);
         }
+    }
+
+    if (maybeStreamLookup.IsValid()) {
+        auto streamLookup = maybeStreamLookup.Cast();
+        input = TExprBase(
+            ctx.ChangeChild(
+                *streamLookup.Raw(),
+                TKqlStreamLookupTable::idx_LookupKeys,
+                input.Ptr()));
+
+        auto settings = TKqpStreamLookupSettings::Parse(maybeStreamLookup.Cast().Settings());
+        // directly infusing keep rows order setting to stream lookup to ensure it will maintain correct rows order
+        settings.KeepRowsOrder = true;
+        auto newSettingsNode = settings.BuildNode(ctx, input.Pos());
+        input = TExprBase(
+            ctx.ChangeChild(
+                *input.Raw(),
+                TKqlStreamLookupTable::idx_Settings,
+                newSettingsNode.Ptr())
+        );
     }
 
     if (maybeFlatmap) {
@@ -271,11 +303,11 @@ bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCo
 }
 
 TExprBase KqpBuildTopStageRemoveSort(
-    TExprBase node, 
-    TExprContext& ctx, 
-    IOptimizationContext& optCtx, 
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
     TTypeAnnotationContext& typeCtx,
-    const TParentsMap& parentsMap, 
+    const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
@@ -313,7 +345,7 @@ TExprBase KqpBuildTopStageRemoveSort(
     }
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
-    
+
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }

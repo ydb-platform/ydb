@@ -10,9 +10,14 @@
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+
+#include <regex>
+
 namespace NKikimr::NPQ {
 
 namespace {
+
+static constexpr const char* EMPTY_COUNTERS = "<pre></pre>";
 
 TVector<std::pair<ui64, TString>> TestData() {
     TVector<std::pair<ui64, TString>> data;
@@ -106,10 +111,131 @@ Y_UNIT_TEST(Partition) {
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), EMPTY_COUNTERS);
     }
 }
 
+
+Y_UNIT_TEST(PerPartition) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+
+    PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+    CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(1, "sourceid1", TestData(), tc, false);
+    CmdWrite(1, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    auto zeroUnreliableValues = [](std::string counters) {
+        // Some counters end up with a different value each run.
+        // To simplify testing we set such values to 0.
+        auto names = TVector<std::string>{
+            "WriteTimeLagMsByLastWrite",
+            "WriteTimeLagMsByCommittedPerPartition",
+            "TimeSinceLastReadMsPerPartition",
+            "WriteTimeLagMsByLastReadPerPartition",
+        };
+        for (const auto& name : names) {
+            counters = std::regex_replace(counters, std::regex(name + ": \\d+"), name + ": 0");
+        }
+        return counters;
+    };
+
+    auto getCountersHtml = [&tc](const TString& group = "topics_per_partition") {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, group);
+        TStringStream countersStr;
+        dbGroup->OutputHtml(countersStr);
+        return countersStr.Str();
+    };
+
+    TString counters = getCountersHtml();
+    TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
+    UNIT_ASSERT(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS);
+
+    {
+        // Turn on per partition counters, check counters.
+
+        PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
+
+        // partition, sourceId, data, text
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        std::string counters = getCountersHtml();
+        Cerr << "after write: " << counters << "\n";
+        Cerr << "after write zeroed: " << zeroUnreliableValues(counters) << "\n";
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+    }
+
+    {
+        // Read messages from different partitions.
+
+        TString sessionId = "session1";
+        TString user = "user1";
+        TPQCmdReadSettings readSettings{
+            /*session=*/ sessionId,
+            /*partition=*/ 0,
+            /*offset=*/ 0,
+            /*count=*/ 2,
+            /*size=*/ 16_MB,
+            /*resCount=*/ 1,
+        };
+        readSettings.PartitionSessionId = 1;
+        readSettings.User = user;
+
+        {
+            // Partition 0
+            TPQCmdSettings sessionSettings{0, user, sessionId};
+            sessionSettings.PartitionSessionId = 1;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+        }
+
+        {
+            // Partition 1
+            TPQCmdSettings sessionSettings{1, user, sessionId};
+            sessionSettings.PartitionSessionId = 2;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            readSettings.Partition = 1;
+            readSettings.Count = 17;
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+        }
+
+        TString counters = getCountersHtml();
+        Cerr << "after read: " << counters << "\n";
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_read.html"));
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+    }
+
+    {
+        // Disable per partition counters, the counters should be empty.
+
+        PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+        TString counters = getCountersHtml();
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
+        UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);
+    }
+}
 
 Y_UNIT_TEST(PartitionWriteQuota) {
     TTestContext tc;

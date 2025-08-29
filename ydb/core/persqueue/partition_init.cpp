@@ -979,11 +979,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                        Partition.InternalPartitionId,
-                                                                        Config.GetYdbDatabasePath()));
+                                                                         Partition.InternalPartitionId,
+                                                                         Config.GetYdbDatabasePath()));
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                        Partition.InternalPartitionId));
+            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
         }
     }
 
@@ -1021,6 +1020,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupStreamCounters(ctx);
         } else {
             SetupTopicCounters(ctx);
+        }
+        if (Config.GetEnablePerPartitionCounters()) {
+            SetupPerPartitionCounters();
         }
     }
 }

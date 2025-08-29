@@ -8,7 +8,7 @@ if [ $# -gt 3 ]; then
 fi
 
 COLLECTION_TIME=${1:-'30'}
-echo "Flame graph collection will be finished after $COLLECTION_TIME seconds or by ^C"
+echo "Flame graph collection will be finished in $COLLECTION_TIME seconds or by ^C"
 
 SUDO=""
 

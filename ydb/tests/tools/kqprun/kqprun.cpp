@@ -701,7 +701,7 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
+        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (min level 0, max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
             .RequiredArgument("uint")
             .DefaultValue(static_cast<ui8>(EVerbosity::Info))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerbosityLevel, [](ui8 value) {

@@ -494,6 +494,9 @@ public:
         Stage = GetInitialStage();
         Line.Clear();
         Content.clear();
+        if (Content.capacity() > MAX_RECYCLED_REQUEST_BODY_CAPACITY) {
+            TString().swap(Content);
+        }
     }
 
     bool IsReady() const {

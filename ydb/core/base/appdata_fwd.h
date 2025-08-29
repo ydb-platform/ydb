@@ -80,6 +80,7 @@ namespace NKikimrConfig {
     class TQueryServiceConfig;
     class TBridgeConfig;
     class TStatisticsConfig;
+    class TMetricsConfig;
 }
 
 namespace NKikimrReplication {
@@ -264,6 +265,7 @@ struct TAppData {
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;
+    NKikimrConfig::TMetricsConfig& MetricsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

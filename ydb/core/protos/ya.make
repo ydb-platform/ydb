@@ -167,6 +167,7 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 PEERDIR(
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/config
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos

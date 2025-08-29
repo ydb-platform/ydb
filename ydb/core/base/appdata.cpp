@@ -20,6 +20,7 @@
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/config/metrics.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -78,6 +79,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
+    NKikimrConfig::TMetricsConfig MetricsConfig;
 };
 
 TAppData::TAppData(
@@ -141,6 +143,7 @@ TAppData::TAppData(
     , QueryServiceConfig(Impl->QueryServiceConfig)
     , BridgeConfig(Impl->BridgeConfig)
     , StatisticsConfig(Impl->StatisticsConfig)
+    , MetricsConfig(Impl->MetricsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

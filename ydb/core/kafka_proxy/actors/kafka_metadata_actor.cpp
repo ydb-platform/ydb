@@ -48,7 +48,6 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     }
 
     Become(&TKafkaMetadataActor::StateWork);
-    RespondIfRequired(ctx);
 }
 
 void TKafkaMetadataActor::SendDiscoveryRequest() {
@@ -274,6 +273,7 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
             TopicСreationAttempts.insert(*topic.Name);
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
@@ -337,6 +337,9 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
+    if (InflyCreateTopics != 0) {
+        return;
+    }
     auto Respond = [&] {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);

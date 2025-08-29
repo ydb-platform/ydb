@@ -7,6 +7,8 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -44,8 +46,7 @@ public:
             LocalRowDispatcherId,
             config,
             "Tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            Nameservice
+            MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);
@@ -105,15 +106,12 @@ public:
     }
 
     void ProcessNodesManagerRequest(ui64 nodesCount) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvInterconnect::TEvListNodes>(Nameservice, TDuration::Seconds(5));
-        UNIT_ASSERT(eventHolder.Get() != nullptr);
-
-        auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
-        nodesInfo->reserve(nodesCount);
-        for (ui64 i = 0; i < nodesCount; ++i) {
-            nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{});
+        TVector<ui32> nodes;
+        nodes.reserve(nodesCount);
+        for (ui32 i = 0; i < nodesCount; ++i) {
+            nodes.push_back(i);
         }
-        Runtime.Send(new NActors::IEventHandle(Coordinator, Nameservice, new TEvInterconnect::TEvNodesInfo(nodesInfo)));
+        Runtime.Send(new NActors::IEventHandle(Coordinator, Nameservice, new TEvTenantNodeEnumerator::TEvLookupResult("TenantName", std::move(nodes))));
     }
 
     TActorSystemStub actorSystemStub;

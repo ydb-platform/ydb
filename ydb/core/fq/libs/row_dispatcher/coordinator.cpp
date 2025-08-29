@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -195,8 +195,7 @@ public:
         NActors::TActorId localRowDispatcherId,
         const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const TString& tenant,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        NActors::TActorId nameserviceId);
+        const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -205,24 +204,24 @@ public:
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvListNodes::TPtr&);
+    void Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvListNodes, Handle);
+        hFunc(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult, Handle);
     })
 
 private:
@@ -244,11 +243,9 @@ TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nameserviceId)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , LocalRowDispatcherId(localRowDispatcherId)
-    , NameserviceId(nameserviceId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters)
@@ -523,19 +520,19 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     PrintInternalState();
 }
 
-void TActorCoordinator::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Updated node info, node count: " <<  ev->Get()->Nodes.size());
-    NodesCount = ev->Get()->Nodes.size();
-    if (!NodesCount) {
+void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
+     if (!ev->Get()->Success) {
+        LOG_ROW_DISPATCHER_ERROR("Failed to get TEvLookupResult, try later...");
         ScheduleNodeInfoRequest();
         return;
     }
+    LOG_ROW_DISPATCHER_INFO("Updated node info, node count: " << ev->Get()->AssignedNodes.size() << ", AssignedNodes: " << JoinSeq(", ", ev->Get()->AssignedNodes));
+    NodesCount = ev->Get()->AssignedNodes.size();
     UpdatePendingReadActors();
 }
 
 void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
-    LOG_ROW_DISPATCHER_INFO("Send TEvInterconnect::TEvListNodes to " << NameserviceId);
-    Send(NameserviceId, new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
+    Register(NKikimr::CreateTenantNodeEnumerationLookup(SelfId(), Tenant));
 }
 
 bool TActorCoordinator::IsReady() const {
@@ -567,10 +564,9 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nameserviceId)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nameserviceId));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters));
 }
 
 } // namespace NFq

@@ -78,7 +78,7 @@ std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, TAu
 
 template<>
 IActor* TTableUploader<TData>::CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie) {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie);
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, true);
 }
 
 }

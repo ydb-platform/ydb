@@ -9,8 +9,8 @@ namespace NKikimr {
 // TBackoffTimer
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TBackoffTimer {
-    const ui64 InitialBackoffMs;
-    const ui64 MaxBackoffMs;
+    ui64 InitialBackoffMs;
+    ui64 MaxBackoffMs;
     ui64 CurrentBackoffMs;
     ui64 PreviousBackoffMs;
 
@@ -43,7 +43,7 @@ struct TBackoff {
 
 private:
     TBackoffTimer Timer;
-    const size_t MaxRetries;
+    size_t MaxRetries;
     size_t Iteration;
 };
 

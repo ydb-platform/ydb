@@ -150,7 +150,6 @@ private:
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
 
-    TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Seconds(15));
     TVector<std::pair<TSerializedCellVec, TString>> RowsForRetry;
 
 protected:
@@ -188,6 +187,8 @@ protected:
     bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
+
+    TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
@@ -1216,6 +1217,12 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
             ctx.SelfID << " Failed to connect to shard " <<  ev->Get()->TabletId);
 
+        if (!Backoff.HasMore()) {
+            SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
+            ShardUploadRetryStates.clear();
+        }
+
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);
@@ -1244,11 +1251,13 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
-                    << " from shard " << shardResponse.GetTabletID());
+                    << " from shard " << shardResponse.GetTabletID()
+                    << " description: " << shardResponse.GetErrorDescription());
 
-        bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
+        bool isRetryableError = Backoff.HasMore() &&
+            (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
             shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
-            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
+            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED);
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
             if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||

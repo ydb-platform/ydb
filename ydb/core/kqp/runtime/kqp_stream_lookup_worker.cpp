@@ -362,7 +362,9 @@ public:
             readRequests.emplace_back(readState.ShardId, std::move(request));
             auto [it, inserted] = ReadStateByReadId.emplace(readId, std::move(readState));
             YQL_ENSURE(inserted);
-            ResultOrder.insert(ResultOrder.end(), &it->second);
+            if (PreserveOrder()) {
+                ResultOrder.insert(ResultOrder.end(), &it->second);
+            }
         }
 
         return readRequests;

@@ -27,7 +27,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
         except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_table"
+            assert self.wait_for_connection(), "Failed to restore connection in create_resource_pool"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
 
@@ -41,7 +41,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
         except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_table"
+            assert self.wait_for_connection(), "Failed to restore connection in alter_resource_pool"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
 
@@ -56,7 +56,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
         except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_table"
+            assert self.wait_for_connection(), "Failed to restore connection in create_resource_pool_classifier"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
 
@@ -70,7 +70,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
         except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_table"
+            assert self.wait_for_connection(), "Failed to restore connection in alter_resource_pool_classifier"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
 

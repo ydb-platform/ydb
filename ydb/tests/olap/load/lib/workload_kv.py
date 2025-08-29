@@ -16,11 +16,12 @@ class WorkloadKvBase(WorkloadTestBase):
         'nemesis_enabled', [True, False],
         ids=['nemesis_true', 'nemesis_false']
     )
-    def test_workload_kv(self, nemesis_enabled: bool):
+    @pytest.mark.parametrize('store_type', ['row', 'column'])
+    def test_workload_kv(self, nemesis_enabled: bool, store_type: str):
         command_args_template = (
             "--endpoint grpc://{node_host}:2135 "
             f"--database /{YdbCluster.ydb_database} "
-            "--store_type", "row",
+            f"--store_type {store_type} "
             "--kv_prefix workload_kv_{node_host}_iter_{iteration_num}_{uuid} "
         )
 
@@ -32,7 +33,7 @@ class WorkloadKvBase(WorkloadTestBase):
         }
 
         self.execute_workload_test(
-            workload_name=f"KvWorkload_nemesis_{nemesis_enabled}",
+            workload_name=f"KvWorkload_{store_type}_nemesis_{nemesis_enabled}",
             command_args=command_args_template,
             duration_value=self.timeout,
             additional_stats=additional_stats,

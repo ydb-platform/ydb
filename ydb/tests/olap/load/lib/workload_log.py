@@ -16,11 +16,13 @@ class WorkloadLogBase(WorkloadTestBase):
         'nemesis_enabled', [True, False],
         ids=['nemesis_true', 'nemesis_false']
     )
-    def test_workload_log(self, nemesis_enabled: bool):
+    @pytest.mark.parametrize('store_type', ['row', 'column'])
+    def test_workload_log(self, nemesis_enabled: bool, store_type: str):
         command_args_template = (
             "--endpoint grpc://{node_host}:2135 "
             f"--database /{YdbCluster.ydb_database} "
-            "--store-type row"
+            f"--store_type {store_type} "
+            "--log_prefix log_kv_{node_host}_iter_{iteration_num}_{uuid} "
         )
 
         additional_stats = {
@@ -31,7 +33,7 @@ class WorkloadLogBase(WorkloadTestBase):
         }
 
         self.execute_workload_test(
-            workload_name=f"LogWorkload_nemesis_{nemesis_enabled}",
+            workload_name=f"LogWorkload_{store_type}_nemesis_{nemesis_enabled}",
             command_args=command_args_template,
             duration_value=self.timeout,
             additional_stats=additional_stats,

@@ -5,8 +5,8 @@ import os
 import requests
 from retry import retry_call
 
-timeout = 10
-max_tries = 15
+timeout = 15
+max_tries = 5
 retry_delay = 2
 
 
@@ -24,6 +24,16 @@ def _do_request(method, url, json=None):
     return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json}, tries=max_tries, delay=2)
 
 
+def config_solomon(response_code):
+    url = "{url}/config".format(
+        url=get_api_url())
+    _do_request("POST", url, {"response_code": response_code})
+
+
+def cleanup_emulator():
+    _do_request("POST", "{url}/cleanup".format(url=get_api_url()))
+
+
 def cleanup_solomon(project, cluster, service):
     url = "{url}/cleanup?project={project}&cluster={cluster}&service={service}".format(
         url=get_api_url(),
@@ -31,12 +41,6 @@ def cleanup_solomon(project, cluster, service):
         cluster=cluster,
         service=service)
     _do_request("POST", url)
-
-
-def config_solomon(response_code):
-    url = "{url}/config".format(
-        url=get_api_url())
-    _do_request("POST", url, {"response_code": response_code})
 
 
 def cleanup_monitoring(folderId, service):
@@ -52,8 +56,8 @@ def add_solomon_metrics(project, cluster, service, metrics):
     _do_request("POST", url, metrics)
 
 
-def add_monitoring_metrics(folderId, service):
-    return add_solomon_metrics(folderId, folderId, service)
+def add_monitoring_metrics(folderId, service, metrics):
+    return add_solomon_metrics(folderId, folderId, service, metrics)
 
 
 def get_solomon_metrics(project, cluster, service):

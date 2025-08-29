@@ -167,7 +167,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         return counters
-            ->GetSubgroup("counters", IsServerless ? "topic_per_partition_serverless" : "topic_per_partition")
+            ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "")
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
@@ -177,7 +177,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
             ->GetSubgroup("partition_id", ToString(Partition));
     } else {
         return counters
-            ->GetSubgroup("counters", "topic_per_partition")
+            ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster")
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
@@ -193,7 +193,7 @@ void TUsersInfoStorage::SetupPerPartitionCounters(const TActorContext& ctx) {
         return;  // TODO(qyryq) Y_ABORT_UNLESS?
     }
     for (auto& userInfo : GetAll()) {
-        userInfo.second.SetupPerPartitionCounters(subgroup);
+        userInfo.second.SetupPerPartitionCounters(ctx, subgroup);
     }
 }
 

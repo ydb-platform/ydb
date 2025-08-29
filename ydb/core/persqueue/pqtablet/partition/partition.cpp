@@ -4354,8 +4354,6 @@ void TPartition::SetupPerPartitionCounters() {
     PartitionWriteQuotaUsagePerPartition = getCounter("topic.partition.write.throttled_microseconds", "PartitionWriteQuotaUsage", false);
 
     BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWrittenPerPartition", true);
-    BytesWrittenPerPartition->Set(BytesWrittenTotal.Value());  // Doesn't work, Value returns 0 for non-supportive partitions.
-
     MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
 }
 

@@ -166,6 +166,7 @@ Y_UNIT_TEST(PerPartition) {
         CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
 
         std::string counters = getCountersHtml();
+        Cerr << "counters after write: " << counters << "\n";
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_after_write.html"));
         UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
     }

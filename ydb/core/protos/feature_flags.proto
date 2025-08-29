@@ -224,4 +224,5 @@ message TFeatureFlags {
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
+    optional bool EnableStreamingQueries = 201 [default = false];
 }

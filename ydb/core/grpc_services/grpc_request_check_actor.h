@@ -276,17 +276,10 @@ public:
                 }
             );
 
-        // Caterogies
+        // Category: Topic
         static NRpcService::TRlConfig ruRlTopicConfig(
             "serverless_rt_coordination_node_path",
             "serverless_rt_topic_resource_ru",
-                {
-                    // no actions
-                }
-            );
-        static NRpcService::TRlConfig ruRlYdsConfig(
-            "serverless_rt_coordination_node_path",
-            "serverless_rt_yds_resource_ru",
                 {
                     // no actions
                 }
@@ -308,9 +301,6 @@ public:
                 break;
             case TRateLimiterMode::RuTopic:
                 RlConfig = &ruRlTopicConfig;
-                break;
-            case TRateLimiterMode::RuYds:
-                RlConfig = &ruRlYdsConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;

@@ -79,7 +79,7 @@ private:
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
-            if (NeedContinueFlag) {
+            if (NeedContinueFlag && (!Self->ProgressTxInFlight || TxId == Self->ProgressTxInFlight)) {
                 Self->EnqueueProgressTx(ctx, TxId);
             }
         }

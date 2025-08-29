@@ -61,6 +61,7 @@ bool TBackoff::HasMore() const {
 }
 
 TDuration TBackoff::Next() {
+    ++Iteration;
     auto delay = Timer.NextBackoffMs();
     delay += RandomNumber<size_t>(delay / 4);
     return TDuration::MilliSeconds(delay);

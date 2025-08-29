@@ -75,18 +75,25 @@ TMaybe<bool> BuildWatermarkMode(
     bool defaultWatermarksMode,
     bool syncActor)
 {
-    const bool enableWatermarks = !analyticsMode &&
-        defaultWatermarksMode &&
-        hoppingTraits.Version().Cast<TCoAtom>().StringValue() == "v2";
+    const auto hoppingVersion = hoppingTraits.Version().Cast<TCoAtom>().StringValue();
+    const bool enableWatermarks = !analyticsMode && defaultWatermarksMode;
+
     if (enableWatermarks && syncActor) {
         ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
         return Nothing();
     }
 
-    if (hoppingTraits.Version().Cast<TCoAtom>().StringValue() == "v2" && !enableWatermarks) {
+    if (hoppingVersion == "v1" && enableWatermarks) {
         ctx.AddError(TIssue(
             ctx.GetPosition(aggregate.Pos()),
-            "HoppingWindow requires watermarks to be enabled. If you don't want to do that, you can use HOP instead."));
+            "HOP requires watermarks to be disabled. Use HoppingWindow instead."));
+        return Nothing();
+    }
+
+    if (hoppingVersion == "v2" && !enableWatermarks) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(aggregate.Pos()),
+            "HoppingWindow requires watermarks to be enabled. Use HOP instead."));
         return Nothing();
     }
 

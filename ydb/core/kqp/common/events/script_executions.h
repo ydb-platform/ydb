@@ -353,6 +353,7 @@ struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, T
         std::optional<TString> QueryPlan;
         std::optional<TString> QueryAst;
         i64 LeaseGeneration;
+        std::optional<TString> QueryPlanCompressionMethod;
         std::optional<TString> QueryAstCompressionMethod;
     };
 
@@ -456,6 +457,18 @@ struct TEvRefreshScriptExecutionLeasesResponse : public TEventLocal<TEvRefreshSc
     {}
 
     bool Success;
+    NYql::TIssues Issues;
+};
+
+struct TEvSaveScriptProgressResponse : public TEventLocal<TEvSaveScriptProgressResponse, TKqpScriptExecutionEvents::EvSaveScriptProgressResponse> {
+    TEvSaveScriptProgressResponse(Ydb::StatusIds::StatusCode status, bool astSaved, NYql::TIssues issues)
+        : Status(status)
+        , AstSaved(astSaved)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    bool AstSaved = false;
     NYql::TIssues Issues;
 };
 

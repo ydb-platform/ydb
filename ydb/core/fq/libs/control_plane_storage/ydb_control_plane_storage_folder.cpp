@@ -16,7 +16,6 @@
 #include <cstdint>
 
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>

@@ -1,3 +1,4 @@
+
 # {{ ydb-short-name }} Cluster Configuration
 
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run. This article provides an overview of the main configuration sections and links to detailed documentation for each section.
@@ -25,6 +26,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
 || [{#T}](security_config.md) | No | Security configuration settings ||
+|| [{#T}](table_service_config.md) | No | Query processing configuration||
 || [{#T}](tls.md) | No | TLS configuration for secure connections ||
 |#
 
@@ -44,3 +46,4 @@ While this documentation section focuses on complete reference documentation for
 ## Sample Cluster Configurations
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.
+

@@ -984,6 +984,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, !syncIsComplete), 0, ev->Cookie);
 
+        CurrentSyncRequest = 0;
         PendingSync.clear();
         ReceivedSync.clear();
 

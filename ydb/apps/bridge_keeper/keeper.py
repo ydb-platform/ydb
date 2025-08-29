@@ -173,11 +173,8 @@ def _parse_args():
 
     parser = argparse.ArgumentParser()
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--endpoint', '-e',
-        help='Single endpoint used to resolve piles and their endpoints')
-    group.add_argument('--endpoints', nargs='+',
-        help='Manual endpoints to check piles. Should include at least three from each pile')
+    parser.add_argument('--endpoint', '-e', required=True,
+                        help='Single endpoint used to resolve piles and their endpoints')
 
     parser.add_argument('--ydb', required=False, help='Path to ydb cli')
     parser.add_argument("--disable-auto-failover", action="store_true", help="Disable automatical failover")
@@ -243,38 +240,20 @@ def main():
     endpoints = None
     piles = None
 
-    if args.endpoints is not None:
-        endpoints = args.endpoints
-        piles = bridge.resolve(args.endpoints[0], path_to_cli)
-        if not piles or len(piles) == 0:
-            logger.error(f'No piles resolved!')
-            sys.exit(1)
-        piles_count = len(piles)
-        user_endpoints_count = len(endpoints)
+    try:
+        piles = bridge.resolve(args.endpoint, path_to_cli)
+        if piles:
+            endpoints = [h for hosts in piles.values() for h in hosts]
+    except Exception as e:
+        # ignore, result is checked below
+        logger.debug(f'Resolve throw exception: {e}')
 
-        # we want at least 3 endpoints per pile to gather quorum about state
-        if user_endpoints_count < piles_count * 3:
-            resolved_endpoints = [h for hosts in piles.values() for h in hosts]
-            resolved_endpoints_count = len(resolved_endpoints)
-            if resolved_endpoints_count > user_endpoints_count:
-                logger.warning(f'Too few endpoints {user_endpoints_count} specified, '
-                    f'using {resolved_endpoints_count} resolved for {piles_count} piles')
-                endpoints = resolved_endpoints
-    else:
-        try:
-            piles = bridge.resolve(args.endpoint, path_to_cli)
-            if piles:
-                endpoints = [h for hosts in piles.values() for h in hosts]
-        except Exception as e:
-            # ignore, result is checked below
-            logger.debug(f'Resolve throw exception: {e}')
+    if not piles or len(piles) == 0:
+        logger.error(f'No piles resilved')
 
-        if not endpoints or len(endpoints) == 0:
-            logger.error(f'No endpoints resolved from {args.endpoint}, use --endpoints')
-            sys.exit(1)
-
-
-    # Rest the cluster not in piece
+    if not endpoints or len(endpoints) == 0:
+        logger.error(f'No endpoints resolved from {args.endpoint}')
+        sys.exit(1)
 
     if args.tui:
         _run_tui(args, endpoints, path_to_cli, piles)

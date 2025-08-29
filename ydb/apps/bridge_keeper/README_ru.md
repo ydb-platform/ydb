@@ -31,7 +31,6 @@ pip3 install textual requests
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `--endpoint` | — | Хост YDB для получения информации о кластере. |
-| `--endpoints` | — | Ручное указание endpoints кластера; укажите как минимум по три из каждого pile. |
 | `--ydb` | из PATH | Путь к исполняемому файлу YDB CLI. |
 | `--disable-auto-failover` | false | Отключить автоматический failover. |
 | `--log-level` | INFO | Уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
@@ -39,6 +38,4 @@ pip3 install textual requests
 | `--tui` | false | Включить TUI. |
 | `--tui-refresh` | 1.0 | Интервал обновления TUI в секундах. |
 | `--https` | false | Использовать HTTPS для healthcheck-запросов viewer. |
-
-Примечание: должен быть указан один из параметров `--endpoint` или `--endpoints`.
 

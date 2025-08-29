@@ -830,7 +830,7 @@ def execute_cli_command_parallel(path_to_cli: str, cmd: List[str], endpoints: Li
 
     return None
 
-
+# TODO: resolve must return proper error text when fails
 def resolve(endpoint: str, path_to_cli: str) -> Dict[str, List[str]]:
     """ Returns pile names -> list of their endpoints """
 

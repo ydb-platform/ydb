@@ -83,6 +83,64 @@ struct TReadState {
     TMaybe<TOwnedCellVec> LastProcessedKey;
     ui32 FirstUnprocessedQuery = 0;
     ui64 LastSeqNo = 0;
+    ui64 ShardId = 0;
+    bool Point = false;
+    bool Finished = false;
+    // std::list<TReadState*>::iterator ResultOrderPosition;
+    std::deque<TKqpStreamLookupWorker::TShardReadResult> Results;
+
+    TReadState(ui64 shardId, std::vector<TOwnedTableRange>&& pendingKeys)
+        : PendingKeys(std::move(pendingKeys))
+        , ShardId(shardId)
+    {}
+
+    TReadState(ui64 shardId, bool point)
+        : ShardId(shardId)
+        , Point(point)
+    {}
+
+    TReadState()
+    {}
+
+    THolder<TEvDataShard::TEvRead> FillReadRequest(ui64 readId, const TLookupSettings& Settings, const std::map<std::string, TSysTables::TTableColumnInfo>& ReadColumns) {
+        THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+
+        auto& record = request->Record;
+
+        record.SetReadId(readId);
+
+        record.MutableTableId()->SetOwnerId(Settings.TableId.PathId.OwnerId);
+        record.MutableTableId()->SetTableId(Settings.TableId.PathId.LocalPathId);
+        record.MutableTableId()->SetSchemaVersion(Settings.TableId.SchemaVersion);
+
+        for (const auto& [name, column] : ReadColumns) {
+            if (!IsSystemColumn(name)) {
+                record.AddColumns(column.Id);
+            }
+        }
+
+        YQL_ENSURE(!PendingKeys.empty());
+        if (PendingKeys.front().Point) {
+            request->Keys.reserve(PendingKeys.size());
+            for (auto& range : PendingKeys) {
+                YQL_ENSURE(range.Point);
+                request->Keys.emplace_back(TSerializedCellVec(range.From));
+            }
+        } else {
+            request->Ranges.reserve(PendingKeys.size());
+            for (auto& range : PendingKeys) {
+                YQL_ENSURE(!range.Point);
+                if (range.To.size() < Settings.KeyColumns.size()) {
+                    // Absent cells mean infinity. So in prefix notation `To` should be inclusive.
+                    request->Ranges.emplace_back(TSerializedTableRange(range.From, range.InclusiveFrom, range.To, true));
+                } else {
+                    request->Ranges.emplace_back(TSerializedTableRange(range));
+                }
+            }
+        }
+
+        return request;
+    }
 };
 
 void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TReadState& state) {
@@ -131,6 +189,9 @@ public:
         const NMiniKQL::THolderFactory& holderFactory)
         : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
     {
+        for (auto column : Settings.Columns) {
+            ReadColumns.emplace(column.Name, column);
+        }
     }
 
     virtual ~TKqpLookupRows() {}
@@ -180,12 +241,19 @@ public:
         }
     }
 
+    bool PreserveOrder() const {
+        return true;
+        // Settings.KeepRowsOrder;
+    }
+
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
+        Y_UNUSED(newReadId);
+
         auto it = ReadStateByReadId.find(prevReadId);
         if (it == ReadStateByReadId.end()) {
             return {};
         }
-
+/*
         std::vector<TOwnedTableRange> unprocessedRanges;
         std::vector<TOwnedTableRange> unprocessedPoints;
 
@@ -238,16 +306,20 @@ public:
                 TReadState{
                     .PendingKeys = std::move(unprocessedRanges),
                 }).second);
-        }
+        }*/
 
+        Y_ABORT_UNLESS(false, "not implemented yet");
+
+        std::vector<THolder<TEvDataShard::TEvRead>> requests;
         return requests;
     }
 
     TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
 
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> rangesPerShard;
-        std::unordered_map<ui64, std::vector<TOwnedTableRange>> pointsPerShard;
+        std::unordered_map<ui64, TReadState*> rangesPerShard;
+        std::unordered_map<ui64, TReadState*> pointsPerShard;
+        std::deque<TReadState> pendingReads;
 
         while (!UnprocessedKeys.empty()) {
             auto range = std::move(UnprocessedKeys.front());
@@ -255,37 +327,43 @@ public:
 
             auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
-                if (range.Point) {
-                    pointsPerShard[shardId].push_back(std::move(range));
+                TReadState* read = nullptr;
+                if (PreserveOrder()) {
+                    if (pendingReads.empty()) {
+                        pendingReads.emplace_back(shardId, range.Point);
+                    } else {
+                        const auto& lastRead = pendingReads.back();
+                        if (lastRead.Point != range.Point || lastRead.ShardId != shardId) {
+                            pendingReads.emplace_back(shardId, range.Point);
+                        }
+                    }
+
+                    read = &pendingReads.back();
+
                 } else {
-                    rangesPerShard[shardId].push_back(std::move(range));
+                    std::unordered_map<ui64, TReadState*>* dedicatedMap = range.Point ? &rangesPerShard : &pointsPerShard;
+                    auto [it, inserted] = dedicatedMap->emplace(shardId, nullptr);
+                    if (inserted) {
+                        pendingReads.emplace_back(shardId, range.Point);
+                        it->second = &pendingReads.back();
+                    }
+
+                    read = it->second;
                 }
+
+                read->PendingKeys.push_back(std::move(range));
             }
         }
 
         std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> readRequests;
-        readRequests.reserve(rangesPerShard.size() + pointsPerShard.size());
+        readRequests.reserve(pendingReads.size());
 
-        for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, points);
-            readRequests.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(points),
-                }).second);
-        }
-
-        for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, ranges);
-            readRequests.emplace_back(shardId, std::move(request));
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(ranges),
-                }).second);
+        for (auto& readState : pendingReads) {
+            THolder<TEvDataShard::TEvRead> request = readState.FillReadRequest(++readId, Settings, ReadColumns);
+            readRequests.emplace_back(readState.ShardId, std::move(request));
+            auto [it, inserted] = ReadStateByReadId.emplace(readId, std::move(readState));
+            YQL_ENSURE(inserted);
+            ResultOrder.insert(ResultOrder.end(), &it->second);
         }
 
         return readRequests;
@@ -302,7 +380,16 @@ public:
             UpdateContinuationData(record, it->second);
         }
 
-        ReadResults.emplace_back(std::move(result));
+        if (PreserveOrder()) {
+            it->second.Results.emplace_back(std::move(result));
+
+            if (record.GetFinished()) {
+                it->second.Finished = record.GetFinished();
+            }
+
+        } else {
+            ReadResults.emplace_back(std::move(result));
+        }
     }
 
     bool IsOverloaded() final {
@@ -313,7 +400,28 @@ public:
         TReadResultStats resultStats;
         batch.clear();
 
-        while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
+        while (!resultStats.SizeLimitExceeded) {
+
+            while(!ResultOrder.empty()) {
+                TReadState* front = *ResultOrder.begin();
+
+                while(!front->Results.empty()) {
+
+                    ReadResults.emplace_back(std::move(front->Results.front()));
+                    front->Results.pop_front();
+                }
+
+                if (front->Finished) {
+                    ResultOrder.pop_front();
+                } else {
+                    break;
+                }
+            }
+
+            if (ReadResults.empty()) {
+                break;
+            }
+
             auto& result = ReadResults.front();
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -437,47 +545,13 @@ public:
     }
 
 private:
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
-        auto& record = request->Record;
-
-        record.SetReadId(readId);
-
-        record.MutableTableId()->SetOwnerId(Settings.TableId.PathId.OwnerId);
-        record.MutableTableId()->SetTableId(Settings.TableId.PathId.LocalPathId);
-        record.MutableTableId()->SetSchemaVersion(Settings.TableId.SchemaVersion);
-
-        for (const auto& column : Settings.Columns) {
-            if (!IsSystemColumn(column.Name)) {
-                record.AddColumns(column.Id);
-            }
-        }
-
-        YQL_ENSURE(!ranges.empty());
-        if (ranges.front().Point) {
-            request->Keys.reserve(ranges.size());
-            for (auto& range : ranges) {
-                YQL_ENSURE(range.Point);
-                request->Keys.emplace_back(TSerializedCellVec(range.From));
-            }
-        } else {
-            request->Ranges.reserve(ranges.size());
-            for (auto& range : ranges) {
-                YQL_ENSURE(!range.Point);
-
-                if (range.To.size() < Settings.KeyColumns.size()) {
-                    // absent cells mean infinity => in prefix notation `To` should be inclusive
-                    request->Ranges.emplace_back(TSerializedTableRange(range.From, range.InclusiveFrom, range.To, true));
-                } else {
-                    request->Ranges.emplace_back(TSerializedTableRange(range));
-                }
-            }
-        }
-    }
 
 private:
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TShardReadResult> ReadResults;
+    std::list<TReadState*> ResultOrder;
+    std::map<std::string, TSysTables::TTableColumnInfo> ReadColumns;
 };
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
@@ -610,8 +684,8 @@ public:
         std::vector<THolder<TEvDataShard::TEvRead>> readRequests;
 
         if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedPoints);
+            auto readState = TReadState(0, std::move(unprocessedPoints));
+            THolder<TEvDataShard::TEvRead> request = readState.FillReadRequest(++newReadId, Settings, ReadColumns);
             readRequests.emplace_back(std::move(request));
 
             for (const auto& point : unprocessedPoints) {
@@ -620,16 +694,12 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedPoints),
-                }).second);
+            YQL_ENSURE(ReadStateByReadId.emplace(newReadId, std::move(readState)).second);
         }
 
         if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++newReadId, request, unprocessedRanges);
+            auto readState = TReadState(0, std::move(unprocessedRanges));
+            auto request = readState.FillReadRequest(++newReadId, Settings, ReadColumns);
             readRequests.emplace_back(std::move(request));
 
             for (const auto& range : unprocessedRanges) {
@@ -640,9 +710,7 @@ public:
 
             YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
-                TReadState{
-                    .PendingKeys = std::move(unprocessedRanges),
-                }).second);
+                TReadState(0, std::move(unprocessedRanges))).second);
         }
 
         return readRequests;
@@ -731,8 +799,8 @@ public:
         requests.reserve(rangesPerShard.size() + pointsPerShard.size());
 
         for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, points);
+            auto readState = TReadState(0, std::move(points));
+            auto request = readState.FillReadRequest(++readId, Settings, ReadColumns);
             requests.emplace_back(shardId, std::move(request));
 
             for (const auto& point : points) {
@@ -741,16 +809,12 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(points),
-                }).second);
+            YQL_ENSURE(ReadStateByReadId.emplace(readId, std::move(readState)).second);
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-            FillReadRequest(++readId, request, ranges);
+            auto readState = TReadState(0, std::move(ranges));
+            auto request = readState.FillReadRequest(++readId, Settings, ReadColumns);
             requests.emplace_back(shardId, std::move(request));
 
             for (const auto& range : ranges) {
@@ -759,11 +823,7 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            YQL_ENSURE(ReadStateByReadId.emplace(
-                readId,
-                TReadState{
-                    .PendingKeys = std::move(ranges),
-                }).second);
+            YQL_ENSURE(ReadStateByReadId.emplace(readId, std::move(readState)).second);
         }
 
         return requests;
@@ -1076,42 +1136,6 @@ private:
 
         // we should check row seqNo only if we need to keep the order
         return seqNo >= CurrentResultSeqNo;
-    }
-
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
-        auto& record = request->Record;
-
-        record.SetReadId(readId);
-
-        record.MutableTableId()->SetOwnerId(Settings.TableId.PathId.OwnerId);
-        record.MutableTableId()->SetTableId(Settings.TableId.PathId.LocalPathId);
-        record.MutableTableId()->SetSchemaVersion(Settings.TableId.SchemaVersion);
-
-        for (const auto& [name, column] : ReadColumns) {
-            if (!IsSystemColumn(name)) {
-                record.AddColumns(column.Id);
-            }
-        }
-
-        YQL_ENSURE(!ranges.empty());
-        if (ranges.front().Point) {
-            request->Keys.reserve(ranges.size());
-            for (auto& range : ranges) {
-                YQL_ENSURE(range.Point);
-                request->Keys.emplace_back(TSerializedCellVec(range.From));
-            }
-        } else {
-            request->Ranges.reserve(ranges.size());
-            for (auto& range : ranges) {
-                YQL_ENSURE(!range.Point);
-                if (range.To.size() < Settings.KeyColumns.size()) {
-                    // Absent cells mean infinity. So in prefix notation `To` should be inclusive.
-                    request->Ranges.emplace_back(TSerializedTableRange(range.From, range.InclusiveFrom, range.To, true));
-                } else {
-                    request->Ranges.emplace_back(TSerializedTableRange(range));
-                }
-            }
-        }
     }
 
     TConstArrayRef<TCell> ExtractKeyPrefix(const TOwnedTableRange& range) {

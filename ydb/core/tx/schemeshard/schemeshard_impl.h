@@ -355,6 +355,7 @@ public:
     bool EnableTempTables = false;
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
+    bool EnableAddUniqueIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;

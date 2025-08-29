@@ -1632,7 +1632,7 @@ public:
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
-            temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+            temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 

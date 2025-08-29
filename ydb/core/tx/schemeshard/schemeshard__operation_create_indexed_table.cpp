@@ -241,8 +241,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+        auto indexType = indexDescription.HasType()
+            ? indexDescription.GetType()
+            : NKikimrSchemeOp::EIndexTypeGlobal;
 
-        switch (indexDescription.GetType()) {
+        switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeInvalid:
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
             case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -250,8 +253,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 // no feature flag, everything is fine
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                if (!context.SS->EnableAddUniqueIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique index support is disabled")};
+                if (!context.SS->EnableInitialUniqueIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -270,14 +273,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.SetInternal(tx.GetInternal());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
-            if (!indexDescription.HasType()) {
-                scheme.MutableCreateTableIndex()->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
-            } else if (!AppData()->FeatureFlags.GetEnableUniqConstraint()) {
-                if (indexDescription.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
-                    TString msg = TStringBuilder() << "Unique constraint feature is disabled";
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-                }
-            }
+            scheme.MutableCreateTableIndex()->SetType(indexType);
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }

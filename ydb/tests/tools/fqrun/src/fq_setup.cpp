@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
@@ -179,6 +180,12 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
+    void InitializeTenantNodes() {
+        if (const auto& systemStateInfo = GetSystemStateInfo(Server->GetProcessMemoryInfoProvider())) {
+            GetRuntime()->Send(NKikimr::NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetFirstNodeId()), GetRuntime()->AllocateEdgeActor(), new NKikimr::NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(*systemStateInfo));
+        }
+    }
+
 public:
     explicit TImpl(const TFqSetupSettings& settings)
         : Settings(settings)
@@ -193,6 +200,7 @@ public:
         InitializeYqlLogger();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
+        InitializeTenantNodes();
 
         if (Settings.MonitoringEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;

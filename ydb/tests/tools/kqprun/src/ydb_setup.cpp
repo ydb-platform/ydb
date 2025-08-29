@@ -365,17 +365,7 @@ private:
     }
 
     void InitializeTenants(TPortGenerator& grpcPortGen) const {
-        std::optional<NKikimrWhiteboard::TSystemStateInfo> systemStateInfo;
-        if (const auto memoryInfoProvider = Server_->GetProcessMemoryInfoProvider()) {
-            systemStateInfo = NKikimrWhiteboard::TSystemStateInfo();
-
-            const auto& memInfo = memoryInfoProvider->Get();
-            if (memInfo.CGroupLimit) {
-                systemStateInfo->SetMemoryLimit(*memInfo.CGroupLimit);
-            } else if (memInfo.MemTotal) {
-                systemStateInfo->SetMemoryLimit(*memInfo.MemTotal);
-            }
-        }
+        const auto& systemStateInfo = GetSystemStateInfo(Server_->GetProcessMemoryInfoProvider());
 
         std::vector<NThreading::TFuture<void>> futures(1, InitializeTenantNodes(Settings_.DomainName, systemStateInfo, grpcPortGen));
         futures.reserve(StorageMeta_.GetTenants().size() + 1);

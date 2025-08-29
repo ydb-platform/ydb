@@ -108,6 +108,23 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     return serverSettings;
 }
 
+std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemStateInfo(TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider) {
+    if (!memoryInfoProvider) {
+        return std::nullopt;
+    }
+
+    NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+
+    const auto& memInfo = memoryInfoProvider->Get();
+    if (memInfo.CGroupLimit) {
+        systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+    } else if (memInfo.MemTotal) {
+        systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+    }
+
+    return systemStateInfo;
+}
+
 void TKikimrSetupBase::SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {
     auto loggerInitializer = [this, settings](NActors::TTestActorRuntime& runtime) {
         InitLogSettings(settings.AppConfig.GetLogConfig(), runtime);

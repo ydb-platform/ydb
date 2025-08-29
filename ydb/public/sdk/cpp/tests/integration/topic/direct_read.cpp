@@ -956,7 +956,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
     auto killer = std::thread([&]() {
         while (work.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(5));
-            // setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
+            // setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());  // TODO(qyryq) Uncomment!
         }
     });
 

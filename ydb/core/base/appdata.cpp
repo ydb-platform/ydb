@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "channel_profiles.h"
+#include "config_metrics.h"
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -20,7 +21,6 @@
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/config/metrics.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -79,7 +79,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
-    NKikimrConfig::TMetricsConfig MetricsConfig;
+    TMetricsConfig MetricsConfig;
 };
 
 TAppData::TAppData(

@@ -825,7 +825,7 @@ private:
     }
 
     void Handle(TEvSaveScriptProgressResponse::TPtr& ev) {
-        LOG_T("Script progress updated saved " << ev->Sender << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_T("Script progress updated " << ev->Sender << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
         if (ev->Get()->AstSaved) {
             AstSaved = true;

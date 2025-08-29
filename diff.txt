@@ -1,0 +1,454 @@
+diff --git a/ydb/mvp/oidc_proxy/extension.cpp b/ydb/mvp/oidc_proxy/extension.cpp
+index 8a950cb2b874bbb766ffb3a5bebdd605f12301f0..7e7b9dfccaa19a73f739fe31fd65416c1da68869 100644
+--- a/ydb/mvp/oidc_proxy/extension.cpp
++++ b/ydb/mvp/oidc_proxy/extension.cpp
+@@ -1,36 +1,36 @@
+ #include "extension.h"
+
+ namespace NMVP::NOIDC {
+
+ void TExtensionContext::Reply(NHttp::THttpOutgoingResponsePtr httpResponse) {
+     NActors::TActivationContext::Send(Sender, std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(std::move(httpResponse)));
+ }
+
+ void TExtensionContext::Reply() {
+-    if (Params->StatusOverride) {
+-        return Reply(Params->Request->CreateResponse(Params->StatusOverride, Params->MessageOverride, *Params->HeadersOverride, Params->BodyOverride));
++    if (Params->GetStatus()) {
++        return Reply(Params->Request->CreateResponse(Params->GetStatus(), Params->GetMessage(), *Params->HeadersOverride, Params->GetBody()));
+     } else {
+         static constexpr size_t MAX_LOGGED_SIZE = 1024;
+         BLOG_D("Can not process request to protected resource:\n" << Params->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+         return Reply(CreateResponseForNotExistingResponseFromProtectedResource(Params->Request, Params->ResponseError));
+     }
+ }
+
+ void TExtensionContext::Continue() {
+     const auto step = Steps.Next();
+     if (step) {
+         step->Execute(this);
+     } else {
+         Reply();
+     }
+ }
+
+ std::unique_ptr<IExtension> TExtensionsSteps::Next() {
+     if (empty()) {
+         return nullptr;
+     }
+     auto target = std::move(front());
+     pop();
+     return target;
+ }
+
+diff --git a/ydb/mvp/oidc_proxy/extension.h b/ydb/mvp/oidc_proxy/extension.h
+index ad5f6c63fcb660c7680a9258b747935d7b8ff866..855d6c226769ab20b1a98c416ee1d325ef06f6f3 100644
+--- a/ydb/mvp/oidc_proxy/extension.h
++++ b/ydb/mvp/oidc_proxy/extension.h
+@@ -1,48 +1,97 @@
+ #pragma once
+
+ #include "cracked_page.h"
+ #include "openid_connect.h"
+
+ #include <ydb/library/actors/core/actorid.h>
+ #include <ydb/library/actors/http/http_proxy.h>
+
+ #include <util/generic/strbuf.h>
+ #include <util/generic/string.h>
++#include <util/generic/maybe.h>
+ #include <util/generic/queue.h>
++#include <utility>
+
+ namespace NMVP::NOIDC {
+
+ class IExtension;
+
+ struct TProxiedResponseParams {
+     NHttp::THttpIncomingRequestPtr Request;
+     THolder<TCrackedPage> ProtectedPage;
+     TString ResponseError;
+-
+-    TString StatusOverride;
+-    TString MessageOverride;
+-    TString BodyOverride;
++    NHttp::THttpIncomingResponsePtr OriginalResponse;
+     THolder<NHttp::THeadersBuilder> HeadersOverride;
++
++private:
++    TMaybe<TString> StatusOverride;
++    TMaybe<TString> MessageOverride;
++    TMaybe<TString> BodyOverride;
++
++public:
++    void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
++        OriginalResponse = std::move(response);
++        HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
++        if (OriginalResponse) {
++            auto headers = NHttp::THeaders(OriginalResponse->Headers);
++            for (const auto& header : headers.Headers) {
++                HeadersOverride->Set(header.first, header.second);
++            }
++        }
++    }
++
++    void OverrideStatus(TString status) {
++        StatusOverride = std::move(status);
++    }
++
++    TStringBuf GetStatus() const {
++        if (StatusOverride) {
++            return TStringBuf(*StatusOverride);
++        }
++        return OriginalResponse ? TStringBuf(OriginalResponse->Status) : TStringBuf();
++    }
++
++    void OverrideMessage(TString message) {
++        MessageOverride = std::move(message);
++    }
++
++    TStringBuf GetMessage() const {
++        if (MessageOverride) {
++            return TStringBuf(*MessageOverride);
++        }
++        return OriginalResponse ? TStringBuf(OriginalResponse->Message) : TStringBuf();
++    }
++
++    void OverrideBody(TString body) {
++        BodyOverride = std::move(body);
++    }
++
++    TStringBuf GetBody() const {
++        if (BodyOverride) {
++            return TStringBuf(*BodyOverride);
++        }
++        return OriginalResponse ? TStringBuf(OriginalResponse->Body) : TStringBuf();
++    }
+ };
+
+ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
+     std::unique_ptr<IExtension> Next();
+ };
+
+ struct TExtensionContext : public TThrRefBase {
+     TActorId Sender;
+     TExtensionsSteps Steps;
+     THolder<TProxiedResponseParams> Params;
+
+     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
+     void Reply();
+     void Continue();
+ };
+
+ class IExtension {
+ public:
+     virtual ~IExtension() = default;
+     virtual void Execute(TIntrusivePtr<TExtensionContext> ctx) = 0;
+ };
+
+ } // NMVP::NOIDC
+diff --git a/ydb/mvp/oidc_proxy/extension_final.cpp b/ydb/mvp/oidc_proxy/extension_final.cpp
+index e38c3db50b1e4898aaccbad767bc5ce81a226e16..90bdad033c5f5bda3e5ded3f55f6e9010b56c20c 100644
+--- a/ydb/mvp/oidc_proxy/extension_final.cpp
++++ b/ydb/mvp/oidc_proxy/extension_final.cpp
+@@ -37,58 +37,58 @@ TString TExtensionFinal::FixReferenceInHtml(TStringBuf html, TStringBuf host) {
+     return FixReferenceInHtml(result, host, findString);
+ }
+
+ void TExtensionFinal::SetProxyResponseHeaders() {
+     auto& params = Context->Params;
+
+     THolder<NHttp::THeadersBuilder> headers = std::move(params->HeadersOverride);
+
+     params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+     for (const auto& header : Settings.RESPONSE_HEADERS_WHITE_LIST) {
+         if (headers->Has(header)) {
+             params->HeadersOverride->Set(header, headers->Get(header));
+         }
+     }
+
+     if (headers->Has(LOCATION_HEADER)) {
+         params->HeadersOverride->Set(LOCATION_HEADER, GetFixedLocationHeader(headers->Get(LOCATION_HEADER)));
+     }
+ }
+
+ void TExtensionFinal::SetProxyResponseBody() {
+     auto& params = Context->Params;
+
+     TStringBuf contentType = params->HeadersOverride->Get("Content-Type").NextTok(';');
+     if (contentType == "text/html") {
+-        params->BodyOverride = FixReferenceInHtml(params->BodyOverride, params->ProtectedPage->Host);
++        params->OverrideBody(FixReferenceInHtml(params->GetBody(), params->ProtectedPage->Host));
+     }
+ }
+
+ TString TExtensionFinal::GetFixedLocationHeader(TStringBuf location) {
+     auto& page = Context->Params->ProtectedPage;
+     if (location.StartsWith("//")) {
+         return TStringBuilder() << '/' << (page->Scheme.empty() ? "" : TString(page->Scheme) + "://") << location.SubStr(2);
+     } else if (location.StartsWith('/')) {
+         return TStringBuilder() << '/'
+                                 << (page->Scheme.empty() ? "" : TString(page->Scheme) + "://")
+                                 << page->Host << location;
+     } else {
+         TStringBuf locScheme, locHost, locUri;
+         NHttp::CrackURL(location, locScheme, locHost, locUri);
+         if (!locScheme.empty()) {
+             return TStringBuilder() << '/' << location;
+         }
+     }
+     return TString(location);
+ }
+
+ void TExtensionFinal::Execute(TIntrusivePtr<TExtensionContext> ctx) {
+     Context = std::move(ctx);
+-    if (Context->Params->StatusOverride) {
++    if (Context->Params->GetStatus()) {
+         SetProxyResponseHeaders();
+         SetProxyResponseBody();
+     }
+
+     Context->Continue();
+ }
+
+ } // NMVP::NOIDC
+diff --git a/ydb/mvp/oidc_proxy/extension_manager.cpp b/ydb/mvp/oidc_proxy/extension_manager.cpp
+index bc63125bdeeb5808064c2bd102e5a6c930d20d49..18dd582f3a73fa8ecf2e537246c049e9cf4d5bfb 100644
+--- a/ydb/mvp/oidc_proxy/extension_manager.cpp
++++ b/ydb/mvp/oidc_proxy/extension_manager.cpp
+@@ -5,89 +5,77 @@
+
+ namespace NMVP::NOIDC {
+
+ TExtensionManager::TExtensionManager(const TActorId sender,
+                                      const TOpenIdConnectSettings& settings,
+                                      const TCrackedPage& protectedPage,
+                                      const TString authHeader)
+     : Settings(settings)
+     , AuthHeader(std::move(authHeader))
+ {
+     ExtensionCtx = MakeIntrusive<TExtensionContext>();
+     ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
+     ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
+     ExtensionCtx->Sender = sender;
+     Timeout = settings.DefaultRequestTimeout;
+ }
+
+ void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
+     Timeout = timeout;
+ }
+
+ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
+     ExtensionCtx->Params->Request = std::move(request);
+ }
+
+-void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+-    ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
++void TExtensionManager::SetOriginalResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+     ExtensionCtx->Params->ResponseError = event->Get()->GetError();
+-
+-    if (!event->Get()->Response)
+-        return;
+-
+-    auto& response = event->Get()->Response;
+-    ExtensionCtx->Params->StatusOverride = response->Status;
+-    auto headers = NHttp::THeaders(response->Headers);
+-    for (const auto& header : headers.Headers) {
+-        ExtensionCtx->Params->HeadersOverride->Set(header.first, header.second);
+-    }
+-    ExtensionCtx->Params->MessageOverride = response->Message;
+-    ExtensionCtx->Params->BodyOverride = response->Body;
++    ExtensionCtx->Params->SetOriginalResponse(event->Get()->Response);
+ }
+
+ void TExtensionManager::AddExtensionWhoami() {
+     auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader, Timeout);
+     AddExtension(std::move(ext));
+ }
+
+ void TExtensionManager::AddExtensionFinal() {
+     auto ext = std::make_unique<TExtensionFinal>(Settings);
+     AddExtension(std::move(ext));
+ }
+
+ void TExtensionManager::AddExtension(std::unique_ptr<IExtension> ext) {
+     ExtensionCtx->Steps.push(std::move(ext));
+ }
+
+ bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const {
+     if (!Settings.EnabledExtensionWhoami() || request->Method == "OPTIONS") {
+         return false;
+     }
+
+     TCrackedPage page(request);
+     auto path = TStringBuf(page.Url).Before('?');
+
+     for (const auto& whoamiPath : Settings.WHOAMI_PATHS) {
+         if (path.EndsWith(whoamiPath)) {
+             return true;
+         }
+     }
+     return false;
+ }
+
+ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& request) {
+     if (NeedExtensionWhoami(request)) {
+         AddExtensionWhoami();
+     }
+     AddExtensionFinal();
+ }
+
+ void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
+                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+     SetRequest(std::move(request));
+-    SetOverrideResponse(std::move(event));
++    SetOriginalResponse(std::move(event));
+
+     const auto step = ExtensionCtx->Steps.Next();
+     step->Execute(std::move(ExtensionCtx));
+ }
+
+ } // NMVP::NOIDC
+diff --git a/ydb/mvp/oidc_proxy/extension_manager.h b/ydb/mvp/oidc_proxy/extension_manager.h
+index 7f838fe2d9d928177a1441e46ce76d700a066a29..58ceeb901d8c15732b2e1570426716ba70026edb 100644
+--- a/ydb/mvp/oidc_proxy/extension_manager.h
++++ b/ydb/mvp/oidc_proxy/extension_manager.h
+@@ -1,32 +1,32 @@
+ #pragma once
+
+ #include "extension.h"
+
+ namespace NMVP::NOIDC {
+
+ struct TExtensionManager {
+     TIntrusivePtr<TExtensionContext> ExtensionCtx;
+     const TOpenIdConnectSettings Settings;
+     TString AuthHeader;
+     TDuration Timeout;
+
+ public:
+     TExtensionManager(const TActorId sender,
+                       const TOpenIdConnectSettings& settings,
+                       const TCrackedPage& protectedPage,
+                       const TString authHeader);
+     void SetExtensionTimeout(TDuration timeout);
+     void ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& request);
+     void StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
+                                NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event = nullptr);
+
+ private:
+     void SetRequest(NHttp::THttpIncomingRequestPtr request);
+-    void SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
++    void SetOriginalResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
+     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
+     void AddExtensionWhoami();
+     void AddExtensionFinal();
+     void AddExtension(std::unique_ptr<IExtension> ext);
+ };
+
+ } // NMVP::NOIDC
+diff --git a/ydb/mvp/oidc_proxy/extension_whoami.cpp b/ydb/mvp/oidc_proxy/extension_whoami.cpp
+index 400eb6ec7a6659d3ac39e6d233e53214217aee3a..75f3fe946598e17026dbf130f9b188e202686ce6 100644
+--- a/ydb/mvp/oidc_proxy/extension_whoami.cpp
++++ b/ydb/mvp/oidc_proxy/extension_whoami.cpp
+@@ -52,90 +52,90 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
+         statusOverride = "200";
+         messageOverride = "OK";
+         if (errorJson.Has(EXTENDED_ERRORS)) {
+             json[EXTENDED_ERRORS] = errorJson[EXTENDED_ERRORS];
+         }
+         outJson = &json;
+     } else {
+         if (!IamResponse.has_value() && !IamError.has_value()) {
+             statusOverride = "504";
+             messageOverride = "Gateway Timeout";
+         } else {
+             statusOverride = "500";
+             messageOverride = "Internal Server Error";
+         }
+         outJson = &errorJson;
+     }
+
+     TStringStream content;
+     NJson::WriteJson(&content, outJson, {
+         .FloatToStringMode = EFloatToStringMode::PREC_NDIGITS,
+         .ValidateUtf8 = false,
+         .WriteNanAsString = true,
+     });
+
+     auto& params = Context->Params;
+-    params->StatusOverride = statusOverride;
+-    params->MessageOverride = messageOverride;
+-    params->BodyOverride = content.Str();
++    params->OverrideStatus(std::move(statusOverride));
++    params->OverrideMessage(std::move(messageOverride));
++    params->OverrideBody(content.Str());
+ }
+
+ void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
+     Context = std::move(ev->Get()->Context);
+-    if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
++    if (Context->Params->GetStatus().StartsWith("3") || Context->Params->GetStatus() == "404") {
+         ContinueAndPassAway();
+     }
+     ApplyIfReady();
+ }
+
+ void TExtensionWhoamiWorker::SetExtendedError(NJson::TJsonValue& root, const TStringBuf section, const TStringBuf key, const TStringBuf value) {
+     if (!value.empty()) {
+         root[EXTENDED_ERRORS][section][key] = value;
+     }
+ }
+
+ void TExtensionWhoamiWorker::ApplyIfReady() {
+     if (!Context) {
+         return;
+     }
+     if (IamResponse.has_value() || IamError.has_value()) {
+         ApplyExtension();
+     }
+ }
+
+ void TExtensionWhoamiWorker::ApplyExtension() {
+     NJson::TJsonValue json;
+     NJson::TJsonValue errorJson;
+     NHttp::THttpIncomingResponsePtr response;
+     auto& params = Context->Params;
+
+-    if (params->StatusOverride) {
+-        NJson::ReadJsonTree(params->BodyOverride, &json);
+-        if (!params->StatusOverride.StartsWith("2")) {
+-            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params->StatusOverride);
+-            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params->MessageOverride);
+-            SetExtendedError(errorJson, "Ydb", "ResponseBody", params->BodyOverride);
++    if (params->GetStatus()) {
++        NJson::ReadJsonTree(params->GetBody(), &json);
++        if (!params->GetStatus().StartsWith("2")) {
++            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params->GetStatus());
++            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params->GetMessage());
++            SetExtendedError(errorJson, "Ydb", "ResponseBody", params->GetBody());
+         }
+     } else {
+         TString& error = params->ResponseError;
+         if (!error) {
+             error = "Can not process request to protected resource";
+         }
+         BLOG_D("Incoming client error for protected resource: " << error);
+         SetExtendedError(errorJson, "Ydb", "ClientError", error);
+     }
+
+     if (IamResponse.has_value()) {
+         auto& iamResponse = (*IamResponse)->Get()->Response;
+         TJsonSettings jsonSettings;
+         TStringStream jsonStream;
+         TProtoToJson::ProtoToJson(jsonStream, iamResponse, jsonSettings);
+
+         NJson::TJsonValue extendedJson;
+         if (NJson::ReadJsonTree(jsonStream.Str(), &extendedJson)) {
+             json[EXTENDED_INFO] = extendedJson;
+             if (!json.Has(USER_SID)) {
+                 if (extendedJson.Has("user_profile") && extendedJson["user_profile"].Has("id")) {
+                     json[USER_SID] = extendedJson["user_profile"]["id"];
+                 } else if (extendedJson.Has("service_account_profile") && extendedJson["service_account_profile"].Has("info") &&
+                            extendedJson["service_account_profile"]["info"].Has("metadata") &&
+                            extendedJson["service_account_profile"]["info"]["metadata"].Has("id")) {

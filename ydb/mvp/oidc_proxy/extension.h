@@ -8,7 +8,9 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/generic/queue.h>
+#include <utility>
 
 namespace NMVP::NOIDC {
 
@@ -18,11 +20,58 @@ struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
     THolder<TCrackedPage> ProtectedPage;
     TString ResponseError;
-
-    TString StatusOverride;
-    TString MessageOverride;
-    TString BodyOverride;
+    NHttp::THttpIncomingResponsePtr OriginalResponse;
     THolder<NHttp::THeadersBuilder> HeadersOverride;
+
+private:
+    TMaybe<TString> StatusOverride;
+    TMaybe<TString> MessageOverride;
+    TMaybe<TString> BodyOverride;
+
+public:
+    void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
+        OriginalResponse = std::move(response);
+        HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+        if (OriginalResponse) {
+            auto headers = NHttp::THeaders(OriginalResponse->Headers);
+            for (const auto& header : headers.Headers) {
+                HeadersOverride->Set(header.first, header.second);
+            }
+        }
+    }
+
+    void OverrideStatus(TString status) {
+        StatusOverride = std::move(status);
+    }
+
+    TStringBuf GetStatus() const {
+        if (StatusOverride) {
+            return TStringBuf(*StatusOverride);
+        }
+        return OriginalResponse ? TStringBuf(OriginalResponse->Status) : TStringBuf();
+    }
+
+    void OverrideMessage(TString message) {
+        MessageOverride = std::move(message);
+    }
+
+    TStringBuf GetMessage() const {
+        if (MessageOverride) {
+            return TStringBuf(*MessageOverride);
+        }
+        return OriginalResponse ? TStringBuf(OriginalResponse->Message) : TStringBuf();
+    }
+
+    void OverrideBody(TString body) {
+        BodyOverride = std::move(body);
+    }
+
+    TStringBuf GetBody() const {
+        if (BodyOverride) {
+            return TStringBuf(*BodyOverride);
+        }
+        return OriginalResponse ? TStringBuf(OriginalResponse->Body) : TStringBuf();
+    }
 };
 
 struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {

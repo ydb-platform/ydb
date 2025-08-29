@@ -128,11 +128,12 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
 }
 
 void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
-    options.AddLongOption("log-default", "Default log priority (allowed log priorities: trace, debug, info, notice, warn, error, crit, alert, emerg)")
+    const auto allowedPriorities = ", allowed log priorities: trace, debug, info, notice, warn, error, crit, alert, emerg";
+    options.AddLongOption("log-default", TStringBuilder() << "Default log priority" << allowedPriorities)
         .RequiredArgument("priority")
         .StoreMappedResultT<TString>(&DefaultLogPriority, GetLogPrioritiesMap("log-default"));
 
-    options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
+    options.AddLongOption("log", TStringBuilder() << "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)" << allowedPriorities)
         .RequiredArgument("component=priority")
         .Handler1([this, logPriority = GetLogPrioritiesMap("log")](const NLastGetopt::TOptsParser* option) {
             TStringBuf component;
@@ -148,29 +149,18 @@ void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
             }
         });
 
-    options.AddLongOption("log-fq", "FQ components log priority")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&FqLogPriority, GetLogPrioritiesMap("log-fq"));
+    const auto addLogOption = [&](const TString& name, const TString& help, std::optional<NActors::NLog::EPriority>* target) {
+        options.AddLongOption(name, TStringBuilder() << help << allowedPriorities)
+            .RequiredArgument("priority")
+            .StoreMappedResultT<TString>(target, GetLogPrioritiesMap(name));
+    };
 
-    options.AddLongOption("log-kqp", "KQP components log priority")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&KqpLogPriority, GetLogPrioritiesMap("log-kqp"));
-
-    options.AddLongOption("log-runtime", "DQ and MKQL components log priority")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&RuntimeLogPriority, GetLogPrioritiesMap("log-runtime"));
-
-    options.AddLongOption("log-tablets", "Log priority for all tablet services (HIVE / SS / DS / CS and etc.)")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&TabletsLogPriority, GetLogPrioritiesMap("log-tablets"));
-
-    options.AddLongOption("log-blob-storage", "Blob storage components log priority")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&BsLogPriority, GetLogPrioritiesMap("log-blob-storage"));
-
-    options.AddLongOption("log-server-io", "Server IO components log priority (http / grpc / viewer and etc.)")
-        .RequiredArgument("priority")
-        .StoreMappedResultT<TString>(&ServerIoLogPriority, GetLogPrioritiesMap("log-server-io"));
+    addLogOption("log-fq", "FQ components log priority", &FqLogPriority);
+    addLogOption("log-kqp", "KQP components log priority", &KqpLogPriority);
+    addLogOption("log-runtime", "DQ and MKQL components log priority", &RuntimeLogPriority);
+    addLogOption("log-tablets", "Log priority for all tablet services (HIVE / SS / DS / CS and etc.)", &TabletsLogPriority);
+    addLogOption("log-blob-storage", "Blob storage components log priority", &BsLogPriority);
+    addLogOption("log-server-io", "Server IO components log priority (http / grpc / viewer and etc.)", &ServerIoLogPriority);
 }
 
 IOutputStream* TMainBase::GetDefaultOutput(const TString& file) {

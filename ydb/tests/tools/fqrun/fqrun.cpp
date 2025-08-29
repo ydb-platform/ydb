@@ -536,7 +536,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
+        auto& singleComputeOpt = options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableYdbCompute = true;
@@ -545,13 +545,13 @@ protected:
                 }
             });
 
-        options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
+        auto& sharedComputeOpt = options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
             .RequiredArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableYdbCompute = true;
                 RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
             });
-        options.MutuallyExclusive("single-compute-db", "shared-compute-db");
+        options.MutuallyExclusiveOpt(singleComputeOpt, sharedComputeOpt);
 
         options.AddLongOption("hold", "Hold fqrun process after finishing all queries")
             .NoArgument()

@@ -25,6 +25,7 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
 ydb/core/kqp/ut/olap KqpOlapWrite.WriteDeleteCleanGC
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
 ydb/core/kqp/ut/scan KqpSplit.StreamLookupDeliveryProblem
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
@@ -85,6 +86,8 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
+ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
+ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
 ydb/library/yaml_config/ut ConsoleDumper.IgnoreUnmanagedItems
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage

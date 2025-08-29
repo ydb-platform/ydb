@@ -2334,7 +2334,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
         messages[xtraKeySize] = TString{xtraKeySize, 'a'};
         THashSet<TString> keysWritten;
-
         auto writeMessage = [&] (const TString& key, ui64 size) {
             NYdb::NTopic::TWriteMessage message{messages[size]};
             NYdb::NTopic::TWriteMessage::TMessageMeta meta1;

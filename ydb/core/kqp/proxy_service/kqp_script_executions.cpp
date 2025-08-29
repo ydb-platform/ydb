@@ -4053,7 +4053,7 @@ public:
         , ExecutionId(executionId)
         , QueryPlan(queryPlan)
         , LeaseGeneration(leaseGeneration)
-        , Ast(ast)
+        , QueryAst(ast)
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
@@ -4081,7 +4081,10 @@ public:
               AND (lease_generation IS NULL OR lease_generation = $lease_generation);
         )";
 
-        const auto& artifacts = CompressScriptArtifacts(Ast, QueryPlan, Compressor);
+        const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
+        if (artifacts.Issues) {
+            KQP_PROXY_LOG_N("Compress script artifacts finished with issues: " << artifacts.Issues.ToOneLineString());
+        }
 
         NYdb::TParamsBuilder params;
         params
@@ -4118,7 +4121,7 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvSaveScriptProgressResponse(status, Ast && status == Ydb::StatusIds::SUCCESS, std::move(issues)));
+        Send(Owner, new TEvSaveScriptProgressResponse(status, QueryAst && status == Ydb::StatusIds::SUCCESS, std::move(issues)));
     }
 
 private:
@@ -4126,7 +4129,7 @@ private:
     const TString ExecutionId;
     const TString QueryPlan;
     const i64 LeaseGeneration;
-    std::optional<TString> Ast;
+    const std::optional<TString> QueryAst;
     const TCompressor Compressor;
 };
 

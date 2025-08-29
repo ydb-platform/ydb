@@ -479,9 +479,7 @@ Table structure:
 
 ## Query sessions {#query-sessions}
 
-The following system view stores information about active query sessions in the database:
-
-* `query_sessions`: Contains detailed information about currently active sessions, including session metadata, client information, query details, and timing data.
+* `query_sessions`: Contains detailed information about currently active sessions.
 
 This view is useful for monitoring active database sessions, identifying long-running queries, tracking client connections, and analyzing session patterns.
 

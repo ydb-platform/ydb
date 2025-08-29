@@ -128,7 +128,7 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
 }
 
 void TMainBase::RegisterLogOptions(NLastGetopt::TOpts& options) {
-    options.AddLongOption("log-default", "Default log priority")
+    options.AddLongOption("log-default", "Default log priority (allowed log priorities: trace, debug, info, notice, warn, error, crit, alert, emerg)")
         .RequiredArgument("priority")
         .StoreMappedResultT<TString>(&DefaultLogPriority, GetLogPrioritiesMap("log-default"));
 

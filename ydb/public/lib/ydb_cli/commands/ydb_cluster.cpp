@@ -21,7 +21,7 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false, true));
     AddCommand(std::make_unique<TCommandClusterDump>());
     AddCommand(std::make_unique<TCommandClusterRestore>());
-    AddHiddenCommand(std::make_unique<TCommandBridge>(true));
+    AddCommand(std::make_unique<TCommandBridge>(true));
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

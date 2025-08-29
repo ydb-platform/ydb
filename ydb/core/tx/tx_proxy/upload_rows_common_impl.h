@@ -1192,7 +1192,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
-        LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRowsInt().size() << " rows / "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRowsInt().size() << " rows / "
             << shardRequestCount << " shards");
 
         // Sanity check: don't break when we don't have any shards for some reason
@@ -1323,7 +1323,7 @@ private:
             count += v.Rows.size();
         }
 
-        LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry for " << count << " rows / "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry for " << count << " rows / "
             << ShardUploadRetryStates.size() << " shards");
 
         TVector<std::pair<TSerializedCellVec, TString>> rows;

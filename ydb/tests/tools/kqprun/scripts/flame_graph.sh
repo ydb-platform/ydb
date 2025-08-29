@@ -17,7 +17,8 @@ if (( ${2:-''} )); then
 fi
 
 SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
-FLAME_GRAPH_TOOL="$SCRIPT_DIR/../../../../../contrib/tools/flame-graph/"
+ROOT_DIR=$(cd $SCRIPT_DIR && git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/../../../../../..")
+FLAME_GRAPH_TOOL="$ROOT_DIR/contrib/tools/flame-graph/"
 
 TARGET_PID=$(pgrep -u $USER ${3:-'kqprun'})
 

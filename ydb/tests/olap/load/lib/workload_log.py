@@ -16,11 +16,12 @@ class WorkloadLogBase(WorkloadTestBase):
         'nemesis_enabled', [True, False],
         ids=['nemesis_true', 'nemesis_false']
     )
-    def test_workload_log(self, nemesis_enabled: bool):
+    @pytest.mark.parametrize('store_type', ['row', 'column'])
+    def test_workload_log(self, nemesis_enabled: bool, store_type: str):
         command_args_template = (
             "--endpoint grpc://{node_host}:2135 "
             f"--database /{YdbCluster.ydb_database} "
-            "--store-type row"
+            f"--store-type {store_type}"
         )
 
         additional_stats = {

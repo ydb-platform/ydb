@@ -8,7 +8,7 @@ import logging
 import yatest.common
 import shutil
 import allure
-from time import time
+from time import time, ctime
 from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
@@ -163,17 +163,17 @@ class RemoteExecutor:
 
             # Логирование
             if raise_on_timeout:
-                LOGGER.error(f"{cmd_type} command timed out after {timeout} seconds on {host}")
-                LOGGER.error(f"Full command: {full_cmd}")
-                LOGGER.error(f"Original command: {cmd}")
+                LOGGER.error(f"{ctime()}{cmd_type} command timed out after {timeout} seconds on {host}")
+                LOGGER.error(f"{ctime()}Full command: {full_cmd}")
+                LOGGER.error(f"{ctime()}Original command: {cmd}")
             else:
-                LOGGER.warning(f"{cmd_type} command timed out after {timeout} seconds on {host}")
-                LOGGER.info(f"Full command: {full_cmd}")
-                LOGGER.info(f"Original command: {cmd}")
+                LOGGER.warning(f"{ctime()}{cmd_type} command timed out after {timeout} seconds on {host}")
+                LOGGER.info(f"{ctime()}Full command: {full_cmd}")
+                LOGGER.info(f"{ctime()}Original command: {cmd}")
 
             if stdout or stderr:
-                LOGGER.info(f"Partial stdout before timeout:\n{stdout}")
-                LOGGER.info(f"Partial stderr before timeout:\n{stderr}")
+                LOGGER.info(f"{ctime()}Partial stdout before timeout:\n{stdout}")
+                LOGGER.info(f"{ctime()}Partial stderr before timeout:\n{stderr}")
             else:
                 LOGGER.debug("No partial output available")
 
@@ -215,21 +215,21 @@ class RemoteExecutor:
 
             if raise_on_error:
                 # Логируем детальную информацию об ошибке
-                LOGGER.error(f"{cmd_type} command failed with exit code {exit_code} on {host}")
-                LOGGER.error(f"Full command: {full_cmd}")
-                LOGGER.error(f"Original command: {cmd}")
+                LOGGER.error(f"{ctime()}{cmd_type} command failed with exit code {exit_code} on {host}")
+                LOGGER.error(f"{ctime()}Full command: {full_cmd}")
+                LOGGER.error(f"{ctime()}Original command: {cmd}")
                 if stdout:
-                    LOGGER.error(f"Command stdout:\n{stdout}")
+                    LOGGER.error(f"{ctime()}Command stdout:\n{stdout}")
                 if stderr:
-                    LOGGER.error(f"Command stderr:\n{stderr}")
+                    LOGGER.error(f"{ctime()}Command stderr:\n{stderr}")
 
                 raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
-            LOGGER.error(f"Error executing {cmd_type.lower()} command on {host}: {e}")
+            LOGGER.error(f"{ctime()}Error executing {cmd_type.lower()} command on {host}: {e}")
             if stdout:
-                LOGGER.error(f"Command stdout:\n{stdout}")
+                LOGGER.error(f"{ctime()}Command stdout:\n{stdout}")
             if stderr:
-                LOGGER.error(f"Command stderr:\n{stderr}")
+                LOGGER.error(f"{ctime()}Command stderr:\n{stderr}")
 
             return ExecutionResult(
                 stdout=stdout,
@@ -240,7 +240,7 @@ class RemoteExecutor:
 
         def _execute_local_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду локально"""
-            LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
+            LOGGER.info(f"{ctime()}Detected localhost ({host}), executing command locally: {cmd}")
 
             full_cmd = cmd
             try:
@@ -261,7 +261,7 @@ class RemoteExecutor:
                 # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
-                    LOGGER.warning(f"Local command failed with exit code {exit_code} but produced no stderr output on {host}")
+                    LOGGER.warning(f"{ctime()}Local command failed with exit code {exit_code} but produced no stderr output on {host}")
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
@@ -279,7 +279,7 @@ class RemoteExecutor:
             except Exception as e:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing local command on {host}: {e}")
+                LOGGER.error(f"{ctime()}Unexpected error executing local command on {host}: {e}")
                 return ExecutionResult(
                     stdout="",
                     stderr="",
@@ -289,7 +289,7 @@ class RemoteExecutor:
 
         def _execute_ssh_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду через SSH"""
-            LOGGER.info(f"Executing SSH command on {host}: {cmd}")
+            LOGGER.info(f"{ctime()}Executing SSH command on {host}: {cmd}")
 
             ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 
@@ -325,7 +325,7 @@ class RemoteExecutor:
                 # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
-                    LOGGER.warning(f"SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
+                    LOGGER.warning(f"{ctime()}SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
@@ -343,7 +343,7 @@ class RemoteExecutor:
             except Exception as e:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
+                LOGGER.error(f"{ctime()}Unexpected error executing SSH command on {host}: {e}")
                 return ExecutionResult(
                     stdout="",
                     stderr="",
@@ -458,7 +458,7 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
     except Exception as e:
         if raise_on_error:
             raise
-        LOGGER.error(f"Failed to copy {local_path} to {host}:{remote_path}: {e}")
+        LOGGER.error(f"{ctime()}Failed to copy {local_path} to {host}:{remote_path}: {e}")
         return None
 
 
@@ -586,7 +586,7 @@ def deploy_binaries_to_hosts(
             host_results[os.path.basename(binary_file)] = result
             # Логируем только критичные события
             if not result['success']:
-                LOGGER.error(f"Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
+                LOGGER.error(f"{ctime()}Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
 
         results[host] = host_results
 
@@ -604,9 +604,9 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
             success = ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
             results[host] = success
             if not success:
-                LOGGER.error(f"Failed to fix permissions for {target_dir} on {host}")
+                LOGGER.error(f"{ctime()}Failed to fix permissions for {target_dir} on {host}")
         except Exception as e:
-            LOGGER.error(f"Error fixing permissions on {host}: {e}")
+            LOGGER.error(f"{ctime()}Error fixing permissions on {host}: {e}")
             results[host] = False
 
     return results

@@ -102,7 +102,7 @@ def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
 class TestPqRowDispatcher(TestYdsBase):
 
     def init(self, client, topic_name_prefix, partitions=1):
-        client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         self.init_topics(topic_name_prefix, create_input=True, create_output=True, partitions_count=partitions)
 
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):

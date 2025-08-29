@@ -3713,7 +3713,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "building global unique index is disabled");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unique index creation is disabled");
         }
     }
 
@@ -3744,7 +3744,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "building global unique index is disabled");
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "Unique index creation is disabled");
         }
     }
 

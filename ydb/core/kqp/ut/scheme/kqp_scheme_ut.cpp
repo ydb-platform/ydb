@@ -3893,7 +3893,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
-                }});
+                }, 10, 3});
 
             auto result = session.CreateTable("/Root/TestTable1", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3908,11 +3908,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     100500,
-                }});
+                }, 10, 3});
 
-            // TODO: should be error
             auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -3934,11 +3934,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         { // valid settings:
-            TIndexDescription index("vector_idx1", Ydb::Table::GlobalVectorKMeansTreeIndex, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+            TIndexDescription index("vector_idx1", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
                 TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
-                    100500
+                    1024
                 }, 10, 3
             });
 
@@ -3950,16 +3950,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         { // invalid settings:
-            // auto builder = TTableBuilder()
-            //     .AddVectorKMeansTreeIndex("vector_idx2", {"Embedding"}, {TVectorIndexSettings{
-            //         NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
-            //         NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
-            //         100500,
-            //     }});
+            TIndexDescription index("vector_idx2", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500
+                }, 10, 3
+            });
 
-            // // TODO: should be error
-            // auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
-            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4023,7 +4027,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cerr << explain;
 
             if (expectedError) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, explain);
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST, explain);
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, explain);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, explain);
@@ -4035,101 +4039,101 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // unknown index setting: 
         check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Unknown index setting: XxX");
+            "Unknown index setting: XxX");
         check("XxX=42, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Unknown index setting: XxX");
+            "Unknown index setting: XxX");
         
         // distance:
         check("distance=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid distance: XxX");
+            "Invalid distance: XxX");
         check("distance=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid distance: 42");
+            "Invalid distance: 42");
         
         // similarity
         check("similarity=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid similarity: XxX");
+            "Invalid similarity: XxX");
         check("similarity=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid similarity: 42");
+            "Invalid similarity: 42");
         check("similarity=True, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid similarity: True");
+            "Invalid similarity: True");
 
         // distance + similarity (none or both)
         check("distance=manhattan, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: only one of distance or similarity should be set, not both");
+            "only one of distance or similarity should be set, not both");
         check("vector_type=float, vector_dimension=1024, levels=3, clusters=10",
-            "Error: either distance or similarity should be set");
+            "either distance or similarity should be set");
 
         // vector_type
         check("similarity=inner_product, vector_type=XxX, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid vector_type: XxX");
+            "Invalid vector_type: XxX");
         check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
-            "Error: Invalid vector_type: 42");
+            "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
-            "Error: vector_type should be set");
+            "vector_type should be set");
         
         // vector_dimension
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: XxX");
+            "Invalid vector_dimension: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 0 should be between 1 and 16384");
+            "Invalid vector_dimension: 0 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 16385 should be between 1 and 16384");
+            "Invalid vector_dimension: 16385 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 999999999999 should be between 1 and 16384");
+            "Invalid vector_dimension: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 99999999999999999999");
+            "Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
-            "Error: vector_dimension should be set");
+            "vector_dimension should be set");
             
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
-            "Error: Invalid levels: XxX");
+            "Invalid levels: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
-            "Error: Invalid levels: 0 should be between 1 and 16");
+            "Invalid levels: 0 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=17, clusters=2",
-            "Error: Invalid levels: 17 should be between 1 and 16");
+            "Invalid levels: 17 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=2",
-            "Error: Invalid levels: 999999999999 should be between 1 and 16");
+            "Invalid levels: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
-            "Error: Invalid levels: 99999999999999999999");
+            "Invalid levels: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
-            "Error: levels should be set");
+            "levels should be set");
 
         // clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
-            "Error: Invalid clusters: XxX");
+            "Invalid clusters: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
-            "Error: Invalid clusters: 0 should be between 2 and 2048");
+            "Invalid clusters: 0 should be between 2 and 2048");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",
-            "Error: Invalid clusters: 1");
+            "Invalid clusters: 1");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2048", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2049",
-            "Error: Invalid clusters: 2049 should be between 2 and 2048");
+            "Invalid clusters: 2049 should be between 2 and 2048");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=999999999999",
-            "Error: Invalid clusters: 999999999999 should be between 2 and 2048");
+            "Invalid clusters: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
-            "Error: Invalid clusters: 99999999999999999999");
+            "Invalid clusters: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
-            "Error: clusters should be set");
+            "clusters should be set");
         
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
-            "Error: Invalid clusters^levels: 10^10 should be less than 1073741824");
+            "Invalid clusters^levels: 10^10 should be less than 1073741824");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=1024",
-            "Error: Invalid clusters^levels: 1024^16 should be less than 1073741824");
+            "Invalid clusters^levels: 1024^16 should be less than 1073741824");
         
         // vector_dimension*clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=2048, levels=1, clusters=2048", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=2049, levels=1, clusters=2048",
-            "Error: Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
+            "Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {

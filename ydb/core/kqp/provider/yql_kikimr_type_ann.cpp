@@ -879,7 +879,7 @@ private:
         return TStatus::Ok;
     }
 
-Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
+Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings, TString& error) {
     Ydb::Table::KMeansTreeSettings proto;
 
     for (const auto& indexSetting : indexSettings) {
@@ -887,8 +887,16 @@ Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoName
         const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
 
         if (name == "distance") {
+            if (proto.mutable_settings()->has_metric()) {
+                error = "only one of distance or similarity should be set, not both";
+                return proto;
+            }
             proto.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
         } else if (name == "similarity") {
+            if (proto.mutable_settings()->has_metric()) {
+                error = "only one of distance or similarity should be set, not both";
+                return proto;
+            }
             proto.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
         } else if (name =="vector_type") {
             proto.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
@@ -899,13 +907,10 @@ Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoName
         } else if (name =="levels") {
             proto.set_levels(FromString<ui32>(value));
         } else {
-            YQL_ENSURE(false, "Wrong index setting name: " << name);
+            error = TStringBuilder() << "Unknown index setting: " << name;
+            return proto;
         }
     }
-
-    YQL_ENSURE(proto.settings().metric() != Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED, "Missed index setting metric");
-    YQL_ENSURE(proto.settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
-    YQL_ENSURE(proto.settings().vector_dimension(), "Missed index setting vector_dimension");
 
     return proto;
 }
@@ -1044,8 +1049,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
             if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                TString error;
                 *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
-                     .MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
+                     .MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings(), error);
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), error));
+                    return IGraphTransformer::TStatus::Error;
+                }
             }
 
             // IndexState and version, pathId are ignored for create table with index request

@@ -8,6 +8,22 @@
 
 namespace NKikimr::NKMeans {
 
+namespace {
+    bool ValidateSettingInRange(const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue, TString& error) {
+        if (!value.has_value()) {
+            error = TStringBuilder() << name << " should be set";
+            return false;
+        }
+
+        if (minValue <= *value && *value <= maxValue) {
+            return true;
+        }
+
+        error = TStringBuilder() << "Invalid " << name << ": " << *value << " should be between " << minValue << " and " << maxValue;
+        return false;
+    };
+}
+
 template <typename TRes>
 Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length)
 {
@@ -330,8 +346,7 @@ private:
 };
 
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error) {
-    if (settings.vector_dimension() < 1) {
-        error = "Dimension of vector should be at least one";
+    if (!ValidateSettings(settings, error)) {
         return nullptr;
     }
 
@@ -352,7 +367,7 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
                 return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, typeVal);
             default:
-                error = "Wrong similarity";
+                error = TStringBuilder() << "Wrong similarity: " << settings.metric();
                 break;
         }
         return nullptr;
@@ -366,14 +381,90 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
             return handleMetric.template operator()<i8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-            error = "TODO(mbkkt) bit vector type is not supported";
+            error = "Bit vector type is not supported";
             break;
         default:
-            error = "Wrong vector type";
+            error = TStringBuilder() << "Wrong vector type: " << settings.vector_type();
             break;
     }
 
     return nullptr;
+}
+
+bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    constexpr ui64 MinLevels = 1;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
+    constexpr ui64 MaxClusters = 2048;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+
+    if (!settings.has_settings()) {
+        error = TStringBuilder() << "vector index settings should be set";
+        return false;
+    }
+
+    if (!ValidateSettings(settings.settings(), error)) {
+        return false;
+    }
+
+    if (!ValidateSettingInRange("levels", 
+        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt, 
+        MinLevels, MaxLevels,
+        error))
+    {
+        return false;
+    }
+
+    if (!ValidateSettingInRange("clusters", 
+        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt, 
+        MinClusters, MaxClusters,
+        error))
+    {
+        return false;
+    }
+
+    ui64 clustersPowLevels = 1;
+    for (ui64 i = 0; i < settings.levels(); ++i) {
+        clustersPowLevels *= settings.clusters();
+        if (clustersPowLevels > MaxClustersPowLevels) {
+            error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+            return false;
+        }
+    }
+
+    if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
+        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters() 
+            << " should be less than " << MaxVectorDimensionMultiplyClusters;
+        return false;
+    }
+
+    return true;
+}
+
+bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+    constexpr ui64 MinVectorDimension = 1;
+    constexpr ui64 MaxVectorDimension = 16384;
+
+    if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
+        error = TStringBuilder() << "either distance or similarity should be set";
+        return false;
+    }
+
+    if (!settings.has_vector_type() || settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+        error = TStringBuilder() << "vector_type should be set";
+        return false;
+    }
+
+    if (!ValidateSettingInRange("vector_dimension", 
+        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt, 
+        MinVectorDimension, MaxVectorDimension,
+        error))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 }

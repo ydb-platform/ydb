@@ -715,11 +715,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
+            index.IndexSettings.emplace<TVectorIndexSettings>();
             if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
-                return false;
-            }
-            if (!vectorSettings.Validate(Ctx_)) {
                 return false;
             }
 
@@ -878,17 +875,18 @@ std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_i
 }
 
 template<>
-std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    ui64 value = 0;
+std::tuple<bool, ui32, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    ui32 value = 0;
     const TString stringValue = GetIndexSettingStringValue(node);
     if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3 || stringValue.empty()) {
         return {false, value, stringValue};
     }
     TString suffix;
-    if (!ParseNumbers(Ctx_, stringValue, value, suffix)) {
+    ui64 value64;
+    if (!ParseNumbers(Ctx_, stringValue, value64, suffix) || value64 > Max<ui32>()) {
         return {false, value, stringValue};
     }
-    return {true, value, stringValue};
+    return {true, value = static_cast<ui32>(value64), stringValue};
 }
 
 template<>
@@ -935,21 +933,21 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
             }
             vectorIndexSettings.VectorType = value;
         } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
             if (!success) {
                 Ctx_.Error() << "Invalid vector_dimension: " << stringValue;
                 return false;
             }
             vectorIndexSettings.VectorDimension = value;
         } else if (to_lower(id.Name) == "clusters") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
             if (!success) {
                 Ctx_.Error() << "Invalid clusters: " << stringValue;
                 return false;
             }
             vectorIndexSettings.Clusters = value;
         } else if (to_lower(id.Name) == "levels") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
             if (!success) {
                 Ctx_.Error() << "Invalid levels: " << stringValue;
                 return false;

@@ -1909,8 +1909,16 @@ public:
                                 };
                                 const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
                                 if (vectorSetting.Name().Value() == "distance") {
+                                    if (protoVectorSettings.mutable_settings()->has_metric()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "only one of distance or similarity should be set, not both"));
+                                        return SyncError();
+                                    }
                                     protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
                                 } else if (vectorSetting.Name().Value() == "similarity") {
+                                    if (protoVectorSettings.mutable_settings()->has_metric()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "only one of distance or similarity should be set, not both"));
+                                        return SyncError();
+                                    }
                                     protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
                                 } else if (vectorSetting.Name().Value() == "vector_type") {
                                     protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
@@ -1921,7 +1929,9 @@ public:
                                 } else if (vectorSetting.Name().Value() == "levels") {
                                     protoVectorSettings.set_levels(parseU32("levels", value));
                                 } else {
-                                    YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
+                                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << 
+                                        "Unknown index setting: " << vectorSetting.Name().Value()));
+                                    return SyncError();
                                 }
                             }
                         }

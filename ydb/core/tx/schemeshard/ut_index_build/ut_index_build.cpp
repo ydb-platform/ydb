@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", TBuildIndexConfig{"index1", indexType, {"index"}, {}}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
               Columns { Name: "key"   Type: "Uint64" }
@@ -641,13 +641,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue0"
+              Type: %s
               KeyColumnNames: ["value0"]
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue1"
+              Type: %s
               KeyColumnNames: ["value1"]
             }
-        )");
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str(), NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         // should not affect index limits
@@ -1105,7 +1107,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        const TString indexTypeStr = (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal) ? "EIndexTypeGlobal" : "EIndexTypeGlobalUnique";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
@@ -1124,7 +1125,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
               Type: %s
               KeyColumnNames: ["value1"]
             }
-        )", indexTypeStr.c_str(), indexTypeStr.c_str()));
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str(), NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -1188,7 +1189,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        const TString indexTypeStr = (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal) ? "EIndexTypeGlobal" : "EIndexTypeGlobalUnique";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
@@ -1202,7 +1202,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
               Type: %s
               KeyColumnNames: ["value0"]
             }
-        )", indexTypeStr.c_str()));
+        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

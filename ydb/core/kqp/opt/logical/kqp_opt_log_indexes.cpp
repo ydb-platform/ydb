@@ -547,10 +547,8 @@ void VectorReadLevel(
 {
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
         .settings();
-    const auto clusters = std::max<ui32>(2, settings.clusters());
-    const auto levels = std::max<ui32>(1, settings.levels());
-    Y_ENSURE(levels >= 1);
-    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), clusters);
+    Y_ENSURE(settings.levels() >= 1);
+    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), settings.clusters());
 
     auto count = ctx.Builder(pos)
         .Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal()
@@ -566,7 +564,7 @@ void VectorReadLevel(
 
         RemapIdToParent(ctx, pos, read);
 
-        if (level == levels) {
+        if (level == settings.levels()) {
             break;
         }
 

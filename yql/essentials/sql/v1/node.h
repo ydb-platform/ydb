@@ -1209,11 +1209,9 @@ namespace NSQLTranslationV1 {
         std::optional<EDistance> Distance;
         std::optional<ESimilarity> Similarity;
         std::optional<EVectorType> VectorType;
-        std::optional<ui64> VectorDimension;
-        std::optional<ui64> Clusters;
-        std::optional<ui64> Levels;
-
-        bool Validate(TContext& ctx) const;
+        std::optional<ui32> VectorDimension;
+        std::optional<ui32> Clusters;
+        std::optional<ui32> Levels;
     };
 
     struct TIndexDescription {

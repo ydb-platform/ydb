@@ -263,6 +263,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
         }
+        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            TString msg;
+            if (!NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+            }
+        }
 
         {
             auto scheme = TransactionTemplate(

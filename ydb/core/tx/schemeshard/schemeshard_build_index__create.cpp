@@ -253,14 +253,17 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
-            buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+                return false;
+            }
             buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
             if (!buildInfo.Clusters) {
                 return false;
             }
+            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+            buildInfo.KMeans.K = vectorIndexKmeansTreeDescription.GetSettings().clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + vectorIndexKmeansTreeDescription.GetSettings().levels();
+            buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
             break;
         }
         };

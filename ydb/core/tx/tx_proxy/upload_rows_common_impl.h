@@ -1323,8 +1323,8 @@ private:
             count += v.Rows.size();
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry for " << count << " rows / "
-            << ShardUploadRetryStates.size() << " shards");
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry iteration " << Backoff.GetIteration()
+            << " for " << count << " rows / " << ShardUploadRetryStates.size() << " shards");
 
         TVector<std::pair<TSerializedCellVec, TString>> rows;
         rows.reserve(count);

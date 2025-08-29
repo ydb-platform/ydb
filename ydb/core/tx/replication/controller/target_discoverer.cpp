@@ -77,7 +77,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString()
-                << ", iteration# " << Backoff.Iteration);
+                << ", iteration# " << Backoff.GetIteration());
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);

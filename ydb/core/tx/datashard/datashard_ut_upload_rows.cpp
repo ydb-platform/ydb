@@ -749,6 +749,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
@@ -786,11 +787,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT(!observedUploadStatus.empty());
         UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
         observedUploadStatus.clear();
-
-        if (!overloadSubscribe) {
-            DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
-            return;
-        }
 
         TVector<THolder<TEvTxUserProxy::TEvUploadRowsResponse>> responses;
         auto responseAwaiter = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
@@ -837,7 +833,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT_VALUES_EQUAL(responses.back()->Status, Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflow) {
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetryRetryableError) {
         DoShouldRejectOnChangeQueueOverflow(false);
     }
 

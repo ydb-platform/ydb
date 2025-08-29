@@ -31,6 +31,10 @@ ui64 TBackoffTimer::NextBackoffMs() {
     return CurrentBackoffMs;
 }
 
+TDuration TBackoffTimer::Next() {
+    return TDuration::MilliSeconds(NextBackoffMs());
+}
+
 void TBackoffTimer::Reset() {
     CurrentBackoffMs = 0ull;
     PreviousBackoffMs = 0ull;
@@ -46,6 +50,10 @@ TBackoff::TBackoff(size_t maxRetries, TDuration initialDelay, TDuration maxDelay
     , MaxRetries(maxRetries)
     , Iteration(0)
 {
+}
+
+size_t TBackoff::GetIteration() const {
+    return Iteration;
 }
 
 bool TBackoff::HasMore() const {

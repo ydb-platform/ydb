@@ -17,6 +17,7 @@ class TBackoffTimer {
 public:
     TBackoffTimer(ui64 initialMs, ui64 maxMs);
     ui64 NextBackoffMs();
+    TDuration Next();
     void Reset();
 };
 
@@ -28,12 +29,14 @@ struct TBackoff {
     TBackoff(TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
     TBackoff(size_t maxRetries, TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
 
+    size_t GetIteration() const;
     bool HasMore() const;
     TDuration Next();
     void Reset();
 
     explicit operator bool() const;
 
+private:
     TBackoffTimer Timer;
     const size_t MaxRetries;
     size_t Iteration;

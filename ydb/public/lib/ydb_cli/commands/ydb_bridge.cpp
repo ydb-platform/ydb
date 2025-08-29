@@ -58,7 +58,7 @@ namespace {
 TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     : TClientCommandTree("bridge", {}, "Manage cluster in bridge mode")
 {
-    AddCommand(std::make_unique<TCommandBridgeUpdate>(allowEmptyDatabase));
+    AddHiddenCommand(std::make_unique<TCommandBridgeUpdate>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeList>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeSwitchover>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeFailover>(allowEmptyDatabase));

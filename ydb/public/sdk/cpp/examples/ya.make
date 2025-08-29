@@ -1,4 +1,5 @@
 RECURSE(
+    auth/ssa_delegation
     basic_example
     bulk_upsert_simple
     pagination

@@ -443,6 +443,50 @@ public:
         sinkType = "SolomonSink";
     }
 
+    bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSource>()) {
+            return false;
+        }
+
+        auto source = node.Cast<TDqSource>();
+        const auto maybeSettings = source.Settings().Maybe<TSoSourceSettings>();
+        if (!maybeSettings) {
+            return false;
+        }
+
+        const auto settings = maybeSettings.Cast();
+        const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+        const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+
+        properties["ExternalDataSource"] = cluster;
+        properties["ClusterType"] = clusterDesc->GetClusterType() == TSolomonClusterConfig::SCT_SOLOMON ? "SOLOMON" : "MONITORING";
+
+        properties["From"] = settings.From().StringValue();
+        properties["To"] = settings.To().StringValue();
+
+        auto selectors = settings.Selectors().StringValue();
+        if (!selectors.empty()) {
+            properties["Selectors"] = selectors;
+        }
+
+        auto program = settings.Program().StringValue();
+        if (!program.empty()) {
+            properties["Program"] = program;
+        }
+        
+        const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
+        if (!isDisabled) {
+            properties["DownsamplingDisabled"] = "false";
+            properties["DownsamplingAggregation"] = settings.DownsamplingAggregation().StringValue();
+            properties["DownsamplingFill"] = settings.DownsamplingFill().StringValue();
+            properties["DownsamplingGridInterval"] = settings.DownsamplingGridSec().Literal().Value();
+        } else {
+            properties["DownsamplingDisabled"] = "true";
+        }
+
+        return true;
+    }
+
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqSolomonMkqlCompilers(compiler);
     }

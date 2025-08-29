@@ -56,16 +56,16 @@ int main(int argc, char** argv) {
 
     NLastGetopt::TOptsParseResult optsResult(&opts, argc, argv);
 
-    NYdb::TIamServiceParams iamParams;
+    NYdb::TIamServiceParams iamParams{
+        .SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(),
+        .ServiceId = serviceId,
+        .MicroserviceId = microserviceId,
+        .ResourceId = resourceId,
+        .ResourceType = resourceType,
+        .TargetServiceAccountId = targetServiceAccountId,
+    };
 
-    iamParams.ServiceId = serviceId;
-    iamParams.MicroserviceId = microserviceId;
-    iamParams.ResourceId = resourceId;
-    iamParams.ResourceType = resourceType;
-    iamParams.TargetServiceAccountId = targetServiceAccountId;
     iamParams.Endpoint = iamEndpoint;
-
-    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
 
     auto config = NYdb::TDriverConfig()
         .SetEndpoint(endpoint)
@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
         std::cerr << ToString(static_cast<NYdb::TStatus>(result)) << std::endl;
         return 1;
     }
-    
+
     auto parser = result.GetResultSetParser(0);
     while (parser.TryNextRow()) {
         std::cout << parser.ColumnParser(0).GetInt32() << std::endl;

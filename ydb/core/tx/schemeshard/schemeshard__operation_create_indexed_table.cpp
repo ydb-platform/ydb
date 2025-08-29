@@ -242,10 +242,24 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
 
-        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree && !context.SS->EnableVectorIndex) {
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+        switch (indexDescription.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                // no feature flag, everything is fine
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                if (!context.SS->EnableAddUniqueIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique index support is disabled")};
+                }
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                if (!context.SS->EnableVectorIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+                }
+                break;
         }
-
 
         {
             auto scheme = TransactionTemplate(

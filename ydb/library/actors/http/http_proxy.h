@@ -17,6 +17,7 @@
 namespace NHttp {
 
 const ui32 DEFAULT_MAX_RECYCLED_REQUESTS_COUNT = 1000;
+const size_t MAX_RECYCLED_REQUEST_BODY_CAPACITY = 1024 * 1024; // 1MB
 
 struct TSocketDescriptor : NActors::TSharedDescriptor, THttpConfig {
     SocketType Socket;

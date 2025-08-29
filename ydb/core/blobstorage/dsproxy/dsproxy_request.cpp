@@ -202,8 +202,8 @@ namespace NKikimr {
 
         TInstant now = TActivationContext::Now();
 
-        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes &&
-                partSize <= MaxBatchedPutSize) {
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes && partSize <= MaxBatchedPutSize &&
+                !BatchedPutIds.contains(ev->Get()->Id)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
@@ -220,6 +220,7 @@ namespace NKikimr {
                 ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
             }
 
+            BatchedPutIds.insert(ev->Get()->Id);
             batchedPuts.Queue.push_back(ev.Release());
             batchedPuts.Bytes += partSize;
         } else {
@@ -552,6 +553,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts,
             NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
+
+        for (auto& ev : batchedPuts.Queue) {
+            const size_t n = BatchedPutIds.erase(ev->Get()->Id);
+            Y_ABORT_UNLESS(n == 1);
+        }
 
         if (Info) {
             if (CurrentStateFunc() == &TThis::StateWork) {
@@ -929,6 +935,7 @@ namespace NKikimr {
                 auto& msg = static_cast<TEvBlobStorage::TEv##T##Result&>(*ev); \
                 status = msg.Status; \
                 errorReason = msg.ErrorReason; \
+                msg.RacingGeneration = RacingGeneration; \
                 Mon->RespStat##T->Account(status); \
                 break; \
             }
@@ -948,10 +955,6 @@ namespace NKikimr {
                 Y_ABORT();
 #undef XX
         }
-
-        auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(ev.get());
-        Y_ABORT_UNLESS(common);
-        common->RacingGeneration = RacingGeneration;
 
         if (ExecutionRelay) {
             SetExecutionRelay(*ev, std::exchange(ExecutionRelay, {}));
@@ -1111,6 +1114,7 @@ namespace NKikimr {
     bool TBlobStorageGroupRequestActor::BootstrapCheck() {
         if (ForceGroupGeneration && *ForceGroupGeneration != Info->GroupGeneration) {
             ErrorReason = "forced group generation mismatch";
+            RacingGeneration = Info->GroupGeneration;
             ReplyAndDie(NKikimrProto::RACE);
             return false;
         }

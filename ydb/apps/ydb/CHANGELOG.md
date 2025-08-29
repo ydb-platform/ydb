@@ -1,4 +1,4 @@
-* Added compilation query time statistics to `ydb workload * run` command.
+* Added query compilation time statistics to the `ydb workload * run` command.
 
 ## 2.25.0 ##
 

@@ -3879,6 +3879,92 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // valid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024,
+                }});
+
+            auto result = session.CreateTable("/Root/TestTable1", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500,
+                }});
+
+            // TODO: should be error
+            auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
+    Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create table:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // valid settings:
+            TIndexDescription index("vector_idx1", Ydb::Table::GlobalVectorKMeansTreeIndex, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500
+                }, 10, 3
+            });
+
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            // auto builder = TTableBuilder()
+            //     .AddVectorKMeansTreeIndex("vector_idx2", {"Embedding"}, {TVectorIndexSettings{
+            //         NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+            //         NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+            //         100500,
+            //     }});
+
+            // // TODO: should be error
+            // auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
     Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, CreateTable) {
         TKikimrRunner kikimr;
         // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);

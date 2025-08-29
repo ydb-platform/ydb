@@ -187,7 +187,7 @@ public:
         return numberMessages;
     }
 
-    void ExpectStatistics(TMap<NActors::TActorId, ui64> clients) {
+    void ExpectStatistics(TMap<NActors::TActorId, TMaybe<ui64>> clients) {
         auto check = [&]() -> bool {
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -293,9 +293,9 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
-        ExpectStatistics({{ReadActorId1, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}});
         StartSession(ReadActorId2, source);
-        ExpectStatistics({{ReadActorId1, 0}, {ReadActorId2, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}, {ReadActorId2, Nothing()}});
 
         std::vector<TString> data = { Json1 };
         PQWrite(data);

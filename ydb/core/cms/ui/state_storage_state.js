@@ -13,17 +13,23 @@ class StateStorageState {
         this.ssData = undefined;
         this.ssbData = undefined;
         this.sbData = undefined;
+        this.headers = ["Group", "Ring", "NodeId", "Location", "Distconf Status", "Sentinel Status"];
+        this.nodeIdColumnIdx = 2;
+        this.dcStatusColumnIdx = 4;
+        this.sStatusColumnIdx = 5;
         this.initTab();
     }
 
     buildPVHeader(table, header) {
-        var headers = [header, "", "", "", "", "", ""];
-        var row = table.addRow(headers);
+        let h = [header];
+        for (let i = 0; i < this.headers.length - 1; i++) {
+            h.push("");
+        }
+        var row = table.addRow(h);
         row[0].setHeader(true);
-        table.merge(0, 0, 0, 6);
-        headers = ["Pile", "Group", "Ring", "NodeId", "Location", "Distconf Status", "Sentinel Status"];
-        row = table.addRow(headers);
-        for(let i = 0; i < 7; i++)
+        table.merge(0, 0, 0, this.headers.length - 1);
+        row = table.addRow(this.headers);
+        for (let i = 0; i < this.headers.length; i++)
             row[i].setHeader(true);
         return row;
     }
@@ -32,22 +38,25 @@ class StateStorageState {
         cell.elem.removeClass("red");
         cell.elem.removeClass("yellow");
         cell.elem.removeClass("green");
-        cell.elem.addClass(this.codeToColor(value[3], isSentinel));
+        cell.elem.addClass(this.codeToColor(value[this.nodeIdColumnIdx], isSentinel));
     }
 
     addPVEntry(table, value) {
         var row = table.addRow(value);
-        this.updateColor(row[5], value, false);
-        this.updateColor(row[6], value, true);
+        this.updateColor(row[this.dcStatusColumnIdx], value, false);
+        this.updateColor(row[this.sStatusColumnIdx], value, true);
         return row;
     }
 
     updatePVEntry(row, value, prevValue) {
         if(value.join() !== prevValue.join()) {
-            for(let i = 0; i < 7; i++)
-                row[i].setText(value[i]);
-            this.updateColor(row[5], value, false);
-            this.updateColor(row[6], value, true);
+            for(let i = 0; i < this.headers.length; i++) {
+                if (value[i] !== prevValue[i]) {
+                    row[i].setText(value[i]);
+                }
+            }
+            this.updateColor(row[this.dcStatusColumnIdx], value, false);
+            this.updateColor(row[this.sStatusColumnIdx], value, true);
         }
     }
 
@@ -142,6 +151,12 @@ class StateStorageState {
         for (let rg of rgs) {
             let ringId = 1;
             let rgName = rgId + " NToSelect: " + rg.NToSelect;
+            if (rg.hasOwnProperty("BridgePileId")) {
+                rgName += " Pile: " + rg.BridgePileId
+                if (rg.hasOwnProperty("PileState")) {
+                    rgName += " " + rg.PileState;
+                }
+            }
             if (rg.WriteOnly) {
                 rgName += " WriteOnly";
             }
@@ -155,14 +170,14 @@ class StateStorageState {
                         ringname += " UseRingSpecificNodeSelection";
                     }
                     for (let n of r["Node"]) {
-                        res.push(["", rgName, ringName, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
+                        res.push([rgName, ringName, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
                     }
                     ringId++;
                 }
             }
             if (rg.hasOwnProperty("Node")) {
                 for (let n of rg["Node"]) {
-                    res.push(["", rgName, ringId, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
+                    res.push([rgName, ringId, n, this.getNodeName(n), this.codeToNodeState(n, false), this.codeToNodeState(n, true)]);
                     ringId++;
                 }
             }

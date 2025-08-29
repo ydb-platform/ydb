@@ -27,7 +27,7 @@ class WorkloadManagerWorkload:
         try:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
-        except:
+        except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in create_table"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
@@ -41,7 +41,7 @@ class WorkloadManagerWorkload:
         try:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
-        except:
+        except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in create_table"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
@@ -56,7 +56,7 @@ class WorkloadManagerWorkload:
         try:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
-        except:
+        except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in create_table"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
@@ -70,7 +70,7 @@ class WorkloadManagerWorkload:
         try:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
-        except:
+        except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in create_table"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 session_pool.execute_with_retries(query)
@@ -81,7 +81,7 @@ class WorkloadManagerWorkload:
                 with ydb.QuerySessionPool(self.driver) as session_pool:
                     session_pool.execute_with_retries("SELECT 1")
                 return True
-            except:
+            except Exception:
                 return False
 
         return wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1)
@@ -91,7 +91,7 @@ class WorkloadManagerWorkload:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 result = session_pool.execute_with_retries(query_body)
                 return result[0].rows
-        except:
+        except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in execute_query"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 result = session_pool.execute_with_retries(query_body)
@@ -208,7 +208,7 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
             try:
                 workload.validate_resource_pool(True)
                 workload.validate_resource_pool_classifier(True)
-            except:
+            except Exception:
                 assert workload.wait_for_connection(), "Failed to restore connection after rolling upgrade"
             step_count += 1
 

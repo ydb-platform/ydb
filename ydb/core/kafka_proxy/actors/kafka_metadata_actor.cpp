@@ -53,6 +53,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     }
 
     Become(&TKafkaMetadataActor::StateWork);
+    RespondIfRequired(ctx);
 }
 
 void TKafkaMetadataActor::SendDiscoveryRequest() {
@@ -342,9 +343,6 @@ void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port)
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
-    if (InflyCreateTopics != 0) {
-        return;
-    }
     auto Respond = [&] {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
@@ -358,7 +356,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         Respond();
         return;
     }
-    if (PendingResponses != 0) {
+    if (PendingResponses != 0 || InflyCreateTopics != 0) {
         return;
     }
 

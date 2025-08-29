@@ -20,8 +20,14 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EVerbose {
         None,
         Info,
+        LogDefaultError,
         QueriesText,
+        LogDefaultWarn,
         InitLogs,
+        LogDefaultNotice,
+        LogDefaultInfo,
+        LogDefaultDebug,
+        LogDefaultTrace,
         Max
     };
 

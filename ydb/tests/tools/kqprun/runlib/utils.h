@@ -133,4 +133,27 @@ TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultV
     return values[std::min(index, values.size() - 1)];
 }
 
+template <typename EVerbose>
+std::optional<NActors::NLog::EPriority> DefaultLogPriorityFromVerbose(EVerbose verbose) {
+    if (verbose >= EVerbose::LogDefaultTrace) {
+        return NActors::NLog::EPriority::PRI_TRACE;
+    }
+    if (verbose >= EVerbose::LogDefaultDebug) {
+        return NActors::NLog::EPriority::PRI_DEBUG;
+    }
+    if (verbose >= EVerbose::LogDefaultInfo) {
+        return NActors::NLog::EPriority::PRI_INFO;
+    }
+    if (verbose >= EVerbose::LogDefaultNotice) {
+        return NActors::NLog::EPriority::PRI_NOTICE;
+    }
+    if (verbose >= EVerbose::LogDefaultWarn) {
+        return NActors::NLog::EPriority::PRI_WARN;
+    }
+    if (verbose >= EVerbose::LogDefaultError) {
+        return NActors::NLog::EPriority::PRI_ERROR;
+    }
+    return std::nullopt;
+}
+
 }  // namespace NKikimrRun

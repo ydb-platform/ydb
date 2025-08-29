@@ -931,6 +931,10 @@ protected:
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
         SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
+
+        if (!DefaultLogPriority) {
+            DefaultLogPriority = DefaultLogPriorityFromVerbose(RunnerOptions.YdbSettings.VerboseLevel);
+        }
         SetupLogsConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {

@@ -604,6 +604,10 @@ protected:
         fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
         SetupLogsConfig(*appConfig.MutableLogConfig());
+
+        if (!DefaultLogPriority) {
+            DefaultLogPriority = DefaultLogPriorityFromVerbose(RunnerOptions.FqSettings.VerboseLevel);
+        }
         SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
 
         if (!PqFilesMapping.empty()) {

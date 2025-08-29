@@ -1,7 +1,5 @@
 #include "rpc_bridge_base.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/bridge.h>
@@ -136,8 +134,11 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
         auto* self = Self();
+        if (self->ReplyIfNotBootstrapped(ev)) {
+            return;
+        }
         const auto* config = ev->Get()->Config.get();
-        if (!config || !config->HasClusterState()) {
+        if (!config->HasClusterState()) {
             self->Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Bridge cluster state is not configured or not available", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
@@ -286,6 +287,9 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
         auto* self = Self();
+        if (self->ReplyIfNotBootstrapped(ev)) {
+            return;
+        }
         const auto& config = ev->Get()->Config;
         const auto& bridgeInfo = ev->Get()->BridgeInfo;
 

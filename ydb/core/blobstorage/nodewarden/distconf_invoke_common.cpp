@@ -102,6 +102,12 @@ namespace NKikimr::NStorage {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Command, op.Command));
+                // forbid executing any external operation before cluster bootstrap is completed
+                if (!Self->StorageConfig || Self->StorageConfig->GetGeneration() == 0) {
+                    if (op.Command.GetRequestCase() != TQuery::kBootstrapCluster) {
+                        return Finish(TResult::ERROR, TStringBuf("Cluster is not bootstrapped"));
+                    }
+                }
                 switch (op.Command.GetRequestCase()) {
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());

@@ -49,24 +49,8 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     NWilson::TTraceId TraceId;
 };
 
-struct TInMemNotification : public TSimpleRefCount<TInMemNotification> {
-    bool IsSent() const {
-        return !Owner;
-    }
-
-    void MarkSent() {
-        Owner = {};
-    }
-
-    TActorId Owner;
-    TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-    ui64 PendingPages = 0;
-    TVector<TEvResult::TLoaded> ReadyPages;
-};
-
 // pending request, index in ready blocks for page
 using TPendingRequests = THashMap<TIntrusivePtr<TRequest>, ui32>;
-using TPendingInMemNotifications = THashMap<TIntrusivePtr<TInMemNotification>, ui32>;
 
 struct TCollection {
     TLogoBlobID Id;
@@ -76,7 +60,6 @@ struct TCollection {
     ui64 TotalSize;
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
-    TMap<TPageId, TPendingInMemNotifications> PendingInMemNotifications;
 
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
@@ -745,6 +728,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (msg->Status != NKikimrProto::OK) {
             DropCollection(*collection, msg->Status);
         } else {
+            TVector<TPage*> loadedPages(::Reserve(msg->Pages.size()));
             for (auto &paged : msg->Pages) {
                 Y_ENSURE(paged.PageId < collection->PageMap.size());
                 auto* page = collection->PageMap[paged.PageId].Get();
@@ -754,6 +738,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
+                loadedPages.push_back(page);
+            }
+
+            for (const auto& owner : collection->InMemoryOwners) {
+                NotifyOwners(msg->PageCollection, loadedPages, owner);
             }
         }
 
@@ -909,41 +898,24 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void BodyProvided(TCollection &collection, TPage *page) {
         AddActivePage(page);
         auto pendingRequestsIt = collection.PendingRequests.find(page->PageId);
-        if (pendingRequestsIt != collection.PendingRequests.end()) {
-            for (auto& [request, index] : pendingRequestsIt->second) {
-                if (request->IsResponded()) {
-                    continue;
-                }
-
-                auto& readyPage = request->ReadyPages[index];
-                Y_ENSURE(readyPage.PageId == page->PageId);
-                readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
-
-                if (--request->PendingBlocks == 0) {
-                    SendResult(*request);
-                }
-            }
-            collection.PendingRequests.erase(pendingRequestsIt);
+        if (pendingRequestsIt == collection.PendingRequests.end()) {
+            Evict(Cache.Insert(page));
+            return;
         }
-
-        auto pendingNotificationsIt = collection.PendingInMemNotifications.find(page->PageId);
-        if (pendingNotificationsIt != collection.PendingInMemNotifications.end()) {
-            for (auto& [notification, index] : pendingNotificationsIt->second) {
-                if (notification->IsSent()) {
-                    continue;
-                }
-
-                auto& readyPage = notification->ReadyPages[index];
-                Y_ENSURE(readyPage.PageId == page->PageId);
-                readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
-
-                if (--notification->PendingPages == 0) {
-                    NotifyOwners(*notification);
-                }
+        for (auto &[request, index] : pendingRequestsIt->second) {
+            if (request->IsResponded()) {
+                continue;
             }
-            collection.PendingInMemNotifications.erase(pendingNotificationsIt);
-        }
 
+            auto &readyPage = request->ReadyPages[index];
+            Y_ENSURE(readyPage.PageId == page->PageId);
+            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
+
+            if (--request->PendingBlocks == 0) {
+                SendResult(*request);
+            }
+        }
+        collection.PendingRequests.erase(pendingRequestsIt);
         Evict(Cache.Insert(page));
     }
 
@@ -992,12 +964,18 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         request.MarkResponded();
     }
 
-    void NotifyOwners(TInMemNotification& notification) {
-        TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(notification.PageCollection), NKikimrProto::OK, 0);
-        result->Pages = std::move(notification.ReadyPages);
-        Send(notification.Owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
+    void NotifyOwners(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TVector<TPage*>& readyPages, const TActorId& owner) {
+        TVector<TEvResult::TLoaded> readyLoadedPages;
 
-        notification.MarkSent();
+        for (auto* page : readyPages) {
+            if (page->State == PageStateLoaded) { // page may be evicted before NotifyOwners call
+                readyLoadedPages.emplace_back(page->PageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+            }
+        }
+
+        TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(pageCollection), NKikimrProto::OK, 0);
+        result->Pages = std::move(readyLoadedPages);
+        Send(owner, result.Release(), 0, static_cast<ui64>(ERequestTypeCookie::TryKeepInMemPages));
     }
 
     void SendRequest(TRequest& request, TVector<TPageId>&& pages, ui64 bytes, TRequestQueue *queue) {
@@ -1115,12 +1093,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             ActualizeCacheSizeLimit();
         }
 
-        auto notification = MakeIntrusive<TInMemNotification>();
-        notification->Owner = owner;
-        notification->PageCollection = pageCollection;
-
         // TODO: pages async and batched and re-request when evicted
         TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
+        TVector<TPage*> loadedPages;
         ui64 pagesToRequestBytes = 0;
         ui64 remainBytes = Config.HasMemoryLimit() ? Min(MemLimitBytes, Config.GetMemoryLimit()) : MemLimitBytes;
         for (const auto& pageId : xrange(pageCollection->Total())) {
@@ -1129,11 +1104,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             switch (page->State) {
             case PageStateLoaded:
-                notification->ReadyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                loadedPages.push_back(page);
                 break;
             case PageStateEvicted:
                 ReloadEvictedPage(page);
-                notification->ReadyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                loadedPages.push_back(page);
                 break;
             case PageStateNo:
                 // Prevent loading out-of-memory pages. TODO: Load the remaining pages when there is enough memory available.
@@ -1145,17 +1120,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 page->State = PageStateRequestedAsync;
                 pagesToRequest.push_back(pageId);
                 pagesToRequestBytes += page->Size;
-                [[fallthrough]];
-            default:
-                collection.PendingInMemNotifications[pageId].emplace(notification, notification->ReadyPages.size());
-                notification->ReadyPages.emplace_back(pageId, TSharedPageRef());
-                ++notification->PendingPages;
-                break;
             }
         }
 
-        if (notification->PendingPages == 0) {
-            NotifyOwners(*notification);
+        if (loadedPages) {
+            NotifyOwners(pageCollection, loadedPages, owner);
         }
 
         if (pagesToRequest) {

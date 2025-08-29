@@ -1528,7 +1528,8 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         });
         sharedCache.Provide(sharedCache.Collection1, {0, 1, 3});
         sharedCache.CheckResults({
-            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+            TFetch{0, sharedCache.Collection1, {2}},       // already in cache
+            TFetch{0, sharedCache.Collection1, {0, 1, 3}}, // preloaded
         });
         sharedCache.CheckFetches({});
 
@@ -1816,19 +1817,23 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         });
         sharedCache.Provide(sharedCache.Collection2, {0, 1, 2, 3});
         sharedCache.CheckResults({
-            TFetch{0, sharedCache.Collection2, {0, 1, 2, 3}}
+            TFetch{0, sharedCache.Collection2, {2, 3}}
         });
 
-        // reads from collection#2 shoul be from cache
+        // collection#1 pages has reads and prioritized, read collection#2 again to evict their pages
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {0, 1, 2, 3});
-        sharedCache.CheckFetches({});
+        sharedCache.CheckFetches({
+            TFetch{20, sharedCache.Collection2, {0, 1}}
+        });
+        sharedCache.Provide(sharedCache.Collection2, {0, 1});
         sharedCache.CheckResults({
-            TFetch{fetchNo++, sharedCache.Collection2, {0, 1, 2, 3}}
+            TFetch{0, sharedCache.Collection2, {0, 1}},                // in-mem notification
+            TFetch{fetchNo++, sharedCache.Collection2, {0, 1, 2, 3}},  // read transaction
         });
         sharedCache.Wakeup();
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits += 4);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), cacheMisses);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits += 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), cacheMisses += 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize + collection2TotalSize);

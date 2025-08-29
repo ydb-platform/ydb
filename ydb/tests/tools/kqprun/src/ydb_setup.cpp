@@ -21,7 +21,7 @@ namespace {
 
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbose verboseLevel)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbosity verbosityLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -35,7 +35,7 @@ public:
         SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
             .Event = std::move(event),
             .TargetNode = Runtime_->GetNodeId(targetNodeIndex),
-            .VerboseLevel = verboseLevel
+            .VerbosityLevel = verbosityLevel
         }, openPromise, closePromise));
 
         SessionId_ = openPromise.GetFuture().GetValueSync();
@@ -88,7 +88,7 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 class TYdbSetup::TImpl : public TKikimrSetupBase {
     using TBase = TKikimrSetupBase;
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
     class TPortGenerator {
@@ -123,7 +123,7 @@ private:
             }
             diskPath.Fix();
             diskPath.MkDir();
-            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+            if (Settings_.VerbosityLevel >= EVerbosity::InitLogs) {
                 Cout << CoutColors_.Cyan() << "Setup storage by path: " << diskPath.GetPath() << CoutColors_.Default() << Endl;
             }
         }
@@ -177,7 +177,7 @@ private:
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
         serverSettings
             .SetDataCenterCount(Settings_.DcCount)
             .SetPqGateway(Settings_.PqGateway);
@@ -204,7 +204,7 @@ private:
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
         if (inserted || it->second.GetCreationInProgress()) {
-            if (Settings_.VerboseLevel >= EVerbose::Info) {
+            if (Settings_.VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
 
@@ -226,7 +226,7 @@ private:
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
                 UpdateStorageMeta();
             }
-            if (Settings_.VerboseLevel >= EVerbose::Info) {
+            if (Settings_.VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Starting " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
             if (!request.has_serverless_resources()) {
@@ -333,7 +333,7 @@ private:
             .ExpectedNodeCount = nodesCount,
             .HealthCheckLevel = level,
             .HealthCheckTimeout = Settings_.HealthCheckTimeout,
-            .VerboseLevel = Settings_.VerboseLevel,
+            .VerbosityLevel = Settings_.VerbosityLevel,
             .Database = absolutePath
         };
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
@@ -402,7 +402,7 @@ public:
         InitializeServer(grpcPortGen);
         InitializeTenants(grpcPortGen);
 
-        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
+        if (Settings_.MonitoringEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
@@ -418,7 +418,7 @@ public:
             std::for_each(Settings_.Tenants.rbegin(), Settings_.Tenants.rend(), std::bind(printTenantNodes, std::placeholders::_1));
         }
 
-        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
+        if (Settings_.GrpcEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << Server_->GetGRpcServer().GetPort() << Endl;
             for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
                 if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
@@ -586,7 +586,7 @@ private:
 
         if (Settings_.SameSession) {
             if (!SessionState_) {
-                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerboseLevel);
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerbosityLevel);
             }
             request->SetSessionId(SessionState_->GetSessionId());
         }

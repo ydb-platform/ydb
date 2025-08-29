@@ -22,7 +22,7 @@ struct TExternalDatabase {
 };
 
 struct TFqSetupSettings : public NKikimrRun::TServerSettings {
-    enum class EVerbose {
+    enum class EVerbosity {
         None,
         Info,
         LogDefaultError,
@@ -55,7 +55,7 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     std::optional<TExternalDatabase> SingleComputeDatabase;
     std::vector<TExternalDatabase> SharedComputeDatabases;
 
-    EVerbose VerboseLevel = EVerbose::Info;
+    EVerbosity VerbosityLevel = EVerbosity::Info;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };

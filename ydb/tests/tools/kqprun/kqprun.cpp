@@ -324,7 +324,7 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
 }
 
 
-void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner, TYdbSetupSettings::EVerbose verboseLevel) {
+void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner, TYdbSetupSettings::EVerbosity verbosityLevel) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     if (executionOptions.SchemeQuery) {
@@ -386,7 +386,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         }
     }
 
-    if (durations.size() > 1 && verboseLevel >= TYdbSetupSettings::EVerbose::Info) {
+    if (durations.size() > 1 && verbosityLevel >= TYdbSetupSettings::EVerbosity::Info) {
         auto gMean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
         Cout << colors.Cyan()
              << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gMean * 1000000.0))
@@ -422,7 +422,7 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
     TKqpRunner runner(runnerOptions);
 
     try {
-        RunArgumentQueries(executionOptions, runner, runnerOptions.YdbSettings.VerboseLevel);
+        RunArgumentQueries(executionOptions, runner, runnerOptions.YdbSettings.VerbosityLevel);
     } catch (const yexception& exception) {
         if (runnerOptions.YdbSettings.MonitoringEnabled) {
             Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -441,7 +441,7 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 
 
 class TMain : public TMainBase {
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
 
     TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
@@ -701,22 +701,22 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(EVerbose::Info))
-            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
+            .DefaultValue(static_cast<ui8>(EVerbosity::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerbosityLevel, [](ui8 value) {
+                return static_cast<EVerbosity>(std::min(value, static_cast<ui8>(EVerbosity::Max)));
             });
 
-        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
-            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
-            {"final", TAsyncQueriesSettings::EVerbose::Final}
+        TChoices<TAsyncQueriesSettings::EVerbosity> verbosity({
+            {"each-query", TAsyncQueriesSettings::EVerbosity::EachQuery},
+            {"final", TAsyncQueriesSettings::EVerbosity::Final}
         });
-        options.AddLongOption("async-verbose", "Verbose type for async queries")
+        options.AddLongOption("async-verbosity", "Verbosity type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")
-            .Choices(verbose.GetChoices())
-            .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbose, verbose);
+            .Choices(verbosity.GetChoices())
+            .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbosity, verbosity);
 
         options.AddLongOption("ping-period", "Query ping period in milliseconds")
             .RequiredArgument("uint")
@@ -933,7 +933,7 @@ protected:
         SetupActorSystemConfig(*appConfig.MutableActorSystemConfig());
 
         if (!DefaultLogPriority) {
-            DefaultLogPriority = DefaultLogPriorityFromVerbose(RunnerOptions.YdbSettings.VerboseLevel);
+            DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
         }
         SetupLogsConfig(*appConfig.MutableLogConfig());
 
@@ -963,7 +963,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -976,7 +976,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();

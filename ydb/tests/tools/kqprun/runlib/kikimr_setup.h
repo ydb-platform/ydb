@@ -14,7 +14,7 @@ public:
 
     TAutoPtr<TLogBackend> CreateLogBackend(const TServerSettings& settings) const;
 
-    NKikimr::Tests::TServerSettings GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbose);
+    NKikimr::Tests::TServerSettings GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbosity);
 
 private:
     void SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const;

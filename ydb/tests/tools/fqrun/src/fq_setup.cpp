@@ -30,11 +30,11 @@ TRequestResult GetStatus(const NYql::TIssues& issues) {
 
 class TFqSetup::TImpl : public TKikimrSetupBase {
     using TBase = TKikimrSetupBase;
-    using EVerbose = TFqSetupSettings::EVerbose;
+    using EVerbosity = TFqSetupSettings::EVerbosity;
 
 private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerbosityLevel >= EVerbosity::InitLogs);
 
         serverSettings.SetEnableYqGrpc(true);
 
@@ -147,7 +147,7 @@ private:
 
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
-        if (Settings.VerboseLevel >= EVerbose::InitLogs) {
+        if (Settings.VerbosityLevel >= EVerbosity::InitLogs) {
             Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
         }
 
@@ -184,7 +184,7 @@ public:
         : Settings(settings)
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
-        if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
+        if (Settings.GrpcEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
         }
 
@@ -194,7 +194,7 @@ public:
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
 
-        if (Settings.MonitoringEnabled && Settings.VerboseLevel >= EVerbose::Info) {
+        if (Settings.MonitoringEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;
         }
     }

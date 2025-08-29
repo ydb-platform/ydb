@@ -66,7 +66,7 @@ TAutoPtr<TLogBackend> TKikimrSetupBase::CreateLogBackend(const TServerSettings& 
     }
 }
 
-NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbose) {
+NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbosity) {
     const ui32 msgBusPort = PortManager.GetPort();
 
     NKikimr::Tests::TServerSettings serverSettings(msgBusPort, settings.AppConfig.GetAuthConfig(), settings.AppConfig.GetPQConfig());
@@ -89,7 +89,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-    serverSettings.SetVerbose(verbose);
+    serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
     serverSettings.SetEnableStorageProxy(settings.AppConfig.GetQueryServiceConfig().GetCheckpointsConfig().GetEnabled());
 

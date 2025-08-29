@@ -133,24 +133,24 @@ TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultV
     return values[std::min(index, values.size() - 1)];
 }
 
-template <typename EVerbose>
-std::optional<NActors::NLog::EPriority> DefaultLogPriorityFromVerbose(EVerbose verbose) {
-    if (verbose >= EVerbose::LogDefaultTrace) {
+template <typename EVerbosity>
+std::optional<NActors::NLog::EPriority> DefaultLogPriorityFromVerbosity(EVerbosity verbosity) {
+    if (verbosity >= EVerbosity::LogDefaultTrace) {
         return NActors::NLog::EPriority::PRI_TRACE;
     }
-    if (verbose >= EVerbose::LogDefaultDebug) {
+    if (verbosity >= EVerbosity::LogDefaultDebug) {
         return NActors::NLog::EPriority::PRI_DEBUG;
     }
-    if (verbose >= EVerbose::LogDefaultInfo) {
+    if (verbosity >= EVerbosity::LogDefaultInfo) {
         return NActors::NLog::EPriority::PRI_INFO;
     }
-    if (verbose >= EVerbose::LogDefaultNotice) {
+    if (verbosity >= EVerbosity::LogDefaultNotice) {
         return NActors::NLog::EPriority::PRI_NOTICE;
     }
-    if (verbose >= EVerbose::LogDefaultWarn) {
+    if (verbosity >= EVerbosity::LogDefaultWarn) {
         return NActors::NLog::EPriority::PRI_WARN;
     }
-    if (verbose >= EVerbose::LogDefaultError) {
+    if (verbosity >= EVerbosity::LogDefaultError) {
         return NActors::NLog::EPriority::PRI_ERROR;
     }
     return std::nullopt;

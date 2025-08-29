@@ -121,15 +121,8 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
         Libraries.emplace(lib, TLibraryStuff());
     }
 
-    Scoped = MakeIntrusive<TScopedState>();
+    Scoped = CreateScopedState();
     AllScopes.push_back(Scoped);
-    Scoped->UnicodeLiterals = settings.UnicodeLiterals;
-    if (settings.DefaultCluster) {
-        Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster);
-        auto provider = GetClusterProvider(settings.DefaultCluster);
-        YQL_ENSURE(provider);
-        Scoped->CurrService = *provider;
-    }
 
     Position_.File = settings.File;
 
@@ -491,6 +484,20 @@ bool TContext::UseUnordered(const TTableRef& table) const {
     return YtProviderName == table.Service;
 }
 
+TScopedStatePtr TContext::CreateScopedState() const {
+    auto state = MakeIntrusive<TScopedState>();
+    state->UnicodeLiterals = Settings.UnicodeLiterals;
+
+    if (Settings.DefaultCluster) {
+        state->CurrCluster = TDeferredAtom({}, Settings.DefaultCluster);
+
+        const auto provider = GetClusterProvider(Settings.DefaultCluster);
+        YQL_ENSURE(provider);
+        state->CurrService = *provider;
+    }
+
+    return state;
+}
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
     static const TSet<TStringBuf> denyForAllArgs = {

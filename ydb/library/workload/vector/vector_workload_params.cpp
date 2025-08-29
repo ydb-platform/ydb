@@ -93,9 +93,7 @@ void TVectorWorkloadParams::Init() {
     // Find the specified index
     bool indexFound = false;
 
-    Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
-        "Only single key is supported. But table %s has %d key columns", TableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
-    KeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+    KeyColumns = tableDescription.GetPrimaryKeyColumns();
 
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
@@ -105,6 +103,7 @@ void TVectorWorkloadParams::Init() {
             const auto& keyColumns = index.GetIndexColumns();
             if (keyColumns.size() > 1) {
                 // The first column is the prefix column, the last column is the embedding
+                Y_ABORT_UNLESS(keyColumns.size() == 2, "Only single prefix column is supported");
                 PrefixColumn = keyColumns[0];
             }
             EmbeddingColumn = keyColumns.back();
@@ -126,7 +125,7 @@ void TVectorWorkloadParams::Init() {
                 str.resize(str.size()-1);
             PrefixType = str;
         }
-        if (column.Name == KeyColumn) {
+        if (KeyColumns.size() == 1 && column.Name == KeyColumns[0]) {
             KeyIsInt = (column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"));
         }
     }

@@ -26,7 +26,7 @@ public:
     TString TableName;
     TString QueryTableName;
     TString IndexName;
-    std::string KeyColumn;
+    std::vector<std::string> KeyColumns;
     std::string EmbeddingColumn;
     std::string QueryTableKeyColumn;
     std::optional<std::string> PrefixColumn;

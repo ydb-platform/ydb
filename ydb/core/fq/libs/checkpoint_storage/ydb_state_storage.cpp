@@ -284,7 +284,7 @@ TStatus ProcessRowState(
 
 class TStateStorage : public IStateStorage {
     TYdbConnectionPtr YdbConnection;
-    const NKikimrConfig::TCheckpointsConfig::TExternalStorage StorageConfig;
+    const NKikimrConfig::TExternalStorage StorageConfig;
     const NKikimrConfig::TCheckpointsConfig Config;
 
 public:

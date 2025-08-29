@@ -16,5 +16,6 @@ RECURSE_FOR_TESTS(
     plans
     restarts
     s3
+    streaming
     yds
 )

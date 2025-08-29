@@ -31,7 +31,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,

@@ -183,10 +183,29 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
-            auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            self->FillDistconfQuery(*ev);
-            self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
+        const bool usingDistconf = ev->Get()->SelfManagementEnabled;
+        const bool enablingDistconf = self->IsDistconfEnableQuery();
+
+        const auto queryDistconf = [&]() {
+            auto req = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            self->FillDistconfQuery(*req);
+            self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), req.release());
+        };
+
+        // allow enabling distconf even before bootstrap
+        if (enablingDistconf) {
+            queryDistconf();
+            return;
+        }
+        // for all other config requests require cluster bootstrap
+        if (!ev->Get()->Config || ev->Get()->Config->GetGeneration() == 0) {
+            self->Reply(Ydb::StatusIds::PRECONDITION_FAILED, "cluster is not bootstrapped",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
+
+        if (usingDistconf) {
+            queryDistconf();
         } else if (RequireSelfManagement) {
             self->Reply(Ydb::StatusIds::BAD_REQUEST, "operating self-management is required to fulfill this request",
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());

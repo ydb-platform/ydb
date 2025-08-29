@@ -221,7 +221,7 @@ protected:
         bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
         if (useFSM) {
             TExprBase output = KqpRemoveRedundantSortOverReadTableFSM(node, ctx, KqpCtx, TypesCtx);
-            DumpAppliedRule("RemoveRedundantSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
+            DumpAppliedRule("RemoveRedundantSortOverReadTableFSM", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
         else {

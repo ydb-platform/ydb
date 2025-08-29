@@ -1,5 +1,4 @@
 import pytest
-import time
 
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import (

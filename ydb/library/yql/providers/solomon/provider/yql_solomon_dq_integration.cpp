@@ -23,6 +23,11 @@ using namespace NNodes;
 
 namespace {
 
+TString GetLastName(const TString& fullName) {
+    auto n = fullName.find_last_of('/');
+    return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
+}
+
 bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TExprContext& ctx, TStringBuf& settingValue) {
     if (value.IsAtom()) {
         settingValue = value.Content();
@@ -122,7 +127,7 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TInstant from = TInstant::Now() - TDuration::Hours(1);
+            TInstant from = TInstant::Zero();
             TInstant to = TInstant::Now();
             TString program;
             TString selectors;
@@ -458,8 +463,8 @@ public:
         const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
         const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
 
-        properties["ExternalDataSource"] = cluster;
-        properties["ClusterType"] = clusterDesc->GetClusterType() == TSolomonClusterConfig::SCT_SOLOMON ? "SOLOMON" : "MONITORING";
+        properties["ExternalDataSource"] = GetLastName(cluster);
+        properties["ClusterType"] = clusterDesc->GetClusterType() == TSolomonClusterConfig::SCT_SOLOMON ? "solomon" : "monitoring";
 
         properties["From"] = settings.From().StringValue();
         properties["To"] = settings.To().StringValue();

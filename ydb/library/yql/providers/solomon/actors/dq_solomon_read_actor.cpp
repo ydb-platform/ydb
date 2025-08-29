@@ -526,14 +526,13 @@ private:
             return result;
         }
 
-        result.reserve(pointsCount / MaxPointsPerOneRequest);
+        ui64 timeIntervals = ceil(pointsCount * 1.0 / MaxPointsPerOneRequest);
+        result.reserve(timeIntervals);
         auto rangeDuration = to - from;
-        for (ui64 i = 0; i < pointsCount; i += MaxPointsPerOneRequest) {
-            double start = i;
-            double end = std::min(i + MaxPointsPerOneRequest, pointsCount);
+        for (ui64 i = 0; i < timeIntervals; ++i) {
             result.emplace_back(
-                from + rangeDuration * start / pointsCount,
-                from + rangeDuration * end / pointsCount
+                from + rangeDuration * 1.0 / timeIntervals * i,
+                from + rangeDuration * 1.0 / timeIntervals * (i + 1)
             );
         }
 

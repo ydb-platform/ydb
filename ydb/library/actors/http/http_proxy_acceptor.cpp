@@ -148,7 +148,9 @@ protected:
             if (RecycledRequests.size() >= MaxRecycledRequestsCount) {
                 break;
             }
-            req->Clear();
+            if (req->Content.capacity() > MAX_RECYCLED_REQUEST_BODY_CAPACITY) {
+                TString().swap(req->Content);
+            }
             RecycledRequests.push_back(std::move(req));
         }
     }

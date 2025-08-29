@@ -4,7 +4,6 @@ SRCS(
     kqp_proxy_service.cpp
     kqp_proxy_databases_cache.cpp
     kqp_proxy_peer_stats_calculator.cpp
-    kqp_script_execution_retries.cpp
     kqp_script_executions.cpp
     kqp_session_info.cpp
 )

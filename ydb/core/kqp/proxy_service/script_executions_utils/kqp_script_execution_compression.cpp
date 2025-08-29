@@ -11,10 +11,11 @@ namespace NKikimr::NKqp {
 namespace {
 
 const NBlockCodecs::ICodec* ProvideCodec(const TString& compressionMethod) {
-    auto codec = NBlockCodecs::Codec(compressionMethod);
+    const auto codec = NBlockCodecs::Codec(compressionMethod);
     if (!codec) {
         throw yexception() << "Unable to find codec for compression method " << compressionMethod;
     }
+
     return codec;
 }
 
@@ -36,9 +37,10 @@ bool TCompressor::IsEnabled() const {
 
 std::pair<TString, TString> TCompressor::Compress(const TString& data) const {
     if (!IsEnabled() || data.size() < MinCompressionSize) {
-        return { "", data };
+        return {"", data};
     }
-    return { CompressionMethod, Codec->Encode(data) };
+
+    return {CompressionMethod, Codec->Encode(data)};
 }
 
 TString TCompressor::Decompress(const TString& data) const {

@@ -1254,10 +1254,9 @@ private:
                     << " from shard " << shardResponse.GetTabletID()
                     << " description: " << shardResponse.GetErrorDescription());
 
-        bool isRetryableError = Backoff.HasMore() &&
-            (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
+        bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
             shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
-            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED);
+            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
             if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
@@ -1276,7 +1275,7 @@ private:
                 }
             }
 
-            if (!isRetryableError) {
+            if (!isRetryableError || !Backoff.HasMore()) {
                 SetError(
                     TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
             }
@@ -1286,7 +1285,7 @@ private:
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
-        if (!isRetryableError) {
+        if (!isRetryableError || !Backoff.HasMore()) {
             ShardUploadRetryStates.erase(shardId);
         }
 

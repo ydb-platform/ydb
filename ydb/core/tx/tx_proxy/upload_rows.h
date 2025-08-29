@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/util/backoff.h>
+
 namespace Ydb {
     class Type;
 }
@@ -28,6 +30,6 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,
                                  ui64 cookie = 0,
-                                 bool withRetries = false);
+                                 TBackoff backoff = TBackoff(0));
 } // namespace NTxProxy
 } // namespace NKikimr

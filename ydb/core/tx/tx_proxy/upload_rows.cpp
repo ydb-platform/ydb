@@ -17,7 +17,7 @@ public:
         bool writeToPrivateTable,
         bool writeToIndexImplTable,
         ui64 cookie,
-        bool withRetries)
+        TBackoff backoff)
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
@@ -39,9 +39,7 @@ public:
                 break;
         }
 
-        if (!withRetries) {
-            Backoff = TBackoff(0);
-        }
+        Backoff = backoff;
     }
 
 private:
@@ -109,7 +107,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     bool writeToPrivateTable,
     bool writeToIndexImplTable,
     ui64 cookie,
-    bool withRetries)
+    TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
         table,
@@ -119,7 +117,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         writeToPrivateTable,
         writeToIndexImplTable,
         cookie,
-        withRetries);
+        backoff);
 }
 
 } // namespace NTxProxy

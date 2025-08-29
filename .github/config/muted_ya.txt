@@ -55,6 +55,7 @@ ydb/core/kqp/ut/service [38/50]*
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/spilling KqpScanSpilling.HandleErrorsCorrectly
+ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut THiveTest.TestHiveBalancerNodeRestarts
 ydb/core/persqueue/ut [37/40] chunk chunk
 ydb/core/persqueue/ut [38/40] chunk chunk

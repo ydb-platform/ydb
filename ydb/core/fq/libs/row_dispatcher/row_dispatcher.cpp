@@ -1173,7 +1173,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             auto* partitionsProto = event->Record.AddPartition();
             if (partition.Stat.Offset) {
                 partitionsProto->SetNextMessageOffset(*partition.Stat.Offset);
-            }            partitionsProto->SetNextMessageOffset(partition.Stat.Offset);
+            }
             readBytes += partition.Stat.ReadBytes;
             filteredBytes += partition.Stat.FilteredBytes;
             filteredRows += partition.Stat.FilteredRows;

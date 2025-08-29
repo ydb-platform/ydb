@@ -85,7 +85,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicWriteRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMWRITE,
                             }));
@@ -110,7 +110,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicReadRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD,
                             }));
@@ -135,7 +135,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMDIRECTREAD,
                             }));

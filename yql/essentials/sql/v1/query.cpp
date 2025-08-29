@@ -296,7 +296,6 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     auto settings = Y();
 
-    // todo: why do we parse ints??
     if (vectorIndexSettings.Distance) {
         settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
     }

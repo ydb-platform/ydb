@@ -645,7 +645,7 @@ protected:
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
-        FillKqpTasksGraphStages(TasksGraph, Request.Transactions);
+        TasksGraph.FillKqpTasksGraphStages(Request.Transactions);
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
@@ -1035,13 +1035,13 @@ protected:
                 // Not task-related
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
                 if (!TasksGraph.GetMeta().IsRestored) {
-                    BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                    TasksGraph.BuildKqpStageChannels(stageInfo, TxId, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
                 }
             }
 
             // Not task-related
             ResponseEv->InitTxResult(tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         return sourceScanPartitionsCount;
@@ -2592,14 +2592,14 @@ protected:
 
     bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
+            TasksGraph.RestoreTasksGraphInfo(*Request.QueryPhysicalGraph);
         }
 
         return TasksGraph.GetMeta().IsRestored;
     }
 
     NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
-        return ArenaSerializeTaskToProto(TasksGraph, task, serializeAsyncIoSettings);
+        return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
     }
 
     const TKqpTasksGraph& GetTasksGraph() const {

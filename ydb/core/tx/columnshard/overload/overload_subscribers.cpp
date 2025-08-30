@@ -161,13 +161,16 @@ void TOverloadSubscribers::RemoveOverloadSubscriber(TSeqNo seqNo, const TActorId
     }
 }
 
- bool TOverloadSubscribers::IsEmpty() const {
-    for (int i = 0; i < RejectReasonCount; ++i) {
-        if (OverloadSubscribersByReason[i] != 0) {
-            return false;
-        }
+void TOverloadSubscribers::ScheduleNotification(const TActorId& actorId) {
+    if (InFlightNotification) {
+        return;
     }
-    return true;
- }
+    InFlightNotification = true;
+    TActivationContext::Schedule(TDuration::MilliSeconds(200), new IEventHandle(actorId, actorId, new NActors::TEvents::TEvWakeup(2)));
+}
+
+void TOverloadSubscribers::ProcessNotification() {
+    InFlightNotification = false;
+}
 
 } // namespace NKikimr::NColumnShard::NOverload

@@ -36,7 +36,8 @@ public:
         }
     }
 
-    bool IsEmpty() const;
+    void ScheduleNotification(const TActorId& actorId);
+    void ProcessNotification();
 
 private:
     struct TPipeServerInfoOverloadSubscribersTag {};
@@ -63,6 +64,7 @@ private:
     using TPipeServersWithOverloadSubscribers = TIntrusiveList<TPipeServerInfo, TPipeServerInfoOverloadSubscribersTag>;
     TPipeServersWithOverloadSubscribers PipeServersWithOverloadSubscribers;
     size_t OverloadSubscribersByReason[RejectReasonCount] = {0};
+    bool InFlightNotification = false;
 };
 
 } // namespace NKikimr::NColumnShard::NOverload

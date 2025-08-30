@@ -1284,6 +1284,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
         return CreateLongIncrementalBackupOp(NextPartId(), txState);
 
+    // Secret
+    case TTxState::ETxType::TxCreateSecret:
+        return CreateNewSecret(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterSecret:
+        return CreateAlterSecret(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSecret:
+        return CreateDropSecret(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1609,6 +1617,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // Incremental Restore Finalization
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
+
+    // Secret
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
+        return {CreateNewSecret(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
+        return {CreateAlterSecret(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
+        return {CreateDropSecret(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

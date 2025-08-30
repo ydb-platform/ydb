@@ -326,6 +326,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSysView);
     DROP_BY_PATH_ID_HELPERS(DropSysView);
 
+    // secret
+    GENERIC_HELPERS(CreateSecret);
+    GENERIC_HELPERS(AlterSecret);
+    GENERIC_HELPERS(DropSecret);
+    DROP_BY_PATH_ID_HELPERS(DropSecret);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

@@ -731,5 +731,15 @@ ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropSysView(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state);
 
+// Secret
+// Create
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSecret(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterSecret(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropSecret(TOperationId id, TTxState::ETxState state);
 }
 }

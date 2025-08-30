@@ -242,6 +242,7 @@ namespace {
             entry.FileStoreInfo.Drop();
             entry.BackupCollectionInfo.Drop();
             entry.SysViewInfo.Drop();
+            entry.SecretInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -1647,6 +1648,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
                 FillInfo(Kind, SysViewInfo, std::move(*pathDesc.MutableSysViewDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeSecret:
+                Kind = TNavigate::KindSecret;
+                FillInfo(Kind, SecretInfo, std::move(*pathDesc.MutableSecretDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1728,6 +1733,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeSysView:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSysView);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeSecret:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSecret);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1960,6 +1968,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
             entry.SysViewInfo = SysViewInfo;
+            entry.SecretInfo = SecretInfo;
             entry.TableKind = TableKind;
         }
 
@@ -2266,6 +2275,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // SysView specific
         TIntrusivePtr<TNavigate::TSysViewInfo> SysViewInfo;
+
+        // Secret specific
+        TIntrusivePtr<TNavigate::TSecretInfo> SecretInfo;
 
     }; // TCacheItem
 

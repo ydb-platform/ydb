@@ -5464,6 +5464,53 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        { // Read secrets
+            auto rowset = db.Table<Schema::Secrets>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::Secrets::PathId>());
+                const ui64 version = rowset.GetValue<Schema::Secrets::AlterVersion>();
+                NKikimrSchemeOp::TSecretDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::Secrets::Description>()));
+
+                TSecretInfo::TPtr secretInfo = new TSecretInfo(version, std::move(description));
+                Self->Secrets[pathId] = secretInfo;
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read secrets alters
+        {
+            auto rowset = db.Table<Schema::SecretsAlterData>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::SecretsAlterData::PathId>());
+                const ui64 version = rowset.GetValue<Schema::SecretsAlterData::AlterVersion>();
+                NKikimrSchemeOp::TSecretDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::SecretsAlterData::Description>()));
+
+                TSecretInfo::TPtr alterData = new TSecretInfo(version, std::move(description));
+                Y_VERIFY_S(Self->Secrets.contains(pathId), "Cannot load alter for secret " << pathId);
+
+                auto secretInfo = Self->Secrets.at(pathId);
+                secretInfo->AlterData = alterData;
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         CollectObjectsToClean();
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);

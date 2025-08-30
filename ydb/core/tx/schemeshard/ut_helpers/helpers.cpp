@@ -1047,6 +1047,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView)
 
+    // secret
+    GENERIC_HELPERS(CreateSecret, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret, &NKikimrSchemeOp::TModifyScheme::MutableCreateSecret)
+    GENERIC_HELPERS(AlterSecret, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret, &NKikimrSchemeOp::TModifyScheme::MutableAlterSecret)
+    GENERIC_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

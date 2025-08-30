@@ -310,6 +310,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
             case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
             case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+            case NKikimrSchemeOp::EPathType::EPathTypeSecret:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;

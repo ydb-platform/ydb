@@ -1,10 +1,10 @@
 #include "kqp_script_executions.h"
-#include "kqp_script_execution_retries.h"
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/util/proto_duration.h>

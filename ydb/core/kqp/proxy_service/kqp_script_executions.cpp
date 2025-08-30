@@ -1,13 +1,13 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
-#include "kqp_script_execution_retries.h"
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -181,6 +181,8 @@ private:
                 Col("issues", NScheme::NTypeIds::JsonDocument),
                 Col("transient_issues", NScheme::NTypeIds::JsonDocument), // Issues from previous query retries
                 Col("plan", NScheme::NTypeIds::JsonDocument),
+                Col("plan_compressed", NScheme::NTypeIds::String),
+                Col("plan_compression_method", NScheme::NTypeIds::Text),
                 Col("meta", NScheme::NTypeIds::JsonDocument),
                 Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
                 Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
@@ -483,7 +485,7 @@ private:
     const TDuration MaxRunTime;
     const NKikimrKqp::TScriptExecutionRetryState RetryState;
     const std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
-    const NFq::TCompressor Compressor;
+    const TCompressor Compressor;
 };
 
 class TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
@@ -1003,7 +1005,7 @@ public:
                     return;
                 }
 
-                const NFq::TCompressor compressor(*compressionMethod);
+                const TCompressor compressor(*compressionMethod);
                 const auto& graph = compressor.Decompress(*graphCompressed);
 
                 if (!physicalGraph.emplace().ParseFromString(graph)) {
@@ -1994,6 +1996,19 @@ NYql::TIssues ParseScriptExecutionIssues(NYdb::TResultSetParser& result) {
     return issues;
 }
 
+std::optional<TString> ParseCompressedColumn(const TString& columnName, NYdb::TResultSetParser& result) {
+    if (const std::optional<TString>& resultCompressed = result.ColumnParser(TStringBuilder() << columnName << "_compressed").GetOptionalString()) {
+        if (const std::optional<TString>& resultCompressionMethod = result.ColumnParser(TStringBuilder() << columnName << "_compression_method").GetOptionalUtf8()) {
+            const TCompressor compressor(*resultCompressionMethod);
+            return compressor.Decompress(*resultCompressed);
+        }
+
+        return *resultCompressed;
+    }
+
+    return std::nullopt;
+}
+
 class TGetScriptExecutionOperationQueryActor : public TQueryBase {
 public:
     TGetScriptExecutionOperationQueryActor(const TString& database, const TString& executionId)
@@ -2019,6 +2034,8 @@ public:
                 execution_mode,
                 result_set_metas,
                 plan,
+                plan_compressed,
+                plan_compression_method,
                 issues,
                 transient_issues,
                 stats,
@@ -2095,20 +2112,17 @@ public:
                 NProtobufJson::Json2Proto(statsJson, *Metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
             }
 
-            if (const auto plan = result.ColumnParser("plan").GetOptionalJsonDocument()) {
+            if (const auto& plan = result.ColumnParser("plan").GetOptionalJsonDocument()) {
                 Metadata.mutable_exec_stats()->set_query_plan(*plan);
+            } else if (const auto& plan = ParseCompressedColumn("plan", result)) {
+                Metadata.mutable_exec_stats()->set_query_plan(*plan);
+            } else {
+                Metadata.mutable_exec_stats()->set_query_plan("{}");
             }
 
-            std::optional<TString> ast;
-            if (const std::optional<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8()) {
-                if (const std::optional<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString()) {
-                    const NFq::TCompressor compressor(*astCompressionMethod);
-                    ast = compressor.Decompress(*astCompressed);
-                }
-            } else {
-                ast = result.ColumnParser("ast").GetOptionalUtf8();
-            }
-            if (ast) {
+            if (const auto& ast = result.ColumnParser("ast").GetOptionalUtf8()) {
+                Metadata.mutable_exec_stats()->set_query_ast(*ast);
+            } else if (const auto& ast = ParseCompressedColumn("ast", result)) {
                 Metadata.mutable_exec_stats()->set_query_ast(*ast);
             }
 
@@ -3633,9 +3647,9 @@ public:
             DECLARE $execution_status AS Int32;
             DECLARE $finalization_status AS Int32;
             DECLARE $issues AS JsonDocument;
-            DECLARE $plan AS JsonDocument;
+            DECLARE $plan_compressed AS Optional<String>;
+            DECLARE $plan_compression_method AS Optional<Text>;
             DECLARE $stats AS JsonDocument;
-            DECLARE $ast AS Optional<Text>;
             DECLARE $ast_compressed AS Optional<String>;
             DECLARE $ast_compression_method AS Optional<Text>;
             DECLARE $operation_ttl AS Interval;
@@ -3653,10 +3667,10 @@ public:
                 execution_status = $execution_status,
                 finalization_status = IF($applicate_script_external_effect_required, $finalization_status, NULL),
                 issues = $issues,
-                plan = $plan,
+                plan_compressed = $plan_compressed,
+                plan_compression_method = $plan_compression_method,
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
-                ast = $ast,
                 ast_compressed = $ast_compressed,
                 ast_compression_method = $ast_compression_method,
                 expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
@@ -3702,16 +3716,6 @@ public:
             serializedStats = statsStream.Str();
         }
 
-        std::optional<TString> ast;
-        std::optional<TString> astCompressed;
-        std::optional<TString> astCompressionMethod;
-        if (Request.QueryAst && Request.QueryAstCompressionMethod) {
-            astCompressed = *Request.QueryAst;
-            astCompressionMethod = *Request.QueryAstCompressionMethod;
-        } else {
-            ast = Request.QueryAst.value_or("");
-        }
-
         KQP_PROXY_LOG_D("Do finalization with status " << Request.OperationStatus
             << ", exec status: " << Ydb::Query::ExecStatus_Name(Request.ExecStatus)
             << ", finalization status (applicate effect: " << Response->ApplicateScriptExternalEffectRequired << "): " << static_cast<ui64>(Request.FinalizationStatus)
@@ -3739,20 +3743,20 @@ public:
             .AddParam("$issues")
                 .JsonDocument(SerializeIssues(Request.Issues))
                 .Build()
-            .AddParam("$plan")
-                .JsonDocument(Request.QueryPlan.value_or("{}"))
+            .AddParam("$plan_compressed")
+                .OptionalString(Request.QueryPlan)
+                .Build()
+            .AddParam("$plan_compression_method")
+                .OptionalUtf8(Request.QueryPlanCompressionMethod)
                 .Build()
             .AddParam("$stats")
                 .JsonDocument(serializedStats)
                 .Build()
-            .AddParam("$ast")
-                .OptionalUtf8(ast)
-                .Build()
             .AddParam("$ast_compressed")
-                .OptionalString(astCompressed)
+                .OptionalString(Request.QueryAst)
                 .Build()
             .AddParam("$ast_compression_method")
-                .OptionalUtf8(astCompressionMethod)
+                .OptionalUtf8(Request.QueryAstCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
                 .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))
@@ -4042,30 +4046,39 @@ private:
 
 class TScriptProgressActor : public TQueryBase {
 public:
-    TScriptProgressActor(const TString& database, const TString& executionId, const TString& queryPlan, i64 leaseGeneration)
+    TScriptProgressActor(const TString& database, const TString& executionId, const TString& queryPlan, i64 leaseGeneration,
+        const std::optional<TString>& ast, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : TQueryBase(__func__, {.Database = database, .ExecutionId = executionId, .LeaseGeneration = leaseGeneration})
         , Database(database)
         , ExecutionId(executionId)
         , QueryPlan(queryPlan)
         , LeaseGeneration(leaseGeneration)
+        , QueryAst(ast)
+        , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
     void OnRunQuery() override {
-        TString sql = R"(
+        const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
+        if (artifacts.Issues) {
+            KQP_PROXY_LOG_N("Compress script artifacts finished with issues: " << artifacts.Issues.ToOneLineString());
+        }
+
+        auto parameters = TStringBuilder() << R"(
             -- TScriptProgressActor::OnRunQuery
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
-            DECLARE $plan AS JsonDocument;
+            DECLARE $plan_compressed AS Optional<String>;
+            DECLARE $plan_compression_method AS Optional<Text>;
             DECLARE $execution_status AS Int32;
             DECLARE $lease_generation AS Int64;
+        )";
 
+        auto sql = TStringBuilder() << R"(
             UPDATE `.metadata/script_executions`
             SET
-                plan = $plan,
+                plan_compressed = $plan_compressed,
+                plan_compression_method = $plan_compression_method,
                 execution_status = $execution_status
-            WHERE database = $database
-              AND execution_id = $execution_id
-              AND (lease_generation IS NULL OR lease_generation = $lease_generation);
         )";
 
         NYdb::TParamsBuilder params;
@@ -4076,8 +4089,11 @@ public:
             .AddParam("$database")
                 .Utf8(Database)
                 .Build()
-            .AddParam("$plan")
-                .JsonDocument(QueryPlan)
+            .AddParam("$plan_compressed")
+                .OptionalString(artifacts.Plan)
+                .Build()
+            .AddParam("$plan_compression_method")
+                .OptionalUtf8(artifacts.PlanCompressionMethod)
                 .Build()
             .AddParam("$execution_status")
                 .Int32(Ydb::Query::EXEC_STATUS_RUNNING)
@@ -4086,14 +4102,41 @@ public:
                 .Int64(LeaseGeneration)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        if (artifacts.Ast) {
+            params
+                .AddParam("$ast_compressed")
+                    .OptionalString(artifacts.Ast)
+                    .Build()
+                .AddParam("$ast_compression_method")
+                    .OptionalUtf8(artifacts.AstCompressionMethod)
+                    .Build();
+
+            parameters << R"(
+                DECLARE $ast_compressed AS Optional<String>;
+                DECLARE $ast_compression_method AS Optional<Text>;
+            )";
+
+            sql << R"(
+                , ast_compressed = $ast_compressed,
+                ast_compression_method = $ast_compression_method
+            )";
+        }
+
+        sql << R"(
+            WHERE database = $database
+              AND execution_id = $execution_id
+              AND (lease_generation IS NULL OR lease_generation = $lease_generation);
+        )";
+
+        RunDataQuery(parameters << sql, &params);
     }
 
     void OnQueryResult() override {
         Finish();
     }
 
-    void OnFinish(Ydb::StatusIds::StatusCode, NYql::TIssues&&) override {
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvSaveScriptProgressResponse(status, QueryAst && status == Ydb::StatusIds::SUCCESS, std::move(issues)));
     }
 
 private:
@@ -4101,6 +4144,8 @@ private:
     const TString ExecutionId;
     const TString QueryPlan;
     const i64 LeaseGeneration;
+    const std::optional<TString> QueryAst;
+    const TCompressor Compressor;
 };
 
 class TListExpiredLeasesQueryActor : public TQueryBase {
@@ -4348,7 +4393,7 @@ private:
     const TString ExecutionId;
     const NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
     const i64 LeaseGeneration;
-    const NFq::TCompressor Compressor;
+    const TCompressor Compressor;
 };
 
 class TGetScriptExecutionPhysicalGraphActor : public TQueryBase {
@@ -4409,7 +4454,7 @@ public:
             return;
         }
 
-        const NFq::TCompressor compressor(*compressionMethod);
+        const TCompressor compressor(*compressionMethod);
         const auto& graph = compressor.Decompress(*graphCompressed);
 
         if (!PhysicalGraph.ParseFromString(graph)) {
@@ -4484,8 +4529,8 @@ IActor* CreateScriptFinalizationFinisherActor(const TActorId& finalizationActorI
     return new TQueryRetryActor<TScriptFinalizationFinisherActor, TEvScriptExecutionFinished, TString, TString, std::optional<Ydb::StatusIds::StatusCode>, NYql::TIssues, i64>(finalizationActorId, executionId, database, operationStatus, operationIssues, leaseGeneration);
 }
 
-IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan, i64 leaseGeneration) {
-    return new TScriptProgressActor(database, executionId, queryPlan, leaseGeneration);
+IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan, i64 leaseGeneration, const std::optional<TString>& ast, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    return new TScriptProgressActor(database, executionId, queryPlan, leaseGeneration, ast, queryServiceConfig);
 }
 
 IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {

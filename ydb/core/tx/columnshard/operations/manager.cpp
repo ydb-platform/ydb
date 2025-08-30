@@ -215,17 +215,19 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
 }
 
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
-    //FIXME #23784
     if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
+        //FIXME #23784
         // AFL_VERIFY_DEBUG(!evWrite.Record.HasTxId())("TxId", evWrite.Record.GetTxId());
+        // if (evWrite.Record.HasTxId()) {
+        //     return TConclusionStatus::Fail("Rollback TEvWrite shouldn't have TxId");
+        // }
+
         AFL_VERIFY_DEBUG(evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)("TxMode", evWrite.Record.GetTxMode());
-        // if (!evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
-        if (evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
-            return EOperationBehaviour::AbortWriteLock;
+        if (evWrite.Record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+            return TConclusionStatus::Fail("Rollback TEvWrite should be Immediate");
         }
-        else {
-            return TConclusionStatus::Fail("Unexpected args for Rollback TEvWrite");
-        }
+
+        return EOperationBehaviour::AbortWriteLock;
     }
 
     if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks()) {

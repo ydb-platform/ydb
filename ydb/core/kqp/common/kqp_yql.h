@@ -56,6 +56,7 @@ enum class EStreamLookupStrategyType {
 struct TKqpStreamLookupSettings {
     static constexpr TStringBuf StrategySettingName = "Strategy";
     static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
+    static constexpr TStringBuf KeepRowsOrderSettingName = "KeepRowsOrder";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
@@ -64,6 +65,7 @@ struct TKqpStreamLookupSettings {
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
+    bool KeepRowsOrder = false;
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);

@@ -144,6 +144,30 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
+    auto getDirection = [] (TExprBase expr) -> ESortDirection {
+        if (!expr.Maybe<TCoBool>()) {
+            return ESortDirection::Unknown;
+        }
+
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return ESortDirection::Reverse;
+        }
+
+        return ESortDirection::Forward;
+    };
+
+    auto direction = ESortDirection::None;
+    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            direction |= getDirection(expr);
+        }
+    } else {
+        direction |= getDirection(sortDirections);
+    }
+    return direction;
+};
+
 bool IsSortKeyPrimary(
     const NYql::NNodes::TCoLambda& keySelector,
     const NYql::TKikimrTableDescription& tableDesc,

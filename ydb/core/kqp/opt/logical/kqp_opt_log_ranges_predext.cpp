@@ -74,30 +74,17 @@ bool IsIdLambda(TExprBase body) {
 
 } // namespace
 
-TExprBase KqpSelectIndexSortOverReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!node.Maybe<TCoTake>()) {
+    if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
 
-    auto take = node.Maybe<TCoTake>().Cast();
+    auto top = node.Cast<TCoTopBase>();
+    auto input = top.Input();
 
-    auto input = take.Input();
-
-    auto skip = input.Maybe<TCoSkip>();
-    if (skip) {
-        input = skip.Cast().Input();
-    }
-
-    auto maybeSort = input.Maybe<TCoSort>();
-    auto maybeTopBase = input.Maybe<TCoTopBase>();
-    if (!maybeSort && !maybeTopBase) {
-        return node;
-    }
-
-    input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
-    auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
-    auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
+    auto sortDirections = top.SortDirections();
+    auto keySelector = top.KeySelectorLambda();
 
     if (!input.Maybe<TKqlReadTableRanges>()) {
         return node;
@@ -137,7 +124,7 @@ TExprBase KqpSelectIndexSortOverReadTable(TExprBase node, TExprContext& ctx, con
             continue;
         }
 
-        if (indexInfo.State == TIndexDescription::EIndexState::Ready) {
+        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
             continue;
         }
 
@@ -169,31 +156,19 @@ TExprBase KqpSelectIndexSortOverReadTable(TExprBase node, TExprContext& ctx, con
 
     auto [indexName, covers] = *selectedIndex;
     YQL_ENSURE(selectedIndex.has_value());
-    auto& indexDesc = kqpCtx.Tables->ExistingTable(
-            kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexName).first->Name);
 
     input = Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
-        .Table(BuildTableMeta(indexDesc, read.Pos(), ctx))
+        .Table(read.Table())
         .Ranges<TCoVoid>()
             .Build()
         .Columns(read.Columns())
         .Settings(read.Settings())
         .ExplainPrompt()
             .Build()
+        .Index(Build<TCoAtom>(ctx, read.Pos()).Value(indexName).Done())
         .Done();
 
-    if (maybeSort) {
-        input = TExprBase(ctx.ChangeChild(maybeSort.Cast().Ref(), TCoSortBase::idx_Input, input.Ptr()));
-    } else if (maybeTopBase) {
-        input = TExprBase(ctx.ChangeChild(maybeTopBase.Cast().Ref(), TCoTopBase::idx_Input, input.Ptr()));
-    }
-
-    if (skip) {
-        input = TExprBase(ctx.ChangeChild(skip.Cast().Ref(), TCoSkip::idx_Input, input.Ptr()));
-    }
-
-    input = TExprBase(ctx.ChangeChild(take.Ref(), TCoTake::idx_Input, input.Ptr()));
-    return input;
+    return TExprBase(ctx.ChangeChild(top.Ref(), TCoTopBase::idx_Input, input.Ptr()));
 }
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,

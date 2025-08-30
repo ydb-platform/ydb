@@ -71,6 +71,7 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
         input = maybeStreamLookup.Cast().LookupKeys();
     }
 
+
     bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
     bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid() ;
     if (!isReadTable && !isReadTableRanges) {

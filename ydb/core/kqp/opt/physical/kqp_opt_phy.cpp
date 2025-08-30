@@ -192,7 +192,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStagesKeepSorted(TExprBase node, TExprContext& ctx) {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = false; // KqpCtx.Config->EnableOrderOptimizaionFSM;
         if (useFSM) {
             TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(node, ctx, TypesCtx, true);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSortedFSM", node.Ptr(), output.Ptr(), ctx);
@@ -201,7 +201,7 @@ protected:
         else {
             TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, true);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSorted", node.Ptr(), output.Ptr(), ctx);
-            return output;   
+            return output;
         }
     }
 
@@ -218,7 +218,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx) {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = false; // KqpCtx.Config->EnableOrderOptimizaionFSM;
         if (useFSM) {
             TExprBase output = KqpRemoveRedundantSortOverReadTableFSM(node, ctx, KqpCtx, TypesCtx);
             DumpAppliedRule("RemoveRedundantSortOverReadTableFSM", node.Ptr(), output.Ptr(), ctx);
@@ -419,7 +419,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = false ; // KqpCtx.Config->EnableOrderOptimizaionFSM;
         if (useFSM)
         {
             TExprBase output = KqpBuildTopStageRemoveSortFSM(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true);

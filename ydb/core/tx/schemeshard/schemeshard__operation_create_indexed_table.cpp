@@ -246,6 +246,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
         }
 
+        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            TString msg;
+            if (!NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+            }
+        }
 
         {
             auto scheme = TransactionTemplate(

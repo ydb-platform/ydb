@@ -3581,20 +3581,4 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TVectorIndexSettings::Validate(TContext& ctx) const {
-    if (!Distance && !Similarity) {
-        ctx.Error() << "either distance or similarity should be set";
-        return false;
-    }
-    if (!VectorType) {
-        ctx.Error() << "vector_type should be set";
-        return false;
-    }
-    if (!VectorDimension) {
-        ctx.Error() << "vector_dimension should be set";
-        return false;
-    }
-    return true;
-}
-
 } // namespace NSQLTranslationV1

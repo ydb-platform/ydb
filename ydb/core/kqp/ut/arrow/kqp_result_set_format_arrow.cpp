@@ -1419,6 +1419,338 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
         }
     }
+
+    Y_UNIT_TEST(ArrowFormat_Types_Optional) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST(3 AS Optional<Int32>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::INT32, "Column type must be INT32");
+
+            const TString expected = R"(column0:   [
+    3
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT JUST(JUST(3))
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+
+            const TString expected = R"(column0:   -- is_valid: all not null
+  -- child 0 type: uint64
+    [
+      1
+    ]
+  -- child 1 type: int32
+    [
+      3
+    ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT JUST(JUST(JUST(NULL)))
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+
+            const TString expected = R"(column0:   -- is_valid: all not null
+  -- child 0 type: uint64
+    [
+      0
+    ]
+  -- child 1 type: null
+1 nulls
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    /**
+     * Arrow format is supported for list types.
+     */
+    Y_UNIT_TEST(ArrowFormat_Types_List) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT [1, 2, 3];
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+
+            const TString expected = R"(column0:   [
+    [
+      1,
+      2,
+      3
+    ]
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Types_EmptyList) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT [];
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::NA, "Column type must be NULL");
+
+            const TString expected = "column0: 1 nulls\n";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    /**
+     * Arrow format is supported for tuple types.
+     */
+    Y_UNIT_TEST(ArrowFormat_Types_Tuple) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST((1, 2.5) AS Tuple<Uint32, Double>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be struct");
+
+            const TString expected = R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    /**
+     * Arrow format is supported for dict types.
+     */
+    Y_UNIT_TEST(ArrowFormat_Types_Dict) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST({"a": 1, "b": 2, "c": 3} AS Dict<String,Int32>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::MAP, "Column type must be map");
+
+            const TString expected = R"(column0:   [
+    keys:
+    [
+      61,
+      63,
+      62
+    ]
+    values:
+    [
+      1,
+      3,
+      2
+    ]
+  ]
+)";
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST({"a": 1, "b": 2, NULL: 3} AS Dict<Optional<String>,Int32>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            Cerr << batch->ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be list");
+
+            const TString expected = R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
+)";
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Types_EmptyDict) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT {};
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::NA, "Column type must be null");
+
+            const TString expected = "column0: 1 nulls\n";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Types_Struct) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT CAST(<|first: 1, second: "2"|> AS Struct<first:Int32,second:Utf8>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be STRUCT");
+
+            const TString expected = R"(column0:   -- is_valid: all not null
+  -- child 0 type: int32
+    [
+      1
+    ]
+  -- child 1 type: string
+    [
+      "2"
+    ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Types_Variant) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto batches = ExecuteAndCombineBatches(client, R"(
+                SELECT Variant(1, "foo", Variant<foo: Int32, bar: Bool>);
+            )", /* assertSize */ false);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
+            const auto& batch = batches.front();
+
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::DENSE_UNION, "Column type must be DENSE_UNION");
+
+            const TString expected = R"(column0:   -- is_valid: all not null
+  -- type_ids:     [
+      1
+    ]
+  -- value_offsets:     [
+      0
+    ]
+  -- child 0 type: bool
+    []
+  -- child 1 type: int32
+    [
+      1
+    ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

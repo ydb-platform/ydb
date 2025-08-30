@@ -124,7 +124,7 @@ public:
 
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
         auto& transactions = Request.Transactions;
-        FillKqpTasksGraphStages(TasksGraph, transactions);
+        TasksGraph.FillKqpTasksGraphStages(transactions);
 
         for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
             auto& tx = transactions[txIdx];
@@ -141,7 +141,7 @@ public:
             }
 
             ResponseEv->InitTxResult(tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {

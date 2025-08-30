@@ -28,6 +28,8 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
+#include <fmt/format.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -35,6 +37,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
 using namespace NYdb::NReplication;
+using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
@@ -11748,13 +11751,36 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_FAIL("Temp dir '" << firstDir << "' still exists, last result: " << deleteResult);
     }
 
-    Y_UNIT_TEST(DisableStreamingQueries) {
+    std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(false);
+        config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
+        config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(false));
+        auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
+            .SetEnableStreamingQueries(enableStreamingQueries)
+            .SetEnableExternalDataSources(true)
+            .SetEnableResourcePools(true)
+            .SetInitFederatedQuerySetupFactory(true));
 
-        auto db = kikimr.GetQueryClient();
+        const auto result = kikimr->GetQueryClient().ExecuteQuery(fmt::format(R"(
+            CREATE TOPIC MyTopic;
+            CREATE EXTERNAL DATA SOURCE MySource WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "localhost:{port}",
+                DATABASE_NAME = "/Root",
+                AUTH_METHOD = "NONE"
+            );)",
+            "port"_a = kikimr->GetTestServer().GetGRpcServer().GetPort()),
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        return kikimr;
+    }
+
+    Y_UNIT_TEST(DisableStreamingQueries) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ false);
+        auto db = kikimr->GetQueryClient();
 
         auto checkQuery = [&db](const TString& query, EStatus status, const TString& error) {
             Cerr << "Check query:\n" << query << "\n";
@@ -11771,8 +11797,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkDisabled(R"(
             CREATE STREAMING QUERY MyQuery WITH (
                 RUN = FALSE
-            ) AS
-                INSERT INTO MyTable (Key) VALUES (1);)");
+            ) AS DO BEGIN
+                INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+            END DO)");
 
         // ALTER STREAMING QUERY
         checkDisabled(R"(
@@ -11786,12 +11813,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(StreamingQueriesValidation) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient();
 
         // Test create
 
@@ -11799,8 +11822,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
                     UNKNOWN_PROPERTY = TRUE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: unknown_property");
@@ -11810,8 +11834,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
                     RUN = "yes"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "RUN property must be 'true' or 'false'");
@@ -11821,8 +11846,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
                     FORCE = TRUE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
@@ -11835,8 +11861,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
@@ -11863,8 +11890,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             const auto result = db.ExecuteQuery(R"(
-                ALTER STREAMING QUERY `MyFolder/MyQuery` AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ALTER STREAMING QUERY `MyFolder/MyQuery` AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
@@ -11893,28 +11921,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"query_text", "INSERT INTO MyTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -11922,15 +11945,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE OR REPLACE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO OtherTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -11939,15 +11961,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE STREAMING QUERY IF NOT EXISTS `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "other_pool"
-                ) AS
-                    INSERT INTO ThirdTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -11955,34 +11976,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE OR REPLACE STREAMING QUERY IF NOT EXISTS `MyFolder/MyQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* third hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
     }
 
     Y_UNIT_TEST(CreateStreamingQueryErrors) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO;
 
                 CREATE TABLE `MyFolder/MyTable` (
                     Key Int32 NOT NULL,
@@ -11998,8 +12015,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery already exists");
@@ -12009,8 +12027,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE OR REPLACE STREAMING QUERY `MyFolder/MyTable` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
@@ -12020,8 +12039,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY IF NOT EXISTS `MyFolder/MyTable` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
@@ -12031,22 +12051,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
                     RUN = TRUE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN
+                    INSERT INTO MyTable (Key) VALUES (1)
+                END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Query compilation / planing failed");
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
         }
     }
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient();
 
         constexpr ui64 PARALLEL_QUERIES = 100;
         std::vector<NQuery::TAsyncExecuteQueryResult> results;
@@ -12056,8 +12072,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()));
         }
 
@@ -12084,36 +12099,31 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(successCount, 1);
-        CheckObjectProperties(*kikimr.GetTestServer().GetRuntime(), "/Root/MyFolder/MyStreamingQuery", {
+        CheckObjectProperties(*kikimr->GetTestServer().GetRuntime(), "/Root/MyFolder/MyStreamingQuery", {
             {"run", "false"},
             {"resource_pool", "my_pool"},
-            {"query_text", "INSERT INTO MyTable ( Key ) VALUES ( 1 )"}
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
         });
     }
 
     Y_UNIT_TEST(AlterStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"query_text", "INSERT INTO MyTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -12121,15 +12131,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
                     FORCE = TRUE
-                ) AS
-                    INSERT INTO OtherTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -12144,7 +12153,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -12161,26 +12170,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
             });
         }
     }
 
     Y_UNIT_TEST(AlterStreamingQueryErrors) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;
 
                 CREATE TABLE `MyFolder/MyTable` (
                     Key Int32 NOT NULL,
@@ -12222,42 +12226,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
         }
-
-        {
-            const auto result = db.ExecuteQuery(R"(
-                ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
-                    RUN = TRUE
-                );)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Query compilation / planing failed");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
-        }
     }
 
     Y_UNIT_TEST(ParallelAlterStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"query_text", "INSERT INTO MyTable ( Key ) VALUES ( 1 )"}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -12269,8 +12257,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
                     FORCE = TRUE,
                     RESOURCE_POOL = "other_pool"
-                ) AS
-                    INSERT INTO OtherTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()));
         }
 
@@ -12294,25 +12281,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
             {"run", "false"},
             {"resource_pool", "other_pool"},
-            {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
         });
     }
 
     Y_UNIT_TEST(DropStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
@@ -12339,13 +12321,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropStreamingQueryErrors) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12385,20 +12363,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ParallelDropStreamingQuery) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
@@ -12440,71 +12413,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
     }
 
-    Y_UNIT_TEST(StreamingQueriesDdlWithTableService) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableStreamingQueries(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            const auto result = session.ExecuteSchemeQuery(R"(
-                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
-                    RUN = FALSE,
-                    RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)"
-            ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
-                {"run", "false"},
-                {"resource_pool", "my_pool"},
-                {"query_text", "INSERT INTO MyTable ( Key ) VALUES ( 1 )"}
-            });
-        }
-
-        {
-            const auto result = session.ExecuteSchemeQuery(R"(
-                ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
-                    FORCE = TRUE,
-                    RESOURCE_POOL = "other_pool"
-                ) AS
-                    INSERT INTO OtherTable (Key) VALUES (1);)"
-            ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
-                {"run", "false"},
-                {"resource_pool", "other_pool"},
-                {"query_text", "INSERT INTO OtherTable ( Key ) VALUES ( 1 )"}
-            });
-        }
-
-        {
-            const auto result = session.ExecuteSchemeQuery(R"(
-                DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)"
-            ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
-        }
-    }
-
     Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
-
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
-            .SetEnableStreamingQueries(true)
-            .SetEnableResourcePools(true));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetQueryClient();
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -12515,8 +12427,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = TRUE,
                     RESOURCE_POOL = "my_pool"
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
@@ -12528,8 +12439,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
                     RUN = FALSE
-                ) AS
-                    INSERT INTO MyTable (Key) VALUES (1);)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 

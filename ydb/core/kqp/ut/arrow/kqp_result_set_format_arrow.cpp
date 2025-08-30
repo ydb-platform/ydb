@@ -1569,21 +1569,15 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be struct");
 
-            const TString expected = R"(column0:   [
-    -- is_valid: all not null
-    -- child 0 type: binary
-      [
-        61,
-        62,
-        null
-      ]
-    -- child 1 type: int32
-      [
-        1,
-        2,
-        3
-      ]
-  ]
+            const TString expected = R"(column0:   -- is_valid: all not null
+  -- child 0 type: uint32
+    [
+      1
+    ]
+  -- child 1 type: double
+    [
+      2.5
+    ]
 )";
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
         }

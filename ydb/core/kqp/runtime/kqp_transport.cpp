@@ -63,7 +63,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
     TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
+    std::vector<std::pair<TString, NMiniKQL::TType*>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
 
     if (fillSchema) {
@@ -85,7 +85,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
             auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
 
-            if (columnType->GetKind() == TType::EKind::Data) {
+            if (columnType->GetKind() == NMiniKQL::TType::EKind::Data) {
                 arrowNotNullColumns.insert(columnName);
             }
 

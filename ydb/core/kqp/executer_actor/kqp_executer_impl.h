@@ -1066,6 +1066,14 @@ protected:
                     YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
+                for (const auto& taskId : stageInfo.Tasks) {
+                    auto& task = TasksGraph.GetTask(taskId);
+
+                    task.Meta.ExecuterId = this->SelfId();
+                    FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                    BuildSinks(stage, stageInfo, task);
+                }
+
                 // Not task-related
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
                 if (!TasksGraph.GetMeta().IsRestored) {
@@ -1095,7 +1103,6 @@ protected:
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.ExecuterId = this->SelfId();
             TShardKeyRanges keyRanges;
 
             switch (op.GetTypeCase()) {
@@ -1126,9 +1133,6 @@ protected:
             task.Meta.Reads->emplace_back(std::move(readInfo));
             task.Meta.ReadInfo.SetSorting(readSettings.GetSorting());
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
-
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, stageInfo, task);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
@@ -1275,8 +1279,6 @@ protected:
             for (const auto taskId : stageInfo.Tasks) {
                 auto& task = TasksGraph.GetTask(taskId);
                 FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
-                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                BuildSinks(stage, stageInfo, task);
             }
             return;
         }
@@ -1296,7 +1298,6 @@ protected:
             }
 
             FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             tasksIds.push_back(task.Id);
         }
@@ -1308,11 +1309,6 @@ protected:
             if (++currentTaskIndex >= tasksIds.size()) {
                 currentTaskIndex = 0;
             }
-        }
-
-        // finish building
-        for (auto taskId : tasksIds) {
-            BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
         }
     }
 
@@ -1392,7 +1388,6 @@ protected:
                 TMaybe<ui64> maxInFlightShards) -> TTask& {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Scan;
-            task.Meta.ExecuterId = this->SelfId();
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
             }
@@ -1401,8 +1396,6 @@ protected:
                 YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
-
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             const auto& stageSource = stage.GetSources(0);
             auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -1585,12 +1578,6 @@ protected:
             }
         };
 
-        auto buildSinks = [&]() {
-            for (const ui64 taskId : createdTasksIds) {
-                BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
-            }
-        };
-
         bool isFullScan = false;
         const THashMap<ui64, TShardInfo> partitions = SourceScanStageIdToParititions.empty()
             ? PartitionPruner.Prune(source, stageInfo, isFullScan)
@@ -1621,7 +1608,6 @@ protected:
                 const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
                 addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
-                buildSinks();
                 return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
             } else {
                 return 0;
@@ -1631,7 +1617,6 @@ protected:
                 addPartition(shardId, {}, shardId, shardInfo, {});
             }
             fillRangesForTasks();
-            buildSinks();
             return partitions.size();
         }
     }
@@ -1660,9 +1645,6 @@ protected:
             for (const auto taskId : stageInfo.Tasks) {
                 auto& task = TasksGraph.GetTask(taskId);
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
-                task.Meta.ExecuterId = SelfId();
-                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                BuildSinks(stage, stageInfo, task);
             }
             return;
         }
@@ -1752,9 +1734,6 @@ protected:
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            task.Meta.ExecuterId = SelfId();
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, stageInfo, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -1954,12 +1933,8 @@ protected:
             }
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::DataShard;
-            task.Meta.ExecuterId = SelfId();
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
-
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, stageInfo, task);
 
             return task;
         };
@@ -2095,11 +2070,9 @@ protected:
                     ui64 nodeId = ShardIdToNodeId.at(shardId);
                     if (stageInfo.Meta.IsOlap() && sorted) {
                         auto& task = TasksGraph.AddTask(stageInfo);
-                        task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
-                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                         ++olapAndSortedTasksCount[nodeId];
                         return task;
                     }
@@ -2112,7 +2085,6 @@ protected:
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
-                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                         tasks.push_back(task.Id);
                         ++cnt;
                         return task;
@@ -2138,7 +2110,6 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.IsSorted());
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
-                        BuildSinks(stage, stageInfo, task);
                     }
 
                     intros.push_back("Actual number of scan tasks for node " + ToString(pair.first) + " - " + ToString(pair.second.size()));
@@ -2193,13 +2164,10 @@ protected:
                         auto& task = TasksGraph.AddTask(stageInfo);
                         task.Meta = metas[t];
                         task.Meta.SetEnableShardsSequentialScan(false);
-                        task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(t);
-                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                        BuildSinks(stage, stageInfo, task);
 
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
@@ -2238,13 +2206,10 @@ protected:
                         auto& task = TasksGraph.AddTask(stageInfo);
                         task.Meta = meta;
                         task.Meta.SetEnableShardsSequentialScan(false);
-                        task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
-                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                        BuildSinks(stage, stageInfo, task);
                     }
                 }
             }

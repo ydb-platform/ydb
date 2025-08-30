@@ -1002,6 +1002,7 @@ public:
                 .Repeat(TExprStep::LoadTablesMetadata)
                 .Repeat(TExprStep::RewriteIO);
 
+        YQL_ENSURE(ExternalSourceFactory);
         const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
         if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();

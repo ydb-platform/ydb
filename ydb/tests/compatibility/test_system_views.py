@@ -39,6 +39,8 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
 
     def compare_sysviews_dicts(self, dict_before, dict_after):
         for sysview_name, sysview_descr in dict_before.items():
+            if min(self.versions) < (25, 1, 4) and ("resource_pools" in sysview_name or "resource_pool_classifiers" in sysview_name):
+                continue
             if sysview_name not in dict_after:
                 logger.debug(f"sysview '{sysview_name}' was deleted")
                 return False

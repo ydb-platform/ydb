@@ -85,15 +85,15 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
             return callback(TTypeWrapper<arrow::DurationType>());
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::JsonDocument:
             return callback(TTypeWrapper<arrow::StringType>());
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::JsonDocument:
             return callback(TTypeWrapper<arrow::BinaryType>());
         case NUdf::EDataSlot::Decimal:
-            return callback(TTypeWrapper<arrow::Decimal128Type>());
+            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
         // TODO convert Tz-types to native arrow date and time types.
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
@@ -154,19 +154,26 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Ar
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
+// template <>
+// NUdf::TUnboxedValue GetUnboxedValue<arrow::Decimal128Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
+//     auto array = std::static_pointer_cast<arrow::Decimal128Array>(column);
+//     auto data = array->GetView(row);
+//     // We check that Decimal(22,9) but it may not be true
+//     // TODO Support other decimal precisions.
+//     const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array->type());
+//     Y_ABORT_UNLESS(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
+//     Y_ABORT_UNLESS(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
+//     Y_ABORT_UNLESS(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
+//     NYql::NDecimal::TInt128 val;
+//     std::memcpy(reinterpret_cast<char*>(&val), data.data(), data.size());
+//     return NUdf::TUnboxedValuePod(val);
+// }
+
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::Decimal128Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
-    auto array = std::static_pointer_cast<arrow::Decimal128Array>(column);
+NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+    auto array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
     auto data = array->GetView(row);
-    // We check that Decimal(22,9) but it may not be true
-    // TODO Support other decimal precisions.
-    const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array->type());
-    Y_ABORT_UNLESS(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
-    Y_ABORT_UNLESS(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
-    Y_ABORT_UNLESS(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
-    NYql::NDecimal::TInt128 val;
-    std::memcpy(reinterpret_cast<char*>(&val), data.data(), data.size());
-    return NUdf::TUnboxedValuePod(val);
+    return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
 template <typename TType>
@@ -174,10 +181,15 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
+// template <>
+// std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
+//     // TODO use non-fixed precision, derive it from data.
+//     return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+// }
+
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    // TODO use non-fixed precision, derive it from data.
-    return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
@@ -384,16 +396,30 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     Y_VERIFY_S(status.ok(), status.ToString());
 }
 
+// template <>
+// void AppendDataValue<arrow::Decimal128Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+//     Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DECIMAL128);
+//     auto typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder);
+//     arrow::Status status;
+//     if (!value.HasValue()) {
+//         status = typedBuilder->AppendNull();
+//     } else {
+//         // Parse value from string
+//         status = typedBuilder->Append(value.AsStringRef().Data());
+//     }
+//     Y_VERIFY_S(status.ok(), status.ToString());
+// }
+
 template <>
-void AppendDataValue<arrow::Decimal128Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DECIMAL128);
-    auto typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder);
+void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+    auto typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
         status = typedBuilder->AppendNull();
     } else {
-        // Parse value from string
-        status = typedBuilder->Append(value.AsStringRef().Data());
+        auto intVal = value.GetInt128();
+        status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));
     }
     Y_VERIFY_S(status.ok(), status.ToString());
 }

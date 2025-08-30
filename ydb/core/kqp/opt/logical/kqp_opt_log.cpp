@@ -33,6 +33,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
+        AddHandler(0, &TCoTake::Match, HNDL(SelectIndexSortOverReadTable));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -105,6 +106,12 @@ protected:
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> SelectIndexSortOverReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpSelectIndexSortOverReadTable(node, ctx, KqpCtx);
+        DumpAppliedRule("SelectIndexSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

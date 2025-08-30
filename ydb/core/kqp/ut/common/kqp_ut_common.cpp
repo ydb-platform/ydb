@@ -623,6 +623,10 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
+    Server->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::EPriority::PRI_ERROR);
+    Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::EPriority::PRI_ERROR);
+    Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NActors::NLog::EPriority::PRI_ERROR);
+
     SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
     SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);

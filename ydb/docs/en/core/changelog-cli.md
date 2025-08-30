@@ -1,5 +1,32 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.25.0 {#2-25-0}
+
+Released on September 1, 2025. To update to version **2.25.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added final execute statistics to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
+* Added the `--start-offset` option to the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read.md), which specifies a starting position for reading from the selected partition.
+* Added a new paths approach in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md) with the new `--include` option instead of the `--item` option.
+* Added support for encryption features in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md).
+
+### Improvements
+
+* User and password authentication options are now parsed independently, allowing them to be sourced from different priority levels. For example, the username can be specified via the `--user` option while the password is retrieved from the `YDB_PASSWORD` environment variable.
+* Changed the default logging level from `EMERGENCY` to `WARN` for commands that support multiple verbosity levels.
+
+### Backward incompatible changes
+
+* Removed the `--float-mode` option from the `{{ ydb-cli }} workload tpch run` and `{{ ydb-cli }} workload tpcds run` [commands](./reference/ydb-cli/commands/workload/index.md). Float mode is now inferred automatically from the table schema created during the `init` phase.
+
+### Bug fixes
+
+* Fixed a bug where the `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md) with the `--newline-delimited` option could get stuck if the input had incorrect data.
+* Fixed a bug with the progress bar display in the `{{ ydb-cli }} workload clickbench import files` [command](./reference/ydb-cli/workload-click-bench.md) — incorrect percentage value and excessive line breaks causing duplicated progress lines.
+* Fixed a bug where the `{{ ydb-cli }} workload topic write` [command](./reference/ydb-cli/topic-write.md) could crash with an `Unknown AckedMessageId` error due to an internal race condition.
+* Fixed decimal type comparison in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
+
 ## Version 2.24.1 {#2-24-1}
 
 Released on July 28, 2025. To update to version **2.24.1**, select the [Downloads](downloads/ydb-cli.md) section.

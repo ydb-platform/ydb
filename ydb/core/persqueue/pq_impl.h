@@ -600,6 +600,9 @@ private:
                                 TDistributedTransaction& tx,
                                 NKikimrPQ::TTransaction::EState state);
 
+    void ResendSplitMergeRequests(const TActorContext& ctx);
+
+
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     NWilson::TSpan WriteTxsSpan;
 

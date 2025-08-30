@@ -279,6 +279,12 @@ public:
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
 
+    std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) override;
+
     std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,

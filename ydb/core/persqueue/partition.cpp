@@ -972,8 +972,36 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
     }
-    result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus : NKikimrPQ::EScaleStatus::NORMAL);
+    if (SplitMergeEnabled(TabletConfig)) {
+        if (PartitionScaleParticipants.Defined()) {
+            result.MutableScaleParticipatingPartitions()->CopyFrom(*PartitionScaleParticipants);
+        }
+        result.SetScaleStatus(ScaleStatus);
+    } else {
+        result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);
+    }
+
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
+}
+
+void TPartition::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
+{
+    const bool mirroredPartition = MirroringEnabled(Config);
+    const NKikimrPQ::TEvPartitionScaleStatusChanged& record = ev->Get()->Record;
+    if (mirroredPartition) {
+        if (record.HasParticipatingPartitions()) [[likely]] {
+            PQ_LOG_I("Got split-merge event from mirrorer: " << ev->ToString());
+
+            ScaleStatus = record.GetScaleStatus();
+            PartitionScaleParticipants.ConstructInPlace();
+            PartitionScaleParticipants->CopyFrom(record.GetParticipatingPartitions());
+            ctx.Send(Tablet, ev->Release());
+        } else {
+            PQ_LOG_W("Ignoring split-merge event from the mirrorer because it does not have participating partitions info: " << ev->ToString());
+        }
+    } else {
+        PQ_LOG_W("Ignoring split-merge event because mirroring is disabled: " << ev->ToString());
+    }
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
@@ -1350,6 +1378,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvTxRollback" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     ProcessPendingEvent(ev, ctx);
 }
 
@@ -1468,7 +1500,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
                 break;
             }
             txSourceIds.insert(s.first);
-            PQ_LOG_D("Tx " << tx.GetTxId() << " affect SourceId " << s.first);
+            PQ_LOG_D("TxId " << tx.GetTxId() << " affect SourceId " << s.first);
         }
 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
@@ -2106,7 +2138,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     if (KVWriteInProgress) {
-        PQ_LOG_D("Can't process txs");
+        PQ_LOG_D("Writing. Can't process transactions and user actions");
         return;
     }
     if (DeletePartitionState == DELETION_INITED) {
@@ -2128,48 +2160,45 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         return;
     }
     PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-    while (true) {
-        if (CanProcessUserActionAndTransactionEvents()) {
-            ContinueProcessTxsAndUserActs(ctx);
-        }
-        if (BatchingState == ETxBatchingState::PreProcessing) {
-            PQ_LOG_D("Still preprocessing - waiting for something");
-            return; // Still preprocessing - waiting for something;
-        }
-        PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-
-        // Preprocessing complete;
-        if (CurrentBatchSize > 0) {
-            Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
-        }
-        CurrentBatchSize = 0;
-
-        if (UserActionAndTxPendingCommit.empty()) {
-            // Processing stopped and nothing to commit - finalize
-            BatchingState = ETxBatchingState::Finishing;
-        } else {
-            // Process commit queue
-            ProcessCommitQueue();
-        }
-        if (!UserActionAndTxPendingCommit.empty()) {
-            // Still pending for come commits
-            PQ_LOG_D("Still pending for come commits");
-            return;
-        }
-        // Commit queue processing complete. Now can either swith to persist or continue preprocessing;
-        if (BatchingState == ETxBatchingState::Finishing) { // Persist required;
-            RunPersist();
-            return;
-        }
-        BatchingState = ETxBatchingState::PreProcessing;
+    if (CanProcessUserActionAndTransactionEvents()) {
+        ContinueProcessTxsAndUserActs(ctx);
     }
+    // Still preprocessing? Waiting for something
+    if (CanProcessUserActionAndTransactionEvents()) {
+        PQ_LOG_D("Still preprocessing - waiting for something");
+        return;
+    }
+    PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+
+    // Preprocessing complete;
+    if (CurrentBatchSize > 0) {
+        PQ_LOG_D("Batch completed (" << CurrentBatchSize << ")");
+        Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
+    }
+    CurrentBatchSize = 0;
+
+    if (UserActionAndTxPendingCommit.empty()) {
+        // Processing stopped and nothing to commit - finalize
+        BatchingState = ETxBatchingState::Finishing;
+    } else {
+        // Process commit queue
+        ProcessCommitQueue();
+    }
+    // BatchingState can go to Finishing in ContinueProcessTxsAndUserActs. Therefore, it is necessary to check
+    // the size of the UserActionAndTxPendingCommit queue here.
+    if (!UserActionAndTxPendingCommit.empty()) {
+        // Still pending for come commits
+        PQ_LOG_D("Still pending for come commits");
+        return;
+    }
+    PQ_LOG_D("Try persist");
+    // Here we have an empty UserActionAndTxPendingCommit queue and BatchingState is equal to Finishing.
+    RunPersist();
 }
 
 bool TPartition::CanProcessUserActionAndTransactionEvents() const
 {
-    return
-        (BatchingState == ETxBatchingState::PreProcessing) ||
-        (BatchingState == ETxBatchingState::Executing);
+    return (BatchingState == ETxBatchingState::PreProcessing);
 }
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
@@ -2255,10 +2284,7 @@ void TPartition::ProcessCommitQueue() {
         std::visit(visitor, event);
     }
     if (UserActionAndTxPendingCommit.empty()) {
-        TxAffectedConsumers.clear();
-        TxAffectedSourcesIds.clear();
-        Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
-        TransactionsInflight.clear();
+        BatchingState = ETxBatchingState::Finishing;
     }
 }
 
@@ -2481,13 +2507,13 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
 
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
-        PQ_LOG_TX_D("The Tx " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
+        PQ_LOG_TX_D("The TxId " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
         result = ApplyWriteInfoResponse(*t);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
-            PQ_LOG_TX_D("The Tx " << t->GetTxId() << " must be blocked");
+            PQ_LOG_TX_D("The TxId " << t->GetTxId() << " must be blocked");
             Y_ABORT_UNLESS(result != EProcessResult::Continue);
             return result;
         }
@@ -2655,7 +2681,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                 break;
             }
             consumers.insert(consumer);
-            PQ_LOG_TX_D("Tx " << tx.TxId << " affect consumer " << consumer);
+            PQ_LOG_TX_D("TxId " << tx.TxId << " affect consumer " << consumer);
         }
     }
 
@@ -3082,6 +3108,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
                                                                           Config));
         } else {
+            ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();
         }
     } else {

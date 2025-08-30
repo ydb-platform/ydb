@@ -79,6 +79,7 @@ protected:
     const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
+    bool IsEmpty = false;
 
     const TIndexBuildScanSettings ScanSettings;
 
@@ -173,6 +174,7 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+        record.SetIsEmpty(IsEmpty);
 
         Uploader.Finish(record, status);
 
@@ -371,10 +373,11 @@ protected:
             if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
+                IsEmpty = true;
                 return true;
             }
             if (rows.size() < K) {
-                // if this datashard have less than K valid embeddings for this parent
+                // if this datashard has less than K valid embeddings for this parent
                 // lets make single centroid for it
                 rows.resize(1);
             }

@@ -77,7 +77,7 @@ private:
     TVector<TFmrTableDataServiceWriter::TPtr> TableDataServiceWriters_;
     ITableDataService::TPtr TableDataService_;
     IYtJobService::TPtr YtJobService_ = MakeYtJobSerivce();
-    THolder<IThreadPool> ThreadPool_ = CreateThreadPool(3);
+    THolder<IThreadPool> ThreadPool_ = CreateThreadPool(3, 100, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     std::shared_ptr<std::atomic<bool>> CancelFlag_ = std::make_shared<std::atomic<bool>>(false);
     // TODO - pass settings for various classes here.
 };

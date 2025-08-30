@@ -194,7 +194,10 @@ namespace NKikimr::NKqp {
 
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
-    using TGetSchemeEntryResult = TMaybe<NYdb::NScheme::ESchemeEntryType>;
+    struct TGetSchemeEntryResult {
+        TMaybe<NYdb::NScheme::ESchemeEntryType> EntryType;
+        NYql::TIssues Issues;
+    };
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,

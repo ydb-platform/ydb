@@ -20,6 +20,7 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 #include <util/string/split.h>
 
@@ -275,6 +276,15 @@ public:
                 }
             );
 
+        // Category: Topic
+        static NRpcService::TRlConfig ruRlTopicConfig(
+            "serverless_rt_coordination_node_path",
+            "serverless_rt_topic_resource_ru",
+                {
+                    // no actions
+                }
+            );
+
         auto rlMode = Request_->Get()->GetRlMode();
         switch (rlMode) {
             case TRateLimiterMode::Rps:
@@ -288,6 +298,9 @@ public:
                 break;
             case TRateLimiterMode::RuManual:
                 RlConfig = &ruRlManualConfig;
+                break;
+            case TRateLimiterMode::RuTopic:
+                RlConfig = &ruRlTopicConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;
@@ -689,25 +702,10 @@ template <typename TEvent>
 const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
     if constexpr (IsStreamWrite<TEvent>) {
         // extended permissions for stream write request family
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata",
-            "ydb.streams.write"
-        };
-        return permissions;
+        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get();
     } else {
         // default permissions
-        static const TVector<TString> permissions = {
-            "ydb.databases.list",
-            "ydb.databases.create",
-            "ydb.databases.connect",
-            "ydb.tables.select",
-            "ydb.schemas.getMetadata"
-        };
-        return permissions;
+        return NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get();
     }
 }
 

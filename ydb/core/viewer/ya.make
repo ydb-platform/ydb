@@ -30,7 +30,6 @@ SRCS(
     json_handlers_query.cpp
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
-    json_handlers_storage.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
     json_handlers_pq.cpp
@@ -51,7 +50,6 @@ SRCS(
     pdisk_status.h
     query_autocomplete_helper.h
     scheme_directory.h
-    storage_groups.h
     vdisk_blobindexstat.h
     vdisk_evict.h
     vdisk_getblob.h
@@ -74,6 +72,7 @@ SRCS(
     viewer_feature_flags.h
     viewer_topic_data.cpp
     viewer_graph.h
+    viewer_groups.h
     viewer_healthcheck.h
     viewer_helper.h
     viewer_hiveinfo.h

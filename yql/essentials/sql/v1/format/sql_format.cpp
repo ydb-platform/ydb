@@ -696,7 +696,10 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore47: // drop resource pool
+            case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
             case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
+            case TRule_sql_stmt_core::kAltSqlStmtCore65: // drop streaming query
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
@@ -1603,6 +1606,42 @@ private:
     void VisitDropResourcePoolClassifier(const TRule_drop_resource_pool_classifier_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitStreamingQuerySettings(const TRule_streaming_query_settings& msg) {
+        VisitKeyword(msg.GetToken1());
+        NewLine();
+        PushCurrentIndent();
+
+        Visit(msg.GetRule_streaming_query_setting2());
+        for (const auto& setting : msg.GetBlock3()) {
+            Visit(setting.GetToken1());
+            NewLine();
+            Visit(setting.GetRule_streaming_query_setting2());
+        }
+
+        if (msg.HasBlock4()) {
+            TokenIndex_++;
+        }
+
+        PopCurrentIndent();
+        NewLine();
+        VisitKeyword(msg.GetToken5());
+    }
+
+    void VisitCreateStreamingQuery(const TRule_create_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterStreamingQuery(const TRule_alter_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropStreamingQuery(const TRule_drop_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_streaming_query_stmt::GetDescriptor(), msg);
     }
 
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
@@ -3097,6 +3136,10 @@ TStaticData::TStaticData()
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
         {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
         {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
+        {TRule_streaming_query_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitStreamingQuerySettings)},
+        {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
+        {TRule_alter_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterStreamingQuery)},
+        {TRule_drop_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropStreamingQuery)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

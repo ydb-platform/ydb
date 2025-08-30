@@ -3811,6 +3811,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         UNIT_ASSERT_C(!blockedSnapshot.empty(), "expected tablet to make a log snapshot after part switch");
     }
 
+    Y_UNIT_TEST(FollowerPromoteToLeaderWhileLoadingPages) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the source tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "... initializing schema" << Endl;
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        Cerr << "... inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(10, 0, 10));
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "... starting follower" << Endl;
+        TActorId followerSysActor;
+        auto followerBootObserver = env->AddObserver<TEvTablet::TEvFBoot>([&](auto& ev) {
+            followerSysActor = ev->Sender;
+            Cerr << "... observed TEvTablet::TEvFBoot" << Endl;
+        });
+        TBlockEvents<NSharedCache::TEvRequest> blockedFollowerRequests(env.Env);
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+        env->WaitFor("follower shared cache requests", [&]{ return blockedFollowerRequests.size() > 0; });
+
+        Cerr << "... stopping leader" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        blockedFollowerRequests.Stop();
+        TBlockEvents<NSharedCache::TEvRequest> blockedLeaderRequests(env.Env);
+
+        TActorId leaderSysActor;
+        auto leaderBootObserver = env->AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
+            leaderSysActor = ev->Sender;
+            Cerr << "... observed TEvTablet::TEvBoot" << Endl;
+        });
+        Cerr << "... promoting follower" << Endl;
+        {
+            NFake::TStarter starter;
+            auto* info = starter.MakeTabletInfo(env.Tablet, env.StorageGroupCount);
+            auto* promote = new TEvTablet::TEvPromoteToLeader(0, info);
+            env->Send(new IEventHandle(followerSysActor, followerSysActor, promote), 0, /* viaActorSystem */ true);
+        }
+        env->WaitFor("promoted shared cache requests", [&]{ return blockedLeaderRequests.size() > 0; });
+
+        Cerr << "... unblocking promoted requests" << Endl;
+        blockedLeaderRequests.Stop().Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+
+        // Simulate reordering replies by reordering requests
+        Cerr << "... unblocking earlier requests" << Endl;
+        blockedFollowerRequests.Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(10));
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
@@ -6785,23 +6850,18 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
     };
 
     struct TTxCachingFamily : public ITransaction {
-        using ECache = NTable::NPage::ECache;
         using ECacheMode = NSharedCache::ECacheMode;
 
         ui32 Family;
-        NTable::NPage::ECache Cache;
         ECacheMode CacheMode;
 
-        TTxCachingFamily(ui32 family, ECache cache, ECacheMode cacheMode)
+        TTxCachingFamily(ui32 family, ECacheMode cacheMode)
             : Family(family)
-            , Cache(cache)
             , CacheMode(cacheMode)
         {}
 
         bool Execute(TTransactionContext &txc, const TActorContext &) override {
-            txc.DB.Alter()
-                .SetFamilyCacheMode(TRowsModel::TableId, Family, CacheMode)
-                .SetFamilyCache(TRowsModel::TableId, Family, Cache);
+            txc.DB.Alter().SetFamilyCacheMode(TRowsModel::TableId, Family, CacheMode);
 
             return true;
         }
@@ -6870,7 +6930,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::Regular) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::Regular) });
 
         // 10 history pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6906,7 +6966,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
 
         // 10 history pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6928,7 +6988,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // should be preloaded
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
     }
 
@@ -6942,7 +7002,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6963,7 +7023,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 10 historic[1] pages
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10); // 10 historic[1] pages
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 14); // 10 historic[1] pages, 4 cache misses before preloading
     }
 
@@ -6978,7 +7038,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6999,7 +7059,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // cache misses before preloading
 
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 1 groups[0], 1 historic[0], 3 index pages are sticky
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 8); // 1 groups[0], 1 historic[0], 6 cache misses before preloading, 3 index pages are sticky
     }
 
@@ -7014,7 +7074,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -7035,7 +7095,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: index root nodes, 1 groups[0], 1 historic[0]
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // index root nodes, 1 groups[0], 1 historic[0]
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading, should be index root nodes?
     }
 
@@ -7049,8 +7109,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -7072,7 +7132,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // should have the same behaviour
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be 0
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
     }
 
@@ -7098,8 +7158,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // add family, old parts won't have it
         env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
         DoFullScan(env, failedAttempts);
@@ -7111,7 +7171,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         // 4 cache misses before preloading, all old and new colums in try-keep-in-memory family sould be preloaded
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
     }
@@ -7138,7 +7198,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // add family, old parts won't have it
         env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
         DoFullScan(env, failedAttempts);
@@ -7150,7 +7210,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         // 4 cache misses before preloading, if at least one family of a group is for memory load it 
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
     }
@@ -7165,8 +7225,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -7178,8 +7238,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // Disable TryKeepInMemory mode
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::Regular) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::Regular) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::Regular) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::Regular) });
 
         int failedAttempts = 0;
         DoFullScan(env, failedAttempts);
@@ -7206,8 +7266,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -7219,7 +7279,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // Disable TryKeepInMemory mode only in default family
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::Regular) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::Regular) });
 
         int failedAttempts = 0;
         DoFullScan(env, failedAttempts);
@@ -7232,7 +7292,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // should not be preloaded
         DoFullScan(env, failedAttempts, true);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be 6
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0]
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading
     }
 }

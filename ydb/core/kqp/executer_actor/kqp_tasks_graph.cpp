@@ -1458,6 +1458,7 @@ void SerializeTaskToProto(
     SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
+    result->SetCreateSuspended(tasksGraph.GetMeta().CreateSuspended);
     FillTaskMeta(stageInfo, task, *result);
 }
 
@@ -1593,6 +1594,22 @@ void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryP
                     const auto& hashInfo = outputInfo.GetHashPartition();
                     newOutput.KeyColumns.assign(hashInfo.GetKeyColumns().begin(), hashInfo.GetKeyColumns().end());
                     newOutput.PartitionsCount = hashInfo.GetPartitionsCount();
+
+                    switch (hashInfo.GetHashKindCase()) {
+                        case NDqProto::TTaskOutputHashPartition::kHashV1:
+                            newOutput.HashKind = EHashShuffleFuncType::HashV1;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::kHashV2:
+                            newOutput.HashKind = EHashShuffleFuncType::HashV2;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::kColumnShardHashV1:
+                            newOutput.HashKind = EHashShuffleFuncType::ColumnShardHashV1;
+                            break;
+                        case NDqProto::TTaskOutputHashPartition::HASHKIND_NOT_SET:
+                            YQL_ENSURE(false, "Hash kind not set");
+                            break;
+                    }
+
                     break;
                 }
                 case NDqProto::TTaskOutput::kBroadcast: {

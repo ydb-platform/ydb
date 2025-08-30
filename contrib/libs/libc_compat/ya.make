@@ -25,6 +25,7 @@ ENDIF()
 
 DEFAULT(PROVIDE_GETRANDOM_GETENTROPY "no")
 DEFAULT(PROVIDE_REALLOCARRAY "no")
+DEFAULT(PROVIDE_QUEUE "no")
 
 # Android libc function appearance is documented here:
 # https://android.googlesource.com/platform/bionic/+/master/docs/status.md
@@ -85,6 +86,7 @@ IF (OS_WINDOWS)
         src/windows/sys/uio.c
     )
     ENABLE(PROVIDE_REALLOCARRAY)
+    ENABLE(PROVIDE_QUEUE)
 ENDIF()
 
 IF (OS_LINUX)
@@ -131,6 +133,10 @@ IF (OS_LINUX AND NOT MUSL)
     ENDIF()
 ENDIF()
 
+IF(OS_EMSCRIPTEN)
+    ENABLE(PROVIDE_QUEUE)
+ENDIF()
+
 IF (PROVIDE_REALLOCARRAY)
     SRCS(
         reallocarray/reallocarray.c
@@ -167,6 +173,12 @@ IF (PROVIDE_MEMFD_CREATE)
     )
     ADDINCL(
         GLOBAL contrib/libs/libc_compat/memfd_create
+    )
+ENDIF()
+
+IF (PROVIDE_QUEUE)
+    ADDINCL(
+        GLOBAL contrib/libs/libc_compat/queue
     )
 ENDIF()
 

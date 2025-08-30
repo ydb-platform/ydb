@@ -520,6 +520,7 @@ namespace NKikimr::NStorage {
         };
         std::deque<TInvokeOperation> InvokeQ; // operations queue; first is always the being executed one
         std::deque<TInvokeOperation> InvokePending; // collected while in ERROR_TIMEOUT state
+        std::deque<TEvNodeConfigInvokeOnRoot::TPtr> InvokeOnRootPending;
         bool DeadActorWaitingForProposition = false;
 
         class TInvokeRequestHandlerActor;
@@ -528,7 +529,7 @@ namespace NKikimr::NStorage {
 
         ui64 InvokePipelineGeneration = 1;
 
-        void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 

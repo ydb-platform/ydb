@@ -412,6 +412,7 @@ bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vE
     if (precInt < 0) {
         precInt = -precInt;
     }
+    precInt = std::max<NYql::NDecimal::TInt128>(precInt, 1);
     return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
 }
 

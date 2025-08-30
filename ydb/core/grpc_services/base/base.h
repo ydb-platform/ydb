@@ -341,6 +341,7 @@ enum class TRateLimiterMode : ui8 {
     Ru = 2,
     RuOnProgress = 3,
     RuManual = 4,
+    RuTopic = 5,
 };
 
 #define RLSWITCH(mode) \
@@ -476,6 +477,8 @@ public:
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) = 0;
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 
 protected:
     virtual void FinishRequest() = 0;
@@ -1155,6 +1158,10 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {

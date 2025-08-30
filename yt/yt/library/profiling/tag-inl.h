@@ -52,15 +52,15 @@ inline const TTagList& TTagSet::Tags() const
     return Tags_;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TFn>
-void TProjectionSet::Range(
-    const TTagIdList& tags,
-    TFn fn) const
+void TTagIdSet::Range(TFn fn) const
 {
     if (Enabled_) {
-        RangeSubsets(tags, Parents_, Children_, Required_, Excluded_, Alternative_, fn);
+        RangeSubsets(TagIds_, Parents_, Children_, Required_, Excluded_, Alternative_, fn);
     } else {
-        fn(tags);
+        fn(TagIds_);
     }
 }
 

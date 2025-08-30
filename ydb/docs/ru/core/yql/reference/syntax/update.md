@@ -1,7 +1,7 @@
 
 # UPDATE
 
-{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+{% include [column-and-row-tables-in-read-only-tx](../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
 
 Изменяет данные в таблице.{% if feature_mapreduce %} Таблица ищется по имени в базе данных, заданной оператором [USE](use.md).{% endif %} После ключевого слова `SET` через запятую указываются столбцы, значение которых необходимо заменить, и сами новые значения. Список обновляемых строк задается с помощью условия `WHERE`. Если условие `WHERE` отсутствует, изменения будут применены ко всем строкам таблицы.
 

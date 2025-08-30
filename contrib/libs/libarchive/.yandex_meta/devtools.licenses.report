@@ -1,0 +1,549 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Public-Domain        05235398ea572015d6cabcaab0f3bc96
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_parse_date.c [4:10]
+
+KEEP     Bsd-Unchanged        05b2e4198f8d61f68c56cb768466492c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-unchanged
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-unchanged.LICENSE
+    Files with this license:
+        libarchive/archive_pathmatch.c [5:24]
+        libarchive/archive_pathmatch.h [5:24]
+        libarchive/archive_read_disk_posix.c [6:25]
+        libarchive/archive_read_disk_private.h [5:24]
+        libarchive/archive_read_disk_windows.c [6:25]
+        libarchive/archive_read_support_format_ar.c [6:25]
+        libarchive/archive_windows.h [6:25]
+        libarchive/archive_write_disk_posix.c [6:25]
+        libarchive/archive_write_disk_private.h [5:24]
+        libarchive/archive_write_disk_windows.c [6:25]
+        libarchive/archive_write_set_format_ar.c [6:25]
+
+KEEP     BSD-2-Clause         111e2187f36301eca7aa99f552b3a9eb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/archive_string_composition.h [5:23]
+
+KEEP     PostgreSQL           2735c91e0415d018d24a9a8783acd500
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: PostgreSQL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/postgresql, http://www.postgresql.org/about/licence, https://spdx.org/licenses/PostgreSQL
+    Files with this license:
+        libarchive/archive_windows.c [813:828]
+
+KEEP     "(CC0-1.0 OR OpenSSL OR Apache-2.0)" 2a740a01cd25eea8dfc29f1ff4ed5cb1
+BELONGS ya.make
+    License text:
+        * The following source files are triple-licensed with the ability to choose
+          from CC0 1.0 Universal, OpenSSL or Apache 2.0 licenses:
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        COPYING [25:26]
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        COPYING [25:26]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        COPYING [25:26]
+
+KEEP     BSD-3-Clause         31338bf962c6df2ee6f3ada1c0b2fb13
+BELONGS ya.make
+    License text:
+        * The following source files are also subject in whole or in part to
+          a 3-clause UC Regents copyright; please read the individual source
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [15:16]
+
+KEEP     Public-Domain        41a9ccdd470e7e36917703bfc97590dd
+BELONGS ya.make
+    License text:
+        2010-04-16 : Igor Pavlov : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8.c [1125:1125]
+
+KEEP     Public-Domain        463d35073d1533bd88bb3ecd80e7f3a3
+BELONGS ya.make
+    License text:
+          PPMd var.I (2002): Dmitry Shkarin : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8.c [1127:1127]
+        libarchive/archive_ppmd8_private.h [4:4]
+
+KEEP     BSD-2-Clause         4a23fcefa5e462ab24d8c477b521cc39
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/xxhash.c [6:27]
+
+KEEP     BSD-2-Clause         552563652f652f63f4671ad717034a9a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/archive_pack_dev.c [10:29]
+        libarchive/archive_pack_dev.h [10:29]
+        libarchive/archive_rb.c [8:27]
+        libarchive/archive_rb.h [8:27]
+
+KEEP     BSD-3-Clause         6daffccbe81cc81cf1b75435c1342138
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        libarchive/archive_write_add_filter_compress.c [34:56]
+
+KEEP     Public-Domain        6e1f4abc82eadc9f480e5f25f78e479f
+BELONGS ya.make
+    License text:
+        2016-05-21 : Igor Pavlov : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8.c [2:2]
+
+KEEP     Public-Domain        72a56b8fe48cc5c7804c7665c95a28e4
+BELONGS ya.make
+    License text:
+        * The following source files are in the public domain:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [22:22]
+
+KEEP     Public-Domain        7537e70fc4accc2c246b91ccdc23fdbb
+BELONGS ya.make
+    License text:
+         * 2008-10-04 : Igor Pavlov : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_read_support_format_7zip.c [4026:4026]
+        libarchive/archive_read_support_format_7zip.c [4349:4349]
+
+KEEP     Public-Domain        821dfcea4647ac0284914633d060e08b
+BELONGS ya.make
+    License text:
+        **  This code is in the public domain and has no copyright.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_parse_date.c [27:27]
+
+KEEP     BSD-2-Clause         9a3ccee65c19e3efe8ff39ddd338523f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/archive_cryptor.c [5:23]
+        libarchive/archive_cryptor_private.h [5:23]
+        libarchive/archive_digest.c [7:25]
+        libarchive/archive_digest_private.h [6:24]
+        libarchive/archive_hmac.c [5:23]
+        libarchive/archive_hmac_private.h [5:23]
+        libarchive/archive_read_support_format_rar.c [6:24]
+        libarchive/archive_read_support_format_rar5.c [5:23]
+
+KEEP     Public-Domain        a4b6a37c6ad840df59cda2c8849e5399
+BELONGS ya.make
+    License text:
+        2010-03-12 : Igor Pavlov : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd7.c [2:2]
+        libarchive/archive_ppmd7_private.h [2:2]
+        libarchive/archive_ppmd_private.h [2:2]
+
+KEEP     BSD-2-Clause         a6442ee4d00b978fdd8c35ea38b0284d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/archive.h [5:23]
+        libarchive/archive_acl.c [6:24]
+        libarchive/archive_acl_private.h [5:23]
+        libarchive/archive_check_magic.c [5:23]
+        libarchive/archive_cmdline.c [5:23]
+        libarchive/archive_cmdline_private.h [5:23]
+        libarchive/archive_entry.c [6:24]
+        libarchive/archive_entry.h [6:24]
+        libarchive/archive_entry_copy_bhfi.c [5:23]
+        libarchive/archive_entry_copy_stat.c [5:23]
+        libarchive/archive_entry_link_resolver.c [5:23]
+        libarchive/archive_entry_locale.h [5:23]
+        libarchive/archive_entry_private.h [5:23]
+        libarchive/archive_entry_sparse.c [6:24]
+        libarchive/archive_entry_stat.c [5:23]
+        libarchive/archive_entry_strmode.c [5:23]
+        libarchive/archive_entry_xattr.c [5:23]
+        libarchive/archive_match.c [6:24]
+        libarchive/archive_openssl_evp_private.h [5:23]
+        libarchive/archive_openssl_hmac_private.h [5:23]
+        libarchive/archive_options.c [5:23]
+        libarchive/archive_options_private.h [5:23]
+        libarchive/archive_platform.h [5:23]
+        libarchive/archive_platform_acl.h [5:23]
+        libarchive/archive_private.h [5:23]
+        libarchive/archive_random.c [5:23]
+        libarchive/archive_random_private.h [5:23]
+        libarchive/archive_read.c [5:23]
+        libarchive/archive_read_add_passphrase.c [5:23]
+        libarchive/archive_read_append_filter.c [5:23]
+        libarchive/archive_read_data_into_fd.c [5:23]
+        libarchive/archive_read_disk_entry_from_file.c [7:25]
+        libarchive/archive_read_disk_set_standard_lookup.c [5:23]
+        libarchive/archive_read_extract.c [5:23]
+        libarchive/archive_read_extract2.c [5:23]
+        libarchive/archive_read_open_fd.c [5:23]
+        libarchive/archive_read_open_file.c [5:23]
+        libarchive/archive_read_open_filename.c [5:23]
+        libarchive/archive_read_open_memory.c [5:23]
+        libarchive/archive_read_private.h [5:23]
+        libarchive/archive_read_set_format.c [5:23]
+        libarchive/archive_read_set_options.c [5:23]
+        libarchive/archive_read_support_filter_all.c [5:23]
+        libarchive/archive_read_support_filter_by_code.c [5:23]
+        libarchive/archive_read_support_filter_bzip2.c [5:23]
+        libarchive/archive_read_support_filter_compress.c [5:23]
+        libarchive/archive_read_support_filter_grzip.c [5:23]
+        libarchive/archive_read_support_filter_gzip.c [5:23]
+        libarchive/archive_read_support_filter_lrzip.c [5:23]
+        libarchive/archive_read_support_filter_lz4.c [5:23]
+        libarchive/archive_read_support_filter_lzop.c [6:24]
+        libarchive/archive_read_support_filter_none.c [5:23]
+        libarchive/archive_read_support_filter_program.c [6:24]
+        libarchive/archive_read_support_filter_rpm.c [5:23]
+        libarchive/archive_read_support_filter_uu.c [5:23]
+        libarchive/archive_read_support_filter_xz.c [6:24]
+        libarchive/archive_read_support_filter_zstd.c [5:23]
+        libarchive/archive_read_support_format_7zip.c [5:23]
+        libarchive/archive_read_support_format_all.c [5:23]
+        libarchive/archive_read_support_format_by_code.c [5:23]
+        libarchive/archive_read_support_format_cab.c [5:23]
+        libarchive/archive_read_support_format_cpio.c [6:24]
+        libarchive/archive_read_support_format_empty.c [5:23]
+        libarchive/archive_read_support_format_iso9660.c [7:25]
+        libarchive/archive_read_support_format_lha.c [5:23]
+        libarchive/archive_read_support_format_mtree.c [7:25]
+        libarchive/archive_read_support_format_raw.c [5:23]
+        libarchive/archive_read_support_format_tar.c [7:25]
+        libarchive/archive_read_support_format_warc.c [5:23]
+        libarchive/archive_read_support_format_xar.c [5:23]
+        libarchive/archive_read_support_format_zip.c [7:25]
+        libarchive/archive_string.c [6:24]
+        libarchive/archive_string.h [5:23]
+        libarchive/archive_string_sprintf.c [5:23]
+        libarchive/archive_time.c [5:23]
+        libarchive/archive_time_private.h [5:23]
+        libarchive/archive_util.c [6:24]
+        libarchive/archive_version_details.c [6:24]
+        libarchive/archive_virtual.c [5:23]
+        libarchive/archive_windows.c [6:24]
+        libarchive/archive_write.c [5:23]
+        libarchive/archive_write_add_filter.c [5:23]
+        libarchive/archive_write_add_filter_b64encode.c [5:23]
+        libarchive/archive_write_add_filter_by_name.c [6:24]
+        libarchive/archive_write_add_filter_bzip2.c [6:24]
+        libarchive/archive_write_add_filter_compress.c [5:23]
+        libarchive/archive_write_add_filter_grzip.c [5:23]
+        libarchive/archive_write_add_filter_gzip.c [5:23]
+        libarchive/archive_write_add_filter_lrzip.c [5:23]
+        libarchive/archive_write_add_filter_lz4.c [5:23]
+        libarchive/archive_write_add_filter_lzop.c [5:23]
+        libarchive/archive_write_add_filter_none.c [5:23]
+        libarchive/archive_write_add_filter_program.c [6:24]
+        libarchive/archive_write_add_filter_uuencode.c [5:23]
+        libarchive/archive_write_add_filter_xz.c [6:24]
+        libarchive/archive_write_add_filter_zstd.c [6:24]
+        libarchive/archive_write_disk_set_standard_lookup.c [5:23]
+        libarchive/archive_write_open_fd.c [5:23]
+        libarchive/archive_write_open_file.c [5:23]
+        libarchive/archive_write_open_filename.c [5:23]
+        libarchive/archive_write_open_memory.c [5:23]
+        libarchive/archive_write_private.h [5:23]
+        libarchive/archive_write_set_format.c [5:23]
+        libarchive/archive_write_set_format_7zip.c [5:23]
+        libarchive/archive_write_set_format_by_name.c [5:23]
+        libarchive/archive_write_set_format_cpio_binary.c [6:24]
+        libarchive/archive_write_set_format_cpio_newc.c [7:25]
+        libarchive/archive_write_set_format_cpio_odc.c [6:24]
+        libarchive/archive_write_set_format_filter_by_ext.c [6:24]
+        libarchive/archive_write_set_format_gnutar.c [8:26]
+        libarchive/archive_write_set_format_iso9660.c [5:23]
+        libarchive/archive_write_set_format_mtree.c [6:24]
+        libarchive/archive_write_set_format_pax.c [7:25]
+        libarchive/archive_write_set_format_private.h [5:23]
+        libarchive/archive_write_set_format_raw.c [5:23]
+        libarchive/archive_write_set_format_shar.c [6:24]
+        libarchive/archive_write_set_format_ustar.c [6:24]
+        libarchive/archive_write_set_format_v7tar.c [6:24]
+        libarchive/archive_write_set_format_warc.c [7:25]
+        libarchive/archive_write_set_format_xar.c [5:23]
+        libarchive/archive_write_set_format_zip.c [7:25]
+        libarchive/archive_write_set_options.c [5:23]
+        libarchive/archive_write_set_passphrase.c [5:23]
+        libarchive/archive_xxhash.h [5:23]
+        libarchive/filter_fork.h [5:23]
+        libarchive/filter_fork_posix.c [6:24]
+        libarchive/filter_fork_windows.c [5:23]
+
+KEEP     BSD-2-Clause         a94a0220092be0cdc66289ffae4cfb2f
+BELONGS ya.make
+    License text:
+        BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/xxhash.c [4:4]
+
+KEEP     Public-Domain        ac3be8d888313aa16e9a939911d24fc7
+BELONGS ya.make
+    License text:
+         * This code is in the public domain and has no copyright.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_parse_date.c [2:2]
+
+KEEP     BSD-3-Clause         aff91b162b1ebf52634a56dff62c4137
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        libarchive/archive_entry.c [1848:1870]
+        libarchive/archive_read_support_filter_compress.c [40:62]
+
+KEEP     Public-Domain        b24003123849873c3d416cd09f59e41a
+BELONGS ya.make
+    License text:
+        2011-01-27 : Igor Pavlov : Public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8_private.h [2:2]
+
+KEEP     Public-Domain        d143c801b319f80dcf600b885409bd20
+BELONGS ya.make
+    License text:
+        This code is based on PPMd var.I (2002): Dmitry Shkarin : Public domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8.c [3:3]
+
+KEEP     0BSD                 d3219ca5d043652f2e4e41a540b53b01
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: 0BSD
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
+    Files with this license:
+        libarchive/archive_read_support_format_7zip.c [4245:4255]
+        libarchive/archive_read_support_format_7zip.c [4303:4313]
+
+KEEP     Bsd-Unchanged        d87b799520898e9131cb6343a3ddbfe0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-unchanged
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-unchanged.LICENSE
+    Files with this license:
+        COPYING [46:65]
+
+KEEP     Public-Domain        e5eb432a29928fa1ebfafe4f81081626
+BELONGS ya.make
+    License text:
+        This code is based on PPMd var.H (2001): Dmitry Shkarin : Public domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd7.c [3:3]
+        libarchive/archive_ppmd7_private.h [3:3]
+        libarchive/archive_ppmd_private.h [3:3]
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        libarchive/archive_random.c [136:146]
+
+KEEP     Public-Domain        e74912a2759a9a1abf238929a826545b
+BELONGS ya.make
+    License text:
+          Carryless rangecoder (1999): Dmitry Subbotin : Public domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_ppmd8.c [1128:1128]
+        libarchive/archive_ppmd8_private.h [5:5]
+
+KEEP     Public-Domain        ec28caaef646a8a34574359ce999e6e5
+BELONGS ya.make
+    License text:
+        	 * This file has been put into the public domain.
+        	 * You can do whatever you want with this file.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libarchive/archive_read_support_format_7zip.c [4139:4140]
+        libarchive/archive_read_support_format_7zip.c [4180:4181]
+
+KEEP     BSD-2-Clause         f59cebb43ee786218189ac014af76fbb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        libarchive/archive_endian.h [5:24]

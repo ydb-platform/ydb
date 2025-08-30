@@ -1,7 +1,7 @@
 PY3_LIBRARY()
 
 PY_SRCS(
-    workload_topic.py
+    __init__.py
 )
 
 BUNDLE(

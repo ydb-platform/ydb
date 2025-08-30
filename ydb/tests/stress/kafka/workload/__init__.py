@@ -30,7 +30,7 @@ class Workload(unittest.TestCase):
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
-        working_dir = os.path.join(tempfile.gettempdir(), "ydb_cli")
+        working_dir = os.path.join(tempfile.gettempdir(), "kafka_ydb_cli")
         self.tmp_dirs.append(working_dir)
         os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)
@@ -51,10 +51,15 @@ class Workload(unittest.TestCase):
 
         urllib.request.urlretrieve(self.jar_path, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
         urllib.request.urlretrieve(self.archive_path, TEST_FILES_DIRECTORY + JDK_FILE_NAME)
+        os.chmod(TEST_FILES_DIRECTORY + JAR_FILE_NAME, 0o777)
+        os.chmod(TEST_FILES_DIRECTORY + JDK_FILE_NAME, 0o777)
 
         tar = tarfile.open(TEST_FILES_DIRECTORY + JDK_FILE_NAME, "r:gz")
         tar.extractall(path=TEST_FILES_DIRECTORY)
         tar.close()
+
+        os.chmod(TEST_FILES_DIRECTORY + 'lib/server/classes.jsa', 0o777)
+        os.chmod(TEST_FILES_DIRECTORY + 'lib/server/classes_nocoops.jsa', 0o777)
 
         java_path = TEST_FILES_DIRECTORY + "/bin/java"
         jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME

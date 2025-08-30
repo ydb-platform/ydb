@@ -298,6 +298,10 @@ SRCS(
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
+    schemeshard__operation_create_set_constraint.cpp
+    schemeshard__operation_create_set_constraint_check.cpp
+    schemeshard__operation_create_set_constraint_finalize.cpp
+    schemeshard__operation_create_set_constraint_lock.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
@@ -331,6 +335,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/persqueue/config
     ydb/core/persqueue/events
+    ydb/core/persqueue/partition_index_generator
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

@@ -34,6 +34,14 @@ public:
         return DatabaseName;
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
+    }
+
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
         return UserToken;
     }

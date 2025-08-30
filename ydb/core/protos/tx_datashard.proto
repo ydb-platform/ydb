@@ -1623,6 +1623,7 @@ message TEvLocalKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    optional bool IsEmpty = 13;
 }
 
 message TEvReshuffleKMeansRequest {

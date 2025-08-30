@@ -178,7 +178,7 @@ TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TE
     TVector<TNodeInfo*> partitionNodes;
     for (const auto& part : response->Partitions) {
         auto iter = Nodes.find(part.NodeId);
-        if (iter.IsEnd()) {
+        if (iter == Nodes.end()) {
             return {};
         }
         partitionNodes.push_back(&iter->second);
@@ -210,21 +210,36 @@ void TKafkaMetadataActor::AddTopicResponse(
         responsePartition.ErrorCode = NONE_ERROR;
         responsePartition.LeaderId = nodeId;
         responsePartition.LeaderEpoch = part.Generation;
-        responsePartition.ReplicaNodes.push_back(nodeId);
-        responsePartition.IsrNodes.push_back(nodeId);
 
-        topic.Partitions.emplace_back(std::move(responsePartition));
-
+        // adding replica nodes in a roundrobin manner based on sorted NodeId
+        std::vector<ui64> nodesToAdd = {nodeId};
         if (!WithProxy && !NeedAllNodes) {
-            auto ins = AllClusterNodes.insert(part.NodeId);
-            if (ins.second) {
-                auto hostname = (*nodeIter)->Host;
-                if (hostname.StartsWith(UnderlayPrefix)) {
-                    hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
-                }
-                AddBroker(part.NodeId, hostname, (*nodeIter)->Port);
-            }
+            AddBroker(nodeId, (*nodeIter)->Host, (*nodeIter)->Port);
         }
+        if (!WithProxy) {
+            auto nodeToAddIter = Nodes.find(part.NodeId);
+            nodeToAddIter++;
+            for (size_t i = 0; i < 2; ++i) {
+                if (nodeToAddIter == Nodes.end()) {
+                    nodeToAddIter = Nodes.begin();
+                }
+                if (nodeToAddIter->first == nodeId) {
+                    break;
+                }
+                nodesToAdd.push_back(nodeToAddIter->first);
+                if (!NeedAllNodes) {
+                    AddBroker(nodeToAddIter->first, nodeToAddIter->second.Host, nodeToAddIter->second.Port);
+                }
+                nodeToAddIter++;
+            }
+            std::sort(nodesToAdd.begin(), nodesToAdd.end());
+        }
+
+        for (size_t i = 0; i < nodesToAdd.size(); i++) {
+            responsePartition.ReplicaNodes.push_back(nodesToAdd[i]);
+            responsePartition.IsrNodes.push_back(nodesToAdd[i]);
+        }
+        topic.Partitions.emplace_back(std::move(responsePartition));
         ++nodeIter;
     }
 }
@@ -259,7 +274,9 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
             TopicСreationAttempts.insert(*topic.Name);
+            PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
     }
@@ -275,6 +292,7 @@ void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TA
     const TString& topicName = topicNameToIndex.TopicName;
     const ui32& topicIndex = topicNameToIndex.TopicIndex;
     InflyCreateTopics--;
+    PendingResponses--;
     EKafkaErrors errorCode = ev->Get()->ErrorCode;
     if (errorCode == EKafkaErrors::NONE_ERROR) {
         TActorId child = SendTopicRequest(topicName);
@@ -307,11 +325,18 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {
-    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-    broker.NodeId = nodeId;
-    broker.Host = host;
-    broker.Port = port;
-    Response->Brokers.emplace_back(std::move(broker));
+    auto ins = AddedNodes.insert(nodeId);
+    if (ins.second) {
+        auto hostname = host;
+        if (hostname.StartsWith(UnderlayPrefix)) {
+            hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
+        };
+        auto broker = TMetadataResponseData::TMetadataResponseBroker{};
+        broker.NodeId = nodeId;
+        broker.Host = hostname;
+        broker.Port = port;
+        Response->Brokers.emplace_back(std::move(broker));
+    }
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {

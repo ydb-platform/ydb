@@ -3,6 +3,12 @@
 #include <sstream>
 #include <iomanip>
 
+#if defined(_linux_)
+#include <sched.h>
+#endif
+
+#include <util/system/info.h>
+
 namespace NYdb::NTPCC {
 
 std::string GetFormattedSize(size_t size) {
@@ -65,5 +71,30 @@ std::stop_source& GetGlobalInterruptSource() {
     static std::stop_source StopByInterrupt;
     return StopByInterrupt;
 }
+
+#if defined(_linux_)
+size_t NumberOfMyCpus() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+        return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    int count = 0;
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set))
+            count++;
+    }
+
+    return count;
+}
+
+#else // not Linux
+
+size_t NumberOfMyCpus() {
+    return NSystemInfo::CachedNumberOfCpus();
+}
+
+#endif // _linux_
 
 } // namespace NYdb::NTPCC

@@ -295,85 +295,32 @@ jobs:
         YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
         echo ============================================================
-        echo DEBUG: Starting Windows build attempt 1 (with ASM optimizations)
+        echo DEBUG: Critical discovery - VsDevCmd.bat terminates CMD blocks!  
+        echo SOLUTION: Must use single-line command like in working version
         echo ============================================================
         
-        echo === STEP 1: Pre-build Environment Check ===
+        echo Pre-build verification:
         echo YA_ASSEMBLER_TYPE=%YA_ASSEMBLER_TYPE%
-        echo Current PATH (first 500 chars):
-        echo %PATH:~0,500%
-        echo.
-        echo LLVM tools verification:
-        where clang-cl 2>nul || echo clang-cl not found
-        where lld-link 2>nul || echo lld-link not found
-        where llvm-lib 2>nul || echo llvm-lib not found
-        echo.
-        echo Symlink verification:
-        if exist "C:\Program Files\LLVM\bin\lib.exe" (echo lib.exe symlink: OK) else (echo lib.exe symlink: MISSING)
-        if exist "C:\Program Files\LLVM\bin\ml.exe" (echo ml.exe symlink: OK) else (echo ml.exe symlink: MISSING)
+        if exist "ya" (echo ya script: EXISTS) else (echo ya script: MISSING)
+        if exist "ydb\apps\ydb" (echo target: EXISTS) else (echo target: MISSING)
         echo.
         
-        echo === STEP 2: Visual Studio Environment Setup ===
-        echo Setting up VS environment...
-        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
-        if %ERRORLEVEL% neq 0 (
-          echo ERROR: VsDevCmd.bat failed with exit code %ERRORLEVEL%
-          exit /b %ERRORLEVEL%
-        )
-        echo VS environment setup: SUCCESS
-        echo.
+        echo === EXECUTING SINGLE-LINE BUILD COMMAND (like working version) ===
+        echo Command: VsDevCmd.bat + PATH setup + ya make (all in one line)
+        echo Start time: %TIME%
         
-        echo === STEP 3: PATH Modification ===
-        echo Adding LLVM to PATH...
-        set "OLD_PATH=%PATH%"
-        set "PATH=C:\Program Files\LLVM\bin;%PATH%"
-        echo New PATH (first 500 chars):
-        echo %PATH:~0,500%
-        echo.
-        echo Tool resolution after PATH change:
-        where clang-cl 2>nul || echo clang-cl not found
-        where link 2>nul || echo link not found
-        where lib 2>nul || echo lib not found  
-        where ml 2>nul || echo ml not found
-        echo.
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && echo VsDevCmd SUCCESS && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && echo PATH modified && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
         
-        echo === STEP 4: Build Configuration ===
-        echo Starting ya make build with:
-        echo   Target: ydb/apps/ydb
-        echo   Flags: -r -DUSE_SSE4=no
-        echo   C Compiler: C:\Program Files\LLVM\bin\clang-cl.exe
-        echo   CXX Compiler: C:\Program Files\LLVM\bin\clang-cl.exe
-        echo   Output: ./
-        echo   ASM Optimizations: ENABLED (this is attempt 1)
-        echo.
-        echo Build start time: %TIME%
-        
-        echo === STEP 5: Running ya make ===
-        python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
         set "BUILD_RESULT=%ERRORLEVEL%"
+        echo End time: %TIME%
+        echo Build result: %BUILD_RESULT%
         
-        echo === STEP 6: Build Result Analysis ===
-        echo Build end time: %TIME%
-        echo Build exit code: %BUILD_RESULT%
-        if %BUILD_RESULT% equ 0 (
-          echo BUILD STATUS: SUCCESS
-          echo Checking output file...
-          if exist "ydb\apps\ydb\ydb.exe" (
-            echo Output file: FOUND
-            dir "ydb\apps\ydb\ydb.exe"
-          ) else (
-            echo Output file: NOT FOUND
-          )
+        if exist "ydb\apps\ydb\ydb.exe" (
+          echo SUCCESS: ydb.exe created!
+          dir "ydb\apps\ydb\ydb.exe"
         ) else (
-          echo BUILD STATUS: FAILED
-          echo Will attempt fallback build without ASM optimizations
+          echo FAILURE: ydb.exe not created
         )
-        
-        echo ============================================================
-        echo DEBUG: Build attempt 1 complete (exit code: %BUILD_RESULT%)
-        echo ============================================================
-        
-        exit /b %BUILD_RESULT%
 
     - name: Build windows binary without ASM optimizations (fallback) - VERBOSE DEBUG
       if: ${{ matrix.os == 'windows-amd' && steps.build_with_asm.outcome == 'failure' }}

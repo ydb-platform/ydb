@@ -645,6 +645,34 @@ public:
     }
 
 private:
+    template <class Duration>
+    std::string FormatDatetime(const std::chrono::sys_time<Duration>& tp) {
+        auto timeT = std::chrono::system_clock::to_time_t(tp);
+        std::tm* tm = std::gmtime(&timeT);
+
+        std::stringstream ss;
+        ss << std::put_time(tm, "%FT%TZ");
+
+        return ss.str();
+    }
+
+    std::string FormatTimestamp(const std::chrono::sys_time<NYdb::TWideMicroseconds>& tp) {
+        auto timeT = std::chrono::system_clock::to_time_t(tp);
+        std::tm* tm = std::gmtime(&timeT);
+    
+        std::stringstream ss;
+        ss << std::put_time(tm, "%FT%T");
+    
+        auto micros = tp.time_since_epoch() % NYdb::TWideSeconds(1);
+        if (micros.count() < 0) {
+            micros += NYdb::TWideSeconds(1);
+        }
+    
+        ss << '.' << std::setfill('0') << std::setw(6) << micros.count() << 'Z';
+    
+        return ss.str();
+    }
+
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (const auto primitive = valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
@@ -680,13 +708,13 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32();
+                return FormatDatetime(valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64();
+                return FormatDatetime(valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64();
+                return FormatTimestamp(valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
-                return valueParser.GetInterval64();
+                return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:

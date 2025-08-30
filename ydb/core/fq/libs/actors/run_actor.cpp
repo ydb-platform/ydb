@@ -5,6 +5,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_printer.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
@@ -762,6 +763,8 @@ private:
         ui32 graphIndex = 0;
         for (auto& graphParams : DqGraphParams) {
             LOG_D("Graph " << graphIndex);
+            LOG_D(TPlanPrinter().Print(*graphParams.MutableTasks()));
+
             graphIndex++;
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {

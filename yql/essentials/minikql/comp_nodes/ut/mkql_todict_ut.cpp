@@ -147,6 +147,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
 
             status = res.Fetch(v);
             UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
+            // XXX: Check whether the internal state is not released
+            // and the sentinel is still set (see more info in YQL-19866).
+            status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
         };
 
         for (auto stream : {true, false}) {
@@ -199,6 +203,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
             }
             UNIT_ASSERT(!v.Contains(NUdf::TUnboxedValue(MakeString("green cucumber"))));
 
+            status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
+            // XXX: Check whether the internal state is not released
+            // and the sentinel is still set (see more info in YQL-19866).
             status = res.Fetch(v);
             UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
         };

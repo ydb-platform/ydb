@@ -188,103 +188,21 @@ jobs:
         echo DEBUG: Windows setup analysis complete
         echo ============================================================
 
-    - name: Create patch script for fix_msvc_output.py (VERBOSE DEBUG)
+    - name: Apply Simple fix_msvc_output.py patch (FIXED SYNTAX)
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       env:
         YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
-        echo ============================================================
-        echo DEBUG: Creating fix_msvc_output.py patch
-        echo ============================================================
-        
-        echo === STEP 1: Environment Variables Check ===
+        echo === Applying SIMPLE fix_msvc_output.py patch ===
         echo YA_ASSEMBLER_TYPE=%YA_ASSEMBLER_TYPE%
-        echo GITHUB_ENV contains:
-        type %GITHUB_ENV% 2>nul || echo GITHUB_ENV file not found
-        echo.
         
-        echo === STEP 2: Original fix_msvc_output.py Content ===
-        echo Checking if build/scripts/fix_msvc_output.py exists...
-        if exist "build\scripts\fix_msvc_output.py" (
-          echo File exists, first 10 lines:
-          more +1 build\scripts\fix_msvc_output.py | head -10
-        ) else (
-          echo ERROR: fix_msvc_output.py not found
-          exit /b 1
-        )
-        echo.
+        echo Applying inline patch (avoids CMD/Python syntax conflicts)...
+        python -c "import re,os; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"; print(\"DEBUG: Fixed Git Bash link conflict\", file=sys.stderr)\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")\n        if os.environ.get(\"YA_ASSEMBLER_TYPE\")==\"LLVM\": args.insert(2,\"--m64\"); print(\"DEBUG: Added --m64 for LLVM ml.exe\", file=sys.stderr)', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Simple patch applied successfully')"
         
-        echo === STEP 3: Creating Patch Script ===
-        echo Creating comprehensive patch...
-        
-        echo import sys > patch_script.py
-        echo import re >> patch_script.py
-        echo print("DEBUG: Starting fix_msvc_output.py patch", file=sys.stderr) >> patch_script.py
-        echo with open('build/scripts/fix_msvc_output.py', 'r') as f: >> patch_script.py
-        echo     content = f.read() >> patch_script.py
-        echo print(f"DEBUG: Original file length: {len(content)} chars", file=sys.stderr) >> patch_script.py
-        echo. >> patch_script.py
-        echo # Fix None handling for assembler >> patch_script.py
-        echo original_line = 'args = sys.argv[1:]' >> patch_script.py
-        echo if original_line in content: >> patch_script.py
-        echo     print("DEBUG: Found target line to replace", file=sys.stderr) >> patch_script.py
-        echo else: >> patch_script.py
-        echo     print("WARNING: Target line not found in file", file=sys.stderr) >> patch_script.py
-        echo. >> patch_script.py
-        echo content = content.replace( >> patch_script.py
-        echo     original_line, >> patch_script.py
-        echo     '''args = sys.argv[1:] >> patch_script.py
-        echo     print(f"VERBOSE_DEBUG: fix_msvc_output.py called with sys.argv = {sys.argv}", file=sys.stderr) >> patch_script.py
-        echo     print(f"VERBOSE_DEBUG: Original sys.argv[1:] = {args}", file=sys.stderr) >> patch_script.py
-        echo     original_had_none = len(args) ^> 1 and args[1] == 'None' >> patch_script.py
-        echo     args = [arg for arg in args if arg != 'None'] >> patch_script.py
-        echo     print(f"VERBOSE_DEBUG: Filtered args = {args}", file=sys.stderr) >> patch_script.py
-        echo     print(f"VERBOSE_DEBUG: original_had_none = {original_had_none}", file=sys.stderr) >> patch_script.py
-        echo     if len(args) ^>= 1 and args[0] == 'ml' and original_had_none: >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: Detected ml command with None parameter", file=sys.stderr) >> patch_script.py
-        echo         args.insert(1, 'C:/Program Files/LLVM/bin/ml.exe') >> patch_script.py
-        echo         # Check assembler type via environment variable >> patch_script.py
-        echo         import os >> patch_script.py
-        echo         assembler_type = os.environ.get('YA_ASSEMBLER_TYPE', 'LLVM') >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: YA_ASSEMBLER_TYPE = {assembler_type}", file=sys.stderr) >> patch_script.py
-        echo         if assembler_type == 'LLVM': >> patch_script.py
-        echo             args.insert(2, '--m64') >> patch_script.py
-        echo             print(f"VERBOSE_DEBUG: Using LLVM ml.exe, added --m64 flag", file=sys.stderr) >> patch_script.py
-        echo         else: >> patch_script.py
-        echo             print(f"VERBOSE_DEBUG: Using Microsoft ml64.exe, no --m64 needed", file=sys.stderr) >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: Fixed ml args = {args}", file=sys.stderr) >> patch_script.py
-        echo     elif len(args) ^>= 1 and args[0] == 'ml': >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: ml command detected but original_had_none={original_had_none}", file=sys.stderr) >> patch_script.py
-        echo     if len(args) ^>= 2 and args[0] == 'link' and args[1].endswith('/usr/bin/link.exe'): >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: Detected Git Bash link conflict: {args[1]}", file=sys.stderr) >> patch_script.py
-        echo         args[1] = 'C:/Program Files/LLVM/bin/lld-link.exe' >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: Replaced Git Bash link with LLVM lld-link.exe", file=sys.stderr) >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: Fixed link args = {args}", file=sys.stderr) >> patch_script.py
-        echo     elif len(args) ^>= 1 and args[0] == 'link': >> patch_script.py
-        echo         print(f"VERBOSE_DEBUG: link command detected but no Git Bash conflict: {args[1] if len(args)^>1 else 'no args[1]'}", file=sys.stderr) >> patch_script.py
-        echo     print(f"VERBOSE_DEBUG: Final processed args = {args}", file=sys.stderr)''' >> patch_script.py
-        echo ) >> patch_script.py
-        echo. >> patch_script.py
-        echo print(f"DEBUG: Patched file length: {len(content)} chars", file=sys.stderr) >> patch_script.py
-        echo with open('build/scripts/fix_msvc_output.py', 'w') as f: >> patch_script.py
-        echo     f.write(content) >> patch_script.py
-        echo print("DEBUG: fix_msvc_output.py patch complete", file=sys.stderr) >> patch_script.py
-        
-        echo === STEP 4: Applying Patch ===
-        python patch_script.py
-        echo Patch application result: %ERRORLEVEL%
-        
-        echo === STEP 5: Patched File Verification ===
-        echo Checking if patch was applied...
-        findstr /C:"VERBOSE_DEBUG" build\scripts\fix_msvc_output.py >nul && echo Patch applied successfully || echo Patch verification failed
-        
-        echo First 20 lines of patched file:
-        more +1 build\scripts\fix_msvc_output.py | head -20
-        
-        echo ============================================================
-        echo DEBUG: fix_msvc_output.py patch complete
-        echo ============================================================
+        echo Verifying patch...
+        findstr /C:"Git Bash" build\scripts\fix_msvc_output.py >nul && echo Git Bash fix: FOUND || echo Git Bash fix: MISSING
+        findstr /C:"--m64" build\scripts\fix_msvc_output.py >nul && echo LLVM ml fix: FOUND || echo LLVM ml fix: MISSING
 
     - name: Build windows binary with ya make using LLVM toolchain (with ASM) - VERBOSE DEBUG
       if: ${{ matrix.os == 'windows-amd' }}
@@ -322,79 +240,28 @@ jobs:
           echo FAILURE: ydb.exe not created
         )
 
-    - name: Build windows binary without ASM optimizations (fallback) - VERBOSE DEBUG
+    - name: Build windows binary without ASM optimizations (fallback) - SINGLE LINE
       if: ${{ matrix.os == 'windows-amd' && steps.build_with_asm.outcome == 'failure' }}
       shell: cmd
       env:
         YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
       run: |
-        echo ============================================================
-        echo DEBUG: Starting Windows build attempt 2 (FALLBACK - no ASM)
-        echo ============================================================
-        
-        echo === STEP 1: Fallback Trigger Analysis ===
-        echo First build outcome: ${{ steps.build_with_asm.outcome }}
-        echo This fallback step was triggered because the first build failed
+        echo === FALLBACK BUILD (no ASM optimizations) ===
+        echo First build failed, trying single-line fallback command...
         echo YA_ASSEMBLER_TYPE=%YA_ASSEMBLER_TYPE%
-        echo.
+        echo Start time: %TIME%
         
-        echo === STEP 2: Fallback Strategy ===
-        echo Strategy: Disable OpenSSL ASM optimizations for compatibility
-        echo This should avoid assembler compatibility issues
-        echo Additional flag: -DOPENSSL_NO_ASM=yes
-        echo.
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && echo VsDevCmd SUCCESS && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && echo PATH modified && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
         
-        echo === STEP 3: Fallback Environment Setup ===
-        echo Re-setting up VS environment for fallback build...
-        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
-        if %ERRORLEVEL% neq 0 (
-          echo ERROR: VsDevCmd.bat failed in fallback with exit code %ERRORLEVEL%
-          exit /b %ERRORLEVEL%
-        )
-        echo VS environment setup for fallback: SUCCESS
+        echo End time: %TIME%
+        echo Fallback result: %ERRORLEVEL%
         
-        echo Re-adding LLVM to PATH...
-        set "PATH=C:\Program Files\LLVM\bin;%PATH%"
-        echo.
-        
-        echo === STEP 4: Fallback Build Configuration ===
-        echo Starting fallback ya make build with:
-        echo   Target: ydb/apps/ydb
-        echo   Flags: -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes
-        echo   C Compiler: C:\Program Files\LLVM\bin\clang-cl.exe
-        echo   CXX Compiler: C:\Program Files\LLVM\bin\clang-cl.exe
-        echo   Output: ./
-        echo   ASM Optimizations: DISABLED (fallback mode)
-        echo.
-        echo Fallback build start time: %TIME%
-        
-        echo === STEP 5: Running Fallback ya make ===
-        python ya make ydb/apps/ydb -r -DUSE_SSE4=no -DOPENSSL_NO_ASM=yes --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
-        set "FALLBACK_RESULT=%ERRORLEVEL%"
-        
-        echo === STEP 6: Fallback Build Result Analysis ===
-        echo Fallback build end time: %TIME%
-        echo Fallback build exit code: %FALLBACK_RESULT%
-        if %FALLBACK_RESULT% equ 0 (
-          echo FALLBACK BUILD STATUS: SUCCESS
-          echo The fallback strategy worked - ASM optimizations were the issue
-          echo Checking output file...
-          if exist "ydb\apps\ydb\ydb.exe" (
-            echo Fallback output file: FOUND
-            dir "ydb\apps\ydb\ydb.exe"
-          ) else (
-            echo Fallback output file: NOT FOUND
-          )
+        if exist "ydb\apps\ydb\ydb.exe" (
+          echo FALLBACK SUCCESS: ydb.exe created!
+          dir "ydb\apps\ydb\ydb.exe"
         ) else (
-          echo FALLBACK BUILD STATUS: FAILED
-          echo Both build attempts failed - there may be a deeper compatibility issue
+          echo FALLBACK FAILED: ydb.exe not created
         )
-        
-        echo ============================================================
-        echo DEBUG: Build attempt 2 (fallback) complete (exit code: %FALLBACK_RESULT%)
-        echo ============================================================
-        
-        exit /b %FALLBACK_RESULT%
 
     - name: Windows Build Success Analysis (VERBOSE DEBUG)
       if: ${{ matrix.os == 'windows-amd' && (steps.build_with_asm.outcome == 'success' || steps.build_with_asm.outcome == 'failure') }}

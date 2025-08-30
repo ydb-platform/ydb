@@ -17,6 +17,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
@@ -121,7 +122,7 @@ private:
     struct TShardUploadRetryState {
         // Contains basic request settings like table ids and columns
         NKikimrTxDataShard::TEvUploadRowsRequest Headers;
-        TVector<std::pair<TString, TString>> Rows;
+        TVector<std::pair<TSerializedCellVec, TString>> Rows;
         ui64 LastOverloadSeqNo = 0;
         ui64 SentOverloadSeqNo = 0;
     };
@@ -148,6 +149,8 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
+
+    TVector<std::pair<TSerializedCellVec, TString>> RowsForRetry;
 
 protected:
     enum class EUploadSource {
@@ -184,6 +187,8 @@ protected:
     bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
+
+    TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
@@ -292,6 +297,14 @@ private:
     virtual const TString& GetSourceSchema() const {
         static const TString none;
         return none;
+    }
+
+    const TVector<std::pair<TSerializedCellVec, TString>>& GetRowsInt() const {
+        if (RowsForRetry.empty()) {
+            return GetRows();
+        }
+
+        return RowsForRetry;
     }
 
 private:
@@ -693,8 +706,6 @@ private:
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
-                } else {
-                    FindMinMaxKeys();
                 }
                 break;
             }
@@ -732,7 +743,6 @@ private:
                     if (!ExtractRows(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
-                    FindMinMaxKeys();
                 }
 
                 // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows()
@@ -961,7 +971,9 @@ private:
     }
 
     void FindMinMaxKeys() {
-        for (const auto& pair : GetRows()) {
+        MinKey = {};
+        MaxKey = {};
+        for (const auto& pair : GetRowsInt()) {
              const auto& serializedKey = pair.first;
 
             if (MinKey.GetCells().empty()) {
@@ -987,7 +999,7 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         Span && Span.Event("ResolveShards");
-        if (GetRows().empty()) {
+        if (GetRowsInt().empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
             return ReplyIfDone(ctx);
@@ -1004,6 +1016,7 @@ private:
             columns.push_back(op);
         }
 
+        FindMinMaxKeys();
         TTableRange range(MinKey.GetCells(), true, MaxKey.GetCells(), true, false);
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
 
@@ -1073,7 +1086,7 @@ private:
         ev->Record = state->Headers;
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
-            row->SetKeyColumns(pr.first);
+            row->SetKeyColumns(pr.first.GetBuffer());
             row->SetValueColumns(pr.second);
         }
 
@@ -1086,7 +1099,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRows().size())}});
+        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRowsInt().size())}});
         const auto* keyRange = GetKeyRange();
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
@@ -1094,7 +1107,7 @@ private:
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
-        for (const auto& keyValue : GetRows()) {
+        for (const auto& keyValue : GetRowsInt()) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
                 [this](const auto &partition, const auto& key) {
@@ -1139,22 +1152,26 @@ private:
                 retryState->Headers = ev->Record;
             }
 
-            TString keyColumns = keyValue.first.GetBuffer();
-            TString valueColumns = keyValue.second;
-
-            // We expect to keep a reference to existing key and value data here
-            uploadRetryStates[shardIdx]->Rows.emplace_back(keyColumns, valueColumns);
+            auto keyColumns = keyValue.first;
+            auto valueColumns = keyValue.second;
 
             auto* row = ev->Record.AddRows();
-            row->SetKeyColumns(std::move(keyColumns));
-            row->SetValueColumns(std::move(valueColumns));
+            row->SetKeyColumns(keyColumns.GetBuffer());
+            row->SetValueColumns(valueColumns);
+
+            // We expect to keep a reference to existing key and value data here
+            uploadRetryStates[shardIdx]->Rows.emplace_back(std::move(keyColumns), std::move(valueColumns));
+
         }
 
         // Send requests to the shards
+        size_t shardRequestCount = 0;
         for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
             auto& ev = shardRequests[idx];
-            if (!ev)
+            if (!ev) {
                 continue;
+            }
+            ++shardRequestCount;
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
@@ -1176,6 +1193,9 @@ private:
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRowsInt().size() << " rows / "
+            << shardRequestCount << " shards");
+
         // Sanity check: don't break when we don't have any shards for some reason
         return ReplyIfDone(ctx);
     }
@@ -1186,6 +1206,7 @@ private:
             Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly"));
 
         ShardRepliesLeft.clear();
+        ShardUploadRetryStates.clear();
 
         return ReplyIfDone(ctx);
     }
@@ -1193,8 +1214,15 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
-            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
+            ctx.SelfID << " Failed to connect to shard " <<  ev->Get()->TabletId);
+
+        if (!Backoff.HasMore()) {
+            SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
+            ShardUploadRetryStates.clear();
+        }
+
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);
@@ -1223,7 +1251,12 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
-                    << " from shard " << shardResponse.GetTabletID());
+                    << " from shard " << shardResponse.GetTabletID()
+                    << " description: " << shardResponse.GetErrorDescription());
+
+        bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
+            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
+            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
             if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
@@ -1242,15 +1275,19 @@ private:
                 }
             }
 
-            SetError(
-                TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
+            if (!isRetryableError || !Backoff.HasMore()) {
+                SetError(
+                    TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
+            }
         }
 
         // Notify the cache that we are done with the pipe
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
-        ShardUploadRetryStates.erase(shardId);
+        if (!isRetryableError || !Backoff.HasMore()) {
+            ShardUploadRetryStates.erase(shardId);
+        }
 
         return ReplyIfDone(ctx);
     }
@@ -1269,6 +1306,49 @@ private:
         }
     }
 
+    void DoRetry(const NActors::TActorContext& ctx) {
+        ctx.Schedule(Backoff.Next(), new TEvents::TEvWakeup(1));
+        TBase::Become(&TThis::StateDoRetry);
+    }
+
+    STFUNC(StateDoRetry) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvents::TEvWakeup, HandleOnRetry);
+            HFunc(TEvents::TEvPoison, Handle);
+
+            default:
+                break;
+        }
+    }
+
+    void HandleOnRetry(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != 1) {
+            return HandleTimeout(ctx);
+        }
+
+        size_t count = 0;
+        for (auto& [_, v] : ShardUploadRetryStates) {
+            count += v.Rows.size();
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry iteration " << Backoff.GetIteration()
+            << " for " << count << " rows / " << ShardUploadRetryStates.size() << " shards");
+
+        TVector<std::pair<TSerializedCellVec, TString>> rows;
+        rows.reserve(count);
+
+        for (auto& [_, v] : ShardUploadRetryStates) {
+            for (auto& r : v.Rows) {
+                rows.emplace_back(std::move(r.first), std::move(r.second));
+            }
+        }
+
+        ShardUploadRetryStates.clear();
+        RowsForRetry = std::move(rows);
+
+        ResolveShards(ctx);
+    }
+
     void SetError(const TUploadStatus& status) {
         if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
             return;
@@ -1281,6 +1361,10 @@ private:
         if (!ShardRepliesLeft.empty()) {
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
             return;
+        }
+
+        if (!ShardUploadRetryStates.empty()) {
+            return DoRetry(ctx);
         }
 
         if (Status.GetErrorMessage()) {

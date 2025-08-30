@@ -1,5 +1,6 @@
 #include "backoff.h"
 #include <util/generic/utility.h>
+#include <util/random/random.h>
 #include <util/system/yassert.h>
 
 namespace NKikimr {
@@ -30,9 +31,50 @@ ui64 TBackoffTimer::NextBackoffMs() {
     return CurrentBackoffMs;
 }
 
+TDuration TBackoffTimer::Next() {
+    return TDuration::MilliSeconds(NextBackoffMs());
+}
+
 void TBackoffTimer::Reset() {
     CurrentBackoffMs = 0ull;
     PreviousBackoffMs = 0ull;
 }
+
+TBackoff::TBackoff(TDuration initialDelay, TDuration maxDelay)
+    : TBackoff(-1ull, initialDelay, maxDelay)
+{
+}
+
+TBackoff::TBackoff(size_t maxRetries, TDuration initialDelay, TDuration maxDelay)
+    : Timer(initialDelay.MilliSeconds(), maxDelay.MilliSeconds())
+    , MaxRetries(maxRetries)
+    , Iteration(0)
+{
+}
+
+size_t TBackoff::GetIteration() const {
+    return Iteration;
+}
+
+bool TBackoff::HasMore() const {
+    return Iteration < MaxRetries;
+}
+
+TDuration TBackoff::Next() {
+    ++Iteration;
+    auto delay = Timer.NextBackoffMs();
+    delay += RandomNumber<size_t>(delay / 4);
+    return TDuration::MilliSeconds(delay);
+}
+
+void TBackoff::Reset() {
+    Timer.Reset();
+    Iteration = 0;
+}
+
+TBackoff::operator bool() const {
+    return HasMore();
+}
+
 
 } // NKikimr

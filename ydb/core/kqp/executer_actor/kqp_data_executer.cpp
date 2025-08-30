@@ -2001,7 +2001,7 @@ private:
         }
 
         for(const auto& channel: GetTasksGraph().GetChannels()) {
-            if (IsCrossShardChannel(GetTasksGraph(), channel)) {
+            if (GetTasksGraph().IsCrossShardChannel(channel)) {
                 HasPersistentChannels = true;
                 break;
             }
@@ -2099,7 +2099,7 @@ private:
         YQL_ENSURE(preparedQuery);
         *physicalGraph.MutablePreparedQuery() = *preparedQuery;
 
-        PersistTasksGraphInfo(GetTasksGraph(), physicalGraph);
+        GetTasksGraph().PersistTasksGraphInfo(physicalGraph);
 
         const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
         Y_ENSURE(runScriptActorId);

@@ -536,7 +536,9 @@ void TRowDispatcher::Bootstrap() {
 
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
-    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+    if (IS_ROW_DISPATCHER_LOG_ENABLED(TRACE)) {
+        Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+    }
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
 
     if (Monitoring) {
@@ -677,7 +679,9 @@ void TRowDispatcher::UpdateMetrics() {
     for (const auto& key : toDelete) {
          AggrStats.LastQueryStats.erase(key);
     }
-    PrintStateToLog();
+    if (IS_ROW_DISPATCHER_LOG_ENABLED(TRACE)) {
+        PrintStateToLog();
+    }
 }
 
 TString TRowDispatcher::GetInternalState() {

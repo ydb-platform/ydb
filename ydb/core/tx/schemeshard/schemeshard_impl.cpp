@@ -4950,6 +4950,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
+    EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
+    EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();
@@ -7666,6 +7668,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
+    EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
+    EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();

@@ -11930,14 +11930,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
+                ) AS DO BEGIN
+INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic;
+INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -12049,6 +12051,31 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             const auto result = db.ExecuteQuery(R"(
+                $x = "str";
+                CREATE STREAMING QUERY `OtherFolder/MyQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MyTable (Key) VALUES (1)
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
                     RUN = TRUE
                 ) AS DO BEGIN
@@ -12131,14 +12158,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = db.ExecuteQuery(R"(
                 ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
                     FORCE = TRUE
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
+                ) AS DO BEGIN
+INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
+INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -12153,7 +12182,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -12170,7 +12199,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
             });
         }
     }
@@ -12225,6 +12254,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MyTable (Key) VALUES (1)
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                $x = "str";
+                ALTER STREAMING QUERY `MyFolder/OtherQuery` AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
         }
     }
 

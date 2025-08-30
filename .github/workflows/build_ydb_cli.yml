@@ -133,46 +133,89 @@ jobs:
         set "ML64_PATH="
         set "FOUND_VS_EDITION="
         
-        echo Checking for Microsoft ml64.exe...
-        echo Trying common VS 2022 paths...
+        echo CRITICAL: Must find REAL Microsoft ml64.exe (LLVM fallback fails!)
+        echo Searching VS 2022 Enterprise (we see it exists from dir output)...
         
-        REM Direct check for common paths - no complex loops
+        REM VS 2022 Enterprise - WORKING VERSION LOGIC
         if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\" (
-          echo Enterprise MSVC found, checking for ml64.exe...
-          dir "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\" /B
+          echo Enterprise found, searching for ml64.exe in MSVC versions...
+          for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
+            echo   Testing: %%v\bin\Hostx64\x64\ml64.exe
+            if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+              echo   SUCCESS: Found ml64.exe in %%v
+              set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+              set "FOUND_VS_EDITION=Enterprise"
+              goto :ml64_found
+            ) else (
+              echo   Not found in %%v
+            )
+          )
         )
         
-        if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\" (
-          echo Professional MSVC found, checking for ml64.exe...
-          dir "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\" /B
+        REM If not found in Enterprise, try Professional  
+        if not defined ML64_PATH (
+          if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\" (
+            echo Professional found, searching for ml64.exe...
+            for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\*") do (
+              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+                echo   SUCCESS: Found ml64.exe in %%v
+                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+                set "FOUND_VS_EDITION=Professional"
+                goto :ml64_found
+              )
+            )
+          )
         )
         
-        if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\" (
-          echo Build Tools MSVC found, checking for ml64.exe...
-          dir "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\" /B
+        REM If still not found, try BuildTools
+        if not defined ML64_PATH (
+          if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\" (
+            echo BuildTools found, searching for ml64.exe...
+            for /d %%v in ("C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\*") do (
+              if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+                echo   SUCCESS: Found ml64.exe in %%v
+                set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+                set "FOUND_VS_EDITION=BuildTools"
+                goto :ml64_found
+              )
+            )
+          )
         )
         
-        REM For now, just set to LLVM since we know ml64.exe is not typically available on GitHub Actions
-        echo Microsoft ml64.exe search complete
-        echo As expected on GitHub Actions, no Microsoft ml64.exe found
-        echo This is NORMAL - will use LLVM fallback
+        REM If STILL not found - this is the problem!
+        echo CRITICAL ERROR: Microsoft ml64.exe not found anywhere!
+        echo LLVM fallback will not work with OpenSSL MASM code!
+        goto :llvm_fallback
         
-        echo === STEP 3: Setting up LLVM assembler ===
-        echo Using LLVM assembler as fallback (expected on GitHub Actions)
-        set "FOUND_VS_EDITION=LLVM_FALLBACK"
+        :ml64_found
+        echo === STEP 3: Microsoft ml64.exe SUCCESS ===
+        echo Using Microsoft assembler: %ML64_PATH%
+        echo Edition: %FOUND_VS_EDITION%
+        echo YA_ASSEMBLER_TYPE=MICROSOFT >> %GITHUB_ENV%
+        goto :symlinks
+        
+        :llvm_fallback
+        echo === STEP 3: LLVM fallback (EXPECTED TO FAIL) ===
         echo YA_ASSEMBLER_TYPE=LLVM >> %GITHUB_ENV%
-        echo Environment variable set: YA_ASSEMBLER_TYPE=LLVM
-        echo.
+        
+        :symlinks
+        echo Environment variable set: YA_ASSEMBLER_TYPE=%FOUND_VS_EDITION%
         
         echo === STEP 4: Creating Symbolic Links ===
         echo Creating lib.exe symlinks...
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" && echo   lib.exe symlink: SUCCESS || echo   lib.exe symlink: FAILED
         mklink "C:\Program Files\LLVM\bin\lib" "C:\Program Files\LLVM\bin\llvm-lib.exe" && echo   lib symlink: SUCCESS || echo   lib symlink: FAILED
         
-        echo Creating ml.exe symlinks for LLVM...
-        echo Using LLVM assembler (GitHub Actions default)
-        mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo   ml.exe symlink to LLVM: SUCCESS || echo   ml.exe symlink: FAILED
-        mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo   ml symlink to LLVM: SUCCESS || echo   ml symlink: FAILED
+        echo Creating ml.exe symlinks...
+        if defined ML64_PATH (
+          echo Using Microsoft ml64.exe: %ML64_PATH%
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" && echo   ml.exe symlink to Microsoft: SUCCESS || echo   ml.exe symlink: FAILED
+          mklink "C:\Program Files\LLVM\bin\ml" "%ML64_PATH%" && echo   ml symlink to Microsoft: SUCCESS || echo   ml symlink: FAILED
+        ) else (
+          echo Using LLVM assembler fallback (will likely fail on OpenSSL)
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo   ml.exe symlink to LLVM: SUCCESS || echo   ml.exe symlink: FAILED  
+          mklink "C:\Program Files\LLVM\bin\ml" "C:\Program Files\LLVM\bin\llvm-ml.exe" && echo   ml symlink to LLVM: SUCCESS || echo   ml symlink: FAILED
+        )
         
         echo === STEP 5: Final Verification ===
         echo Verifying created symlinks:
@@ -198,7 +241,7 @@ jobs:
         echo YA_ASSEMBLER_TYPE=%YA_ASSEMBLER_TYPE%
         
         echo Applying inline patch (avoids CMD/Python syntax conflicts)...
-        python -c "import re,os; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"; print(\"DEBUG: Fixed Git Bash link conflict\", file=sys.stderr)\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")\n        if os.environ.get(\"YA_ASSEMBLER_TYPE\")==\"LLVM\": args.insert(2,\"--m64\"); print(\"DEBUG: Added --m64 for LLVM ml.exe\", file=sys.stderr)', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Simple patch applied successfully')"
+        python -c "import re,os; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"; print(\"DEBUG: Fixed Git Bash link conflict\", file=sys.stderr)\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\":\n        args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")\n        asm_type=os.environ.get(\"YA_ASSEMBLER_TYPE\",\"\")\n        print(f\"DEBUG: ml command detected, YA_ASSEMBLER_TYPE={asm_type}\", file=sys.stderr)\n        if asm_type==\"LLVM\": args.insert(2,\"--m64\"); print(\"DEBUG: Added --m64 for LLVM ml.exe\", file=sys.stderr)\n        elif asm_type==\"MICROSOFT\": print(\"DEBUG: Using Microsoft ml64.exe, no --m64 needed\", file=sys.stderr)\n        else: print(\"DEBUG: Unknown assembler type, no --m64 added\", file=sys.stderr)', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Enhanced patch applied successfully')"
         
         echo Verifying patch...
         findstr /C:"Git Bash" build\scripts\fix_msvc_output.py >nul && echo Git Bash fix: FOUND || echo Git Bash fix: MISSING

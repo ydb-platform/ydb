@@ -1068,6 +1068,45 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ReadTopicMessages(outputTopicName, messages);
         }
     }
+
+    Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                DEFINE ACTION $start_query($add) AS
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value || $add FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String  NOT NULL
+                        )
+                    )
+                END DEFINE;
+
+                DO $start_query("Add1")
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key":"key1", "value": "value1"})");
+        ReadTopicMessages(outputTopicName, {"key1value1Add1"});
+    }
 }
 
 } // namespace NKikimr::NKqp

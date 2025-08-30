@@ -11,7 +11,6 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <ydb/core/protos/config.pb.h>
 
-#include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 
 namespace NKikimr::NKqp::NOpt {
 

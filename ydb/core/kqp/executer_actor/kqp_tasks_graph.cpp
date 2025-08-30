@@ -4,6 +4,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/program/resolver.h>
@@ -1645,6 +1646,56 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const NKikimrKqp::TQueryPhysicalGraph
     }
 
     GetMeta().IsRestored = true;
+}
+
+void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo, const IKqpGateway::TExecPhysicalRequest& request) {
+    Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
+
+    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+    const auto& holderFactory = request.TxAlloc->HolderFactory;
+    const auto& typeEnv = request.TxAlloc->TypeEnv;
+    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+    const auto& keyTypes = tableInfo->KeyColumnTypes;
+
+    for (auto& op : stage.GetTableOps()) {
+        Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
+
+        auto& task = AddTask(stageInfo);
+        TShardKeyRanges keyRanges;
+
+        switch (op.GetTypeCase()) {
+            case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                stageInfo.Meta.SkipNullKeys.assign(
+                    op.GetReadRange().GetSkipNullKeys().begin(),
+                    op.GetReadRange().GetSkipNullKeys().end()
+                );
+                keyRanges.Add(MakeKeyRange(
+                    keyTypes, op.GetReadRange().GetKeyRange(),
+                    stageInfo, holderFactory, typeEnv)
+                );
+                break;
+            case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+                keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, typeEnv));
+                break;
+            default:
+                YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
+        }
+
+        TTaskMeta::TShardReadInfo readInfo = {
+            .Ranges = std::move(keyRanges),
+            .Columns = BuildKqpColumns(op, tableInfo),
+        };
+
+        auto readSettings = ExtractReadSettings(op, stageInfo, holderFactory, typeEnv);
+        task.Meta.Reads.ConstructInPlace();
+        task.Meta.Reads->emplace_back(std::move(readInfo));
+        task.Meta.ReadInfo.SetSorting(readSettings.GetSorting());
+        task.Meta.Type = TTaskMeta::TTaskType::Compute;
+
+        // TODO: restore logs
+        // LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
+    }
 }
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const

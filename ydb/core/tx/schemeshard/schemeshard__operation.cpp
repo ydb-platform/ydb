@@ -387,7 +387,14 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             UserSID = userToken->GetUserSID();
             SanitizedToken = userToken->GetSanitizedToken();
         }
-        PeerName = Request->Get()->Record.GetPeerName();
+        const auto& record = Request->Get()->Record;
+        PeerName = record.GetPeerName();
+        if (UserSID.empty() && record.GetUserSID()) {
+            UserSID = record.GetUserSID();
+        }
+        if (SanitizedToken.empty() && record.GetSanitizedToken()) {
+            SanitizedToken = record.GetSanitizedToken();
+        }
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;

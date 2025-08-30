@@ -158,6 +158,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             exportInfo->UserSID = request.GetUserSID();
         }
 
+        exportInfo->SanitizedToken = request.GetSanitizedToken();
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateExport(db, *exportInfo);
 

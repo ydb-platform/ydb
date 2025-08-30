@@ -61,7 +61,7 @@ public:
     }
 
     bool Execute(TColumnShard* owner, const TActorContext& ctx) const;
-    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx) const;
+    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
 };
 
 class TWriteTasksQueue {

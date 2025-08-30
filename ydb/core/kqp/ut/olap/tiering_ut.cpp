@@ -83,7 +83,7 @@ public:
     }
 
     void WriteSampleData() {
-        for (ui64 i = 0; i < 100; ++i) {
+        for (ui64 i = 0; i < 400; ++i) {
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
         }

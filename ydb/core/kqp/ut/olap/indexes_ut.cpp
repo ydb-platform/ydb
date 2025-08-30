@@ -89,8 +89,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-            
-            
+
+
         }
         {
             auto alterQuery = TStringBuilder() <<
@@ -216,13 +216,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
-        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
+        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 280000);
+        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 440000);
 
         csController->WaitActualization(TDuration::Seconds(10));
 

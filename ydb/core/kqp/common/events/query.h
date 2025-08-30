@@ -419,6 +419,14 @@ public:
         return Generation;
     }
 
+    void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
+        DisableDefaultTimeout = disableDefaultTimeout;
+    }
+
+    bool GetDisableDefaultTimeout() const {
+        return DisableDefaultTimeout;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -453,6 +461,7 @@ private:
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
+    bool DisableDefaultTimeout = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

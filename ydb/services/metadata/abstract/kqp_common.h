@@ -8,6 +8,7 @@ class IInitializationBehaviour;
 }
 
 namespace NModifications {
+class IOptimizationManager;
 class IOperationsManager;
 }
 
@@ -27,6 +28,7 @@ public:
     TString GetStorageTableDirectory() const;
     TString GetStorageHistoryTablePath() const;
     std::shared_ptr<NInitializer::IInitializationBehaviour> GetInitializer() const;
+    virtual std::shared_ptr<NModifications::IOptimizationManager> GetOptimizationManager() const;
     virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const = 0;
 
     virtual TString GetTypeId() const = 0;

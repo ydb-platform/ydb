@@ -34,4 +34,8 @@ TString IClassBehaviour::GetInternalStorageHistoryTablePath() const {
     return GetInternalStorageTablePath() + "_history";
 }
 
+std::shared_ptr<NModifications::IOptimizationManager> IClassBehaviour::GetOptimizationManager() const {
+    return nullptr;
+}
+
 }

@@ -289,6 +289,9 @@ TPartitionCompaction::TCompactState::TCompactState(
             Failure = true;
         }
     }
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " Created compact state. StartOffset: " << partitionActor->CompactionBlobEncoder.StartOffset
+              << ", first head offset: " << FirstHeadOffset << ", EndOffset: " << partitionActor->BlobEncoder.EndOffset);
     MaxOffset = std::min(MaxOffset, FirstHeadOffset);
 
     KeysIter = DataKeysBody.begin();
@@ -418,8 +421,8 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         if (!currentBatch) {
             currentBatch.ConstructInPlace(res.GetOffset(), res.GetPartNo());
         }
-
-        TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(*res.MutableData()),
+        auto tmpData = res.GetData();
+        TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(tmpData),
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()));
@@ -462,16 +465,13 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             CurrentMessage = Nothing();
         }
         Y_ABORT_UNLESS(res.GetData().size() != 0);
+
         bool isLastPart = !res.HasTotalParts()
                           || res.GetTotalParts() == res.GetPartNo() + 1;
 
 
-        Y_ABORT_UNLESS(res.GetData().size() != 0);
         if (isNewMsg) {
-            if (!isLastPart) {
-                CurrentMessage.ConstructInPlace().CopyFrom(res);
-            }
-            // otherwise it's a single part message, will parse it in place
+            CurrentMessage.ConstructInPlace().CopyFrom(res);
         } else { //glue to last res
             Y_ABORT_UNLESS(CurrentMessage.Defined());
             if (CurrentMessage->GetSeqNo() != res.GetSeqNo()
@@ -492,15 +492,14 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
 
         if (isLastPart) {
             LastProcessedOffset = res.GetOffset();
-            const auto& message = CurrentMessage.Defined() ? CurrentMessage.GetRef() : res;
-            Y_ABORT_UNLESS(!message.HasTotalSize() || (ui32)message.GetTotalSize() == message.GetData().size());
-            auto proto(GetDeserializedData(message.GetData()));
+            Y_ABORT_UNLESS(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
+            auto proto(GetDeserializedData(CurrentMessage->GetData()));
             if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
                 CurrentMessage = Nothing();
                 Y_ABORT();
                 continue; //no such chunks must be on prod - ?
             }
-            auto offset = message.GetOffset();
+            auto offset = CurrentMessage->GetOffset();
             TString key;
             for (const auto& kv : proto.GetMessageMeta()) {
                 if (kv.key() == "__key") {
@@ -510,6 +509,8 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             }
             auto iter = TopicData.find(key);
             bool keepMessage = (iter.IsEnd() || iter->second == offset);
+            PQ_LOG_D("Compaction for topic LastPart '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                      << "restored messaged with key '" << key << "' on offset " << res.GetOffset() << ", should keep: " << keepMessage);
 
             PQ_LOG_D("Compaction for topic LastPart '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                       << PartitionActor->Partition << " processed read result in CompState starting from: "

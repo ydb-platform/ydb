@@ -35,6 +35,10 @@ protected:
 
     void ReplaceYqlTokenTemplate(TString& text) const;
 
+    void SetupActorSystemConfig(NKikimrConfig::TAppConfig& config) const;
+
+    void SetupLogsConfig(NKikimrConfig::TLogConfig& config) const;
+
 protected:
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
@@ -42,6 +46,12 @@ protected:
 
     std::optional<NActors::NLog::EPriority> DefaultLogPriority;
     std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;
+    std::optional<NActors::NLog::EPriority> FqLogPriority;
+    std::optional<NActors::NLog::EPriority> KqpLogPriority;
+    std::optional<NActors::NLog::EPriority> RuntimeLogPriority;
+    std::optional<NActors::NLog::EPriority> TabletsLogPriority;
+    std::optional<NActors::NLog::EPriority> BsLogPriority;
+    std::optional<NActors::NLog::EPriority> ServerIoLogPriority;
 
 private:
     inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
@@ -49,6 +59,7 @@ private:
     TString UdfsDirectory;
     TVector<TString> UdfsPaths;
     bool ExcludeLinkedUdfs;
+    std::optional<ui64> UserPoolSize;
 };
 
 }  // namespace NKikimrRun

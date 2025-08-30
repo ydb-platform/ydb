@@ -95,7 +95,7 @@ public:
 
         if (response.IsSuccess()) {
             Completed_++;
-            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+            if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::EachQuery) {
                 Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
             }
         } else {
@@ -103,7 +103,7 @@ public:
             Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.GetStatus() << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.GetError() << CoutColors_.Default();
         }
 
-        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
+        if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
             Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
             LastReportTime_ = TInstant::Now();
         }
@@ -138,7 +138,7 @@ private:
             };
 
             MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
-            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
+            if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::EachQuery) {
                 Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
             }
 
@@ -152,7 +152,7 @@ private:
             return false;
         }
 
-        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final) {
+        if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::Final) {
             Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
         }
 

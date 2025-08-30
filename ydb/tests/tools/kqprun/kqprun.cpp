@@ -324,7 +324,7 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
 }
 
 
-void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner, TYdbSetupSettings::EVerbosity verbosityLevel) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     if (executionOptions.SchemeQuery) {
@@ -386,10 +386,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         }
     }
 
-    if (durations.size() > 1) {
-        auto gmean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
+    if (durations.size() > 1 && verbosityLevel >= TYdbSetupSettings::EVerbosity::Info) {
+        auto gMean = pow(std::accumulate(durations.begin(), durations.end(), 1.0, std::multiplies<double>()), 1.0 / durations.size());
         Cout << colors.Cyan()
-             << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gmean * 1000000.0))
+             << "Geometric mean of " << durations.size() << " best iterations: " << TDuration::MicroSeconds(static_cast<ui64>(gMean * 1000000.0))
              << colors.Default() << Endl;
     }
 
@@ -422,7 +422,7 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
     TKqpRunner runner(runnerOptions);
 
     try {
-        RunArgumentQueries(executionOptions, runner);
+        RunArgumentQueries(executionOptions, runner, runnerOptions.YdbSettings.VerbosityLevel);
     } catch (const yexception& exception) {
         if (runnerOptions.YdbSettings.MonitoringEnabled) {
             Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -441,12 +441,11 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 
 
 class TMain : public TMainBase {
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
 
     TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
-    std::optional<ui64> UserPoolSize;
 
     std::unordered_map<TString, TString> Templates;
     THashMap<TString, TString> TablesMapping;
@@ -702,22 +701,22 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (min level 0, max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(EVerbose::Info))
-            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
+            .DefaultValue(static_cast<ui8>(EVerbosity::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerbosityLevel, [](ui8 value) {
+                return static_cast<EVerbosity>(std::min(value, static_cast<ui8>(EVerbosity::Max)));
             });
 
-        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
-            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
-            {"final", TAsyncQueriesSettings::EVerbose::Final}
+        TChoices<TAsyncQueriesSettings::EVerbosity> verbosity({
+            {"each-query", TAsyncQueriesSettings::EVerbosity::EachQuery},
+            {"final", TAsyncQueriesSettings::EVerbosity::Final}
         });
-        options.AddLongOption("async-verbose", "Verbose type for async queries")
+        options.AddLongOption("async-verbosity", "Verbosity type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")
-            .Choices(verbose.GetChoices())
-            .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbose, verbose);
+            .Choices(verbosity.GetChoices())
+            .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbosity, verbosity);
 
         options.AddLongOption("ping-period", "Query ping period in milliseconds")
             .RequiredArgument("uint")
@@ -806,15 +805,6 @@ protected:
             });
 
         // Cluster settings
-
-        options.AddLongOption("threads", "User pool size for each node (also scaled system, batch and IC pools in proportion: system / user / batch / IC = 1 / 10 / 1 / 1)")
-            .RequiredArgument("uint")
-            .StoreMappedResultT<ui32>(&UserPoolSize, [](ui32 threadsCount) {
-                if (threadsCount < 1) {
-                    ythrow yexception() << "Number of threads less than one";
-                }
-                return threadsCount;
-            });
 
         options.AddLongOption('N', "node-count", "Number of nodes to create")
             .RequiredArgument("uint")
@@ -940,8 +930,12 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
-        SetupActorSystemConfig();
-        SetupLogsConfig();
+        if (!DefaultLogPriority) {
+            DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
+        }
+        SetupActorSystemConfig(appConfig);
+
+        SetupLogsConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -969,7 +963,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -982,7 +976,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();
@@ -999,69 +993,6 @@ private:
         if (ExecutionOptions.UseTemplates) {
             ReplaceYqlTokenTemplate(sql);
         }
-    }
-
-    void SetupLogsConfig() {
-        auto& logConfig = *RunnerOptions.YdbSettings.AppConfig.MutableLogConfig();
-        if (DefaultLogPriority) {
-            logConfig.SetDefaultLevel(*DefaultLogPriority);
-        }
-        ModifyLogPriorities(LogPriorities, logConfig);
-    }
-
-    void SetupActorSystemConfig() {
-        if (!UserPoolSize) {
-            return;
-        }
-
-        auto& asConfig = *RunnerOptions.YdbSettings.AppConfig.MutableActorSystemConfig();
-
-        if (!asConfig.HasScheduler()) {
-            auto& scheduler = *asConfig.MutableScheduler();
-            scheduler.SetResolution(64);
-            scheduler.SetSpinThreshold(0);
-            scheduler.SetProgressThreshold(10000);
-        }
-
-        asConfig.ClearExecutor();
-
-        const auto addExecutor = [&asConfig](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type, std::optional<ui64> spinThreshold = std::nullopt) {
-            auto& executor = *asConfig.AddExecutor();
-            executor.SetName(name);
-            executor.SetThreads(threads);
-            executor.SetType(type);
-            if (spinThreshold) {
-                executor.SetSpinThreshold(*spinThreshold);
-            }
-            return executor;
-        };
-
-        const auto divideThreads = [](ui64 threads, ui64 divisor) {
-            if (threads < 1) {
-                ythrow yexception() << "Threads must be greater than 0";
-            }
-            return (threads - 1) / divisor + 1;
-        };
-
-        addExecutor("System", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10);
-        asConfig.SetSysExecutor(0);
-
-        addExecutor("User", *UserPoolSize, NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
-        asConfig.SetUserExecutor(1);
-
-        addExecutor("Batch", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
-        asConfig.SetBatchExecutor(2);
-
-        addExecutor("IO", 1, NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-        asConfig.SetIoExecutor(3);
-
-        addExecutor("IC", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10)
-            .SetTimePerMailboxMicroSecs(100);
-        auto& serviceExecutors = *asConfig.MutableServiceExecutor();
-        serviceExecutors.Clear();
-        auto& serviceExecutor = *serviceExecutors.Add();
-        serviceExecutor.SetServiceName("Interconnect");
-        serviceExecutor.SetExecutorId(4);
     }
 };
 

@@ -2,11 +2,13 @@
 #include "actors.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
@@ -29,11 +31,11 @@ TRequestResult GetStatus(const NYql::TIssues& issues) {
 
 class TFqSetup::TImpl : public TKikimrSetupBase {
     using TBase = TKikimrSetupBase;
-    using EVerbose = TFqSetupSettings::EVerbose;
+    using EVerbosity = TFqSetupSettings::EVerbosity;
 
 private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerbosityLevel >= EVerbosity::InitLogs);
 
         serverSettings.SetEnableYqGrpc(true);
 
@@ -146,7 +148,7 @@ private:
 
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
-        if (Settings.VerboseLevel >= EVerbose::InitLogs) {
+        if (Settings.VerbosityLevel >= EVerbosity::InitLogs) {
             Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
         }
 
@@ -178,12 +180,18 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
+    void InitializeTenantNodes() {
+        if (const auto& systemStateInfo = GetSystemStateInfo(Server->GetProcessMemoryInfoProvider())) {
+            GetRuntime()->Send(NKikimr::NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetFirstNodeId()), GetRuntime()->AllocateEdgeActor(), new NKikimr::NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(*systemStateInfo));
+        }
+    }
+
 public:
     explicit TImpl(const TFqSetupSettings& settings)
         : Settings(settings)
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
-        if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
+        if (Settings.GrpcEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
         }
 
@@ -192,8 +200,9 @@ public:
         InitializeYqlLogger();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
+        InitializeTenantNodes();
 
-        if (Settings.MonitoringEnabled && Settings.VerboseLevel >= EVerbose::Info) {
+        if (Settings.MonitoringEnabled && Settings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;
         }
     }
@@ -291,6 +300,10 @@ private:
         content.set_type(query.Type);
         content.set_text(query.Query);
         SetupAcl(content.mutable_acl());
+
+        if (const auto timeout = query.Timeout) {
+            *content.mutable_limits()->mutable_execution_deadline() = NProtoInterop::CastToProto(TInstant::Now() + timeout);
+        }
 
         return request;
     }

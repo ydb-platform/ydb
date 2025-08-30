@@ -22,11 +22,17 @@ struct TExternalDatabase {
 };
 
 struct TFqSetupSettings : public NKikimrRun::TServerSettings {
-    enum class EVerbose {
+    enum class EVerbosity {
         None,
         Info,
+        LogDefaultError,
         QueriesText,
+        LogDefaultWarn,
         InitLogs,
+        LogDefaultNotice,
+        LogDefaultInfo,
+        LogDefaultDebug,
+        LogDefaultTrace,
         Max
     };
 
@@ -49,7 +55,7 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     std::optional<TExternalDatabase> SingleComputeDatabase;
     std::vector<TExternalDatabase> SharedComputeDatabases;
 
-    EVerbose VerboseLevel = EVerbose::Info;
+    EVerbosity VerbosityLevel = EVerbosity::Info;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
@@ -79,6 +85,7 @@ struct TRequestOptions {
     FederatedQuery::ExecuteMode Action = FederatedQuery::ExecuteMode::RUN;
     FederatedQuery::QueryContent::QueryType Type = FederatedQuery::QueryContent::STREAMING;
     ui64 QueryId = 0;
+    TDuration Timeout;
     TFqOptions FqOptions;
 };
 

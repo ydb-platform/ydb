@@ -110,6 +110,7 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
     }
 
     if (maybeStreamLookup.IsValid()) {
+        YQL_ENSURE(maybeStreamLookup.IsValid());
         auto streamLookup = maybeStreamLookup.Cast();
         input = TExprBase(
             ctx.ChangeChild(

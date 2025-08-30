@@ -11,6 +11,7 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -72,6 +73,128 @@ bool IsIdLambda(TExprBase body) {
 }
 
 } // namespace
+
+TExprBase KqpSelectIndexSortOverReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+{
+    if (!node.Maybe<TCoTake>()) {
+        return node;
+    }
+
+    auto take = node.Maybe<TCoTake>().Cast();
+
+    auto input = take.Input();
+
+    auto skip = input.Maybe<TCoSkip>();
+    if (skip) {
+        input = skip.Cast().Input();
+    }
+
+    auto maybeSort = input.Maybe<TCoSort>();
+    auto maybeTopBase = input.Maybe<TCoTopBase>();
+    if (!maybeSort && !maybeTopBase) {
+        return node;
+    }
+
+    input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
+    auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
+    auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
+
+    if (!input.Maybe<TKqlReadTableRanges>()) {
+        return node;
+    }
+
+    auto read = input.Maybe<TKqlReadTableRanges>().Cast();
+    auto readSettings = TKqpReadTableSettings::Parse(read.Settings());
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+
+    if (readSettings.ForcePrimary) {
+        return node;
+    }
+
+    if (mainTableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
+        return node;
+    }
+
+    if (!read.Ranges().Maybe<TCoVoid>()) {
+        return node;
+    }
+
+    auto direction = GetSortDirection(sortDirections);
+    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
+        return node;
+    }
+
+    if (direction == ESortDirection::Reverse) {
+        if (kqpCtx.IsScanQuery()) {
+            return node;
+        }
+    }
+
+    std::optional<std::pair<TString, bool>> selectedIndex;
+
+    for (auto& indexInfo : mainTableDesc.Metadata->Indexes) {
+        if (indexInfo.Type == TIndexDescription::EType::GlobalAsync) {
+            continue;
+        }
+
+        if (indexInfo.State == TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        auto& tableDesc = kqpCtx.Tables->ExistingTable(
+            kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexInfo.Name).first->Name);
+
+        if (!IsSortKeyPrimary(keySelector, tableDesc)) {
+            continue;
+        }
+
+        bool readCoversIndex = true;
+        for (auto&& column : read.Columns()) {
+            if (!tableDesc.Metadata->Columns.contains(column.Value())) {
+                readCoversIndex = false;
+            }
+        }
+
+        if (!selectedIndex.has_value()) {
+            selectedIndex.emplace(indexInfo.Name, readCoversIndex);
+        } else if (!selectedIndex->second && readCoversIndex) {
+            // among all indexes we should prefer those that covers all required columns
+            selectedIndex.emplace(indexInfo.Name, readCoversIndex);
+        }
+    }
+
+    if (!selectedIndex.has_value()) {
+        return node;
+    }
+
+    auto [indexName, covers] = *selectedIndex;
+    YQL_ENSURE(selectedIndex.has_value());
+    auto& indexDesc = kqpCtx.Tables->ExistingTable(
+            kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexName).first->Name);
+
+    input = Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
+        .Table(BuildTableMeta(indexDesc, read.Pos(), ctx))
+        .Ranges<TCoVoid>()
+            .Build()
+        .Columns(read.Columns())
+        .Settings(read.Settings())
+        .ExplainPrompt()
+            .Build()
+        .Done();
+
+    if (maybeSort) {
+        input = TExprBase(ctx.ChangeChild(maybeSort.Cast().Ref(), TCoSortBase::idx_Input, input.Ptr()));
+    } else if (maybeTopBase) {
+        input = TExprBase(ctx.ChangeChild(maybeTopBase.Cast().Ref(), TCoTopBase::idx_Input, input.Ptr()));
+    }
+
+    if (skip) {
+        input = TExprBase(ctx.ChangeChild(skip.Cast().Ref(), TCoSkip::idx_Input, input.Ptr()));
+    }
+
+    input = TExprBase(ctx.ChangeChild(take.Ref(), TCoTake::idx_Input, input.Ptr()));
+    return input;
+}
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)

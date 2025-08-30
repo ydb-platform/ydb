@@ -352,6 +352,8 @@ using TTask = NYql::NDq::TTask<TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskO
 
 class TKqpTasksGraph : public NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTaskMeta, TTaskInputMeta, TTaskOutputMeta> {
 public:
+    void BuildSysViewScanTasks(TStageInfo& stageInfo, const IKqpGateway::TExecPhysicalRequest& request);
+
     void FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysicalTxData>& txs);
     void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);

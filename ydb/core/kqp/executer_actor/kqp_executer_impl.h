@@ -1000,7 +1000,7 @@ protected:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if (buildSysViewTasks) {
-                    BuildSysViewScanTasks(stageInfo);
+                    TasksGraph.BuildSysViewScanTasks(stageInfo, Request);
                 } else if (buildComputeTasks) {
                     auto nodesCount = ShardsOnNode.size();
                     if constexpr (!isScan) {
@@ -1053,53 +1053,6 @@ protected:
         }
 
         return sourceScanPartitionsCount;
-    }
-
-    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
-        Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
-
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-        const auto& keyTypes = tableInfo->KeyColumnTypes;
-
-        for (auto& op : stage.GetTableOps()) {
-            Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-
-            auto& task = TasksGraph.AddTask(stageInfo);
-            TShardKeyRanges keyRanges;
-
-            switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    stageInfo.Meta.SkipNullKeys.assign(
-                        op.GetReadRange().GetSkipNullKeys().begin(),
-                        op.GetReadRange().GetSkipNullKeys().end()
-                    );
-                    keyRanges.Add(MakeKeyRange(
-                        keyTypes, op.GetReadRange().GetKeyRange(),
-                        stageInfo, HolderFactory(), TypeEnv())
-                    );
-                    break;
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, TypeEnv()));
-                    break;
-                default:
-                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
-            }
-
-            TTaskMeta::TShardReadInfo readInfo = {
-                .Ranges = std::move(keyRanges),
-                .Columns = BuildKqpColumns(op, tableInfo),
-            };
-
-            auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
-            task.Meta.Reads.ConstructInPlace();
-            task.Meta.Reads->emplace_back(std::move(readInfo));
-            task.Meta.ReadInfo.SetSorting(readSettings.GetSorting());
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
-
-            LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
-        }
     }
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {

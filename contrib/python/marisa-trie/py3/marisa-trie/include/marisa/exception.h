@@ -3,7 +3,8 @@
 
 #include <exception>
 
-#include "marisa/base.h"
+// Please don't #include this header directly.
+// This header is #included from "marisa/base.h".
 
 namespace marisa {
 

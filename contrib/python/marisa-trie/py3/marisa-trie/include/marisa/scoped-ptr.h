@@ -1,7 +1,8 @@
 #ifndef MARISA_SCOPED_PTR_H_
 #define MARISA_SCOPED_PTR_H_
 
-#include "marisa/base.h"
+// Please don't #include this header directly.
+// This header is #included from "marisa/base.h".
 
 namespace marisa {
 
@@ -16,7 +17,7 @@ class scoped_ptr {
   }
 
   void reset(T *ptr = NULL) {
-    MARISA_THROW_IF((ptr != NULL) && (ptr == ptr_), MARISA_RESET_ERROR);
+    MARISA_DEBUG_IF((ptr != NULL) && (ptr == ptr_), MARISA_RESET_ERROR);
     scoped_ptr(ptr).swap(*this);
   }
 

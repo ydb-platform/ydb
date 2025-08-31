@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "marisa/grimoire/vector/pop-count.h"
 #include "marisa/grimoire/vector/bit-vector.h"
 
@@ -337,7 +339,44 @@ std::size_t select_bit(std::size_t i, std::size_t bit_id,
 
   return bit_id + SELECT_TABLE[i][byte];
 }
+  #else  // MARISA_USE_SSE2
+std::size_t select_bit(std::size_t i, std::size_t bit_id,
+    UInt32 unit_lo, UInt32 unit_hi) {
+  UInt32 unit = unit_lo;
+  PopCount count(unit);
+  if (i >= count.lo32()) {
+    bit_id += 32;
+    i -= count.lo32();
+    unit = unit_hi;
+    count = PopCount(unit);
+  }
+
+  if (i < count.lo16()) {
+    if (i >= count.lo8()) {
+      bit_id += 8;
+      unit >>= 8;
+      i -= count.lo8();
+    }
+  } else if (i < count.lo24()) {
+    bit_id += 16;
+    unit >>= 16;
+    i -= count.lo16();
+  } else {
+    bit_id += 24;
+    unit >>= 24;
+    i -= count.lo24();
+  }
+  return bit_id + SELECT_TABLE[i][unit & 0xFF];
+}
   #endif  // MARISA_USE_SSE2
+
+
+// This is only used by build_index, so don't worry about the small performance
+// penalty from not having version taking only a UInt32.
+inline std::size_t select_bit(std::size_t i, std::size_t bit_id, UInt32 unit) {
+  return select_bit(i, bit_id, /*unit_lo=*/unit, /*unit_hi=*/0);
+}
+
  #endif  // MARISA_WORD_SIZE == 64
 #endif  // MARISA_USE_BMI2
 
@@ -613,36 +652,7 @@ std::size_t BitVector::select0(std::size_t i) const {
     i -= 448 - rank.rel7();
   }
 
-#ifdef MARISA_USE_SSE2
   return select_bit(i, unit_id * 32, ~units_[unit_id], ~units_[unit_id + 1]);
-#else  // MARISA_USE_SSE2
-  UInt32 unit = ~units_[unit_id];
-  PopCount count(unit);
-  if (i >= count.lo32()) {
-    ++unit_id;
-    i -= count.lo32();
-    unit = ~units_[unit_id];
-    count = PopCount(unit);
-  }
-
-  std::size_t bit_id = unit_id * 32;
-  if (i < count.lo16()) {
-    if (i >= count.lo8()) {
-      bit_id += 8;
-      unit >>= 8;
-      i -= count.lo8();
-    }
-  } else if (i < count.lo24()) {
-    bit_id += 16;
-    unit >>= 16;
-    i -= count.lo16();
-  } else {
-    bit_id += 24;
-    unit >>= 24;
-    i -= count.lo24();
-  }
-  return bit_id + SELECT_TABLE[i][unit & 0xFF];
-#endif  // MARISA_USE_SSE2
 }
 
 std::size_t BitVector::select1(std::size_t i) const {
@@ -704,51 +714,26 @@ std::size_t BitVector::select1(std::size_t i) const {
     i -= rank.rel7();
   }
 
-#ifdef MARISA_USE_SSE2
   return select_bit(i, unit_id * 32, units_[unit_id], units_[unit_id + 1]);
-#else  // MARISA_USE_SSE2
-  UInt32 unit = units_[unit_id];
-  PopCount count(unit);
-  if (i >= count.lo32()) {
-    ++unit_id;
-    i -= count.lo32();
-    unit = units_[unit_id];
-    count = PopCount(unit);
-  }
-
-  std::size_t bit_id = unit_id * 32;
-  if (i < count.lo16()) {
-    if (i >= count.lo8()) {
-      bit_id += 8;
-      unit >>= 8;
-      i -= count.lo8();
-    }
-  } else if (i < count.lo24()) {
-    bit_id += 16;
-    unit >>= 16;
-    i -= count.lo16();
-  } else {
-    bit_id += 24;
-    unit >>= 24;
-    i -= count.lo24();
-  }
-  return bit_id + SELECT_TABLE[i][unit & 0xFF];
-#endif  // MARISA_USE_SSE2
 }
 
 #endif  // MARISA_WORD_SIZE == 64
 
 void BitVector::build_index(const BitVector &bv,
     bool enables_select0, bool enables_select1) {
-  ranks_.resize((bv.size() / 512) + (((bv.size() % 512) != 0) ? 1 : 0) + 1);
+  const std::size_t num_bits = bv.size();
+  ranks_.resize((num_bits / 512) + (((num_bits % 512) != 0) ? 1 : 0) + 1);
 
-  std::size_t num_0s = 0;
+  std::size_t num_0s = 0;  // Only updated if enables_select0 is true.
   std::size_t num_1s = 0;
 
-  for (std::size_t i = 0; i < bv.size(); ++i) {
-    if ((i % 64) == 0) {
-      const std::size_t rank_id = i / 512;
-      switch ((i / 64) % 8) {
+  const std::size_t num_units = bv.units_.size();
+  for (std::size_t unit_id = 0; unit_id < num_units; ++unit_id) {
+    const std::size_t bit_id = unit_id * MARISA_WORD_SIZE;
+
+    if ((bit_id % 64) == 0) {
+      const std::size_t rank_id = bit_id / 512;
+      switch ((bit_id / 64) % 8) {
         case 0: {
           ranks_[rank_id].set_abs(num_1s);
           break;
@@ -784,22 +769,47 @@ void BitVector::build_index(const BitVector &bv,
       }
     }
 
-    if (bv[i]) {
-      if (enables_select1 && ((num_1s % 512) == 0)) {
-        select1s_.push_back(static_cast<UInt32>(i));
+    const Unit unit = bv.units_[unit_id];
+    // push_back resizes with 0, so the high bits of the last unit are 0 and
+    // do not affect the 1s count.
+    const std::size_t unit_num_1s = PopCount::count(unit);
+
+    if (enables_select0) {
+      // num_0s is somewhat move involved to compute, so only do it if we
+      // need it.  The last word has zeros in the high bits, so that needs
+      // to be accounted for when computing the unit_num_0s from unit_num_1s.
+      const std::size_t bits_remaining = num_bits - bit_id;
+      const std::size_t unit_num_0s =
+          std::min<std::size_t>(bits_remaining, MARISA_WORD_SIZE) - unit_num_1s;
+
+      // Note: MSVC rejects unary minus operator applied to unsigned type.
+      const std::size_t zero_bit_id = (0 - num_0s) % 512;
+      if (unit_num_0s > zero_bit_id) {
+        // select0s_ is UInt32, but select_bit returns size_t, so cast to
+        // suppress narrowing conversion warning.  push_back checks the
+        // size, so there is no truncation here.
+        select0s_.push_back(
+            static_cast<UInt32>(select_bit(zero_bit_id, bit_id, ~unit)));
       }
-      ++num_1s;
-    } else {
-      if (enables_select0 && ((num_0s % 512) == 0)) {
-        select0s_.push_back(static_cast<UInt32>(i));
-      }
-      ++num_0s;
+
+      num_0s += unit_num_0s;
     }
+
+    if (enables_select1) {
+      // Note: MSVC rejects unary minus operator applied to unsigned type.
+      const std::size_t one_bit_id = (0 - num_1s) % 512;
+      if (unit_num_1s > one_bit_id) {
+        select1s_.push_back(
+            static_cast<UInt32>(select_bit(one_bit_id, bit_id, unit)));
+      }
+    }
+
+    num_1s += unit_num_1s;
   }
 
-  if ((bv.size() % 512) != 0) {
-    const std::size_t rank_id = (bv.size() - 1) / 512;
-    switch (((bv.size() - 1) / 64) % 8) {
+  if ((num_bits % 512) != 0) {
+    const std::size_t rank_id = (num_bits - 1) / 512;
+    switch (((num_bits - 1) / 64) % 8) {
       case 0: {
         ranks_[rank_id].set_rel1(num_1s - ranks_[rank_id].abs());
       }  // fall through
@@ -825,16 +835,16 @@ void BitVector::build_index(const BitVector &bv,
     }
   }
 
-  size_ = bv.size();
+  size_ = num_bits;
   num_1s_ = bv.num_1s();
 
   ranks_.back().set_abs(num_1s);
   if (enables_select0) {
-    select0s_.push_back(static_cast<UInt32>(bv.size()));
+    select0s_.push_back(static_cast<UInt32>(num_bits));
     select0s_.shrink();
   }
   if (enables_select1) {
-    select1s_.push_back(static_cast<UInt32>(bv.size()));
+    select1s_.push_back(static_cast<UInt32>(num_bits));
     select1s_.shrink();
   }
 }

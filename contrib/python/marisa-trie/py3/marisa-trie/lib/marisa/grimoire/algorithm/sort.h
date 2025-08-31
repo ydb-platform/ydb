@@ -187,7 +187,7 @@ template <typename Iterator>
 std::size_t sort(Iterator begin, Iterator end) {
   MARISA_DEBUG_IF(begin > end, MARISA_BOUND_ERROR);
   return details::sort(begin, end, 0);
-};
+}
 
 }  // namespace algorithm
 }  // namespace grimoire

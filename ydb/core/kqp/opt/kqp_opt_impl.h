@@ -58,4 +58,21 @@ bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
 bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
     const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
 
+enum ESortDirection : ui32 {
+    None = 0,
+    Forward = 1,
+    Reverse = 2,
+    Unknown = 4,
+};
+
+using ESortDirectionRaw = std::underlying_type<ESortDirection>::type;
+
+inline ESortDirection operator|(ESortDirection a, ESortDirection b) {
+    return ESortDirection(static_cast<ESortDirectionRaw>(a) | static_cast<ESortDirectionRaw>(b));
+}
+
+inline ESortDirection operator|=(ESortDirection& a, ESortDirection b) { return (a = a | b); }
+
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections);
+
 } // namespace NKikimr::NKqp::NOpt

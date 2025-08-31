@@ -115,12 +115,14 @@ jobs:
     - name: Patch fix_msvc_output.py  
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Patch applied')"
+      run: |
+        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Patch applied')"
 
     - name: Build YDB CLI
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+      run: |
+        "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
 
     
     - name: Build unix binary with ya make

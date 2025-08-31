@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/noncopyable.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/public/udf/udf_types.h>
 
 #include <arrow/type.h>
@@ -37,5 +37,4 @@ public:
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
     const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool);
-
 }

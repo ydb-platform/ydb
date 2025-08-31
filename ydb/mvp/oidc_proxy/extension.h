@@ -69,7 +69,7 @@ public:
     TStringBuf GetBody() const {
         if (BodyOverride) {
             return TStringBuf(*BodyOverride);
-        } else if (OriginalResponse->Body.size() > 5 * 1024 * 1024) {
+        } else if (OriginalResponse->Body.length() > 5 * 1024 * 1024) {
             return "{\"data\":\"test\"}";
         }
         return OriginalResponse ? TStringBuf(OriginalResponse->Body) : TStringBuf();

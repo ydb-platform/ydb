@@ -1175,7 +1175,7 @@ message TCheckpointsConfig {
     message TLocalStorage {
         optional string TablePrefix = 1;
     }
-    
+
     optional bool Enabled = 1;
     oneof Storage {
         TExternalStorage ExternalStorage = 2;
@@ -2089,7 +2089,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 600000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];

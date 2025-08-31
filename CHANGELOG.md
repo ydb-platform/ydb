@@ -4,6 +4,7 @@
 
 * 21119:Added the ability to use familiar streaming processing tools – Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKHQ and several others smaller ones via the Kafka API when working with YDB Topics. Added support for kafka transactions, compacted topics, storing metadata during offset commit, DESCRIBE_CONFIGS, DESCRIBE_GROUPS, LIST_GROUPS requests. [#21119](https://github.com/ydb-platform/ydb/pull/21119) ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
 * 20982:Added [new protocol to Node Broker](https://github.com/ydb-platform/ydb/issues/11064), eliminating the long startup of nodes on large clusters.  [#20982](https://github.com/ydb-platform/ydb/pull/20982) ([Ilia Shakhov](https://github.com/pixcc))
+* 23224:Enable CDC support for topic data handler #23127 [#23224](https://github.com/ydb-platform/ydb/pull/23224) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 
 ### Bug fixes
 

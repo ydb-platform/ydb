@@ -24,6 +24,7 @@ private:
     const std::optional<TDuration> Timeout;
     const ui64 TxId;
     const bool IsBulk;
+    const std::optional<ui64> OverloadSubscribeSeqNo;
 
 public:
     bool operator<(const TWriteTask& item) const {
@@ -36,7 +37,7 @@ public:
 
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
         const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const ui64 lockId,
-        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk)
+        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
@@ -49,6 +50,7 @@ public:
         , Timeout(timeout)
         , TxId(txId)
         , IsBulk(isBulk)
+        , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
     {
     }
 

@@ -12,8 +12,8 @@ class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     ui64 TabletId;
     ui32 SourceId = 0;
-    NArrow::TSimpleRow Start;
-    NArrow::TSimpleRow Finish;
+    NArrow::TSimpleRowContent Start;
+    NArrow::TSimpleRowContent Finish;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -43,15 +43,15 @@ public:
         return SourceIdx;
     }
 
-    NArrow::TSimpleRow ExtractStart() {
+    NArrow::TSimpleRowContent ExtractStart() {
         return std::move(Start);
     }
 
-    NArrow::TSimpleRow ExtractFinish() {
+    NArrow::TSimpleRowContent ExtractFinish() {
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(const ui64 tabletId, const ui32 sourceId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
+    TDataSourceConstructor(const ui64 tabletId, const ui32 sourceId, NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish)
         : TabletId(tabletId)
         , SourceId(sourceId)
         , Start(std::move(start))
@@ -59,28 +59,31 @@ public:
         AFL_VERIFY(SourceId);
     }
 
-    const NArrow::TSimpleRow& GetStart() const {
+    const NArrow::TSimpleRowContent& GetStart() const {
         return Start;
     }
-    const NArrow::TSimpleRow& GetFinish() const {
+    const NArrow::TSimpleRowContent& GetFinish() const {
         return Finish;
     }
 
     class TComparator {
     private:
         const ERequestSorting Sorting;
-
+        const arrow::Schema* Schema;
     public:
-        TComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
+        TComparator(const ERequestSorting sorting, const arrow::Schema* schema)
+            : Sorting(sorting)
+            , Schema(schema)
+        {
+            AFL_VERIFY(schema);
             AFL_VERIFY(Sorting != ERequestSorting::NONE);
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
             if (Sorting == ERequestSorting::DESC) {
-                return l.Finish < r.Finish;
+                return l.Finish.GetView(*Schema) < r.Finish.GetView(*Schema);
             } else {
-                return r.Start < l.Start;
+                return r.Start.GetView(*Schema) < l.Start.GetView(*Schema);
             }
         }
     };
@@ -126,8 +129,8 @@ protected:
     const ui64 TabletId;
 
 public:
-    TConstructor(const ERequestSorting sorting, const ui64 tabletId)
-        : Constructors(sorting)
+    TConstructor(const ERequestSorting sorting, const ui64 tabletId, const std::shared_ptr<arrow::Schema>& pkSchema)
+        : Constructors(sorting, pkSchema)
         , TabletId(tabletId) {
     }
 };

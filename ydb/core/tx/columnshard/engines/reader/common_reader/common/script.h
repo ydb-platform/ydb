@@ -16,9 +16,10 @@ class TFetchingScriptCursor;
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
-    TAtomicCounter SumDuration;
+    TDuration CPUDuration;
+    TDuration TotalDuration;
     TAtomicCounter SumSize;
-    std::shared_ptr<TFetchingStepSignals> Signals;
+    YDB_READONLY_DEF(std::shared_ptr<TFetchingStepSignals>, Signals);
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
@@ -27,8 +28,8 @@ protected:
     }
 
 public:
-    TDuration GetSumDuration() const {
-        return TDuration::MicroSeconds(SumDuration.Val());
+    TDuration GetCPUDuration() const {
+        return CPUDuration;
     }
 
     ui64 GetSumSize() const {
@@ -36,12 +37,14 @@ public:
     }
 
     void AddExecutionDuration(const TDuration dLocal, const TDuration dGlobal) {
-        SumDuration.Add(dLocal.MicroSeconds());
-        Signals->AddExecutionDuration(dLocal);
-        Signals->AddTotalDuration(dGlobal);
+        CPUDuration += dLocal;
+        TotalDuration += dGlobal;
     }
 
-    virtual ~IFetchingStep() = default;
+    virtual ~IFetchingStep() {
+        Signals->AddExecutionDuration(CPUDuration);
+        Signals->AddTotalDuration(TotalDuration);
+    }
 
     [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
         return DoExecuteInplace(source, step);

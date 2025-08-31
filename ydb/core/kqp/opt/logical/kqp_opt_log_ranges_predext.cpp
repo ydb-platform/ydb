@@ -75,6 +75,10 @@ bool IsIdLambda(TExprBase body) {
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
+    if (!kqpCtx.Config->EnableTopSortSelectIndex) {
+        return node;
+    }
+
     if (!node.Maybe<TCoTopBase>()) {
         return node;
     }

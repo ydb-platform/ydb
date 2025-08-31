@@ -4069,6 +4069,56 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
     }
 
+    Y_UNIT_TEST(IndexAutochooserTopSortDisabled) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTopSortSelectIndex(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE `/Root/my_table` (
+                    id Uint64,
+                    a Utf8,
+                    b Utf8,
+                    c Utf8,
+                    INDEX idx_my_table_table_a_b GLOBAL ON (a,b),
+                    INDEX idx_my_table_table_a_c GLOBAL ON (a,c),
+                    PRIMARY KEY (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                ORDER BY a, b
+                LIMIT 10;
+            )");
+
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
+        }
+    }
+
     Y_UNIT_TEST(IndexAutochooserTopSort) {
         TKikimrSettings settings;
         TKikimrRunner kikimr(settings);

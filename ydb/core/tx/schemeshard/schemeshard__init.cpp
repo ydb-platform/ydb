@@ -4401,9 +4401,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
                     }
-
-                    exportInfo->PeerName = rowset.GetValueOrDefault<Schema::Exports::PeerName>(TString());
-                    exportInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Exports::SanitizedToken>(TString());
+                    exportInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Exports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Exports::Items>();
                     exportInfo->Items.resize(items);
@@ -4513,9 +4511,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
-
-                    importInfo->PeerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>(TString());
-                    importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>(TString());
+                    importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);

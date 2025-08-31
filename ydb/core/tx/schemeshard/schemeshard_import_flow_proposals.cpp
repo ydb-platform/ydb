@@ -1,6 +1,7 @@
 #include "schemeshard_import_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -12,22 +13,6 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-
-namespace {
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TImportInfo& importInfo) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-    auto& record = propose->Record;
-    record.SetPeerName(importInfo.PeerName);
-    record.SetSanitizedToken(importInfo.SanitizedToken);
-    if (importInfo.UserSID) {
-        record.SetOwner(*importInfo.UserSID);
-        record.SetUserSID(*importInfo.UserSID);
-    }
-    return propose;
-}
-
-}
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,

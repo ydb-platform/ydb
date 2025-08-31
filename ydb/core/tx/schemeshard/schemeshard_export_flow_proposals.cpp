@@ -1,6 +1,7 @@
 #include "schemeshard_export_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
@@ -12,22 +13,6 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-
-namespace {
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TExportInfo& exportInfo) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-    auto& record = propose->Record;
-    record.SetPeerName(exportInfo.PeerName);
-    record.SetSanitizedToken(exportInfo.SanitizedToken);
-    if (exportInfo.UserSID) {
-        record.SetOwner(*exportInfo.UserSID);
-        record.SetUserSID(*exportInfo.UserSID);
-    }
-    return propose;
-}
-
-}
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,

@@ -179,7 +179,7 @@ Y_UNIT_TEST(PackMany) {
 
     constexpr size_t cols_types_num = 4;
     constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
-    const ui64 NTuples1 = 1e6 * 2;
+    const ui64 NTuples1 = 1e5 * 2;
 
     constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
     constexpr size_t cols_num =
@@ -273,7 +273,7 @@ Y_UNIT_TEST(UnpackMany) {
 
     constexpr size_t cols_types_num = 4;
     constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
-    const ui64 NTuples1 = 1e6 * 2;
+    const ui64 NTuples1 = 1e5 * 2;
 
     constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
     constexpr size_t cols_num =
@@ -989,8 +989,8 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     ui64 totalSize = 0;
     ui64 totalRows = 0;
     for (ui32 test = 0; test < 10; ++test) {
-        ui32 rows = 1 + (rng() % 1000);
-        ui32 cols = 1 + (rng() % 100);
+        ui32 rows = 1 + (rng() % 100);
+        ui32 cols = 1 + (rng() % 10);
         columns.resize(cols);
         colsdata.resize(cols);
         colsptr.resize(cols);

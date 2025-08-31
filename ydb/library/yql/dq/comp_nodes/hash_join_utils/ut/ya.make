@@ -22,6 +22,10 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/no_llvm
+    yql/essentials/minikql/computation
+    yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
 )
 

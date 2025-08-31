@@ -4075,10 +4075,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        if (AutoSelectIndex) {
-            return;
-        }
-
         {
             auto result = session.ExecuteSchemeQuery(R"(
                 CREATE TABLE `/Root/my_table` (

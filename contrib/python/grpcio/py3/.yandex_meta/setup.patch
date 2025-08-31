@@ -1,16 +1,18 @@
 --- a/setup.py
 +++ b/setup.py
-@@ -299,11 +299,11 @@
-     RE2_INCLUDE = (os.path.join('/usr', 'include', 're2'),)
- 
- EXTENSION_INCLUDE_DIRECTORIES = ((PYTHON_STEM,) + CORE_INCLUDE + ABSL_INCLUDE +
--                                 ADDRESS_SORTING_INCLUDE + CARES_INCLUDE +
--                                 RE2_INCLUDE + SSL_INCLUDE + UPB_INCLUDE +
-+                                 ADDRESS_SORTING_INCLUDE +
-+                                 RE2_INCLUDE + UPB_INCLUDE +
-                                  UPB_GRPC_GENERATED_INCLUDE +
-                                  UPBDEFS_GRPC_GENERATED_INCLUDE +
--                                 XXHASH_INCLUDE + ZLIB_INCLUDE)
-+                                 XXHASH_INCLUDE)
+@@ -324,15 +324,12 @@
+     + CORE_INCLUDE
+     + ABSL_INCLUDE
+     + ADDRESS_SORTING_INCLUDE
+-    + CARES_INCLUDE
+     + RE2_INCLUDE
+-    + SSL_INCLUDE
+     + UPB_INCLUDE
+     + UPB_GRPC_GENERATED_INCLUDE
+     + UPBDEFS_GRPC_GENERATED_INCLUDE
+     + UTF8_RANGE_INCLUDE
+     + XXHASH_INCLUDE
+-    + ZLIB_INCLUDE
+ )
  
  EXTENSION_LIBRARIES = ()

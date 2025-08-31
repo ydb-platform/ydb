@@ -1,0 +1,5 @@
+{
+    "test_canonical_records.test_create_and_drop_database": {
+        "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.json"
+    }
+}

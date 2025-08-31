@@ -15,6 +15,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     conftest.py
     test_auditlog.py
+    test_canonical_records.py
 )
 
 DEPENDS(

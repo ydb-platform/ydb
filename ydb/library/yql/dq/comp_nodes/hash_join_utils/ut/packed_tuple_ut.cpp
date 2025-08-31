@@ -1,10 +1,7 @@
-// #include <yql/essentials/minikql/mkql_runtime_version.h>
-// #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
 #include <vector>
-#include <set>
 #include <random>
 
 #include <util/system/fs.h>

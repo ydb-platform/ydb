@@ -24,9 +24,9 @@ struct TProxiedResponseParams {
     THolder<NHttp::THeadersBuilder> HeadersOverride;
 
 private:
-    TMaybe<TString> StatusOverride;
-    TMaybe<TString> MessageOverride;
-    TMaybe<TString> BodyOverride;
+    std::optional<TString> StatusOverride;
+    std::optional<TString> MessageOverride;
+    std::optional<TString> BodyOverride;
 
 public:
     void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
@@ -45,7 +45,7 @@ public:
     }
 
     TStringBuf GetStatus() const {
-        if (StatusOverride) {
+        if (StatusOverride.has_value()) {
             return TStringBuf(*StatusOverride);
         }
         return OriginalResponse ? TStringBuf(OriginalResponse->Status) : TStringBuf();
@@ -56,7 +56,7 @@ public:
     }
 
     TStringBuf GetMessage() const {
-        if (MessageOverride) {
+        if (MessageOverride.has_value()) {
             return TStringBuf(*MessageOverride);
         }
         return OriginalResponse ? TStringBuf(OriginalResponse->Message) : TStringBuf();
@@ -67,11 +67,14 @@ public:
     }
 
     TStringBuf GetBody() const {
-        if (BodyOverride) {
+        if (BodyOverride.has_value()) {
+            Cerr << "iiii GetBody override" << Endl;
             return TStringBuf(*BodyOverride);
         } else if (OriginalResponse->Body.length() > 5 * 1024 * 1024) {
+            Cerr << "iiii GetBody > 5 * 1024 * 1024" << Endl;
             return "{\"data\":\"test\"}";
         }
+        Cerr << "iiii GetBody original" << Endl;
         return OriginalResponse ? TStringBuf(OriginalResponse->Body) : TStringBuf();
     }
 };

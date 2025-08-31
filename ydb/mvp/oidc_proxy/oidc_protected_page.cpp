@@ -116,6 +116,7 @@ TDuration THandlerSessionServiceCheck::GetRequestTimeout() const {
 }
 
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
+    Cerr << "iiii Forward " << ProtectedPage.Url << Endl;
     BLOG_D("Forward user request bypass OIDC");
 
     auto timeout = GetRequestTimeout();

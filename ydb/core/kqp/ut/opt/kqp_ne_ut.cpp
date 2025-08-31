@@ -4069,14 +4069,14 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
     }
 
-    Y_UNIT_TEST_TWIN(IndexAutochooserTopSort, AutoSelectIndex) {
+    Y_UNIT_TEST(IndexAutochooserTopSort) {
         TKikimrSettings settings;
         TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
         {
-            auto result = session.ExecuteSchemeQuery(R"(
+            auto result = session.ExecuteQuery(R"(
                 CREATE TABLE `/Root/my_table` (
                     id Uint64,
                     a Utf8,
@@ -4086,29 +4086,31 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     INDEX idx_my_table_table_a_c GLOBAL ON (a,c),
                     PRIMARY KEY (id)
                 );
-            )").GetValueSync();
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        NYdb::NTable::TExecDataQuerySettings querySettings;
-        querySettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        querySettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+        querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
 
         {
             TString query = Sprintf(R"(
-                SELECT * FROM `/Root/my_table` %s
+                SELECT * FROM `/Root/my_table`
                 ORDER BY a, b
                 LIMIT 10;
-            )", AutoSelectIndex ? "" : " VIEW idx_my_table_table_a_b ");
+            )");
 
-            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetPlan() << Endl;
-            Cerr << explainResult.GetAst() << Endl;
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
 
             TItemsLimitsExtractor extractor;
             NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
             plan.Scan(extractor);
 
             UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
@@ -4117,20 +4119,21 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         {
             TString query = Sprintf(R"(
-                SELECT a, c FROM `/Root/my_table` %s
+                SELECT a, c FROM `/Root/my_table`
                 ORDER BY a
                 LIMIT 10;
-            )", AutoSelectIndex ? "" : " VIEW idx_my_table_table_a_c ");
+            )");
 
-            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetPlan() << Endl;
-            Cerr << explainResult.GetAst() << Endl;
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
 
             TItemsLimitsExtractor extractor;
             NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
             plan.Scan(extractor);
 
             UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
@@ -4139,20 +4142,21 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         {
             TString query = Sprintf(R"(
-                SELECT * FROM `/Root/my_table` %s
+                SELECT * FROM `/Root/my_table`
                 ORDER BY a, b, id
                 LIMIT 10;
-            )", AutoSelectIndex ? "" : " VIEW idx_my_table_table_a_b ");
+            )");
 
-            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetPlan() << Endl;
-            Cerr << explainResult.GetAst() << Endl;
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
 
             TItemsLimitsExtractor extractor;
             NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
             plan.Scan(extractor);
 
             UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
@@ -4161,23 +4165,97 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         {
             TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                ORDER BY a DESC, b DESC, id DESC
+                LIMIT 10;
+            )");
+
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
+        }
+
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                ORDER BY a DESC, b DESC, id DESC
+                LIMIT 10;
+            )");
+
+            NYdb::NTable::TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            settings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query, settings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            auto rs = it.ReadNext().ExtractValueSync();
+            Cerr << rs.GetQueryStats().GetPlan() << Endl;
+            Cerr << rs.GetQueryStats().GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*rs.GetQueryStats().GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
+        }
+
+
+        {
+            TString query = Sprintf(R"(
                 SELECT * FROM `/Root/my_table` VIEW PRIMARY KEY
                 ORDER BY a, b, id
                 LIMIT 10;
             )");
 
-            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetPlan() << Endl;
-            Cerr << explainResult.GetAst() << Endl;
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
 
             TItemsLimitsExtractor extractor;
             NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
             plan.Scan(extractor);
 
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
+        }
+
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                ORDER BY a, b, id
+            )");
+
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
         }
     }
 

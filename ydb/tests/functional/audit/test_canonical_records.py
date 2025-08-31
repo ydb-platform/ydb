@@ -7,6 +7,18 @@ import yatest
 
 from ydb.tests.library.harness.util import LogLevels
 
+
+def test_file_with_content(human_readable_name, content):
+    file_path = os.path.join(yatest.common.output_path(), human_readable_name)
+    with open(file_path, 'w') as w:
+        w.write(content)
+    return file_path
+
+
+TOKEN='root@builtin'
+
+AUTH_CONFIG=f'staff_api_user_token: {TOKEN}'
+
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
@@ -37,20 +49,22 @@ CLUSTER_CONFIG = dict(
         'log_class_config': [
             {
                 'log_class': 'default',
-                'enable_logging': 'true',
+                'enable_logging': True,
                 'log_phase': ['received', 'completed'],
             }
         ]
     },
+    enforce_user_token_requirement=True,
+    default_clusteradmin=TOKEN,
+    auth_config_path=test_file_with_content('auth_config.yaml', AUTH_CONFIG),
     # extra_feature_flags=['enable_grpc_audit'],
 )
 
 
 class CanonicalCaptureAuditFileOutput:
-    def __init__(self, filename, expected_lines):
+    def __init__(self, filename):
         self.filename = filename
         self.captured = ''
-        self.expected_lines = expected_lines
         self.read_lines = 0
 
     def __enter__(self):
@@ -60,7 +74,7 @@ class CanonicalCaptureAuditFileOutput:
     def __canonize_field(self, json_record, field_name, placeholder_value=None):
         value = json_record.get(field_name)
         if value and value != '{none}':
-            json_record[field_name] = placeholder_value if placeholder_value else f'<{field_name}>'
+            json_record[field_name] = placeholder_value if placeholder_value else f'<canonized_{field_name}>'
 
     def __canonize_audit_line(self, output):
         # Audit log has the following format: "<time>: {"k1": "v1", "k2": "v2", ...}"
@@ -77,45 +91,40 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_field(json_record, 'tx_id')
         return json.dumps(json_record, sort_keys=True) + '\n'
 
-    def __captured_all(self):
-        self.captured.count('\n') >= self.expected_lines
-
     def __exit__(self, *exc):
-        start_time = time.time()
-        timeout = 10
+        timeout = 2
+        last_read_time = time.time()
         with open(self.filename, 'rb', buffering=0) as f:
             f.seek(self.saved_pos)
-            while time.time() - start_time <= timeout and not self.__captured_all():
+            while time.time() - last_read_time <= timeout:
                 # unreliable way to get all due audit records into the file
                 time.sleep(0.1)
                 line = f.readline()
                 if len(line) > 0:
                     self.read_lines += 1
                     self.captured += self.__canonize_audit_line(line.decode('utf-8'))
+                    last_read_time = time.time()
 
     def canonize(self):
-        file_path = os.path.join(yatest.common.output_path(), 'audit_log.json')
-        with open(file_path, 'w') as w:
-            w.write(self.captured)
-
         return yatest.common.canonical_file(
             local=True,
             universal_lines=True,
-            path=file_path
+            path=test_file_with_content('audit_log.json', self.captured)
         )
 
 
 def test_create_and_drop_database(ydb_cluster):
-    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, expected_lines=11)
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit:
-        database = '/Root/users/database'
+        database = '/Root/Database'
         ydb_cluster.create_database(
             database,
-            storage_pool_units_count={'hdd': 1}
+            storage_pool_units_count={'hdd': 1},
+            token=TOKEN
         )
         database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
-        ydb_cluster.wait_tenant_up(database)
+        ydb_cluster.wait_tenant_up(database, token=TOKEN)
 
-        ydb_cluster.remove_database(database)
+        ydb_cluster.remove_database(database, token=TOKEN)
         ydb_cluster.unregister_and_stop_slots(database_nodes)
     return capture_audit.canonize()

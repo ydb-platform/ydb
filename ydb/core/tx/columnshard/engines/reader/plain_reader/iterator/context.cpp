@@ -52,6 +52,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     const bool useIndexes = false;
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || !isWholeExclusiveSource;
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("needSnapshots", needSnapshots)("partial_pk", partialUsageByPK)("id", source->GetSourceId())(
+        "lock_id", GetReadMetadata()->GetLockId())("max", source->GetRecordSnapshotMax())("req", GetReadMetadata()->GetRequestSnapshot())(
+        "debug", source->DebugJson());
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!GetReadMetadata()->GetRequestShardingInfo()) {

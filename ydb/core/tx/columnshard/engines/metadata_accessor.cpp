@@ -7,8 +7,8 @@
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -34,22 +34,39 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
     const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& resolver, const bool isPlain) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
-    std::vector<std::shared_ptr<TPortionInfo>> portions =
-        context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, !!readDescription.LockId);
+    std::vector<std::shared_ptr<TPortionInfo>> portions = context.GetEngine().Select(
+        PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, !!readDescription.LockId);
     std::vector<TInsertWriteId> uncommitted;
     if (readDescription.LockId) {
         std::vector<std::shared_ptr<TPortionInfo>> visible;
-        for (auto&& portion: portions) {
+        for (auto&& portion : portions) {
             if (portion->IsCommitted()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "committed_portion")("lock_id", readDescription.LockId)(
+                    "portion_id", portion->GetPortionId());
                 visible.emplace_back(std::move(portion));
             } else {
                 AFL_VERIFY(portion->GetPortionType() == EPortionType::Written);
                 auto* written = static_cast<NKikimr::NOlap::TWrittenPortionInfo*>(portion.get());
                 const auto& insertWriteId = written->GetInsertWriteId();
                 uncommitted.emplace_back(insertWriteId);
-                if (const auto& lockId = resolver.ResolveWriteIdToLockId(insertWriteId); lockId == readDescription.LockId) {
+                if (const auto& lockId = resolver.ResolveWriteIdToLockId(insertWriteId)) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "uncommitted_portion")("lock_id", readDescription.LockId)(
+                        "write_id", insertWriteId)("portion_lock_id", lockId)("portion_id", portion->GetPortionId());
                     visible.emplace_back(std::move(portion));
+                } else {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "uncommitted_portion")("lock_id", readDescription.LockId)(
+                        "write_id", insertWriteId)("portion_id", portion->GetPortionId());
                 }
+            }
+        }
+        portions.swap(visible);
+    } else {
+        std::vector<std::shared_ptr<TPortionInfo>> visible;
+        for (auto&& portion : portions) {
+            if (portion->IsCommitted()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "committed_portion")("lock_id", readDescription.LockId)(
+                    "portion_id", portion->GetPortionId());
+                visible.emplace_back(std::move(portion));
             }
         }
         portions.swap(visible);

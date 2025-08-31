@@ -33,9 +33,9 @@ ui64 TTxController::GetMemoryUsage() const {
 
 TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
     if (!RunningQueue.empty()) {
-        return TPlanQueueItem(RunningQueue.begin()->Step, RunningQueue.begin()->TxId);
+        return TPlanQueueItem(*RunningQueue.begin());
     } else if (!PlanQueue.empty()) {
-        return TPlanQueueItem(PlanQueue.begin()->Step, PlanQueue.begin()->TxId);
+        return TPlanQueueItem(*PlanQueue.begin());
     }
     return TPlanQueueItem(Owner.LastPlannedStep, 0);
 }
@@ -78,6 +78,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         txInfo.DeserializeSeqNoFromString(rowset.GetValue<Schema::TxInfo::SeqNo>());
 
         if (txInfo.PlanStep != 0) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "plan_step_info")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
             PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
         } else if (txInfo.MaxStep != Max<ui64>()) {
             DeadlineQueue.emplace(txInfo.MaxStep, txInfo.TxId);
@@ -200,9 +201,9 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
-        TPlanQueueItem tx(item.Step, item.TxId);
+        TPlanQueueItem tx = item;
         RunningQueue.emplace(std::move(item));
-        return GetTxInfoVerified(item.TxId);
+        return GetTxInfoVerified(tx.TxId);
     }
     return std::nullopt;
 }
@@ -307,6 +308,7 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         txInfo.PlanStep = planStep;
         NIceDb::TNiceDb db(txc.DB);
         Schema::UpdateTxInfoPlanStep(db, txId, planStep);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "add_plan_step")("tx_id", txId)("plan_step", planStep);
         PlanQueue.emplace(planStep, txId);
         if (txInfo.MaxStep != Max<ui64>()) {
             DeadlineQueue.erase(TPlanQueueItem(txInfo.MaxStep, txId));

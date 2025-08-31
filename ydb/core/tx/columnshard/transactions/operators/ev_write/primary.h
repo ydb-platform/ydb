@@ -133,13 +133,13 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("receive", TabletId)(
-                    "reason", "operation absent");
+                    "reason", "operation absent")("tx_id", TxId);
             } else if (!op->WaitShardsResultAck.erase(TabletId)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
+                    "receive", TabletId)("tx_id", TxId);
             } else {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
+                    "receive", TabletId)("tx_id", TxId);
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
                 op->CheckFinished(*Self);
             }
@@ -174,7 +174,7 @@ private:
 
     void CheckFinished(TColumnShard& owner) {
         if (WaitShardsResultAck.empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished");
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished")("tx_id", GetTxId())("is_broken", TxBroken);
             owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
     }
@@ -232,7 +232,7 @@ private:
                     AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
                 }
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
-                    "receive", Self->TabletID());
+                    "receive", Self->TabletID())("tx_id", TxId)("lock_id", lock.GetLockId())("is_broken", lock.IsBroken());
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             }
             return true;
@@ -258,7 +258,7 @@ private:
         return WaitShardsResultAck.size();
     }
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId)("tx_id", GetTxId());
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 

@@ -102,7 +102,8 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
             auto result = std::make_unique<TEvWriteResult>();
-            ACFL_WARN("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_error")(
+                "status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
@@ -116,6 +117,7 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin) {
             auto result = std::make_unique<TEvWriteResult>();
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_completed")("origin", origin);
             result->Record.SetOrigin(origin);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             return result;
@@ -123,6 +125,7 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId) {
             auto result = std::make_unique<TEvWriteResult>();
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_completed")("origin", origin)("tx_id", txId);
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
@@ -134,6 +137,8 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_completed")("origin", origin)("tx_id", txId)(
+                "lock", lock.GetLockId())("lock_details", lock.DebugString());
             auto& lockResult = *result->Record.AddTxLocks();
             lockResult = lock;
             lockResult.SetHasWrites(true);
@@ -145,6 +150,7 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ev_write_prepared")("tx_id", txId);
 
             result->Record.SetMinStep(transactionInfo.GetMinStep());
             result->Record.SetMaxStep(transactionInfo.GetMaxStep());

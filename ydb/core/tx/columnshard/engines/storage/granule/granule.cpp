@@ -298,6 +298,7 @@ void TGranuleMeta::CommitPortionOnExecute(
     NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "commit")("snapshot", snapshot.DebugString());
     it->second->SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
     it->second->CommitToDatabase(wrapper);

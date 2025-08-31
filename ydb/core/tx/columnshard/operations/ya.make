@@ -19,4 +19,6 @@ PEERDIR(
     ydb/core/tx/columnshard/operations/common
 )
 
+GENERATE_ENUM_SERIALIZATION(write.h)
+
 END()

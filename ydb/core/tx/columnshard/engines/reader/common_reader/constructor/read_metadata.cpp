@@ -29,9 +29,12 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("lock_id", LockId)("count", SourcesConstructor->GetUncommittedWriteIds().size());
     if (LockId) {
         for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("lock_id", LockId)("event", "add_check_write_id")(
+                "portion_lock_id", op->GetLockId());
             AddWriteIdToCheck(i, op->GetLockId());
         }
     }

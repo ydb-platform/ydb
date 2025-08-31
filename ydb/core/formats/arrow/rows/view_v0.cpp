@@ -46,19 +46,28 @@ private:
 
 public:
     bool OnNull(const ui32 /*fieldIndex*/) {
-        Result << "NULL,";
+        if (Result.size()) {
+            Result << ",";
+        }
+        Result << "NULL";
         return false;
     }
 
     template <class TWrap>
     bool OnBinary(const ui32 /*fieldIndex*/, const char* data, const ui32 size) {
-        Result << std::string_view(data, size) << ",";
+        if (Result.size()) {
+            Result << ",";
+        }
+        Result << std::string_view(data, size);
         return false;
     }
 
     template <class TWrap, class CType = typename arrow::TypeTraits<typename TWrap::T>::CType>
     bool OnValue(const ui32 /*fieldIndex*/, const CType value) {
-        Result << value << ",";
+        if (Result.size()) {
+            Result << ",";
+        }
+        Result << value;
         return false;
     }
 };

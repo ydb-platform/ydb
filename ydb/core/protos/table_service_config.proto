@@ -400,4 +400,6 @@ message TTableServiceConfig {
     optional bool EnableDataShardCreateTableAs = 102 [default = false];
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
+
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
 };

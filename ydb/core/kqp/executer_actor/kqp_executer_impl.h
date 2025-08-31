@@ -1006,7 +1006,7 @@ protected:
                     if constexpr (!isScan) {
                         nodesCount = std::max<ui32>(nodesCount, ResourcesSnapshot.size());
                     }
-                    UnknownAffectedShardCount = TasksGraph.BuildComputeTasks(stageInfo, nodesCount);
+                    UnknownAffectedShardCount |= TasksGraph.BuildComputeTasks(stageInfo, nodesCount);
                 } else if (buildScanTasks) {
                     HasOlapTable = true;
                     BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());

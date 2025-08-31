@@ -98,137 +98,30 @@ jobs:
     - name: Show LLVM/Clang version for Windows
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: |
-        echo === LLVM/Clang version info ===
-        clang-cl --version
-        echo.
+      run: clang-cl --version
 
-    # Create LLVM tool symlinks and patch fix_msvc_output.py to handle None arguments
     - name: Setup Windows tools
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
-        REM Find Microsoft ml64.exe in VS 2022 Enterprise  
         set "ML64_PATH="
         for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
-          if exist "%%v\bin\Hostx64\x64\ml64.exe" (
-            set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
-            goto :symlinks
-          )
+          if exist "%%v\bin\Hostx64\x64\ml64.exe" set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe" & goto :symlinks
         )
-        
         :symlinks
-        REM Create required symlinks for LLVM/ya make integration
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" >nul 2>&1
-        if defined ML64_PATH (
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>&1
-        ) else (
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>&1
-        )
+        if defined ML64_PATH (mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>&1) else (mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>&1)
 
     - name: Patch fix_msvc_output.py  
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: |
-        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Patch applied')"
+      run: python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Patch applied')"
 
     - name: Build YDB CLI
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: |
-        "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+      run: "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
 
-
-
-    - name: Windows Build Success Analysis (VERBOSE DEBUG)
-      if: ${{ matrix.os == 'windows-amd' && (steps.build_with_asm.outcome == 'success' || steps.build_with_asm.outcome == 'failure') }}
-      shell: cmd
-      env:
-        YA_ASSEMBLER_TYPE: ${{ env.YA_ASSEMBLER_TYPE }}
-      run: |
-        echo ============================================================
-        echo DEBUG: Windows Build Success Analysis
-        echo ============================================================
-        
-        echo === STEP 1: Build Attempts Summary ===
-        echo First build (with ASM): ${{ steps.build_with_asm.outcome }}
-        echo Fallback triggered: ${{ steps.build_with_asm.outcome == 'failure' }}
-        echo YA_ASSEMBLER_TYPE used: %YA_ASSEMBLER_TYPE%
-        echo.
-        
-        echo === STEP 2: Key Findings Analysis ===
-        if "${{ steps.build_with_asm.outcome }}" == "success" (
-          echo SUCCESS SCENARIO: First build with ASM optimizations worked
-          echo This means:
-          echo   - Microsoft ml64.exe detection: ${{ env.YA_ASSEMBLER_TYPE == 'MICROSOFT' && 'SUCCESS' || 'FAILED - used LLVM fallback' }}
-          echo   - fix_msvc_output.py patch: EFFECTIVE
-          echo   - Git Bash link conflict resolution: WORKING
-          echo   - LLVM toolchain integration: SUCCESSFUL
-          if "%YA_ASSEMBLER_TYPE%" == "MICROSOFT" (
-            echo   - Microsoft assembler compatibility: CONFIRMED
-          ) else (
-            echo   - LLVM assembler compatibility: SURPRISINGLY GOOD
-          )
-        ) else (
-          echo FALLBACK SCENARIO: First build failed, checking if fallback worked...
-          if exist "ydb\apps\ydb\ydb.exe" (
-            echo Fallback build: SUCCESS
-            echo This means:
-            echo   - ASM optimizations were the blocker
-            echo   - -DOPENSSL_NO_ASM=yes was necessary
-            echo   - Basic LLVM toolchain works
-            echo   - fix_msvc_output.py patch: PARTIALLY EFFECTIVE
-          ) else (
-            echo Both builds: FAILED
-            echo This indicates deeper compatibility issues
-          )
-        )
-        echo.
-        
-        echo === STEP 3: Component Necessity Assessment ===
-        echo Based on the build results, we can assess:
-        echo.
-        echo CRITICAL COMPONENTS (cannot be removed):
-        echo   - lib.exe symlink: REQUIRED (ya make dependency)
-        echo   - fix_msvc_output.py Git Bash link patch: REQUIRED
-        echo   - PATH modification: REQUIRED
-        echo   - LLVM in PATH priority: REQUIRED
-        echo.
-        echo POTENTIALLY OPTIONAL COMPONENTS:
-        if "%YA_ASSEMBLER_TYPE%" == "MICROSOFT" (
-          echo   - Microsoft ml64.exe search: BENEFICIAL (enabled ASM)
-          echo   - Complex VS path search: WORTH SIMPLIFYING
-        ) else (
-          echo   - Microsoft ml64.exe search: NOT FOUND (could simplify)
-          echo   - LLVM ml.exe symlink: REQUIRED
-          echo   - --m64 flag in fix_msvc_output.py: CRITICAL
-        )
-        if "${{ steps.build_with_asm.outcome }}" == "failure" (
-          echo   - Fallback build step: REQUIRED (saved the build)
-          echo   - -DOPENSSL_NO_ASM=yes: NECESSARY
-        ) else (
-          echo   - Fallback build step: UNUSED (could be optional)
-        )
-        echo.
-        echo OPTIMIZATION OPPORTUNITIES:
-        echo   - Reduce VS search complexity
-        echo   - Simplify symlink creation logic  
-        echo   - Remove unused debug output
-        echo   - Consolidate environment setup
-        echo.
-        
-        echo === STEP 4: Final Binary Verification ===
-        if exist "ydb\apps\ydb\ydb.exe" (
-          echo SUCCESS: ydb.exe was created
-          echo File details:
-          dir "ydb\apps\ydb\ydb.exe"
-        ) else (
-          echo FAILURE: ydb.exe was not created
-        )
-        
-        echo ============================================================
-        echo DEBUG: Windows Build Analysis Complete
-        echo ============================================================
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}

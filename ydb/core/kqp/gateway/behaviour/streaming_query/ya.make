@@ -31,6 +31,8 @@ PEERDIR(
     ydb/services/metadata/abstract
     ydb/services/metadata/manager
     ydb/services/metadata/optimization
+    yql/essentials/core
+    yql/essentials/providers/common/provider
 )
 
 YQL_LAST_ABI_VERSION()

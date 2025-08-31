@@ -1466,6 +1466,9 @@ public:
                 TExprNode::TPtr ast;
                 if (const auto optimizationManager = cBehaviour->GetOptimizationManager()) {
                     ast = optimizationManager->ExtractWorldFeatures(settings.Features, ctx);
+                    if (!ast) {
+                        return nullptr;
+                    }
                 } else {
                     ast = ctx.NewWorld(node->Pos());
                 }

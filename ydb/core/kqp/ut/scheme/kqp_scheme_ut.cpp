@@ -11930,16 +11930,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
                     RESOURCE_POOL = "my_pool"
-                ) AS DO BEGIN
-INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic;
-INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
             });
         }
 
@@ -11990,6 +11988,94 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
         }
     }
 
+    void CheckStreamingQueryBodyValidation(TKikimrRunner& kikimr, const TString& prefix) {
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    $x = 1;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query must have at least one streaming read from topic");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query with more than one streaming write to topic is not supported now");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM `MyFolder/MyTable`;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Reading from YDB tables is not supported now for streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    SELECT 42;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Results is not allowed for streaming queries, please use INSERT to record the query result");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO `MyFolder/MyTable` (Key) VALUES ("1");
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Writing into YDB tables is not supported now for streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    CREATE TABLE `MyFolder/OtherTable` (
+                        Key Int32 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Operations with YDB objects is not allowed inside streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MyTable (Key) VALUES ("1")
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << "$x = \"str\";" << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
+        }
+    }
+
     Y_UNIT_TEST(CreateStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
@@ -12004,7 +12090,7 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
                 END DO;
 
                 CREATE TABLE `MyFolder/MyTable` (
-                    Key Int32 NOT NULL,
+                    Key String NOT NULL,
                     PRIMARY KEY (Key)
                 );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -12049,42 +12135,8 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
         }
 
-        {
-            const auto result = db.ExecuteQuery(R"(
-                $x = "str";
-                CREATE STREAMING QUERY `OtherFolder/MyQuery` WITH (
-                    RUN = FALSE
-                ) AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(R"(
-                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
-                    RUN = FALSE
-                ) AS DO BEGIN
-                    INSERT INTO MyTable (Key) VALUES (1)
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(R"(
-                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
-                    RUN = TRUE
-                ) AS DO BEGIN
-                    INSERT INTO MyTable (Key) VALUES (1)
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
-        }
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = FALSE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = TRUE) ");
     }
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
@@ -12158,16 +12210,14 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             const auto result = db.ExecuteQuery(R"(
                 ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
                     FORCE = TRUE
-                ) AS DO BEGIN
-INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
-INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
-                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -12182,7 +12232,7 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
 
@@ -12199,7 +12249,7 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
-                {"__query_text", "\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;\nINSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic "}
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
     }
@@ -12216,7 +12266,7 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
                 ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;
 
                 CREATE TABLE `MyFolder/MyTable` (
-                    Key Int32 NOT NULL,
+                    Key String NOT NULL,
                     PRIMARY KEY (Key)
                 );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -12256,28 +12306,8 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
         }
 
-        {
-            const auto result = db.ExecuteQuery(R"(
-                ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
-                    RUN = FALSE
-                ) AS DO BEGIN
-                    INSERT INTO MyTable (Key) VALUES (1)
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(R"(
-                $x = "str";
-                ALTER STREAMING QUERY `MyFolder/OtherQuery` AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
-        }
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = FASLE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = TRUE) ");
     }
 
     Y_UNIT_TEST(ParallelAlterStreamingQuery) {
@@ -12474,8 +12504,13 @@ INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END
             const auto result = db.ExecuteQuery(R"(
                 CREATE RESOURCE POOL my_pool WITH (
                     CONCURRENT_QUERY_LIMIT = 0
-                );
+                ))",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
 
+        {
+            const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = TRUE,
                     RESOURCE_POOL = "my_pool"

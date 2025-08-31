@@ -127,9 +127,9 @@ namespace TEvColumnShard {
 
         TString ToString() const {
             auto columns = TStringBuilder() << "[";
-            for (size_t i = 0; i!= ColumnIds.size(); ++i) {
+            for (size_t i = 0; i != ColumnIds.size(); ++i) {
                 columns << ColumnIds[i];
-                if (i != ColumnIds.size() -1) {
+                if (i != ColumnIds.size() - 1) {
                     columns << ", ";
                 }
             }

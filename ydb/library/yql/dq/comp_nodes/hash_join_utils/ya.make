@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     tuple.cpp
     accumulator.cpp
+    block_layout_converter.cpp
 )
 
 PEERDIR(

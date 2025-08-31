@@ -15,6 +15,7 @@ ENDIF()
 SRCS(
     packed_tuple_ut.cpp
     accumulator_ut.cpp
+    block_layout_converter_ut.cpp
 )
 
 PEERDIR(

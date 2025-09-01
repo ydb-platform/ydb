@@ -593,6 +593,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
+        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -1179,6 +1180,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 NextPartitionId = 0;
     THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
+    THashMap<ui32, TMaybe<TTopicTabletInfo::TKeyRange>> KeyRangesToChange;
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;

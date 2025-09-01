@@ -1405,6 +1405,8 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBuildColumn(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         return {DropBuildColumn(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        return CreateSetConstraintInitiate(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:

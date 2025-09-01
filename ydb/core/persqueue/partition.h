@@ -251,6 +251,7 @@ private:
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
+    void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -581,6 +582,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
+            HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
@@ -634,6 +636,7 @@ private:
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
+            HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);

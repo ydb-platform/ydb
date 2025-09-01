@@ -31,7 +31,6 @@
                         "Group",
                         "Name"
                     ],
-                    "limit": "1001",
                     "lookup_by": [
                         "Group (1)"
                     ],

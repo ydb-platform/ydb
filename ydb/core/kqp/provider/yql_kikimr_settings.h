@@ -214,7 +214,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableParallelUnionAllConnectionsForExtend = false;
     bool EnableTempTablesForUser = false;
     bool EnableOlapPushdownAggregate = false;
+    bool EnableOrderOptimizaionFSM = false;
 
+    bool EnableTopSortSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;

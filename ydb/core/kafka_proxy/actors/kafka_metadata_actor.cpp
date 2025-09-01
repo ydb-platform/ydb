@@ -274,7 +274,9 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
             TopicСreationAttempts.insert(*topic.Name);
+            PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
     }
@@ -290,6 +292,7 @@ void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TA
     const TString& topicName = topicNameToIndex.TopicName;
     const ui32& topicIndex = topicNameToIndex.TopicIndex;
     InflyCreateTopics--;
+    PendingResponses--;
     EKafkaErrors errorCode = ev->Get()->ErrorCode;
     if (errorCode == EKafkaErrors::NONE_ERROR) {
         TActorId child = SendTopicRequest(topicName);

@@ -1,3 +1,8 @@
+* Added query compilation time statistics to the `ydb workload * run` command.
+
+## 2.25.0 ##
+
+* Added the `ydb admin cluster bridge` commands to manage a cluster in bridge mode: list, switchover, failover, takedown, rejoin.
 * User and password authentication options are now parsed independently, allowing them to be sourced from different priority levels. For example, the username can be specified via the `--user` command-line option while the password is retrieved from the `YDB_PASSWORD` environment variable.
 * Removed the `--float-mode` option from the `ydb workload tpch run` and `ydb workload tpcds run` commands. Float mode is now inferred automatically from the table schema created during the `init` phase.
 * Added final execute statistics to `ydb workload * run` commands.

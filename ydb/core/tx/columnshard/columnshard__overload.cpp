@@ -5,7 +5,7 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 constexpr ui64 DEFAULT_WRITES_IN_FLY_LIMIT = 1000000;
-constexpr ui64 DEFAULT_WRITES_SIZE_IN_FLY_LIMIT = (((ui64)1) << 30);
+constexpr ui64 DEFAULT_WRITES_SIZE_IN_FLY_LIMIT = 2 * (((ui64)1) << 30);
 
 } // namespace
 

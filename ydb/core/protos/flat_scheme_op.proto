@@ -1455,6 +1455,13 @@ message TPersQueueGroupDescription {
         optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
+
+    message TPartitionBoundary {
+        required uint32 Partition = 1;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 2;
+        optional bool CreatePartition = 3;
+    }
+    repeated TPartitionBoundary RootPartitionBoundaries = 17;
 }
 
 message TRtmrVolumeDescription {
@@ -1740,6 +1747,45 @@ message TDropColumnBuild {
     optional uint64 BuildIndexId = 3;
 }
 
+// Begin Set Column Constraints
+
+message TSetColumnConstraintSettings {
+    enum EConstraint {
+        NOT_NULL = 1;
+    }
+
+    optional string ColumnName = 1;
+    optional EConstraint Constraint = 2;
+}
+
+message TSetColumnConstraintsInitiate {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsLock {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsCheck {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsFinalize {
+    enum EStatus {
+        SUCCESS = 0;
+        COLUMN_CONSTRAINT_VIOLATION = 1;
+    }
+
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+    optional EStatus Status = 3;
+}
+
+// End Set Column Constraints
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1854,6 +1900,8 @@ message TModifyScheme {
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
+
+    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
 
     // Some entries are grouped by semantics, so are out of order
 }

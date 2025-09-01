@@ -33,6 +33,7 @@ struct TTableReaderOptions
 {
     bool Unordered = false;
     bool OmitInaccessibleColumns = false;
+    bool OmitInaccessibleRows = false;
     bool EnableTableIndex = false;
     bool EnableRowIndex = false;
     bool EnableRangeIndex = false;

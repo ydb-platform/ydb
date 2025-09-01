@@ -179,6 +179,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
 

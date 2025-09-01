@@ -6,6 +6,11 @@ import time
 
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+
+
+NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
+
 
 def cluster_endpoint(cluster):
     return f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
@@ -92,11 +97,10 @@ class CanonicalCaptureAuditFileOutput:
         return json.dumps(json_record, sort_keys=True) + '\n'
 
     def __exit__(self, *exc):
-        timeout = 2
         last_read_time = time.time()
         with open(self.filename, 'rb', buffering=0) as f:
             f.seek(self.saved_pos)
-            while time.time() - last_read_time <= timeout:
+            while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
                 # unreliable way to get all due audit records into the file
                 time.sleep(0.1)
                 line = f.readline()

@@ -205,11 +205,12 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
-        REM Find VsDevCmd.bat using vswhere for any VS edition/version
+        REM Find and setup VS environment in single command chain
         set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do set "VSINSTALLDIR=%%i"
-        
-        "%VSINSTALLDIR%\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do (
+          echo Using Visual Studio: %%i
+          "%%i\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+        )
 
     
     - name: Build unix binary with ya make

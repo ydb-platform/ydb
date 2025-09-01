@@ -1,3 +1,4 @@
+
 #include "dq_scalar_hash_join.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -33,26 +34,14 @@ public:
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , RightItemTypes_(std::move(rightItemTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
-        , LeftWideFieldsIndex_(mutables.IncrementWideFieldsIndex(leftItemTypes.size()))
-        , RightWideFieldsIndex_(mutables.IncrementWideFieldsIndex(rightItemTypes.size()))
+
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         Y_UNUSED(state);
 
         if (!LeftFinished_) {
-            auto** leftFields = ctx.WideFields.data() + LeftWideFieldsIndex_;
-
-
-            for (ui32 i = 0; i < LeftItemTypes_.size(); ++i) {
-                if (i < ResultItemTypes_.size() && output[i]) {
-                    leftFields[i] = output[i];
-                } else {
-                    leftFields[i] = &ctx.MutableValues[LeftWideFieldsIndex_ + i];
-                }
-            }
-
-            auto result = LeftFlow_->FetchValues(ctx, leftFields);
+            auto result = LeftFlow_->FetchValues(ctx, output);
             if (result == EFetchResult::One) {
                 return EFetchResult::One;
             } else if (result == EFetchResult::Finish) {
@@ -63,19 +52,7 @@ public:
         }
 
         if (!RightFinished_) {
-            auto** rightFields = ctx.WideFields.data() + RightWideFieldsIndex_;
-
-
-            for (ui32 i = 0; i < RightItemTypes_.size(); ++i) {
-                ui32 outputIdx = LeftItemTypes_.size() + i;
-                if (outputIdx < ResultItemTypes_.size() && output[outputIdx]) {
-                    rightFields[i] = output[outputIdx];
-                } else {
-                    rightFields[i] = &ctx.MutableValues[RightWideFieldsIndex_ + i];
-                }
-            }
-
-            auto result = RightFlow_->FetchValues(ctx, rightFields);
+            auto result = RightFlow_->FetchValues(ctx, output);
             if (result == EFetchResult::One) {
                 return EFetchResult::One;
             } else if (result == EFetchResult::Finish) {
@@ -101,15 +78,12 @@ private:
     IComputationWideFlowNode* const LeftFlow_;
     IComputationWideFlowNode* const RightFlow_;
 
-    const TVector<TType*>   ResultItemTypes_;
+        const TVector<TType*>   ResultItemTypes_;
     const TVector<TType*>   LeftItemTypes_;
     const TVector<ui32>     LeftKeyColumns_;
     const TVector<TType*>   RightItemTypes_;
     const TVector<ui32>     RightKeyColumns_;
-
-    const ui32 LeftWideFieldsIndex_;
-    const ui32 RightWideFieldsIndex_;
-
+    
     mutable bool LeftFinished_ = false;
     mutable bool RightFinished_ = false;
 };
@@ -122,12 +96,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
-    const auto joinFlowType = AS_TYPE(TFlowType, joinType);
-    MKQL_ENSURE(joinFlowType->GetItemType()->IsMulti(),
-                "Expected Multi as a resulting item type");
-    const auto joinComponents = GetWideComponents(joinFlowType);
-    MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
@@ -183,7 +151,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         ctx.Mutables,
         leftFlow,
         rightFlow,
-        std::move(joinItems),
+        std::move(leftFlowItems), // Используем тип левого потока как результат
         std::move(leftFlowItems),
         std::move(leftKeyColumns),
         std::move(rightFlowItems),
@@ -191,3 +159,4 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     );
 }
 } // namespace NKikimr::NMiniKQL
+

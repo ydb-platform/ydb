@@ -2532,6 +2532,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
@@ -2908,7 +2909,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
-        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
 

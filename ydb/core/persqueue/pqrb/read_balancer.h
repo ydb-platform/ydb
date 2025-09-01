@@ -118,12 +118,15 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
     void AnswerWaitingRequests(const TActorContext& ctx);
 
+    void BroadcastPartitionError(const TString& message, NKikimrServices::EServiceKikimr service, const TActorContext& ctx);
+
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);
@@ -185,6 +188,7 @@ private:
     std::unique_ptr<NBalancing::TBalancer> Balancer;
 
     std::unique_ptr<TPartitionScaleManager> PartitionsScaleManager;
+    TActorId MirrorTopicDescriberActorId;
 
 private:
 
@@ -321,6 +325,8 @@ public:
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             // from TPartitionScaleRequest
             HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
+            // from MirrorDescriber
+            HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
                 break;

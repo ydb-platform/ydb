@@ -72,7 +72,7 @@ $all_sales = (
    AND curr_yr.i_manufact_id=prev_yr.i_manufact_id
    AND curr_yr.d_year=2002
    AND prev_yr.d_year=2002-1
-   AND cast((curr_yr.sales_cnt/prev_yr.sales_cnt) AS double)<0.9
+   AND curr_yr.sales_cnt < 0.9 * prev_yr.sales_cnt
  ORDER BY sales_cnt_diff,sales_amt_diff
  limit 100;
 

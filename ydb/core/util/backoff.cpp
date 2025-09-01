@@ -62,9 +62,9 @@ bool TBackoff::HasMore() const {
 
 TDuration TBackoff::Next() {
     ++Iteration;
-    auto delay = Timer.NextBackoffMs();
-    delay += RandomNumber<size_t>(delay / 4);
-    return TDuration::MilliSeconds(delay);
+    TDuration delay = TDuration::MilliSeconds(Timer.NextBackoffMs());
+    TDuration jitter = TDuration::MicroSeconds(RandomNumber(delay.MicroSeconds() / 4));
+    return delay + jitter;
 }
 
 void TBackoff::Reset() {

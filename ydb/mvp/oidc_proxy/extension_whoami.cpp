@@ -81,9 +81,6 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
-    if (Context->Params->GetStatusOverride().StartsWith("3") || Context->Params->GetStatusOverride() == "404") {
-        ContinueAndPassAway();
-    }
     ApplyIfReady();
 }
 
@@ -103,6 +100,9 @@ void TExtensionWhoamiWorker::ApplyIfReady() {
 }
 
 void TExtensionWhoamiWorker::ApplyExtension() {
+    if (Context->Params->GetStatusOverride().StartsWith("3") || Context->Params->GetStatusOverride() == "404") {
+        return ContinueAndPassAway();
+    }
     NJson::TJsonValue json;
     NJson::TJsonValue errorJson;
     NHttp::THttpIncomingResponsePtr response;

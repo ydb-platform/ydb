@@ -268,8 +268,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             bool needsJoin,
             const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
         {
+            ui64 prefixLen = 0;
+            if (buildResult.ExpectedMaxRanges.Defined() && *buildResult.ExpectedMaxRanges == 1)
+                prefixLen = buildResult.PointPrefixLen;
+
             return std::make_tuple(
-                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, buildResult.PointPrefixLen) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
+                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, prefixLen) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,
@@ -304,13 +308,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                     bool needsJoin = calcNeedsJoin(tableDesc.Metadata);
 
                     auto key = calcKey(buildResult, index.KeyColumns.size(), needsJoin, tableDesc);
-                    Cerr << "selecting index " << index.Name << "("
-                        << std::get<0>(key) << ", "
-                        << std::get<1>(key) << ", "
-                        << std::get<2>(key) << ", "
-                        << std::get<3>(key) << ", "
-                        << std::get<4>(key) << ") "
-                        << Endl;
                     if (key > maxKey) {
                         maxKey = key;
                         chosenIndex = index.Name;

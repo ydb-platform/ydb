@@ -76,7 +76,10 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
 
     ui64 pointPrefix = 0;
     if (input.Maybe<TKqpReadTableRanges>()) {
-        pointPrefix = TKqpReadTableExplainPrompt::Parse(input.Maybe<TKqpReadTableRanges>().Cast().ExplainPrompt()).PointPrefixLen;
+        auto prompt = TKqpReadTableExplainPrompt::Parse(input.Maybe<TKqpReadTableRanges>().Cast().ExplainPrompt());
+        if (prompt.ExpectedMaxRanges.Defined() && *prompt.ExpectedMaxRanges == 1) {
+            pointPrefix = prompt.PointPrefixLen;
+        }
     } else if (input.Maybe<TKqpReadTable>()) {
         pointPrefix = settings.PointPrefixLen;
     }

@@ -13,9 +13,14 @@ using namespace NYdb::NTable;
 class TItemsLimitsExtractor : public NJson::IScanCallback {
 public:
     THashMap<TString, TString> LimitsPerTable;
+    THashSet<TString> ReadsOverTable;
 
     bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
         Y_UNUSED(path, parent);
+
+        if (value.Has("Path")) {
+            ReadsOverTable.emplace(value["Path"].GetStringSafe());
+        }
 
         if (value.IsMap() && value.Has("ReadLimit") && value.Has("Path")) {
             TString path = value["Path"].GetStringSafe();
@@ -4213,6 +4218,32 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
             UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
             UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_c/indexImplTable"], "10");
+        }
+
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' or a = '1123' or a = '13412'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(
+                extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable") ||
+                extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable")
+            );
         }
 
         {

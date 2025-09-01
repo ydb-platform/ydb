@@ -30,6 +30,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
 
     if (WithProxy) {
+        Nodes.insert({ProxyNodeId, {Context->Config.GetProxy().GetHostname(), static_cast<ui32>(Context->Config.GetProxy().GetPort())}});
         AddProxyNodeToBrokers();
     } else {
         SendDiscoveryRequest();
@@ -99,24 +100,24 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     }
 }
 
-void TKafkaMetadataActor::RequestICNodeCache() {
-    Y_ABORT_UNLESS(!FallbackToIcDiscovery);
-    FallbackToIcDiscovery = true;
-    PendingResponses++;
-    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
-}
+// void TKafkaMetadataActor::RequestICNodeCache() {
+//     Y_ABORT_UNLESS(!FallbackToIcDiscovery);
+//     FallbackToIcDiscovery = true;
+//     PendingResponses++;
+//     Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
+// }
 
-void TKafkaMetadataActor::HandleNodesResponse(
-        NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
-        const NActors::TActorContext& ctx
-) {
-    Y_ABORT_UNLESS(FallbackToIcDiscovery);
-    for (const auto& [nodeId, index] : *ev->Get()->NodeIdsMapping) {
-        Nodes[nodeId] = {(*ev->Get()->Nodes)[index].Host, (ui32)Context->Config.GetListeningPort()};
-    }
-    --PendingResponses;
-    RespondIfRequired(ctx);
-}
+// void TKafkaMetadataActor::HandleNodesResponse(
+//         NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
+//         const NActors::TActorContext& ctx
+// ) {
+//     Y_ABORT_UNLESS(FallbackToIcDiscovery);
+//     for (const auto& [nodeId, index] : *ev->Get()->NodeIdsMapping) {
+//         Nodes[nodeId] = {(*ev->Get()->Nodes)[index].Host, (ui32)Context->Config.GetListeningPort()};
+//     }
+//     --PendingResponses;
+//     RespondIfRequired(ctx);
+// }
 
 void TKafkaMetadataActor::ProcessTopicsFromRequest() {
     TVector<TString> topicsToRequest;
@@ -359,15 +360,15 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         auto& topic = Response->Topics[index];
         auto topicNodes = CheckTopicNodes(ev.Get());
         if (topicNodes.empty()) {
-            if (!FallbackToIcDiscovery) {
-                // Node info wasn't found via discovery, fallback to interconnect
-                RequestICNodeCache();
-                return;
-            } else {
+            // if (!FallbackToIcDiscovery) {
+            //     // Node info wasn't found via discovery, fallback to interconnect
+            //     RequestICNodeCache();
+            //     return;
+            // } else {
                 // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
                 KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
                 AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            }
+            // }
         } else {
             AddTopicResponse(topic, ev.Get(), topicNodes);
         }

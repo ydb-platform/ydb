@@ -22,8 +22,8 @@ Released on September 1, 2025. To update to version **2.25.0**, select the [Down
 
 ### Bug fixes
 
-* Fixed a bug where the `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md) with the `--newline-delimited` option could get stuck if the input had incorrect data.
-* Fixed a bug with the progress bar display in the `{{ ydb-cli }} workload clickbench import files` [command](./reference/ydb-cli/workload-click-bench.md) — incorrect percentage value and excessive line breaks causing duplicated progress lines.
+* Fixed a bug where the `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md) with the `--newline-delimited` option could get stuck when processing input with invalid data.
+* Fixed an issue with the progress bar display in the `{{ ydb-cli }} workload clickbench import files` [command](./reference/ydb-cli/workload-click-bench.md): incorrect percentage values and excessive line breaks caused duplicate progress lines.
 * Fixed a bug where the `{{ ydb-cli }} workload topic write` [command](./reference/ydb-cli/topic-write.md) could crash with an `Unknown AckedMessageId` error due to an internal race condition.
 * Fixed decimal type comparison in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
 

@@ -737,6 +737,70 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
+    Y_UNIT_TEST(RetryUploadRowsToShard) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        //runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        TVector<ui64> requestedTablets;
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
+                if (blockedEnqueueRecords.empty()) {
+                    blockedEnqueueRecords.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP; // drop a message for one datashard
+                };
+
+                TEvDataShard::TEvUploadRowsRequest::TPtr* e = reinterpret_cast<TEvDataShard::TEvUploadRowsRequest::TPtr*>(&ev);
+                requestedTablets.push_back(e->Get()->Get()->Record.GetTableId());
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        auto splitShard = [&](size_t shardId, size_t splitKey) {
+            auto senderSplit = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            UNIT_ASSERT(tablets.size() > shardId);
+            size_t wasTablets = tablets.size();
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(shardId), splitKey);
+            WaitTxNotification(server, senderSplit, txId);
+            tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            UNIT_ASSERT(tablets.size() == wasTablets + 1);
+        };
+
+        splitShard(0, 10);
+
+        DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, TBackoff(5));
+
+        splitShard(0, 4);
+
+        for (auto& ev : blockedEnqueueRecords) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        blockedEnqueueRecords.clear();
+
+        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SUCCESS);
+        // Three messages were received: the first message was sent to the datashard, which did not splitted, and two messages were received
+        // by the datashards after the split of the datashard, in which we lost the message.
+        UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 3);
+    }
+
     void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool withBackoff = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

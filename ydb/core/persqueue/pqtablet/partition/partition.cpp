@@ -1823,9 +1823,15 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             }
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != snapshot.ReadLag.MilliSeconds()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
+        {
+            auto lag = snapshot.ReadLag.MilliSeconds();
+            if (userInfo.ReadTimeLagMsPerPartition) {
+                userInfo.ReadTimeLagMsPerPartition->Set(lag);
+            }
+            if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != lag) {
+                haveChanges = true;
+                userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(lag);
+            }
         }
 
         {

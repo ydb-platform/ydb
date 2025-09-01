@@ -1,0 +1,115 @@
+# -*- coding: utf-8 -*-
+import json
+import os
+import re
+import time
+
+import yatest
+
+
+def cluster_endpoint(cluster):
+    return f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
+
+
+def make_test_file_with_content(human_readable_file_name, content):
+    file_path = os.path.join(yatest.common.output_path(), human_readable_file_name)
+
+    if os.path.exists(file_path):
+        name, ext = os.path.splitext(human_readable_file_name)
+        name, num = os.path.splitext(name)
+        if num:
+            num = str(int(num[1:]) + 1)  # '.1' -> '2'
+        else:
+            num = '1'
+        return make_test_file_with_content(f'{name}.{num}{ext}', content)
+
+    with open(file_path, 'w') as w:
+        w.write(content)
+    return file_path
+
+
+class CaptureFileOutput:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def __enter__(self):
+        self.saved_pos = os.path.getsize(self.filename)
+        return self
+
+    def __exit__(self, *exc):
+        # unreliable way to get all due audit records into the file
+        time.sleep(0.1)
+        with open(self.filename, 'rb', buffering=0) as f:
+            f.seek(self.saved_pos)
+            self.captured = f.read().decode('utf-8')
+
+
+class CanonicalCaptureAuditFileOutput:
+    def __init__(self, filename, components=[]):
+        self.filename = filename
+        self.captured = ''
+        self.read_lines = 0
+        self.components = components
+
+    def __enter__(self):
+        self.saved_pos = os.path.getsize(self.filename)
+        return self
+
+    def __canonize_field(self, json_record, field_name, placeholder_value=None):
+        value = json_record.get(field_name)
+        if value and value != '{none}':
+            json_record[field_name] = placeholder_value if placeholder_value else f'<canonized_{field_name}>'
+
+    def __canonize_regex(self, json_record, regex_str, replace_str):
+        for k, v in json_record.items():
+            replace_result = re.sub(regex_str, replace_str, v)
+            if replace_result != v:
+                json_record[k] = replace_result
+
+    def __canonize_audit_line(self, output):
+        # Audit log has the following format: "<time>: {"k1": "v1", "k2": "v2", ...}"
+        # where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message
+        # and v1, v2, ..., vn are their values
+        record_start = output.find('{')
+        if record_start == -1:  # error, wrong format
+            return output
+
+        json_record = json.loads(output[record_start:])
+        if len(self.components) > 0:
+            component = json_record.get('component')
+            if component not in self.components:
+                return None
+        self.__canonize_field(json_record, 'start_time')
+        self.__canonize_field(json_record, 'end_time')
+        self.__canonize_field(json_record, 'remote_address')
+        self.__canonize_field(json_record, 'tx_id')
+        self.__canonize_regex(json_record, r'txid=\d+', 'txid=<canonized_txid>')
+        self.__canonize_regex(json_record, r'cmstid=\d+', 'txid=<canonized_cmstid>')
+        self.__canonize_regex(json_record, r'\.cpp:\d+', '.cpp:<canonized_line>')
+        self.__canonize_regex(json_record, r'OwnerId: \d+', 'OwnerId: <canonized_owner_id>')
+        self.__canonize_regex(json_record, r'LocalPathId: \d+', 'LocalPathId: <canonized_local_path_id>')
+        self.__canonize_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
+        return json.dumps(json_record, sort_keys=True) + '\n'
+
+    def __exit__(self, *exc):
+        timeout = 2
+        last_read_time = time.time()
+        with open(self.filename, 'rb', buffering=0) as f:
+            f.seek(self.saved_pos)
+            while time.time() - last_read_time <= timeout:
+                # unreliable way to get all due audit records into the file
+                time.sleep(0.1)
+                line = f.readline()
+                if len(line) > 0:
+                    canonized_line = self.__canonize_audit_line(line.decode('utf-8'))
+                    if canonized_line:
+                        self.captured += canonized_line
+                        self.read_lines += 1
+                    last_read_time = time.time()
+
+    def canonize(self):
+        return yatest.common.canonical_file(
+            local=True,
+            universal_lines=True,
+            path=make_test_file_with_content('audit_log.json', self.captured)
+        )

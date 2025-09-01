@@ -304,6 +304,13 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                     bool needsJoin = calcNeedsJoin(tableDesc.Metadata);
 
                     auto key = calcKey(buildResult, index.KeyColumns.size(), needsJoin, tableDesc);
+                    Cerr << "selecting index " << index.Name << "("
+                        << std::get<0>(key) << ", "
+                        << std::get<1>(key) << ", "
+                        << std::get<2>(key) << ", "
+                        << std::get<3>(key) << ", "
+                        << std::get<4>(key) << ") "
+                        << Endl;
                     if (key > maxKey) {
                         maxKey = key;
                         chosenIndex = index.Name;

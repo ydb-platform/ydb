@@ -114,9 +114,46 @@ jobs:
 
     - name: Patch fix_msvc_output.py  
       if: ${{ matrix.os == 'windows-amd' }}
-      shell: cmd
+      shell: powershell
       run: |
-        python -c "import re; f=open('build/scripts/fix_msvc_output.py','r'); c=f.read(); f.close(); c=re.sub(r'args = sys\.argv\[1:\]', 'args=[a for a in sys.argv[1:] if a!=\"None\"]\n    if len(args)>=2 and args[0]==\"link\" and \"/usr/bin/link.exe\" in args[1]: args[1]=\"C:/Program Files/LLVM/bin/lld-link.exe\"\n    if len(args)>=1 and args[0]==\"ml\" and len(sys.argv)>2 and sys.argv[2]==\"None\": args.insert(1,\"C:/Program Files/LLVM/bin/ml.exe\")', c); f=open('build/scripts/fix_msvc_output.py','w'); f.write(c); f.close(); print('Patch applied')"
+        Write-Host "Creating patch script..."
+        
+        # Create readable Python patch script
+        $patchScript = @'
+        import re
+        import sys
+        
+        print("Patching build/scripts/fix_msvc_output.py...")
+        
+        # Read the original file
+        with open('build/scripts/fix_msvc_output.py', 'r') as f:
+            content = f.read()
+        
+        # Define the patch code (replacement for "args = sys.argv[1:]")
+        patch_code = '''args = [a for a in sys.argv[1:] if a != "None"]
+            
+            # Fix Git Bash link conflict: /usr/bin/link.exe -> lld-link.exe  
+            if len(args) >= 2 and args[0] == "link" and "/usr/bin/link.exe" in args[1]:
+                args[1] = "C:/Program Files/LLVM/bin/lld-link.exe"
+                
+            # Fix missing ml.exe path when None is passed
+            if len(args) >= 1 and args[0] == "ml" and len(sys.argv) > 2 and sys.argv[2] == "None":
+                args.insert(1, "C:/Program Files/LLVM/bin/ml.exe")'''
+        
+        # Apply the patch using regex substitution
+        patched_content = re.sub(r'args = sys\.argv\[1:\]', patch_code, content)
+        
+        # Write the patched file back
+        with open('build/scripts/fix_msvc_output.py', 'w') as f:
+            f.write(patched_content)
+            
+        print("fix_msvc_output.py patched successfully!")
+        '@
+        
+        # Write and execute the patch script
+        $patchScript | Out-File -FilePath "patch_fix_msvc.py" -Encoding utf8
+        python patch_fix_msvc.py
+        Remove-Item "patch_fix_msvc.py"
 
     - name: Build YDB CLI
       if: ${{ matrix.os == 'windows-amd' }}

@@ -616,7 +616,7 @@ private:
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(EWakeupTags::Timeout)));
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTags::Timeout))));
 
         TBase::Become(&TThis::StateWaitResolveTable);
     }
@@ -1312,7 +1312,7 @@ private:
     }
 
     void DoRetry(const NActors::TActorContext& ctx) {
-        ctx.Schedule(Backoff.Next(), new TEvents::TEvWakeup(EWakeupTags::Retry));
+        ctx.Schedule(Backoff.Next(), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTags::Retry)));
         TBase::Become(&TThis::StateDoRetry);
     }
 
@@ -1327,7 +1327,7 @@ private:
     }
 
     void HandleOnRetry(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Tag != EWakeupTags::Retry) {
+        if (ev->Get()->Tag != static_cast<ui64>(EWakeupTags::Retry)) {
             return HandleTimeout(ctx);
         }
 

@@ -75,6 +75,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
         TMaybe<ui32> PartitionsPerTablet_;
+        bool EnablePartitionCounters_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
@@ -92,6 +93,7 @@ namespace NYdb::NConsoleClient {
 
 
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<bool> EnablePartitionCounters_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };

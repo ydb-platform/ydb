@@ -421,4 +421,6 @@ message TTableServiceConfig {
     optional bool EnableOlapPushdownAggregate = 98  [ default = false ];
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false ];
+
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
 };

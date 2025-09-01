@@ -8,5 +8,6 @@ namespace NKikimr {
         MAY_BE_BAD,
         BAD,
         UNKNOWN,
+        NODE_STATE_MAX
     };
 }

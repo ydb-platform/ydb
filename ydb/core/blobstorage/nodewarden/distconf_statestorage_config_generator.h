@@ -17,7 +17,7 @@ namespace NKikimr::NStorage {
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
 
     private:
-        static constexpr ui32 NodeStatesSize = (ui32)ENodeState::UNKNOWN + 1;
+        static constexpr ui32 NodeStatesSize = (ui32)ENodeState::NODE_STATE_MAX;
 
         struct TNodeGroup {
             std::vector<std::tuple<ui32, TNodeLocation>> Nodes;

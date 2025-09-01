@@ -122,4 +122,81 @@ TEST_F(Describe, TEST_NAME(Location)) {
     }
 }
 
+TEST_F(Describe, TEST_NAME(EnablePartitionCounters)) {
+    TTopicClient client(MakeDriver());
+
+
+    {
+        const std::string topic("topic-with-counters");
+
+        {
+            auto res = client.CreateTopic(topic, TCreateTopicSettings().EnablePartitionCounters(true)).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == true);
+        }
+
+        {
+            auto res = client.AlterTopic(topic, TAlterTopicSettings().EnablePartitionCounters(false)).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == false);
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters-by-default");
+
+        {
+            auto res = client.CreateTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == false);
+        }
+
+        {
+            auto res = client.AlterTopic(topic, TAlterTopicSettings().EnablePartitionCounters(true)).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == true);
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters");
+
+        {
+            auto res = client.CreateTopic(topic, TCreateTopicSettings().EnablePartitionCounters(false)).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == false);
+        }
+
+        {
+            auto res = client.AlterTopic(topic, TAlterTopicSettings().EnablePartitionCounters(true)).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+        }
+        {
+            auto res = client.DescribeTopic(topic, {}).GetValueSync();
+            Y_ENSURE(res.IsSuccess());
+            Y_ENSURE(res.GetTopicDescription().GetEnablePartitionCounters() == true);
+        }
+    }
+}
+
 }

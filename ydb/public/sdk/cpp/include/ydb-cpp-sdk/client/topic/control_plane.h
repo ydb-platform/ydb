@@ -307,6 +307,8 @@ public:
 
     const TTopicStats& GetTopicStats() const;
 
+    bool GetEnablePartitionCounters() const;
+
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
 private:
 
@@ -330,6 +332,7 @@ private:
     NScheme::TVirtualTimestamp CreationTimestamp_;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
+    bool EnablePartitionCounters_;
 };
 
 class TConsumerDescription {
@@ -557,6 +560,8 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
 
     FLUENT_SETTING(TAttributes, Attributes);
 
+    FLUENT_SETTING_DEFAULT(bool, EnablePartitionCounters, false);
+
     TCreateTopicSettings& SetSupportedCodecs(std::vector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
         return *this;
@@ -682,6 +687,8 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     FLUENT_SETTING_VECTOR(TAlterConsumerSettings, AlterConsumers);
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+
+    FLUENT_SETTING_DEFAULT(bool, EnablePartitionCounters, false);
 
     TAlterTopicAttributesBuilder BeginAlterAttributes() {
         return TAlterTopicAttributesBuilder(*this);

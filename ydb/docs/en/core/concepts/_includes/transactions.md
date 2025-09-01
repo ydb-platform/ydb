@@ -20,6 +20,12 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
+{% note info %}
+
+For [column tables](../datamodel/table.md#column-tables), both *Online Read-Only* and *Stale Read-Only* transaction modes currently use a database snapshot taken at the start of the transaction. As a result, their behavior is effectively the same as *Snapshot Read-Only*.
+
+{% endnote %}
+
 The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 
 ## YQL Language {#language-yql}

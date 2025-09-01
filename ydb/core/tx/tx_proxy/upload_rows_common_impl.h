@@ -155,8 +155,6 @@ private:
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
 
-    TVector<std::pair<TSerializedCellVec, TString>> RowsForRetry;
-
 protected:
     enum class EUploadSource {
         ProtoValues = 0,
@@ -195,6 +193,7 @@ protected:
 
     TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
+    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
 
@@ -277,7 +276,9 @@ private:
 
     virtual TString GetDatabase() = 0;
     virtual const TString& GetTable() = 0;
-    virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
+    virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const {
+        return *Rows;
+    };
     virtual bool CheckAccess(TString& errorMessage) = 0;
     virtual TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
@@ -302,14 +303,6 @@ private:
     virtual const TString& GetSourceSchema() const {
         static const TString none;
         return none;
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRowsInt() const {
-        if (RowsForRetry.empty()) {
-            return GetRows();
-        }
-
-        return RowsForRetry;
     }
 
 private:
@@ -978,7 +971,7 @@ private:
     void FindMinMaxKeys() {
         MinKey = {};
         MaxKey = {};
-        for (const auto& pair : GetRowsInt()) {
+        for (const auto& pair : GetRows()) {
              const auto& serializedKey = pair.first;
 
             if (MinKey.GetCells().empty()) {
@@ -1004,7 +997,7 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         Span && Span.Event("ResolveShards");
-        if (GetRowsInt().empty()) {
+        if (GetRows().empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
             return ReplyIfDone(ctx);
@@ -1104,7 +1097,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRowsInt().size())}});
+        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRows().size())}});
         const auto* keyRange = GetKeyRange();
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
@@ -1112,7 +1105,7 @@ private:
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
-        for (const auto& keyValue : GetRowsInt()) {
+        for (const auto& keyValue : GetRows()) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
                 [this](const auto &partition, const auto& key) {
@@ -1198,7 +1191,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRowsInt().size() << " rows / "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRows().size() << " rows / "
             << shardRequestCount << " shards");
 
         // Sanity check: don't break when we don't have any shards for some reason
@@ -1339,17 +1332,17 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry iteration " << Backoff.GetIteration()
             << " for " << count << " rows / " << ShardUploadRetryStates.size() << " shards");
 
-        TVector<std::pair<TSerializedCellVec, TString>> rows;
-        rows.reserve(count);
+        auto rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
+        rows->reserve(count);
 
         for (auto& [_, v] : ShardUploadRetryStates) {
             for (auto& r : v.Rows) {
-                rows.emplace_back(std::move(r.first), std::move(r.second));
+                rows->emplace_back(std::move(r.first), std::move(r.second));
             }
         }
 
         ShardUploadRetryStates.clear();
-        RowsForRetry = std::move(rows);
+        Rows = std::move(rows);
 
         ResolveShards(ctx);
     }

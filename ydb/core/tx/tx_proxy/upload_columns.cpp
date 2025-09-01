@@ -20,6 +20,7 @@ public:
         , Data(data)
         , Cookie(cookie)
     {
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
     }
 
 private:
@@ -29,11 +30,6 @@ private:
 
     const TString& GetTable() override {
         return Table;
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        static const TVector<std::pair<TSerializedCellVec, TString>> empty;
-        return empty;
     }
 
     bool CheckAccess(TString&) override {

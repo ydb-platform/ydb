@@ -161,7 +161,9 @@ public:
         : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
                 NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
-    {}
+    {
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -189,10 +191,6 @@ private:
 
     const TString& GetTable() override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return AllRows;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -274,7 +272,7 @@ private:
             // Save serialized key and value
             TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            AllRows.emplace_back(std::move(serializedKey), std::move(serializedValue));
+            Rows->emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
         RuCost = TUpsertCost::CostToRu(cost);
@@ -282,7 +280,7 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(AllRows, errorMessage);
+        Batch = RowsToBatch(*Rows, errorMessage);
         return Batch.get();
     }
 
@@ -309,7 +307,6 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -318,7 +315,9 @@ public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
         : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
-    {}
+    {
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -357,10 +356,6 @@ private:
 
     const TString& GetTable() override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return Rows;
     }
 
     const TString& GetSourceData() const override {
@@ -445,7 +440,7 @@ private:
 
     bool ExtractRows(TString& errorMessage) override {
         Y_ABORT_UNLESS(Batch);
-        Rows = BatchToRows(Batch, errorMessage);
+        *Rows = BatchToRows(Batch, errorMessage);
         return errorMessage.empty();
     }
 
@@ -518,7 +513,6 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> Rows;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

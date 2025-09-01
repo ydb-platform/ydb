@@ -22,6 +22,53 @@ namespace {
         error = TStringBuilder() << "Invalid " << name << ": " << *value << " should be between " << minValue << " and " << maxValue;
         return false;
     };
+
+    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance, TString& error) {
+        if (distance == "cosine")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        else if (distance == "manhattan")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        else if (distance == "euclidean")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        else {
+            error = TStringBuilder() << "Invalid distance: " << distance;
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+        }
+    };
+    
+    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity, TString& error) {
+        if (similarity == "cosine")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        else if (similarity == "inner_product")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+        else {
+            error = TStringBuilder() << "Invalid similarity: " << similarity;
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+        }
+    };
+    
+    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType, TString& error) {
+        if (vectorType == "float")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        else if (vectorType == "uint8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        else if (vectorType == "int8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+        else if (vectorType == "bit")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+        else {
+            error = TStringBuilder() << "Invalid vector_type: " << vectorType;
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+        }
+    };
+
+    ui32 ParseUInt32(const TString& name, const TString& value, TString& error) {
+        ui32 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+        }
+        return result;
+    }
 }
 
 template <typename TRes>
@@ -466,6 +513,44 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
     }
 
     return true;
+}
+
+Ydb::Table::KMeansTreeSettings FillSettings(const TVector<std::pair<TString, TString>>& settings, TString& error) {
+    Ydb::Table::KMeansTreeSettings result;
+
+    for (const auto& [name, value] : settings) {
+        if (name == "distance") {
+            if (result.mutable_settings()->has_metric()) {
+                error = "only one of distance or similarity should be set, not both";
+                return result;
+            }
+            result.mutable_settings()->set_metric(ParseDistance(value, error));
+        } else if (name == "similarity") {
+            if (result.mutable_settings()->has_metric()) {
+                error = "only one of distance or similarity should be set, not both";
+                return result;
+            }
+            result.mutable_settings()->set_metric(ParseSimilarity(value, error));
+        } else if (name =="vector_type") {
+            result.mutable_settings()->set_vector_type(ParseVectorType(value, error));
+        } else if (name =="vector_dimension") {
+            result.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, error));
+        } else if (name =="clusters") {
+            result.set_clusters(ParseUInt32(name, value, error));
+        } else if (name =="levels") {
+            result.set_levels(ParseUInt32(name, value, error));
+        } else {
+            error = TStringBuilder() << "Unknown index setting: " << name;
+            return result;
+        }
+
+        if (error) {
+            return result;
+        }
+    }
+
+    NKikimr::NKMeans::ValidateSettings(result, error);
+    return result;
 }
 
 }

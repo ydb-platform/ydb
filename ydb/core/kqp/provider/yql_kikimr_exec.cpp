@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -1911,42 +1912,17 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            auto& protoVectorSettings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
-                            YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
+                            TVector<std::pair<TString, TString>> settings(::Reserve(indexSettings.Size()));
                             for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
-                                auto parseU32 = [] (const char* key, const TString& value) {
-                                    ui32 num = 0;
-                                    YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
-                                    return num;
-                                };
-                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
-                                if (vectorSetting.Name().Value() == "distance") {
-                                    if (protoVectorSettings.mutable_settings()->has_metric()) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "only one of distance or similarity should be set, not both"));
-                                        return SyncError();
-                                    }
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
-                                } else if (vectorSetting.Name().Value() == "similarity") {
-                                    if (protoVectorSettings.mutable_settings()->has_metric()) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "only one of distance or similarity should be set, not both"));
-                                        return SyncError();
-                                    }
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
-                                } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
-                                } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
-                                } else if (vectorSetting.Name().Value() == "clusters") {
-                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
-                                } else if (vectorSetting.Name().Value() == "levels") {
-                                    protoVectorSettings.set_levels(parseU32("levels", value));
-                                } else {
-                                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << 
-                                        "Unknown index setting: " << vectorSetting.Name().Value()));
-                                    return SyncError();
-                                }
+                                settings.emplace_back(vectorSetting.Name().Value(), vectorSetting.Value().Cast<TCoAtom>().StringValue());
+                            }
+                            TString error;
+                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = NKikimr::NKMeans::FillSettings(settings, error);
+                            if (error) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), error));
+                                return SyncError();
                             }
                         }
                         else {

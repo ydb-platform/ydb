@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+from ydb import Driver, DriverConfig, SessionPool
+from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
 
-from helpers import make_test_file_with_content, CanonicalCaptureAuditFileOutput
+from helpers import cluster_endpoint, make_test_file_with_content, CanonicalCaptureAuditFileOutput
 
 
 TOKEN = 'root@builtin'
@@ -50,6 +52,25 @@ CLUSTER_CONFIG = dict(
 )
 
 
+DYN_CONFIG = '''
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+allowed_labels:
+  node_id:
+    type: string
+  host:
+    type: string
+  tenant:
+    type: string
+selector_config: []
+    '''
+
+
 def test_create_and_drop_database(ydb_cluster):
     capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console', 'schemeshard'])
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console', 'schemeshard'])
@@ -67,3 +88,16 @@ def test_create_and_drop_database(ydb_cluster):
         ydb_cluster.remove_database(database, token=TOKEN)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
     return (capture_audit_create.canonize(), capture_audit_drop.canonize())
+
+
+def test_replace_config(ydb_cluster):
+    def apply_config(pool, config):
+        client = DynamicConfigClient(pool._driver)
+        client.set_config(config, dry_run=False, allow_unknown_fields=False)
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+        with SessionPool(driver) as pool:
+            with capture_audit:
+                pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
+    return capture_audit.canonize()

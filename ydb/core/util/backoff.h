@@ -27,9 +27,9 @@ struct TBackoff {
     static constexpr TDuration DefaultMaxDelay = TDuration::Minutes(15);
 
     // backoff with unlimited retries
-    TBackoff(TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
+    explicit TBackoff(TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
     // backoff with limited retries
-    TBackoff(size_t maxRetries, TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
+    explicit TBackoff(size_t maxRetries, TDuration initialDelay = DefaultInitialDelay, TDuration maxDelay = DefaultMaxDelay);
 
     // current retry iteration
     size_t GetIteration() const;

@@ -105,12 +105,40 @@ jobs:
       shell: cmd
       run: |
         set "ML64_PATH="
-        for /d %%v in ("C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*") do (
-          if exist "%%v\bin\Hostx64\x64\ml64.exe" set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe" & goto :symlinks
+        
+        REM Use vswhere.exe to find Visual Studio installation dynamically
+        set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+        if not exist "%VSWHERE%" (
+          echo vswhere.exe not found, falling back to LLVM assembler
+          goto :symlinks
         )
+        
+        REM Find latest VS installation with MSVC component
+        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do set "VSINSTALLDIR=%%i"
+        if not defined VSINSTALLDIR (
+          echo Visual Studio with MSVC not found, falling back to LLVM assembler  
+          goto :symlinks
+        )
+        
+        REM Find ml64.exe in the MSVC tools directory
+        for /d %%v in ("%VSINSTALLDIR%\VC\Tools\MSVC\*") do (
+          if exist "%%v\bin\Hostx64\x64\ml64.exe" (
+            set "ML64_PATH=%%v\bin\Hostx64\x64\ml64.exe"
+            echo Found Microsoft ml64.exe: %%v\bin\Hostx64\x64\ml64.exe
+            goto :symlinks
+          )
+        )
+        
         :symlinks
+        REM Create required symlinks for LLVM/ya make integration
         mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" >nul 2>&1
-        if defined ML64_PATH (mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>&1) else (mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>&1)
+        if defined ML64_PATH (
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>&1
+          echo Using Microsoft ml64.exe for assembly
+        ) else (
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>&1
+          echo Using LLVM llvm-ml.exe for assembly (may fail on OpenSSL)
+        )
 
     - name: Patch fix_msvc_output.py  
       if: ${{ matrix.os == 'windows-amd' }}
@@ -159,7 +187,11 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: |
-        "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
+        REM Find VsDevCmd.bat using vswhere for any VS edition/version
+        set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+        for /f "delims=" %%i in ('"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath') do set "VSINSTALLDIR=%%i"
+        
+        "%VSINSTALLDIR%\Common7\Tools\VsDevCmd.bat" -arch=amd64 && set "PATH=C:\Program Files\LLVM\bin;%PATH%" && python ya make ydb/apps/ydb -r -DUSE_SSE4=no --c-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" --cxx-compiler="C:\Program Files\LLVM\bin\clang-cl.exe" -o ./
 
     
     - name: Build unix binary with ya make

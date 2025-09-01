@@ -3108,6 +3108,15 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus WorldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = ctx.Expr.NewWorld(input->Pos());
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus WithWorldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -12719,6 +12728,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["ShiftRight"] = &ShiftWrapper;
         ExtFunctions["RotRight"] = &ShiftWrapper;
         Functions[SyncName] = &SyncWrapper;
+        Functions["World"] = &WorldWrapper;
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;

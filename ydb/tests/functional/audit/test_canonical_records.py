@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
 from ydb.draft import DynamicConfigClient
+from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
 from helpers import cluster_endpoint, make_test_file_with_content, CanonicalCaptureAuditFileOutput
@@ -118,3 +119,21 @@ def test_create_and_drop_table(ydb_cluster):
         with capture_audit_drop:
             table_client.drop_table('/Root/Table')
     return (capture_audit_create.canonize(), capture_audit_drop.canonize())
+
+
+def test_dml(ydb_cluster):
+    def select_42(session):
+        with session.transaction() as transaction:
+            with transaction.execute('SELECT 42;', commit_tx=True) as iterator:
+                try:
+                    while iterator.next():
+                        pass
+                except StopIteration:
+                    pass
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+        pool = QuerySessionPool(driver)
+        with capture_audit:
+            pool.retry_operation_sync(select_42)
+    return capture_audit.canonize()

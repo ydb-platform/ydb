@@ -15,6 +15,9 @@
             "uri": "file://test_canonical_records.test_create_and_drop_table/audit_log.1.json"
         }
     ],
+    "test_canonical_records.test_dml": {
+        "uri": "file://test_canonical_records.test_dml/audit_log.json"
+    },
     "test_canonical_records.test_replace_config": {
         "uri": "file://test_canonical_records.test_replace_config/audit_log.json"
     }

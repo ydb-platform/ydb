@@ -654,6 +654,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

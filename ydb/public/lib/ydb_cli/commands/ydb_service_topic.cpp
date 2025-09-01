@@ -407,8 +407,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&RetentionStorageMb_);
         config.Opts->AddLongOption("partition-counters", "Enable partition counters")
+            .NoArgument()
             .StoreValue(&EnablePartitionCounters_, true);
         config.Opts->AddLongOption("no-partition-counters", "Disable partition counters")
+            .NoArgument()
             .StoreValue(&EnablePartitionCounters_, false);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");

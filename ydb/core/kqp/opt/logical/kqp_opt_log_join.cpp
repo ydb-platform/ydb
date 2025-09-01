@@ -754,13 +754,13 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         YQL_ENSURE(joinKeyPredicate.IsValid());
 
         auto leftRowTuple = Build<TExprList>(ctx, join.Pos())
+            .Add(leftRowArg)
             .Add<TCoOptionalIf>()
                 .Predicate(joinKeyPredicate.Cast())
                 .Value<TCoAsStruct>()
                     .Add(lookupMembers)
                     .Build()
                 .Build()
-            .Add(leftRowArg)
             .Done();
 
         auto leftInput = Build<TCoFlatMap>(ctx, join.Pos())

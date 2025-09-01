@@ -510,7 +510,7 @@ public:
     };
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
-        auto joinKey = inputRow.GetElement(0);
+        auto joinKey = inputRow.GetElement(1);
         std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
         NMiniKQL::TStringProviderBackend backend;
 
@@ -542,7 +542,7 @@ public:
         UnprocessedRows.emplace_back(
             TUnprocessedLeftRow(
                 std::move(TOwnedCellVec(joinKeyCells)),
-                std::move(inputRow.GetElement(1)),
+                std::move(inputRow.GetElement(0)),
                 rowSeqNo
             )
         );

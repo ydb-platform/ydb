@@ -193,7 +193,7 @@ protected:
 
     TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> Rows;
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
 
@@ -208,7 +208,10 @@ public:
         return DerivedActivityType;
     }
 
-    explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false, NWilson::TSpan span = {})
+    explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
+                             TDuration timeout = TDuration::Max(),
+                             bool diskQuotaExceeded = false,
+                             NWilson::TSpan span = {})
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
@@ -216,6 +219,7 @@ public:
         , Status(Ydb::StatusIds::SUCCESS)
         , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
         , DiskQuotaExceeded(diskQuotaExceeded)
+        , Rows(std::move(rows))
         , Span(std::move(span))
     {}
 

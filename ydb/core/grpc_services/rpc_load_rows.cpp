@@ -158,11 +158,10 @@ class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::T
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
                 NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
     {
-        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
     }
 
 private:
@@ -239,13 +238,13 @@ private:
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
         float cost = 0.0f;
+        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows;
 
         // TODO: check that value is a list of structs
 
         // For each row in values
         TMemoryPool valueDataPool(256);
-        const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
-        for (const auto& r : rows) {
+        for (const auto& r : GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems()) {
             valueDataPool.Clear();
 
             ui64 sz = 0;
@@ -272,9 +271,10 @@ private:
             // Save serialized key and value
             TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            Rows->emplace_back(std::move(serializedKey), std::move(serializedValue));
+            rows->emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
+        Rows = std::move(rows);
         RuCost = TUpsertCost::CostToRu(cost);
         return true;
     }
@@ -313,10 +313,9 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
     {
-        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
     }
 
 private:
@@ -440,7 +439,7 @@ private:
 
     bool ExtractRows(TString& errorMessage) override {
         Y_ABORT_UNLESS(Batch);
-        *Rows = BatchToRows(Batch, errorMessage);
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(BatchToRows(Batch, errorMessage));
         return errorMessage.empty();
     }
 

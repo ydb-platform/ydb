@@ -18,12 +18,12 @@ public:
         bool writeToIndexImplTable,
         ui64 cookie,
         TBackoff backoff)
-        : Sender(sender)
+        : TUploadRowsBase(std::move(rows))
+        , Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Cookie(cookie)
     {
-        Rows = std::move(rows);
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
 

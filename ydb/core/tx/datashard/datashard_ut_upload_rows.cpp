@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool backoff = false) {
+    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool withBackoff = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
         observedUploadStatus.clear();
 
-        if (!overloadSubscribe && !backoff) {
+        if (!overloadSubscribe && !withBackoff) {
             DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
             return;
         }
@@ -805,7 +805,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
         }));
 
-        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32, TBackoff(3, TDuration::Seconds(1)));
+        TBackoff backoff = withBackoff ? TBackoff(3, TDuration::Seconds(1)) : TBackoff(0);
+        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32, backoff);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!blockedEnqueueRecords.empty());

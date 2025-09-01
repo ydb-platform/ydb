@@ -14,17 +14,17 @@ public:
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
         ui64 cookie)
-        : Sender(sender)
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>())
+        , Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Data(data)
         , Cookie(cookie)
     {
-        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
     }
 
 private:
-    TString GetDatabase()override {
+    TString GetDatabase() override {
         return TString();
     }
 

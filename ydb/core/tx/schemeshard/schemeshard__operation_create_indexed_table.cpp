@@ -241,7 +241,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
-        auto indexType = indexDescription.HasType()
+        const auto indexType = indexDescription.HasType()
             ? indexDescription.GetType()
             : NKikimrSchemeOp::EIndexTypeGlobal;
 

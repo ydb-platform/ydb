@@ -42,6 +42,11 @@ class QueryExecMode(enum.IntEnum):
     EXECUTE = 50
 
 
+class QueryExplainResultFormat(enum.Enum):
+    STR = 0
+    DICT = 10
+
+
 class QueryStatsMode(enum.IntEnum):
     UNSPECIFIED = 0
     NONE = 10

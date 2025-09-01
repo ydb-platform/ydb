@@ -22,30 +22,28 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 ### Implicit Transactions {#implicit}
 
-When a transaction is not explicitly defined for a query, {{ ydb-short-name }} automatically manages transactional behavior. This is referred to as an implicit transaction. Unlike explicit transactions, where applications initiate and commit transactions directly, implicit transactions are internally handled by the {{ ydb-short-name }} server when no [explicit transaction mode](../transactions.md#modes) is specified.
+If no [transaction mode](../transactions.md#modes) is specified for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
+
+In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with **Serializable** mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with certain guarantees and limitations described below.
 
 #### Behavior and Guarantees
 
-The guarantees provided by implicit transactions are generally weaker than those offered by explicit transactions. In particular, some types of operations executed via implicit transactions cannot be rolled back if an error occurs. The behavior varies depending on the type of statement:
-
 - **Data Definition Language (DDL) Statements**
-  DDL queries (such as `CREATE TABLE`, `DROP TABLE`, etc.) are always executed outside of any transaction context. Multistatement queries are supported only if all statements are DDL. If an error occurs, changes made by previous statements within the batch are not rolled back.
+  DDL statements (such as `CREATE TABLE`, `DROP TABLE`, etc.) are always executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
 
 - **Data Manipulation Language (DML) Statements**
-  DML queries (such as `UPSERT`, `INSERT`, `UPDATE`, etc.) are automatically executed inside a transaction with Snapshot (for read-only queries) or Serializable (for read-write queries) isolation, created and managed by the server. Multistatement queries are supported if all statements are DML. On successful execution, changes are committed. If an error occurs, all changes are rolled back.
+  DML statements (such as `UPSERT`, `INSERT`, `UPDATE`, etc.) are wrapped in a transaction with **Serializable** mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes rolled back.
 
 - **Batch Modification Statements**
-  Batch modification statements (such as `BATCH UPDATE` and `BATCH DELETE FROM`) are executed outside of a transactional context. Multistatement queries are not supported. As with DDL, changes are not rolled back if an error occurs during execution.
+  Batch modification statements (such as `BATCH UPDATE` and `BATCH DELETE FROM`) are executed outside a transaction. A query can contain only one batch modification statement. If an error occurs, the statement's changes are not rolled back.
 
 #### Summary Table
 
 | Statement Type | Implicit Transaction Handling                     | Multistatement Support | Rollback on Error     |
 |----------------|---------------------------------------------------|------------------------|-----------------------|
-| DDL            | Outside transaction context                       | Yes (DDL-only)         | No                    |
-| DML            | Auto transaction (Serializable/Snapshot)          | Yes (DML-only)         | Yes                   |
-| Batch Modification Statements | Outside transaction context        | No                     | No                    |
-
-When using implicit transactions, be aware of these limitations and reduced guarantees compared to explicit transactions. For advanced transaction control, error handling, or atomicity across diverse statements, it is strongly recommended to use [explicit transactions mode](../transactions.md#modes).
+| DDL            | Outside a transaction                             | Yes (DDL-only)         | No                    |
+| DML            | Auto transaction (Serializable)                   | Yes (DML-only)         | Yes                   |
+| Batch Modification Statements | Outside a transaction              | No                     | No                    |
 
 The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 

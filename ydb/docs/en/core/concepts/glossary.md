@@ -102,13 +102,9 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
-### Explicit Transactions {#explicit-transactions}
-
-Transactions that are explicitly defined and managed by the user are called **explicit transactions**. This type of transaction is initiated manually, including the selection of the isolation level and transactional behavior. They are explained in more detail in [{#T}](transactions.md#modes).
-
 ### Implicit Transactions {#implicit-transactions}
 
-Transactions that are automatically created and managed by {{ ydb-short-name }} are called **implicit transactions**. {{ ydb-short-name }} automatically determines the transactional behavior based on the provided query. They are explained in more detail in [{#T}](transactions.md#implicit).
+An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
 
 ### Interactive transactions {#interactive-transaction}
 

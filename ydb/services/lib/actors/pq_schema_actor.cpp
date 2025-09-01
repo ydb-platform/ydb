@@ -948,6 +948,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        pqTabletConfig->SetEnablePartitionCounters(settings.enable_partition_counters());
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST);
     }
 
@@ -1153,6 +1155,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
+
+        pqTabletConfig->SetEnablePartitionCounters(request.enable_partition_counters());
+
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
@@ -1407,6 +1412,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
+
+        pqTabletConfig->SetEnablePartitionCounters(request.enable_partition_counters());
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
     }
 }

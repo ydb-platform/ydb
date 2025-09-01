@@ -3080,7 +3080,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (Config.GetEnablePerPartitionCounters()) {
+    if (Config.GetEnablePartitionCounters()) {
         SetupPerPartitionCounters();
     } else {
         ResetPerPartitionCounters();

@@ -92,7 +92,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetEnableCompactification(true);
             }
 
-            tabletConfig->SetEnablePerPartitionCounters(parameters.enablePerPartitionCounters);
+            tabletConfig->SetEnablePartitionCounters(parameters.enablePartitionCounters);
 
             for (auto& u : users) {
                 if (u.second)

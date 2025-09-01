@@ -1305,7 +1305,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasMetricsConfig()) {
-        AppData->MetricsConfig = runConfig.AppConfig.GetMetricsConfig();
+        AppData->MetricsConfig.InitializeFromProto(runConfig.AppConfig.GetMetricsConfig());
     }
 
     // setup resource profiles

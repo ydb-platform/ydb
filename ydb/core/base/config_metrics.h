@@ -22,67 +22,57 @@ struct TCommonLatencyHistBounds {
     TVector<double> Nvme;
 
 public:
-    TCommonLatencyHistBounds() = default;
+    TCommonLatencyHistBounds() {
+        InitializeWithDefaults();
+    }
 
 private:
-    TCommonLatencyHistBounds(TVector<double> unknown, TVector<double> rot, TVector<double> ssd, TVector<double> nvme)
-        : Unknown(std::move(unknown))
-        , Rot(std::move(rot))
-        , Ssd(std::move(ssd))
-        , Nvme(std::move(nvme))
-    {}
-
-public:
-    static TCommonLatencyHistBounds Create(const NKikimrConfig::TCommonLatencyHistBounds& bounds) {
-        TVector<double> unknown = {
+    void InitializeWithDefaults() {
+        Unknown = {
             8, 16, 32, 64, 128, 256, 512,   // ms
             1'024, 4'096,                                       // s
             65'536                                                  // minutes
         };
+        Rot = Unknown;
+        Ssd = {
+            0.5,                                        // us
+            1, 2, 8, 32, 128, 512,  // ms
+            1'024, 4'096,                           // s
+            65'536                                      // minutes
+        };
+        Nvme = {
+            0.25, 0.5,                              // us
+            1, 2, 4, 8, 32, 128,    // ms
+            1'024,                                      // s
+            65'536                                      // minutes
+        };
+    }
 
-        TVector<double> rot;
-        TVector<double> ssd;
-        TVector<double> nvme;
-
+public:
+    void InitializeFromProto(const NKikimrConfig::TCommonLatencyHistBounds& bounds) {
         if (bounds.RotSize() > 0) {
-            rot = FromArray(bounds.GetRot());
-        } else {
-            rot = unknown;
+            Rot = FromArray(bounds.GetRot());
         }
-
         if (bounds.SsdSize() > 0) {
-            ssd = FromArray(bounds.GetSsd());
-        } else {
-            ssd = {
-                0.5,                                        // us
-                1, 2, 8, 32, 128, 512,  // ms
-                1'024, 4'096,                           // s
-                65'536                                      // minutes
-            };
+            Ssd = FromArray(bounds.GetSsd());
         }
-        
         if (bounds.NvmeSize() > 0) {
-            nvme = FromArray(bounds.GetNvme());
-        } else {
-            nvme = {
-                0.25, 0.5,                              // us
-                1, 2, 4, 8, 32, 128,    // ms
-                1'024,                                      // s
-                65'536                                      // minutes
-            };
+            Nvme = FromArray(bounds.GetNvme());
         }
-
-        return TCommonLatencyHistBounds(std::move(unknown), std::move(rot), std::move(ssd), std::move(nvme));
     }
 };
 
 class TMetricsConfig {
 public:
-    TMetricsConfig() = default;
+    TMetricsConfig()
+    : CommonLatencyHistBounds()
+    {}
 
-    TMetricsConfig(const NKikimrConfig::TMetricsConfig& config )
-    : CommonLatencyHistBounds(TCommonLatencyHistBounds::Create(config.GetCommonLatencyHistBounds()))
-    { }
+    void InitializeFromProto(const NKikimrConfig::TMetricsConfig& config) {
+        if (config.HasCommonLatencyHistBounds()) {
+            CommonLatencyHistBounds.InitializeFromProto(config.GetCommonLatencyHistBounds());
+        }
+    }
 
     TCommonLatencyHistBounds GetCommonLatencyHistBounds() const {
         return CommonLatencyHistBounds;

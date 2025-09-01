@@ -284,14 +284,26 @@ namespace NActors {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "harmonize done");
         }
 
-        do {
+        while (!StopFlag.load(std::memory_order_acquire)) {
             {
-                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
-                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
-                    Threads[workerId].SetWork();
-                    AtomicDecrement(Semaphore);
-                    return MailboxTable->Get(activation);
+                bool needToCheckSleep = false;
+                while (true) {
+                    ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
+                    if (checkToSleepWorkers == 0) {
+                        break;
+                    }
+                    needToCheckSleep = true;
+                    CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
+                }
+
+                if (!needToCheckSleep) {
+                    TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                    if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
+                        Threads[workerId].SetWork();
+                        AtomicDecrement(Semaphore);
+                        return MailboxTable->Get(activation);
+                    }
                 }
             }
 
@@ -316,7 +328,7 @@ namespace NActors {
                 }
             }
             SpinLockPause();
-        } while (!StopFlag.load(std::memory_order_acquire));
+        }
 
         return nullptr;
     }
@@ -651,6 +663,7 @@ namespace NActors {
                 semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
             } else {
                 semaphore.CurrentSleepThreadCount -= (i64)prevCount - threads;
+                CheckToSleepWorkers.fetch_add(prevCount - threads, std::memory_order_release);
             }
             AtomicAdd(Semaphore, semaphore.ConvertToI64() - oldX);
             LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);

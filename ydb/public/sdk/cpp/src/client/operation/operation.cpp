@@ -73,4 +73,4 @@ NThreading::TFuture<TOperationsList<NQuery::TScriptExecutionOperation>> TOperati
     return List<NQuery::TScriptExecutionOperation>("scriptexec", pageSize, pageToken);
 }
 
-} // namespace NYdb::inline Dev::NOperation
+} // namespace NYdb::NOperation

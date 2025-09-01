@@ -332,12 +332,12 @@ auto CalcFulltextImplTableDescImpl(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto tokenColumn = implTableDesc.AddColumns();
-        tokenColumn->SetName(NTableFulltextIndex::TokenColumn);
-        tokenColumn->SetType(NTableIndex::TokenTypeName);
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NFulltext::TokenTypeName);
         tokenColumn->SetTypeId(NSchemeShard::TokenTypeId);
         tokenColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableFulltextIndex::TokenColumn);
+    implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);

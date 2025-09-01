@@ -79,6 +79,11 @@ bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);
 
+namespace NFulltext {
+    // TODO: support utf-8 in fulltext index
+    inline constexpr const char* TokenTypeName = "String";
+
+    inline constexpr const char* TokenColumn = "__ydb_token";
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

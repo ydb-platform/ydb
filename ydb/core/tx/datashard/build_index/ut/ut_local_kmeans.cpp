@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.SetChild(Max<ui64>() - 100);
-        }, "Condition violated: `(parent & PostingParentFlag) == 0'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        }, "Condition violated: `!HasPostingParentFlag(parent)'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
     }
 
     Y_UNIT_TEST (MainToPosting) {

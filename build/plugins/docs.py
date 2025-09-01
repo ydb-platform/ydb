@@ -2,10 +2,11 @@ import json
 
 
 def extract_macro_calls(unit, macro_value_name):
-    if not unit.get(macro_value_name):
+    value = unit.get(macro_value_name)  # TODO(dimdim11) replace by get_subst
+    if not value:
         return []
 
-    return filter(None, unit.get(macro_value_name).replace('$' + macro_value_name, '').split())
+    return filter(None, value.replace('$' + macro_value_name, '').split())
 
 
 def macro_calls_to_dict(unit, calls):

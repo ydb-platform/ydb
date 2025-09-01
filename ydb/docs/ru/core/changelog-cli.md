@@ -8,8 +8,8 @@
 
 * Добавлена финальная статистика выполнения в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
 * Добавлена опция `--start-offset` в [команду](./reference/ydb-cli/topic-read.md) `{{ ydb-cli }} topic read`, которая задаёт начальную позицию для чтения из выбранной партиции.
-* Добавлен новый способ указания путей в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3` с новой опцией `--include` вместо опции `--item`.
-* Добавлена поддержка функций шифрования в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3`.
+* **_(Требуется сервер v25.3+)_** Добавлен новый способ указания путей в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3` с новой опцией `--include` вместо опции `--item`.
+* **_(Требуется сервер v25.3+)_** Добавлена поддержка функций шифрования в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3`.
 
 ### Улучшения
 

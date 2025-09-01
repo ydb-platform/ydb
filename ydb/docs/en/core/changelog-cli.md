@@ -8,8 +8,8 @@ Released on September 1, 2025. To update to version **2.25.0**, select the [Down
 
 * Added final execute statistics to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
 * Added the `--start-offset` option to the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read.md), which specifies a starting position for reading from the selected partition.
-* Added a new paths approach in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md) with the new `--include` option instead of the `--item` option.
-* Added support for encryption features in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md).
+* **_(Requires server v25.3+)_** Added a new paths approach in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md) with the new `--include` option instead of the `--item` option.
+* **_(Requires server v25.3+)_** Added support for encryption features in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md).
 
 ### Improvements
 

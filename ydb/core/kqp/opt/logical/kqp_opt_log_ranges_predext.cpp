@@ -269,8 +269,13 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
         {
             ui64 prefixLen = 0;
-            if (buildResult.ExpectedMaxRanges.Defined() && *buildResult.ExpectedMaxRanges == 1)
+            if (buildResult.ExpectedMaxRanges.Defined() && *buildResult.ExpectedMaxRanges == 1) {
                 prefixLen = buildResult.PointPrefixLen;
+            }
+
+            if (!kqpCtx.Config->EnablePointPredicateSortAutoSelectIndex) {
+                prefixLen = 0;
+            }
 
             return std::make_tuple(
                 keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, prefixLen) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),

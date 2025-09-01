@@ -1,4 +1,4 @@
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
@@ -95,8 +95,8 @@ TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription
     TVector<TStringBuf> indexTableColumns;
     THashSet<TStringBuf> indexTableColumnSet;
 
-    indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-    indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+    indexTableColumns.emplace_back(NTableIndex::NKMeans::ParentColumn);
+    indexTableColumnSet.insert(NTableIndex::NKMeans::ParentColumn);
 
     for (const auto& column : table.Metadata->KeyColumnNames) {
         if (indexTableColumnSet.insert(column).second) {

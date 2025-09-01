@@ -2,7 +2,7 @@
 
 #include "distconf.h"
 
-#include <ydb/core/base/statestorage_nodestate.h>
+#include <ydb/core/base/nodestate.h>
 
 namespace NKikimr::NStorage {
 

@@ -8,7 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
-#include <ydb/core/base/statestorage_nodestate.h>
+#include <ydb/core/base/nodestate.h>
 
 namespace NKikimr::NCms::NSentinel {
 

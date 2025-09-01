@@ -42,6 +42,7 @@ SRCS(
     logoblob.h
     memory_controller_iface.h
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
@@ -58,7 +59,6 @@ SRCS(
     statestorage_guardian_impl.h
     statestorage_impl.h
     statestorage_monitoring.cpp
-    statestorage_nodestate.h
     statestorage_proxy.cpp
     statestorage_replica.cpp
     statestorage_ringwalker.h

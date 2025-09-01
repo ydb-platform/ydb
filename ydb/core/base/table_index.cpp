@@ -89,6 +89,8 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
         takeKeyColumns--;
     }
 
@@ -183,6 +185,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()

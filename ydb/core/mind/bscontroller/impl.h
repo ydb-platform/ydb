@@ -89,6 +89,7 @@ public:
     class TGroupSelector;
     class TGroupFitter;
     class TSelfHealActor;
+    struct TStaticGroupInfo;
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TMonotonic, TVSlotInfo*>>;
 
@@ -1601,6 +1602,7 @@ private:
     void CommitStoragePoolStatUpdates(TConfigState& state);
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
+    void CommitSyncerUpdates(TConfigState& state);
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
@@ -1999,10 +2001,29 @@ private:
         ui64 BlobsError = 0;
     };
 
-    std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
-    std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
-    THashSet<TGroupId> TargetGroupsInCommit;
-    THashMap<std::tuple<TGroupId, TNodeId>, TSyncerProgress> SyncerProgress;
+    struct TSyncersRequiringAction;
+
+    struct TSyncerState
+        : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
+    {
+        struct TPerNodeInfo {
+            TGroupId SourceGroupId;
+            TSyncerProgress Progress;
+        };
+        const TGroupId BridgeProxyGroupId;
+        const TGroupId TargetGroupId;
+        THashMap<TNodeId, TPerNodeInfo> NodeIds;
+        bool InCommit = false;
+
+        TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , TargetGroupId(targetGroupId)
+        {}
+    };
+
+    THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
+    std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 
     void CheckUnsyncedBridgePiles();
 
@@ -2011,12 +2032,14 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
-    void StartRequiredSyncers();
+    bool ProcessSyncers(TNodeId nodeId = 0);
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<ui32>& groupIdsToRead);
 
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
+
+    void ApplyStaticGroupUpdateForSyncers(std::map<TGroupId, TStaticGroupInfo>& prevStaticGroups);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Node warden interoperation

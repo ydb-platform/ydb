@@ -1,4 +1,9 @@
 #include "reporter.h"
+#include "../counters/aggregation/table_stats.h"
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+namespace NKikimr::NOlap {
+
 
 void TColumnShardStatisticsReporter::Bootstrap(const TActorContext& /*ctx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TColumnShardStatisticsReporter", "Bootstrapped");
@@ -11,8 +16,10 @@ void TColumnShardStatisticsReporter::BuildSSPipe(const TActorContext& ctx) {
 }
 
 void TColumnShardStatisticsReporter::SetSSId(ui64 sSId, const TActorContext& ctx) {
-    SSId = sSId;
-    BuildSSPipe(ctx);
+    if (!SSId) {
+        SSId = sSId;
+        BuildSSPipe(ctx);
+    }
 }
 
 void TColumnShardStatisticsReporter::SendPeriodicStats() {
@@ -22,26 +29,26 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
         // LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
-    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
+    const auto& tabletSchemeShardLocalPathId = Owner.TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
 
     const TActorContext& ctx = ActorContext();
     const TInstant now = TAppData::TimeProvider->Now();
 
-    if (LastStatsReport + StatsReportInterval > now) {
-        LOG_S_TRACE("Skip send periodic stats: report interval = " << StatsReportInterval);
+    if (Owner.LastStatsReport + Owner.StatsReportInterval > now) {
+        LOG_S_TRACE("Skip send periodic stats: report interval = " << Owner.StatsReportInterval);
         return;
     }
-    LastStatsReport = now;
+    Owner.LastStatsReport = now;
 
     if (!StatsReportPipe) {
-        LOG_S_DEBUG("Create periodic stats pipe to " << CurrentSchemeShardId << " at tablet " << TabletID());
+        LOG_S_DEBUG("Create periodic stats pipe to " << Owner.CurrentSchemeShardId << " at tablet " << Owner.TabletID());
 
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(Owner.TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
-    FillOlapStats(ctx, ev);
-    FillColumnTableStats(ctx, ev);
+    Owner.FillOlapStats(ctx, ev);
+    Owner.FillColumnTableStats(ctx, ev);
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
@@ -56,4 +63,6 @@ void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::T
     StatsReportPipe = {};
     BuildSSPipe(ctx);
     return;
+}
+
 }

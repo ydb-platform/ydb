@@ -5,6 +5,7 @@
 #include "counters/aggregation/table_stats.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
+#include "statistics/reporter.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
@@ -128,6 +129,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
+    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this);
+    ColumnShardStatisticsReporter = ctx.Register(TmpColumnShardStatisticsReporter);
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
@@ -246,7 +249,8 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
 
-        SendPeriodicStats();
+        TmpColumnShardStatisticsReporter->SendPeriodicStats();
+        // SendPeriodicStats();
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
@@ -442,6 +446,8 @@ void TColumnShard::SendPeriodicStats() {
         NTabletPipe::TClientConfig clientConfig;
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
+
+    LOG_S_ERROR("iurii Shard id " << CurrentSchemeShardId << " " << tabletSchemeShardLocalPathId.GetRawValue());
 
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 

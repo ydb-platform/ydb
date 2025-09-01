@@ -60,6 +60,7 @@ PEERDIR(
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/splitter
+    ydb/core/tx/columnshard/statistics
     ydb/core/tx/columnshard/subscriber
     ydb/core/tx/columnshard/tablet
     ydb/core/tx/columnshard/tracing

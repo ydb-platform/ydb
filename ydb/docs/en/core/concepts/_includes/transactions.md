@@ -24,15 +24,15 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 If no [transaction mode](../transactions.md#modes) is specified for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
 
-In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with **Serializable** mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with certain guarantees and limitations described below.
+In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with certain guarantees and limitations described below.
 
 #### Behavior and Guarantees
 
 - **Data Definition Language (DDL) Statements**
-  DDL statements (such as `CREATE TABLE`, `DROP TABLE`, etc.) are always executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
+  DDL statements (such as `CREATE TABLE`, `DROP TABLE`, etc.) are executed outside a transaction. A query can consist only of DDL statements. If an error occurs, changes made by previous statements in the query are not rolled back.
 
 - **Data Manipulation Language (DML) Statements**
-  DML statements (such as `UPSERT`, `INSERT`, `UPDATE`, etc.) are wrapped in a transaction with **Serializable** mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes rolled back.
+  DML statements (such as `UPSERT`, `INSERT`, `UPDATE`, etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes rolled back.
 
 - **Batch Modification Statements**
   Batch modification statements (such as `BATCH UPDATE` and `BATCH DELETE FROM`) are executed outside a transaction. A query can contain only one batch modification statement. If an error occurs, the statement's changes are not rolled back.

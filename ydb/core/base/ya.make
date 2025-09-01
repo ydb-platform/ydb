@@ -58,6 +58,7 @@ SRCS(
     statestorage_guardian_impl.h
     statestorage_impl.h
     statestorage_monitoring.cpp
+    statestorage_nodestate.h
     statestorage_proxy.cpp
     statestorage_replica.cpp
     statestorage_ringwalker.h

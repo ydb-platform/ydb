@@ -8,6 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <ydb/core/base/statestorage_nodestate.h>
 
 namespace NKikimr::NCms::NSentinel {
 
@@ -109,14 +110,6 @@ private:
 }; // TPDiskInfo
 
 struct TNodeStatusComputer {
-    enum ENodeState {
-        GOOD = 0,
-        PRETTY_GOOD,
-        MAY_BE_GOOD,
-        MAY_BE_BAD,
-        BAD,
-    };
-
     ENodeState CurrentState = ENodeState::GOOD;
     ENodeState ActualState = ENodeState::GOOD;
     ui64 StateCounter = 0;

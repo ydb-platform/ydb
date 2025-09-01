@@ -728,7 +728,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         return false;
     }
 
-    void MarkNode(ui32 nodeId, TNodeInfo::ENodeState status) {
+    void MarkNode(ui32 nodeId, ENodeState status) {
         auto node = SentinelState->Nodes.find(nodeId);
         if (node != SentinelState->Nodes.end()) {
             node->second.AddState(status);
@@ -774,7 +774,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
-        MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
+        MarkNode(nodeId, ENodeState::GOOD);
 
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
@@ -820,7 +820,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
-        MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
+        MarkNode(nodeId, ENodeState::BAD);
 
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId
@@ -847,7 +847,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             const ui32 nodeId = *SentinelState->StateUpdaterWaitNodes.begin();
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
-            MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
+            MarkNode(nodeId, ENodeState::BAD);
             AcceptNodeReply(nodeId);
         }
 

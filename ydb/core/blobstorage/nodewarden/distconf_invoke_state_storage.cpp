@@ -1,7 +1,9 @@
 #include "distconf_invoke.h"
 #include "distconf_selfheal.h"
-#include "ydb/core/base/statestorage.h"
-#include "ydb/core/cms/sentinel_impl.h"
+
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/statestorage_nodestate.h>
+
 
 namespace NKikimr::NStorage {
 
@@ -82,7 +84,7 @@ namespace NKikimr::NStorage {
             ui32 nodeId = node.GetNodeId();
             auto* nodeState = currentConfig->AddNodesState();
             nodeState->SetNodeId(nodeId);
-            ui32 state = Self->SelfHealNodesState.contains(nodeId) ? Self->SelfHealNodesState.at(nodeId) : ((ui32)NCms::NSentinel::TNodeStatusComputer::ENodeState::BAD + 1);
+            ui32 state = Self->SelfHealNodesState.contains(nodeId) ? Self->SelfHealNodesState.at(nodeId) : (ui32)ENodeState::UNKNOWN;
             nodeState->SetState(state);
             nodeState->SetLocation(location.GetRackId());
         }

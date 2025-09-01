@@ -1,7 +1,6 @@
 RECURSE(
     core
     dq
-    minikql
     providers
     public
     tests

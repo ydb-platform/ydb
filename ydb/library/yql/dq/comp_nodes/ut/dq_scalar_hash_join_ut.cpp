@@ -15,17 +15,17 @@ namespace NMiniKQL {
 namespace {
 
 NUdf::TUnboxedValue DoTestDqScalarHashJoin(
-    TSetup<false>& setup,
+    TDqSetup<false>& setup,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
     EJoinKind joinKind
 ) {
-    TDqProgramBuilder dpb(setup.PgmBuilder->GetTypeEnvironment(), *setup.FunctionRegistry);
+    TDqProgramBuilder& pb = setup.GetDqProgramBuilder();
 
-    TRuntimeNode leftList = dpb.Arg(leftType);
-    TRuntimeNode rightList = dpb.Arg(rightType);
-    const auto leftFlow = ToWideFlow(dpb, leftList);
-    const auto rightFlow = ToWideFlow(dpb, rightList);
+    TRuntimeNode leftList = pb.Arg(leftType);
+    TRuntimeNode rightList = pb.Arg(rightType);
+    const auto leftFlow = ToWideFlow(pb, leftList);
+    const auto rightFlow = ToWideFlow(pb, rightList);
     
     TVector<TType*> resultTypes;
     
@@ -39,12 +39,12 @@ NUdf::TUnboxedValue DoTestDqScalarHashJoin(
         resultTypes.push_back(type);
     }
     
-    auto resultMultiType = dpb.NewMultiType(resultTypes);
-    auto resultFlowType = dpb.NewFlowType(resultMultiType);
+    auto resultMultiType = pb.NewMultiType(resultTypes);
+    auto resultFlowType = pb.NewFlowType(resultMultiType);
     
-    const auto joinNode = dpb.DqScalarHashJoin(leftFlow, rightFlow, joinKind, leftKeyColumns, rightKeyColumns, resultFlowType);
+    const auto joinNode = pb.DqScalarHashJoin(leftFlow, rightFlow, joinKind, leftKeyColumns, rightKeyColumns, resultFlowType);
     
-    const auto resultNode = FromWideFlow(dpb, joinNode);
+    const auto resultNode = FromWideFlow(pb, joinNode);
 
     const auto graph = setup.BuildGraph(resultNode, {leftList.GetNode(), rightList.GetNode()});
     auto& ctx = graph->GetContext();
@@ -54,139 +54,115 @@ NUdf::TUnboxedValue DoTestDqScalarHashJoin(
     return graph->GetValue();
 }
 
+void RunTestDqScalarHashJoin(
+    TDqSetup<false>& setup, EJoinKind joinKind,
+    TType* expectedType, const NUdf::TUnboxedValue& expected,
+    TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
+    TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns
+) {
+    const auto got = DoTestDqScalarHashJoin(
+        setup,
+        leftType, std::move(leftListValue), leftKeyColumns,
+        rightType, std::move(rightListValue), rightKeyColumns,
+        joinKind
+    );
+    
+    UNIT_ASSERT(got.HasValue());
+    CompareResults(expectedType, expected, got);
+}
+
 } // namespace
 
-Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
-    Y_UNIT_TEST(TestSimpleScalarHashJoin) {
-        TSetup<false> setup(GetDqNodeFactory());
-        TProgramBuilder& pb = *setup.PgmBuilder;
+Y_UNIT_TEST_SUITE(TDqScalarHashJoinBasicTest) {
 
-
-        const auto leftDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-        const auto leftStringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-        const auto leftTupleType = pb.NewTupleType({leftDataType, leftStringType});
-        const auto leftListType = pb.NewListType(leftTupleType);
-
-        TVector<TRuntimeNode> leftItems;
-        leftItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<NUdf::EDataSlot::String>("a")}));
-        leftItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(2), pb.NewDataLiteral<NUdf::EDataSlot::String>("b")}));
-        const auto leftListValue = pb.NewList(leftTupleType, leftItems);
-
-
-        const auto rightDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-        const auto rightStringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-        const auto rightTupleType = pb.NewTupleType({rightDataType, rightStringType});
-        const auto rightListType = pb.NewListType(rightTupleType);
-
-        TVector<TRuntimeNode> rightItems;
-        rightItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<NUdf::EDataSlot::String>("x")}));
-        rightItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(3), pb.NewDataLiteral<NUdf::EDataSlot::String>("y")}));
-        const auto rightListValue = pb.NewList(rightTupleType, rightItems);
-
-        const auto leftGraph = setup.BuildGraph(leftListValue);
-        const auto rightGraph = setup.BuildGraph(rightListValue);
-        const auto leftValue = leftGraph->GetValue();
-        const auto rightValue = rightGraph->GetValue();
-
-
-        TVector<ui32> leftKeyColumns = {0};
-        TVector<ui32> rightKeyColumns = {0};
-
-
-        const auto result = DoTestDqScalarHashJoin(
-            setup,
-            leftListType, NUdf::TUnboxedValue(leftValue), leftKeyColumns,
-            rightListType, NUdf::TUnboxedValue(rightValue), rightKeyColumns,
-            EJoinKind::Inner
-        );
-
-        UNIT_ASSERT(result.HasValue());
-        const auto resultIterator = result.GetListIterator();
-
-        TVector<NUdf::TUnboxedValue> resultItems;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
-            UNIT_ASSERT(item.HasValue());
-            resultItems.push_back(item);
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 4);
-
-        for (ui32 i = 0; i < 2; ++i) {
-            auto tuple = resultItems[i];
-            UNIT_ASSERT(tuple.HasValue());
-            
-            auto leftId = tuple.GetElement(0);
-            UNIT_ASSERT(leftId.HasValue());
-            UNIT_ASSERT_VALUES_EQUAL(leftId.Get<ui32>(), i + 1);
-            
-            auto leftStr = tuple.GetElement(1);
-            UNIT_ASSERT(leftStr.HasValue());
-            ui32 expectedAscii = (i == 0) ? 97 : 98;
-            UNIT_ASSERT_VALUES_EQUAL(leftStr.Get<ui32>(), expectedAscii);
-            auto rightId = tuple.GetElement(2);
-            auto rightStr = tuple.GetElement(3);
-            UNIT_ASSERT(!rightId.HasValue());
-            UNIT_ASSERT(!rightStr.HasValue());
-        }
+    Y_UNIT_TEST(TestBasicPassthrough) {
+        TDqSetup<false> setup(GetDqNodeFactory());
         
+        TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+        TVector<TString> leftValues = {"a", "b", "c", "d", "e"};
+        
+        TVector<ui64> rightKeys = {2, 3, 4, 6, 7};
+        TVector<TString> rightValues = {"x", "y", "z", "u", "v"};
 
-        for (ui32 i = 2; i < 4; ++i) {
-            auto tuple = resultItems[i];
-            UNIT_ASSERT(tuple.HasValue());
-            
-            auto leftId = tuple.GetElement(0);
-            auto leftStr = tuple.GetElement(1);
-            UNIT_ASSERT(leftId.HasValue());
-            UNIT_ASSERT(leftStr.HasValue());
-            UNIT_ASSERT_VALUES_EQUAL(leftId.Get<ui32>(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(leftStr.Get<ui32>(), 98);
-            
-            auto rightId = tuple.GetElement(2);
-            auto rightStr = tuple.GetElement(3);
-            UNIT_ASSERT(rightId.HasValue());
-            UNIT_ASSERT(rightStr.HasValue());
-            
-            ui32 expectedRightId = (i == 2) ? 1 : 3;
-            ui32 expectedRightStr = (i == 2) ? 120 : 121;
-            UNIT_ASSERT_VALUES_EQUAL(rightId.Get<ui32>(), expectedRightId);
-            UNIT_ASSERT_VALUES_EQUAL(rightStr.Get<ui32>(), expectedRightStr);
-        }
+        TVector<ui64> expectedKeys = {1, 2, 3, 4, 5, 2, 3, 4, 6, 7};
+        TVector<TString> expectedValues = {"a", "b", "c", "d", "e", "x", "y", "z", "u", "v"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
     }
 
     Y_UNIT_TEST(TestEmptyFlows) {
-        TSetup<false> setup(GetDqNodeFactory());
-        TProgramBuilder& pb = *setup.PgmBuilder;
+        TDqSetup<false> setup(GetDqNodeFactory());
+        
+        TVector<ui64> emptyKeys;
+        TVector<TString> emptyValues;
 
-        const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-        const auto tupleType = pb.NewTupleType({dataType});
-        const auto listType = pb.NewListType(tupleType);
-        const auto emptyListValue = pb.NewEmptyList(tupleType);
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
 
-        const auto leftGraph = setup.BuildGraph(emptyListValue);
-        const auto rightGraph = setup.BuildGraph(emptyListValue);
-        const auto leftValue = leftGraph->GetValue();
-        const auto rightValue = rightGraph->GetValue();
-
-        TVector<ui32> leftKeyColumns = {0};
-        TVector<ui32> rightKeyColumns = {0};
-
-        const auto result = DoTestDqScalarHashJoin(
-            setup,
-            listType, NUdf::TUnboxedValue(leftValue), leftKeyColumns,
-            listType, NUdf::TUnboxedValue(rightValue), rightKeyColumns,
-            EJoinKind::Inner
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
         );
+    }
 
-        UNIT_ASSERT(result.HasValue());
-        const auto resultIterator = result.GetListIterator();
+    Y_UNIT_TEST(TestEmptyLeft) {
+        TDqSetup<false> setup(GetDqNodeFactory());
         
-        TVector<NUdf::TUnboxedValue> resultItems;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
-            UNIT_ASSERT(item.HasValue());
-            resultItems.push_back(item);
-        }
+        TVector<ui64> emptyKeys;
+        TVector<TString> emptyValues;
         
-        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 0);
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"x", "y", "z"};
+
+        TVector<ui64> expectedKeys = {1, 2, 3};
+        TVector<TString> expectedValues = {"x", "y", "z"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestEmptyRight) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        
+        TVector<ui64> leftKeys = {1, 2, 3};
+        TVector<TString> leftValues = {"a", "b", "c"};
+        
+        TVector<ui64> emptyKeys;
+        TVector<TString> emptyValues;
+
+        TVector<ui64> expectedKeys = {1, 2, 3};
+        TVector<TString> expectedValues = {"a", "b", "c"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
     }
 }
 

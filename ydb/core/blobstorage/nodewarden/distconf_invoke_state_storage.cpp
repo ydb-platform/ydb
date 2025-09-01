@@ -438,7 +438,9 @@ namespace NKikimr::NStorage {
 
             bool found = false;
 
-            auto processRing = [&](auto* ring) {
+            auto *m = (config.*mutableFunc)();
+            for (size_t i = 0; i < m->RingGroupsSize(); i++) {
+                auto *ring = m->MutableRingGroups(i);
                 if (ring->RingSize() && ring->NodeSize()) {
                     throw TExError() << name << " incorrect configuration: both Ring and Node fields are set";
                 }
@@ -479,18 +481,6 @@ namespace NKikimr::NStorage {
                         }
                     }
                 }
-            };
-            auto *m = (config.*mutableFunc)();
-
-            if (m->RingGroupsSize() && m->HasRing()) {
-                throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
-            }
-            for (size_t i = 0; i < m->RingGroupsSize(); i++) {
-                auto *ring = m->MutableRingGroups(i);
-                processRing(ring);
-            }
-            if (m->HasRing()) {
-                processRing(m->MutableRing());
             }
             if (!found) {
                 throw TExError() << name << " From node not found";

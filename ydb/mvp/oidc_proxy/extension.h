@@ -70,9 +70,6 @@ public:
         if (BodyOverride.has_value()) {
             Cerr << "iiii GetBody override" << Endl;
             return TStringBuf(*BodyOverride);
-        } else if (OriginalResponse->Body.length() > 5 * 1024 * 1024) {
-            Cerr << "iiii GetBody > 5 * 1024 * 1024" << Endl;
-            return "{\"data\":\"test\"}";
         }
         Cerr << "iiii GetBody original" << Endl;
         return OriginalResponse ? TStringBuf(OriginalResponse->Body) : TStringBuf();

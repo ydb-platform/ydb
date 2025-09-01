@@ -86,7 +86,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetGRpcKeepAliveTimeout(TDuration::Seconds(10));
-        cfg.SetGRpcKeepAlivePermitWithoutCalls(true));
+        cfg.SetGRpcKeepAlivePermitWithoutCalls(true);
         return cfg;
     }
 

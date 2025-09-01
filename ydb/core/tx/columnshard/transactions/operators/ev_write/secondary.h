@@ -79,8 +79,13 @@ private:
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
-            if (NeedContinueFlag && (!Self->ProgressTxInFlight || TxId == Self->ProgressTxInFlight)) {
-                Self->EnqueueProgressTx(ctx, TxId);
+            if (NeedContinueFlag) {
+                if (TxId && Self->ProgressTxInFlight && TxId != Self->ProgressTxInFlight) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("issue #23402", "TxId != ProgressTxInFlight")("TxId", TxId)("ProgressTxInFlight", Self->ProgressTxInFlight);
+                }
+                else {
+                    Self->EnqueueProgressTx(ctx, TxId);
+                }
             }
         }
 

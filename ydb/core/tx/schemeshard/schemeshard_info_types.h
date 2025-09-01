@@ -3580,7 +3580,7 @@ public:
             switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    TString createError; // CreateClusters also validates settings
+                    TString createError;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();

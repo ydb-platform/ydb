@@ -679,6 +679,10 @@ void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, cons
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
 }
 
+bool TTranslation::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const {
+    return NYql::IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, langVer, Ctx_.Settings.BackportMode);
+}
+
 void EnumerateSqlFlags(std::function<void(std::string_view)> callback) {
     for (const auto& x : CTX_PRAGMA_FIELDS) {
         callback(x.first);

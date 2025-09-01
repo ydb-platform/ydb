@@ -477,6 +477,8 @@ namespace NSQLTranslationV1 {
         void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
         TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
+        bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const;
+
     protected:
         TContext& Ctx_;
     };

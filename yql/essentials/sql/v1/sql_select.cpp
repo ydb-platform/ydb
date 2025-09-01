@@ -1460,7 +1460,24 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
     for (int i = 0; i < tail.size(); ++i) {
         const auto& nextBlock = tail[i];
 
-        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_union_op1().GetToken1()));
+        const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetToken1();
+        TString nextOp = ToLowerUTF8(Token(token));
+        if (nextOp != "union" && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+            Ctx_.Error(Ctx_.TokenPosition(token))
+                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            return nullptr;
+        }
+
+        if (nextBlock.GetRule_union_op1().HasBlock2()) {
+            const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetBlock2().GetToken1();
+            const TString qualifier = ToLowerUTF8(Token(token));
+            if (qualifier == "distinct" && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+                Ctx_.Error(Ctx_.TokenPosition(token))
+                    << "UNION DISTINCT is not available before version 2025.03";
+                return nullptr;
+            }
+        }
+
         bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_union_op1());
 
         TSelectKindPlacement nextPlacement = {
@@ -1536,7 +1553,14 @@ TSourcePtr TSqlSelect::BuildIntersection(
     for (int i = 0; i < tail.size(); ++i) {
         const auto& nextBlock = tail[i];
 
-        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_intersect_op1().GetToken1()));
+        const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
+        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3))) {
+            Ctx_.Error(Ctx_.TokenPosition(token))
+                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            return nullptr;
+        }
+
+        TString nextOp = ToLowerUTF8(Token(token));
         bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_intersect_op1());
 
         TSelectKindPlacement nextPlacement = {

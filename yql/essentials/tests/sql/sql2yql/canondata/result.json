@@ -12607,6 +12607,13 @@
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_binding-table_from_binding_bad4-default.txt_/err_file.out"
         }
     ],
+    "test_sql_negative.test[except-except_2025_02-]": [
+        {
+            "checksum": "d1a9befd09ff66e48088c0b3fd2dbf8d",
+            "size": 147,
+            "uri": "https://{canondata_backend}/1775059/4c8907373e923bd61d89a2abd8d5898575ccd4d5/resource.tar.gz#test_sql_negative.test_except-except_2025_02-_/err_file.out"
+        }
+    ],
     "test_sql_negative.test[expr-as_struct_0-default.txt]": [
         {
             "checksum": "24fecad0dce7ae5b6c51087e032fc23e",
@@ -12689,6 +12696,13 @@
             "checksum": "5ed6af7841b5567157469d9f90280851",
             "size": 163,
             "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_in-in_with_subquery_where-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[intersect-intersect_2025_02-]": [
+        {
+            "checksum": "e7df28bf512ef389fab49c097def3f6a",
+            "size": 150,
+            "uri": "https://{canondata_backend}/1775059/4c8907373e923bd61d89a2abd8d5898575ccd4d5/resource.tar.gz#test_sql_negative.test_intersect-intersect_2025_02-_/err_file.out"
         }
     ],
     "test_sql_negative.test[join-join_and_distinct_key_without_correlation-default.txt]": [
@@ -12850,6 +12864,13 @@
             "checksum": "97d780dab08cad5050ca810da93b7d93",
             "size": 115,
             "uri": "https://{canondata_backend}/1942278/6d832fede309393ea2fafff4a7beb49daf9842a1/resource.tar.gz#test_sql_negative.test_udf-python_udf_with_settings_fail3-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[union-union_distinct_2025_02-]": [
+        {
+            "checksum": "87642d253b76ecef97e1e074200018c3",
+            "size": 159,
+            "uri": "https://{canondata_backend}/1937424/0b9081eeb8e5eb4c4a9b551d297204305ddddd3c/resource.tar.gz#test_sql_negative.test_union-union_distinct_2025_02-_/err_file.out"
         }
     ],
     "test_sql_negative.test[union_all-union_all_with_top_level_limits-default.txt]": [

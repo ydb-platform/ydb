@@ -484,6 +484,7 @@ namespace NKikimr::NStorage {
                 throw TExError() << name << " From node not found";
             }
         };
+        
 #define F(NAME) \
         if (cmd.Get##NAME()) { \
             process(#NAME, &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \

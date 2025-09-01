@@ -254,7 +254,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
     void TestWatermarksImpl(
         const std::vector<TInputItem>& input,
         const std::vector<TOutputGroup>& expected,
-        const std::vector<std::pair<ui64, TInstant>>& watermarks)
+        const std::vector<std::pair<ui64, TInstant>>& watermarks,
+        ui64 hop = 10,
+        ui64 interval = 30,
+        ui64 delay = 20)
     {
         bool yield = false;
         TWatermark watermark;
@@ -273,7 +276,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
                 ++inp_index;
             }
         };
-        TestImpl(input, expected, false, 10, 30, 20, [](ui32, TSetup<false>&){}, &watermark, &yield, avant_fetch, true);
+        TestImpl(input, expected, false, hop, interval, delay, [](ui32, TSetup<false>&){}, &watermark, &yield, avant_fetch, true);
     }
 
     Y_UNIT_TEST(TestThrowWatermarkFromPast) {
@@ -410,6 +413,64 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             {0, TInstant::MicroSeconds(76)},
         };
         TestWatermarksImpl(input, expected, yield_pattern);
+    }
+
+    Y_UNIT_TEST(TestWatermarkFlowOverflow) {
+        // TODO this tests fails before this change, but it does not exercise
+        // exact expected bug scenario (hop stuck forever in the future)
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 1, 2},
+            {1, 2, 3},
+            {1, 5, 4},
+            {1, 6, 5},
+            {1, 7, 6},
+            {1, 8, 7},
+            {1, 9, 8},
+            {1, 10, 9},
+            {1, 11, 10},
+            {1, 22, 11},
+            {1, 23, 12},
+            {1, 24, 13},
+            {1, 100, 14},
+            {1, 117, 15},
+            {1, 121, 16},
+            {1, 126, 17},
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 69, 110},{1, 90, 100}}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 65, 120}}),
+            TOutputGroup({{1, 17, 220}, {1, 32, 210}, {1, 46, 130}, {1, 46, 140}, {1, 46, 150}, {1, 46, 160}, {1, 46, 170}, {1, 46, 180}, {1, 46, 190}, {1, 46, 200}}),
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {9, TInstant::MicroSeconds(1)},
+            {12, TInstant::MicroSeconds(2)},
+            {14, TInstant::MicroSeconds(50)},
+            {15, TInstant::MicroSeconds(110)},
+            {16, TInstant::MicroSeconds(120)},
+        };
+        TestWatermarksImpl(input, expected, yield_pattern, 10, 100, 20);
     }
 
     Y_UNIT_TEST(TestDataWatermarks) {

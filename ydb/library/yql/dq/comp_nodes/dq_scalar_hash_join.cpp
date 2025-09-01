@@ -39,11 +39,11 @@ public:
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         Y_UNUSED(state);
-        // Простая логика: сначала читаем все данные из левого потока, потом из правого
+
         if (!LeftFinished_) {
             auto** leftFields = ctx.WideFields.data() + LeftWideFieldsIndex_;
-            
-            // Настраиваем поля для левого потока
+
+
             for (ui32 i = 0; i < LeftItemTypes_.size(); ++i) {
                 if (i < ResultItemTypes_.size() && output[i]) {
                     leftFields[i] = output[i];
@@ -51,7 +51,7 @@ public:
                     leftFields[i] = &ctx.MutableValues[LeftWideFieldsIndex_ + i];
                 }
             }
-            
+
             auto result = LeftFlow_->FetchValues(ctx, leftFields);
             if (result == EFetchResult::One) {
                 return EFetchResult::One;
@@ -64,8 +64,8 @@ public:
 
         if (!RightFinished_) {
             auto** rightFields = ctx.WideFields.data() + RightWideFieldsIndex_;
-            
-            // Настраиваем поля для правого потока
+
+
             for (ui32 i = 0; i < RightItemTypes_.size(); ++i) {
                 ui32 outputIdx = LeftItemTypes_.size() + i;
                 if (outputIdx < ResultItemTypes_.size() && output[outputIdx]) {
@@ -74,7 +74,7 @@ public:
                     rightFields[i] = &ctx.MutableValues[RightWideFieldsIndex_ + i];
                 }
             }
-            
+
             auto result = RightFlow_->FetchValues(ctx, rightFields);
             if (result == EFetchResult::One) {
                 return EFetchResult::One;
@@ -109,7 +109,7 @@ private:
 
     const ui32 LeftWideFieldsIndex_;
     const ui32 RightWideFieldsIndex_;
-    
+
     mutable bool LeftFinished_ = false;
     mutable bool RightFinished_ = false;
 };
@@ -175,7 +175,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto leftFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));
-    
+
     MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
 

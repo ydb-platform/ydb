@@ -1,4 +1,3 @@
-
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -105,7 +104,7 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
         TSetup<false> setup(GetDqScalarNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        // Создаем левую таблицу: [(1, "a"), (2, "b")]
+
         const auto leftDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto leftStringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
         const auto leftTupleType = pb.NewTupleType({leftDataType, leftStringType});
@@ -116,7 +115,7 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
         leftItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(2), pb.NewDataLiteral<NUdf::EDataSlot::String>("b")}));
         const auto leftListValue = pb.NewList(leftTupleType, leftItems);
 
-        // Создаем правую таблицу: [(1, "x"), (3, "y")]
+
         const auto rightDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto rightStringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
         const auto rightTupleType = pb.NewTupleType({rightDataType, rightStringType});
@@ -132,11 +131,11 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
         const auto leftValue = leftGraph->GetValue();
         const auto rightValue = rightGraph->GetValue();
 
-        // Колонки для джоина: левая колонка 0, правая колонка 0
+
         TVector<ui32> leftKeyColumns = {0};
         TVector<ui32> rightKeyColumns = {0};
 
-        // Выполняем тест
+
         const auto result = DoTestDqScalarHashJoin(
             setup,
             leftListType, NUdf::TUnboxedValue(leftValue), leftKeyColumns,
@@ -144,34 +143,71 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
             EJoinKind::Inner
         );
 
-        // Проверяем результат
+
         UNIT_ASSERT(result.HasValue());
         const auto resultIterator = result.GetListIterator();
         
-        // Поскольку это простой проход данных без реального джоина,
-        // мы ожидаем сначала левые данные, потом правые
-        ui32 itemCount = 0;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item); ++itemCount) {
+
+        TVector<NUdf::TUnboxedValue> resultItems;
+        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
             UNIT_ASSERT(item.HasValue());
-            // Проверяем что элементы есть, не проверяем конкретные значения
-            // так как это заглушка
+            resultItems.push_back(item);
         }
         
-        // Должно быть больше 0 элементов
-        UNIT_ASSERT(itemCount > 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 4);
+        
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto tuple = resultItems[i];
+            UNIT_ASSERT(tuple.HasValue());
+            
+            auto leftId = tuple.GetElement(0);
+            UNIT_ASSERT(leftId.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(leftId.Get<ui32>(), i + 1);
+            
+            auto leftStr = tuple.GetElement(1);
+            UNIT_ASSERT(leftStr.HasValue());
+            ui32 expectedAscii = (i == 0) ? 97 : 98;
+            UNIT_ASSERT_VALUES_EQUAL(leftStr.Get<ui32>(), expectedAscii);
+            auto rightId = tuple.GetElement(2);
+            auto rightStr = tuple.GetElement(3);
+            UNIT_ASSERT(!rightId.HasValue());
+            UNIT_ASSERT(!rightStr.HasValue());
+        }
+        
+
+        for (ui32 i = 2; i < 4; ++i) {
+            auto tuple = resultItems[i];
+            UNIT_ASSERT(tuple.HasValue());
+            
+            auto leftId = tuple.GetElement(0);
+            auto leftStr = tuple.GetElement(1);
+            UNIT_ASSERT(leftId.HasValue());
+            UNIT_ASSERT(leftStr.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(leftId.Get<ui32>(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(leftStr.Get<ui32>(), 98);
+            
+            auto rightId = tuple.GetElement(2);
+            auto rightStr = tuple.GetElement(3);
+            UNIT_ASSERT(rightId.HasValue());
+            UNIT_ASSERT(rightStr.HasValue());
+            
+            ui32 expectedRightId = (i == 2) ? 1 : 3;
+            ui32 expectedRightStr = (i == 2) ? 120 : 121;
+            UNIT_ASSERT_VALUES_EQUAL(rightId.Get<ui32>(), expectedRightId);
+            UNIT_ASSERT_VALUES_EQUAL(rightStr.Get<ui32>(), expectedRightStr);
+        }
     }
 
     Y_UNIT_TEST(TestEmptyLeftInput) {
         TSetup<false> setup(GetDqScalarNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        // Пустая левая таблица
         const auto leftDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto leftTupleType = pb.NewTupleType({leftDataType});
         const auto leftListType = pb.NewListType(leftTupleType);
         const auto leftListValue = pb.NewEmptyList(leftTupleType);
-
-        // Правая таблица с одним элементом
         const auto rightDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto rightTupleType = pb.NewTupleType({rightDataType});
         const auto rightListType = pb.NewListType(rightTupleType);
@@ -198,28 +234,35 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
         UNIT_ASSERT(result.HasValue());
         const auto resultIterator = result.GetListIterator();
         
-        ui32 itemCount = 0;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item); ++itemCount) {
+        TVector<NUdf::TUnboxedValue> resultItems;
+        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
             UNIT_ASSERT(item.HasValue());
+            resultItems.push_back(item);
         }
         
-        // Должен быть 1 элемент (из правой таблицы)
-        UNIT_ASSERT_VALUES_EQUAL(itemCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 1);
+        
+        auto tuple = resultItems[0];
+        UNIT_ASSERT(tuple.HasValue());
+        
+        auto leftId = tuple.GetElement(0);
+        UNIT_ASSERT(!leftId.HasValue());
+        
+        auto rightId = tuple.GetElement(1);
+        UNIT_ASSERT(rightId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(rightId.Get<ui32>(), 1);
     }
 
     Y_UNIT_TEST(TestEmptyRightInput) {
         TSetup<false> setup(GetDqScalarNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        // Левая таблица с одним элементом
         const auto leftDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto leftTupleType = pb.NewTupleType({leftDataType});
         const auto leftListType = pb.NewListType(leftTupleType);
         TVector<TRuntimeNode> leftItems;
         leftItems.emplace_back(pb.NewTuple({pb.NewDataLiteral<ui32>(1)}));
         const auto leftListValue = pb.NewList(leftTupleType, leftItems);
-
-        // Пустая правая таблица
         const auto rightDataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto rightTupleType = pb.NewTupleType({rightDataType});
         const auto rightListType = pb.NewListType(rightTupleType);
@@ -240,24 +283,32 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
             EJoinKind::Inner
         );
 
-        // Результат должен содержать только левые данные
         UNIT_ASSERT(result.HasValue());
         const auto resultIterator = result.GetListIterator();
         
-        ui32 itemCount = 0;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item); ++itemCount) {
+        TVector<NUdf::TUnboxedValue> resultItems;
+        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
             UNIT_ASSERT(item.HasValue());
+            resultItems.push_back(item);
         }
         
-        // Должен быть 1 элемент (из левой таблицы)
-        UNIT_ASSERT_VALUES_EQUAL(itemCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 1);
+        
+        auto tuple = resultItems[0];
+        UNIT_ASSERT(tuple.HasValue());
+        
+        auto leftId = tuple.GetElement(0);
+        UNIT_ASSERT(leftId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(leftId.Get<ui32>(), 1);
+        
+        auto rightId = tuple.GetElement(1);
+        UNIT_ASSERT(!rightId.HasValue());
     }
 
     Y_UNIT_TEST(TestBothEmptyInputs) {
         TSetup<false> setup(GetDqScalarNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        // Обе таблицы пустые
         const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto tupleType = pb.NewTupleType({dataType});
         const auto listType = pb.NewListType(tupleType);
@@ -278,19 +329,18 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinTest) {
             EJoinKind::Inner
         );
 
-        // Результат должен быть пустым
         UNIT_ASSERT(result.HasValue());
         const auto resultIterator = result.GetListIterator();
         
-        ui32 itemCount = 0;
-        for (NUdf::TUnboxedValue item; resultIterator.Next(item); ++itemCount) {
+        TVector<NUdf::TUnboxedValue> resultItems;
+        for (NUdf::TUnboxedValue item; resultIterator.Next(item);) {
             UNIT_ASSERT(item.HasValue());
+            resultItems.push_back(item);
         }
         
-        UNIT_ASSERT_VALUES_EQUAL(itemCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resultItems.size(), 0);
     }
 }
 
 } // namespace NMiniKQL
 } // namespace NKikimr
-

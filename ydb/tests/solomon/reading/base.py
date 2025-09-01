@@ -96,22 +96,18 @@ class SolomonReadingTestBase(object):
 
     @staticmethod
     def _generate_listing_paging_test_metrics(size):
-        result = []
-        for i in range(size):
-            result.append(
-                {
-                    "labels"        : {"test_type": "listing_paging_test", "test_label": str(i)},
-                    "type"          : "DGAUGE",
-                    "timestamps"    : [0],
-                    "values"        : [0]
-                }
-            )
-        return result
+        return [
+            {
+                "labels"        : {"test_type": "listing_paging_test", "test_label": str(i)},
+                "type"          : "DGAUGE",
+                "timestamps"    : [0],
+                "values"        : [0]
+            }
+            for i in range(size)
+        ]
 
     @staticmethod
     def _generate_data_paging_timeseries(size):
-        timestamps, values = [], []
-        for i in range(size):
-            timestamps.append(i * 5)
-            values.append(i)
+        timestamps = [i * 5 for i in range(size)]
+        values = [i for i in range(size)]
         return timestamps, values

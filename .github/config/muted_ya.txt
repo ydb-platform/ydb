@@ -80,6 +80,7 @@ ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [8/10] chunk chunk
+ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeStatus
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables

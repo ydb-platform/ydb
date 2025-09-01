@@ -16,27 +16,6 @@
 #include <cctype>
 #include <cstring>
 #include <string>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #include <string_view>
 
 namespace NStringPrivate {

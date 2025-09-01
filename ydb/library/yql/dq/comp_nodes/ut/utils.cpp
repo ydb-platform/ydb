@@ -64,7 +64,6 @@ TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow) {
     );
 }
 
-
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
     NUdf::TUnboxedValue current;
     NUdf::TUnboxedValue iterator = list.GetListIterator();

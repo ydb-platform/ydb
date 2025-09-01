@@ -102,7 +102,7 @@ WITH(
 Для преобразования данных из таблицы изменений в формат SCD2 и загрузки в финальную таблицу используется следующий запрос:
 
 ```sql
--- Шаг 1: Читаем все новые события из стейджинг-таблицы (`dimension_scd_changes`).
+-- Шаг 1: Читаем все новые события из таблицы `dimension_scd_changes`.
 -- Это именованное выражение ($changes) является исходным набором данных для всей последующей обработки в рамках этого запуска.
 $changes = (
     SELECT
@@ -125,8 +125,8 @@ $unprocessed_data = (
         chg.change_time AS change_time,
         chg.op AS op
     FROM $changes AS chg
-    LEFT OUTER JOIN dimension_scd2_final AS scd
-        ON chg.id = scd.id AND chg.change_time = scd.valid_from
+    LEFT JOIN dimension_scd2_final AS scd
+        ON chg.id = scd.id AND chg.change_time = scd.valid_from -- Ищем записи по каждой сущности (id) и времени изменения
     WHERE scd.id IS NULL -- для исключения строк, которые уже были перенесены в таблицу dimension_scd2_final ранее
 );
 
@@ -227,17 +227,24 @@ SELECT id, change_time FROM $changes;
 | CUSTOMER\_1001 | John Doe   | San Francisco | 2025-08-22 19:00 | UPDATE    |
 | CUSTOMER\_1002 | Judy Doe   | New York      | 2025-08-22 21:00 | DELETE    |
 
-Процесс SCD2 превращает эти события в версионные интервальные записи **\[valid\_from, valid\_to)**: у `CUSTOMER_1001` образуются две последовательные версии (LA → SF, текущая с `valid_to = NULL`), у `CUSTOMER_1002` — историческая версия и финальная «тумбстоун»-запись с `is_deleted=1` и `is_current=0`. Ниже показаны исходные события и соответствующие им версии в финальной таблице.
+Процесс SCD2 превращает эти события в версионные интервальные записи **\[valid\_from, valid\_to)**: у `CUSTOMER_1001` образуются две последовательные версии (LA → SF, текущая с `valid_to = NULL`), у `CUSTOMER_1002` — историческая версия и финальная «тумбстоун»-запись с `is_deleted=1` и `is_current=0`.
 
+Ниже показаны исходные события и соответствующие им версии в финальной таблице.
 
-```text
-John/LA   [2025-08-22 17:00)──────────┐
-John/SF                      [2025-08-22 19:00)── … (текущее)
-```
+```mermaid
+    gantt
+        title История изменения данных
+        dateFormat YYYY-MM-DD HH:mm
+        axisFormat %H:%M
+        todayMarker off
 
-```text
-Judy/NY  [2025-08-22 17:00)─────────┐
-(DELETE)                   [2025-08-22 21:00)── … (удаление)
+        section CUSTOMER_1001 — John Doe
+        Los Angeles                  :done,    t0, 2025-08-22 17:00, 2025-08-22 19:00
+        San Francisco (is_current)   :active,  t1, 2025-08-22 19:00, 2025-08-23 00:00
+
+        section CUSTOMER_1002 — Judy Doe
+        New York                  :done,    t0b, 2025-08-22 17:00, 2025-08-22 21:00
+
 ```
 
 | id             | attribute1 | attribute2    | valid\_from      | valid\_to        | is\_current | is\_deleted |

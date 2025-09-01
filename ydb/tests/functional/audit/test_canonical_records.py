@@ -73,10 +73,11 @@ CLUSTER_CONFIG = dict(
 
 
 class CanonicalCaptureAuditFileOutput:
-    def __init__(self, filename):
+    def __init__(self, filename, components=[]):
         self.filename = filename
         self.captured = ''
         self.read_lines = 0
+        self.components = components
 
     def __enter__(self):
         self.saved_pos = os.path.getsize(self.filename)
@@ -106,6 +107,10 @@ class CanonicalCaptureAuditFileOutput:
             return output
 
         json_record = json.loads(output[record_start:])
+        if len(self.components) > 0:
+            component = json_record.get('component')
+            if component not in self.components:
+                return None
         self.__canonize_field(json_record, 'start_time')
         self.__canonize_field(json_record, 'end_time')
         self.__canonize_field(json_record, 'remote_address')
@@ -128,8 +133,10 @@ class CanonicalCaptureAuditFileOutput:
                 time.sleep(0.1)
                 line = f.readline()
                 if len(line) > 0:
-                    self.read_lines += 1
-                    self.captured += self.__canonize_audit_line(line.decode('utf-8'))
+                    canonized_line = self.__canonize_audit_line(line.decode('utf-8'))
+                    if canonized_line:
+                        self.captured += canonized_line
+                        self.read_lines += 1
                     last_read_time = time.time()
 
     def canonize(self):
@@ -141,8 +148,8 @@ class CanonicalCaptureAuditFileOutput:
 
 
 def test_create_and_drop_database(ydb_cluster):
-    capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console', 'schemeshard'])
+    capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console', 'schemeshard'])
     with capture_audit_create:
         database = '/Root/Database'
         ydb_cluster.create_database(

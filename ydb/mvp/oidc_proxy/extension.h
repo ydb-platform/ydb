@@ -8,6 +8,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/generic/queue.h>
 
 namespace NMVP::NOIDC {
@@ -18,11 +19,57 @@ struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
     THolder<TCrackedPage> ProtectedPage;
     TString ResponseError;
-
-    TString StatusOverride;
-    TString MessageOverride;
-    TString BodyOverride;
     THolder<NHttp::THeadersBuilder> HeadersOverride;
+
+private:
+    std::optional<TString> StatusOverride;
+    std::optional<TString> MessageOverride;
+    std::optional<TString> BodyOverride;
+
+    NHttp::THttpIncomingResponsePtr Response;
+
+    TStringBuf GetOverride(const std::optional<TString>& override, TStringBuf original) const {
+        if (override.has_value()) {
+            return TStringBuf(*override);
+        }
+        return original;
+    }
+
+public:
+    void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
+        Response = std::move(response);
+        HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+        if (Response) {
+            auto headers = NHttp::THeaders(Response->Headers);
+            for (const auto& header : headers.Headers) {
+                HeadersOverride->Set(header.first, header.second);
+            }
+        }
+    }
+
+    void OverrideStatus(const TString& status) {
+        StatusOverride = status;
+    }
+
+    void OverrideMessage(const TString& message) {
+        MessageOverride = message;
+    }
+
+    void OverrideBody(const TString& body) {
+        BodyOverride = body;
+    }
+
+    TStringBuf GetStatusOverride() const {
+        return GetOverride(StatusOverride, Response ? Response->Status : TStringBuf());
+    }
+
+    TStringBuf GetMessageOverride() const {
+        return GetOverride(MessageOverride, Response ? Response->Message : TStringBuf());
+    }
+
+    TStringBuf GetBodyOverride() const {
+        return GetOverride(BodyOverride, Response ? Response->Body : TStringBuf());
+    }
 };
 
 struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {

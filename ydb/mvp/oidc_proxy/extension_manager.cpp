@@ -27,21 +27,9 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
     ExtensionCtx->Params->Request = std::move(request);
 }
 
-void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+void TExtensionManager::SetOriginalResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     ExtensionCtx->Params->ResponseError = event->Get()->GetError();
-
-    if (!event->Get()->Response)
-        return;
-
-    auto& response = event->Get()->Response;
-    ExtensionCtx->Params->StatusOverride = response->Status;
-    auto headers = NHttp::THeaders(response->Headers);
-    for (const auto& header : headers.Headers) {
-        ExtensionCtx->Params->HeadersOverride->Set(header.first, header.second);
-    }
-    ExtensionCtx->Params->MessageOverride = response->Message;
-    ExtensionCtx->Params->BodyOverride = response->Body;
+    ExtensionCtx->Params->SetOriginalResponse(std::move(event->Get()->Response));
 }
 
 void TExtensionManager::AddExtensionWhoami() {
@@ -84,7 +72,7 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     SetRequest(std::move(request));
-    SetOverrideResponse(std::move(event));
+    SetOriginalResponse(std::move(event));
 
     const auto step = ExtensionCtx->Steps.Next();
     step->Execute(std::move(ExtensionCtx));

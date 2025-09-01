@@ -74,14 +74,14 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     });
 
     auto& params = Context->Params;
-    params->StatusOverride = statusOverride;
-    params->MessageOverride = messageOverride;
-    params->BodyOverride = content.Str();
+    params->OverrideStatus(std::move(statusOverride));
+    params->OverrideMessage(std::move(messageOverride));
+    params->OverrideBody(content.Str());
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
-    if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
+    if (Context->Params->GetStatusOverride().StartsWith("3") || Context->Params->GetStatusOverride() == "404") {
         ContinueAndPassAway();
     }
     ApplyIfReady();
@@ -108,12 +108,12 @@ void TExtensionWhoamiWorker::ApplyExtension() {
     NHttp::THttpIncomingResponsePtr response;
     auto& params = Context->Params;
 
-    if (params->StatusOverride) {
-        NJson::ReadJsonTree(params->BodyOverride, &json);
-        if (!params->StatusOverride.StartsWith("2")) {
-            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params->StatusOverride);
-            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params->MessageOverride);
-            SetExtendedError(errorJson, "Ydb", "ResponseBody", params->BodyOverride);
+    if (params->GetStatusOverride()) {
+        NJson::ReadJsonTree(params->GetBodyOverride(), &json);
+        if (!params->GetStatusOverride().StartsWith("2")) {
+            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params->GetStatusOverride());
+            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params->GetMessageOverride());
+            SetExtendedError(errorJson, "Ydb", "ResponseBody", params->GetBodyOverride());
         }
     } else {
         TString& error = params->ResponseError;

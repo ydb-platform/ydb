@@ -131,12 +131,30 @@ jobs:
         
         :symlinks
         REM Create required symlinks for LLVM/ya make integration
-        mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" >nul 2>&1
+        echo Creating lib.exe symlink...
+        mklink "C:\Program Files\LLVM\bin\lib.exe" "C:\Program Files\LLVM\bin\llvm-lib.exe" >nul 2>nul
+        if %ERRORLEVEL% equ 0 (
+          echo   lib.exe -^> llvm-lib.exe: SUCCESS
+        ) else (
+          echo   lib.exe symlink failed ^(may already exist^): CONTINUING
+        )
+        
+        echo Creating ml.exe symlink...
         if defined ML64_PATH (
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>&1
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "%ML64_PATH%" >nul 2>nul
+          if %ERRORLEVEL% equ 0 (
+            echo   ml.exe -^> Microsoft ml64.exe: SUCCESS
+          ) else (
+            echo   ml.exe symlink failed ^(may already exist^): CONTINUING  
+          )
           echo Using Microsoft ml64.exe for assembly
         ) else (
-          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>&1
+          mklink "C:\Program Files\LLVM\bin\ml.exe" "C:\Program Files\LLVM\bin\llvm-ml.exe" >nul 2>nul
+          if %ERRORLEVEL% equ 0 (
+            echo   ml.exe -^> llvm-ml.exe: SUCCESS
+          ) else (
+            echo   ml.exe symlink failed ^(may already exist^): CONTINUING
+          )
           echo Using LLVM llvm-ml.exe for assembly (may fail on OpenSSL)
         )
 

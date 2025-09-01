@@ -1,5 +1,10 @@
 {
-    "test_canonical_records.test_create_and_drop_database": {
-        "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.json"
-    }
+    "test_canonical_records.test_create_and_drop_database": [
+        {
+            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.1.json"
+        }
+    ]
 }

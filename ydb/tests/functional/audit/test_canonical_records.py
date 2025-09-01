@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import re
 import time
 
 import yatest
@@ -10,6 +11,16 @@ from ydb.tests.library.harness.util import LogLevels
 
 def test_file_with_content(human_readable_name, content):
     file_path = os.path.join(yatest.common.output_path(), human_readable_name)
+
+    if os.path.exists(file_path):
+        name, ext = os.path.splitext(human_readable_name)
+        name, num = os.path.splitext(name)
+        if num:
+            num = str(int(num[1:]) + 1)  # '.1' -> '2'
+        else:
+            num = '1'
+        return test_file_with_content(f'{name}.{num}{ext}', content)
+
     with open(file_path, 'w') as w:
         w.write(content)
     return file_path
@@ -76,6 +87,16 @@ class CanonicalCaptureAuditFileOutput:
         if value and value != '{none}':
             json_record[field_name] = placeholder_value if placeholder_value else f'<canonized_{field_name}>'
 
+    def __canonize_regex(self, input_str):
+        # Replace txid=123 or txid=any_number with txid=<canonized_tx_id>
+        return re.sub(r'txid=\d+', 'txid=<canonized_tx_id>', input_str)
+
+    def __canonize_regex(self, json_record, regex_str, replace_str):
+        for k, v in json_record.items():
+            replace_result = re.sub(regex_str, replace_str, v)
+            if replace_result != v:
+                json_record[k] = replace_result
+
     def __canonize_audit_line(self, output):
         # Audit log has the following format: "<time>: {"k1": "v1", "k2": "v2", ...}"
         # where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message
@@ -89,6 +110,12 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_field(json_record, 'end_time')
         self.__canonize_field(json_record, 'remote_address')
         self.__canonize_field(json_record, 'tx_id')
+        self.__canonize_regex(json_record, r'txid=\d+', 'txid=<canonized_txid>')
+        self.__canonize_regex(json_record, r'cmstid=\d+', 'txid=<canonized_cmstid>')
+        self.__canonize_regex(json_record, r'\.cpp:\d+', '.cpp:<canonized_line>')
+        self.__canonize_regex(json_record, r'OwnerId: \d+', 'OwnerId: <canonized_owner_id>')
+        self.__canonize_regex(json_record, r'LocalPathId: \d+', 'LocalPathId: <canonized_local_path_id>')
+        self.__canonize_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
         return json.dumps(json_record, sort_keys=True) + '\n'
 
     def __exit__(self, *exc):
@@ -114,8 +141,9 @@ class CanonicalCaptureAuditFileOutput:
 
 
 def test_create_and_drop_database(ydb_cluster):
-    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with capture_audit:
+    capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with capture_audit_create:
         database = '/Root/Database'
         ydb_cluster.create_database(
             database,
@@ -123,8 +151,9 @@ def test_create_and_drop_database(ydb_cluster):
             token=TOKEN
         )
         database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
-        ydb_cluster.wait_tenant_up(database, token=TOKEN)
+    ydb_cluster.wait_tenant_up(database, token=TOKEN)
 
+    with capture_audit_drop:
         ydb_cluster.remove_database(database, token=TOKEN)
-        ydb_cluster.unregister_and_stop_slots(database_nodes)
-    return capture_audit.canonize()
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+    return (capture_audit_create.canonize(), capture_audit_drop.canonize())

@@ -1,3 +1,4 @@
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -840,6 +841,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetMoveTable().GetDstPath();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableMoveTable()->SetDstPath(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTable>(id, tx);

@@ -18,7 +18,9 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     const auto& moving = tx.GetMoveTable();
     const auto& srcStr = moving.GetSrcPath();
-    const auto& dstStr = moving.GetDstPath();
+    const TString dstStr = moving.GetDstPath().StartsWith('/')
+        ? moving.GetDstPath() // for compatibility
+        : JoinPath({tx.GetWorkingDir(), moving.GetDstPath()});
 
     {
         TString errStr;

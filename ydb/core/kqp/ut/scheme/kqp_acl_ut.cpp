@@ -1106,8 +1106,39 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
 
         {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TABLE `/Root/test_dir/TestSimple` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TABLE `/Root/test_dir/Test` (
+                    primary key (id)
+                ) WITH (STORE=%s)
+                AS SELECT 1 As id, "test" As name;
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
             // Writer can access table
             auto result = sessionWriteOther.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Writer can access table
+            auto result = sessionWriteOther.ExecuteQuery("SELECT * FROM `/Root/test_dir/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -1118,10 +1149,22 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
+        {
+            // Another user can't access table
+            auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/test_dir/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
         AddPermissions(kikimr, "/Root", UserReadName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
 
         {
             auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/test_dir/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from ydb import Driver, DriverConfig, SessionPool
+from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
 from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
 
@@ -101,3 +101,20 @@ def test_replace_config(ydb_cluster):
             with capture_audit:
                 pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
     return capture_audit.canonize()
+
+
+def test_create_and_drop_table(ydb_cluster):
+    capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), '/Root', auth_token=TOKEN)) as driver:
+        table_client = TableClient(driver)
+        description = TableDescription().with_columns(
+            Column('key', OptionalType(PrimitiveType.Uint64)),
+            Column('value', OptionalType(PrimitiveType.Utf8))).with_primary_key('key')
+
+        with capture_audit_create:
+            table_client.create_table('/Root/Table', description)
+
+        with capture_audit_drop:
+            table_client.drop_table('/Root/Table')
+    return (capture_audit_create.canonize(), capture_audit_drop.canonize())

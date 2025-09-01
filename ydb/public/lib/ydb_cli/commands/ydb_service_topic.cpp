@@ -319,6 +319,8 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(0)
             .Optional()
             .StoreResult(&RetentionStorageMb_);
+        config.Opts->AddLongOption("partition-counters", "Enable partition counters")
+            .StoreTrue(&EnablePartitionCounters_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -379,6 +381,8 @@ namespace NYdb::NConsoleClient {
             settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
         }
 
+        settings.EnablePartitionCounters(EnablePartitionCounters_);
+
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
@@ -402,6 +406,10 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .Optional()
             .StoreResult(&RetentionStorageMb_);
+        config.Opts->AddLongOption("partition-counters", "Enable partition counters")
+            .StoreValue(&EnablePartitionCounters_, true);
+        config.Opts->AddLongOption("no-partition-counters", "Disable partition counters")
+            .StoreValue(&EnablePartitionCounters_, false);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -474,6 +482,10 @@ namespace NYdb::NConsoleClient {
 
         if (RetentionStorageMb_.Defined() && describeResult.GetTopicDescription().GetRetentionStorageMb() != *RetentionStorageMb_) {
             settings.SetRetentionStorageMb(*RetentionStorageMb_);
+        }
+
+        if (EnablePartitionCounters_) {
+            settings.EnablePartitionCounters(*EnablePartitionCounters_);
         }
 
         return settings;

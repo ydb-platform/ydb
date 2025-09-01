@@ -524,6 +524,7 @@ SELECT
     SessionId,
     Query,
     QueryStartAt,
+    CurrentUtcTimestamp() - QueryStartAt AS Duration,
     ClientAddress,
     ApplicationName
 FROM `.sys/query_sessions`

@@ -269,7 +269,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
         {
             return std::make_tuple(
-                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
+                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc, {}, buildResult.PointPrefixLen) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,
@@ -404,6 +404,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
         if (buildResult.LiteralRange) {
             bool ispoint = buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size();
+            readSettings.PointPrefixLen = buildResult.PointPrefixLen;
             if (ispoint && tableDesc.Metadata->Kind != EKikimrTableKind::SysView) {
                 TVector<TExprBase> structMembers;
                 for (size_t i = 0; i < tableDesc.Metadata->KeyColumnNames.size(); ++i) {
@@ -439,7 +440,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                     input = Build<TKqlReadTableIndex>(ctx, read.Pos())
                         .Table(read.Table())
                         .Columns(read.Columns())
-                        .Settings(read.Settings())
+                        .Settings(readSettings.BuildNode(ctx, read.Pos()))
                         .Range(keyRange)
                         .Index(indexName.Cast())
                         .Done();
@@ -447,7 +448,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                     input = Build<TKqlReadTable>(ctx, read.Pos())
                         .Table(read.Table())
                         .Columns(read.Columns())
-                        .Settings(read.Settings())
+                        .Settings(readSettings.BuildNode(ctx, read.Pos()))
                         .Range(keyRange)
                         .Done();
                 }

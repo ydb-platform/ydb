@@ -74,7 +74,14 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
 
     auto settings = GetReadTableSettings(input, isReadTableRanges);
 
-    if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields)) {
+    ui64 pointPrefix = 0;
+    if (input.Maybe<TKqpReadTableRanges>()) {
+        pointPrefix = TKqpReadTableExplainPrompt::Parse(input.Maybe<TKqpReadTableRanges>().Cast().ExplainPrompt()).PointPrefixLen;
+    } else if (input.Maybe<TKqpReadTable>()) {
+        pointPrefix = settings.PointPrefixLen;
+    }
+
+    if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields, pointPrefix)) {
         return node;
     }
 
@@ -271,11 +278,11 @@ bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCo
 }
 
 TExprBase KqpBuildTopStageRemoveSort(
-    TExprBase node, 
-    TExprContext& ctx, 
-    IOptimizationContext& optCtx, 
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
     TTypeAnnotationContext& typeCtx,
-    const TParentsMap& parentsMap, 
+    const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
@@ -313,7 +320,7 @@ TExprBase KqpBuildTopStageRemoveSort(
     }
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
-    
+
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }

@@ -4193,6 +4193,30 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         {
             TString query = Sprintf(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                querySettings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << explainResult.GetStats()->GetPlan() << Endl;
+            Cerr << explainResult.GetStats()->GetAst() << Endl;
+
+            TItemsLimitsExtractor extractor;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
+            plan.Scan(extractor);
+
+            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
+            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_c/indexImplTable"], "10");
+        }
+
+        {
+            TString query = Sprintf(R"(
                 SELECT a, c FROM `/Root/my_table`
                 ORDER BY a
                 LIMIT 10;

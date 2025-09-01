@@ -446,7 +446,7 @@ message TPQTabletConfig {
 
     optional bool EnableCompactification = 39 [default = false];
 
-    optional bool EnablePerPartitionCounters = 40 [default = false];
+    optional bool EnablePartitionCounters = 40 [default = false];
 }
 
 message THeartbeat {

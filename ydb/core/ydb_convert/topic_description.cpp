@@ -43,7 +43,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
 bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
-    
+
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
@@ -159,6 +159,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
                 break;
         }
     }
+
+    out.set_enable_partition_counters(config.GetEnablePartitionCounters());
 
     for (const auto& consumer : config.GetConsumers()) {
         if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {

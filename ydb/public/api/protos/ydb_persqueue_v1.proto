@@ -1184,6 +1184,9 @@ message TopicSettings {
     }
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
+
+    // Per partition counters (e.g. topic.partition.committed_read_lag_milliseconds).
+    bool enable_partition_counters = 16;
 }
 
 message AutoPartitioningSettings {

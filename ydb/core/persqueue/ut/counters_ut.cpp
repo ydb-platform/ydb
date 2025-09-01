@@ -124,7 +124,7 @@ Y_UNIT_TEST(PerPartition) {
     tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+    PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -162,7 +162,7 @@ Y_UNIT_TEST(PerPartition) {
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
+        PQTabletPrepare({ .enablePartitionCounters = true }, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -231,7 +231,7 @@ Y_UNIT_TEST(PerPartition) {
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+        PQTabletPrepare({ .enablePartitionCounters = false }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
         UNIT_ASSERT_VALUES_EQUAL(zeroUnreliableValues(counters) + "\n", referenceCounters);

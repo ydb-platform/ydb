@@ -262,7 +262,7 @@ struct TTabletPreparationParameters {
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
     bool enableCompactificationByKey{false};
-    bool enablePerPartitionCounters{false};
+    bool enablePartitionCounters{false};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,

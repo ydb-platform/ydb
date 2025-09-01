@@ -366,11 +366,12 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
                 return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, typeVal);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
                 return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, typeVal);
-            default:
-                error = TStringBuilder() << "Wrong similarity: " << settings.metric();
-                break;
+            case Ydb::Table::VectorIndexSettings_Metric_METRIC_UNSPECIFIED:
+            case Ydb::Table::VectorIndexSettings_Metric_VectorIndexSettings_Metric_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case Ydb::Table::VectorIndexSettings_Metric_VectorIndexSettings_Metric_INT_MAX_SENTINEL_DO_NOT_USE_:
+                error = TStringBuilder() << "Invalid similarity: " << Ydb::Table::VectorIndexSettings::Metric_Name(settings.metric());
+                return nullptr;
         }
-        return nullptr;
     };
 
     switch (settings.vector_type()) {
@@ -381,14 +382,14 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
             return handleMetric.template operator()<i8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-            error = "Bit vector type is not supported";
-            break;
-        default:
-            error = TStringBuilder() << "Wrong vector type: " << settings.vector_type();
-            break;
+            error = TStringBuilder() << "Unsupported vector_type: " << Ydb::Table::VectorIndexSettings::VectorType_Name(settings.vector_type());
+            return nullptr;
+        case Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_UNSPECIFIED:
+        case Ydb::Table::VectorIndexSettings_VectorType_VectorIndexSettings_VectorType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Table::VectorIndexSettings_VectorType_VectorIndexSettings_VectorType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            error = TStringBuilder() << "Invalid similarity: " << Ydb::Table::VectorIndexSettings::Metric_Name(settings.metric());
+            return nullptr;
     }
-
-    return nullptr;
 }
 
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/counters/aggregation/table_stats.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/core/log.h>
@@ -20,6 +21,7 @@ private:
     NColumnShard::TColumnShard& Owner;
     ui32 ReportBaseStatisticsPeriodMs;
     ui32 ReportExecutorStatisticsPeriodMs;
+    std::unique_ptr<NKikimr::NColumnShard::TCountersManager> CountersManager;
 
     void BuildSSPipe(const TActorContext& ctx);
     void UpdateSSId();
@@ -44,8 +46,16 @@ class TEvReportExecutorStatistics: public NActors::TEventLocal<TEvReportExecutor
     }
 
 public:
-    TColumnShardStatisticsReporter (NColumnShard::TColumnShard& owner, ui32 reportBaseStatisticsPeriodMs, ui32 reportExecutorStatisticsPeriodMs):
-        Owner(owner), ReportBaseStatisticsPeriodMs(reportBaseStatisticsPeriodMs), ReportExecutorStatisticsPeriodMs(reportExecutorStatisticsPeriodMs) {}
+    TColumnShardStatisticsReporter (
+        NColumnShard::TColumnShard& owner,
+        ui32 reportBaseStatisticsPeriodMs,
+        ui32 reportExecutorStatisticsPeriodMs,
+        std::unique_ptr<NColumnShard::TCountersManager> countersManager)
+        :
+        Owner(owner),
+        ReportBaseStatisticsPeriodMs(reportBaseStatisticsPeriodMs),
+        ReportExecutorStatisticsPeriodMs(reportExecutorStatisticsPeriodMs),
+        CountersManager(std::move(countersManager)) {}
     void Bootstrap(const NActors::TActorContext& /*ctx*/);
     void SendPeriodicStats();
     void SetSSId(ui64 sSId, const TActorContext& ctx);

@@ -2073,6 +2073,13 @@ message TColumnShardConfig {
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = true];
+
+    message TStatistics {
+        optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
+        optional uint32 ReportExecutorStatisticsPeriodMs = 2 [default = 60000];
+    }
+
+    optional TStatistics Statistics = 47;
 }
 
 message TSchemeShardConfig {

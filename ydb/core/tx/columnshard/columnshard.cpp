@@ -129,8 +129,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
+
     auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
-    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs());
+    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs(), std::make_unique<TTableStatsBuilder>(Counters, Executor()));
     ColumnShardStatisticsReporter = ctx.Register(TmpColumnShardStatisticsReporter);
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
@@ -422,6 +423,19 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 
         LOG_S_TRACE("Add stats for table, tableLocalID=" << schemeShardLocalPathId);
     }
+}
+
+void TColumnShard::FillExecutorStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    ev->Record.SetGeneration(Executor()->Generation());
+    auto& tableStats = *ev->Record.MutableTableStats();
+    auto& tableMetrics = *ev->Record.MutableTabletMetrics();
+
+    if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+        resourceMetrics->Fill(tableMetrics);
+    }
+
+    tableStats.SetInFlightTxCount(Executor()->GetStats().TxInFly);
+    tableStats.SetHasLoanedParts(Executor()->HasLoanedParts());
 }
 
 void TColumnShard::SendPeriodicStats() {

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "mpmc_ring_queue.h"
 #include "mpmc_ring_queue_v2.h"
+#include "mpmc_ring_queue_v3.h"
 #include "mpmc_ring_queue_blocking.h"
 #include <atomic>
 
@@ -13,7 +14,7 @@ namespace NActors {
 class TRingActivationQueue {
     NThreading::TPadded<std::atomic_bool> IsNeedToWriteToOldQueue = false;
     NThreading::TPadded<TMPMCRingQueue<20>> ActivationQueue;
-    NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OldActivationQueue;    
+    NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OldActivationQueue;
     NThreading::TPadded<std::atomic_uint64_t> RevolvingCounter = 0;
     const bool IsMPSC = false;
 
@@ -53,7 +54,43 @@ public:
         if (IsNeedToWriteToOldQueue.load(std::memory_order_acquire)) {
             return OldActivationQueue.Pop(revolvingCounter);
         }
-        return 0; 
+        return 0;
+    }
+
+};
+
+class TRingActivationQueueV3 {
+    NThreading::TPadded<std::atomic_bool> IsNeedToWriteToOldQueue = false;
+    NThreading::TPadded<TMPMCRingQueueV3<20>> ActivationQueue;
+    NThreading::TPadded<TUnorderedCache<ui32, 512, 4>> OldActivationQueue;
+    NThreading::TPadded<std::atomic_uint64_t> RevolvingCounter = 0;
+
+public:
+    TRingActivationQueueV3(bool)
+    {}
+
+    void Push(ui32 activation, ui64 revolvingCounter) {
+        if (!IsNeedToWriteToOldQueue.load(std::memory_order_acquire)) {
+            if (ActivationQueue.TryPush(activation)) {
+                return;
+            }
+            IsNeedToWriteToOldQueue.store(true, std::memory_order_release);
+        }
+        if (!revolvingCounter) {
+            revolvingCounter = RevolvingCounter.fetch_add(1, std::memory_order_relaxed);
+        }
+        OldActivationQueue.Push(activation, AtomicIncrement(revolvingCounter));
+    }
+
+    ui32 Pop(ui64 revolvingCounter) {
+        std::optional<ui32> activation = ActivationQueue.TryPop();
+        if (activation) {
+            return *activation;
+        }
+        if (IsNeedToWriteToOldQueue.load(std::memory_order_acquire)) {
+            return OldActivationQueue.Pop(revolvingCounter);
+        }
+        return 0;
     }
 
 };
@@ -80,7 +117,7 @@ public:
         if (activation) {
             return *activation;
         }
-        return 0; 
+        return 0;
     }
 
     void Stop() {

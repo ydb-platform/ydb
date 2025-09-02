@@ -10,26 +10,31 @@
 namespace NKikimr {
 
 static inline NMonitoring::TBucketBounds GetCommonLatencyHistBounds(NPDisk::EDeviceType type, TActorSystem* actorSystem = nullptr) {
+    static TMetricsConfig defaultMetricsConfig; // this is for tests only
+
+    TMetricsConfig* metricsConfig;
     if (!actorSystem) {
         if (NActors::TlsActivationContext) {
             actorSystem = NActors::TActivationContext::ActorSystem();
         }
     }
 
-    Y_ABORT_UNLESS(actorSystem);
-    
-    auto appData = AppData(actorSystem);
-    auto& metricsConfig = appData->MetricsConfig;
+    if (actorSystem) {
+        auto appData = AppData(actorSystem);
+        metricsConfig = &appData->MetricsConfig;
+    } else {
+        metricsConfig = &defaultMetricsConfig;
+    }
 
     switch (type) {
         case NPDisk::DEVICE_TYPE_UNKNOWN:
-            return metricsConfig.GetCommonLatencyHistBounds().Unknown;
+            return metricsConfig->GetCommonLatencyHistBounds().Unknown;
         case NPDisk::DEVICE_TYPE_ROT:
-            return metricsConfig.GetCommonLatencyHistBounds().Rot;
+            return metricsConfig->GetCommonLatencyHistBounds().Rot;
         case NPDisk::DEVICE_TYPE_SSD:
-            return metricsConfig.GetCommonLatencyHistBounds().Ssd;
+            return metricsConfig->GetCommonLatencyHistBounds().Ssd;
         case NPDisk::DEVICE_TYPE_NVME:
-            return metricsConfig.GetCommonLatencyHistBounds().Nvme;
+            return metricsConfig->GetCommonLatencyHistBounds().Nvme;
         default:
             Y_ABORT_S("unknown device type " << ui8(type));
     }

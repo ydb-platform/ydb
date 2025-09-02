@@ -31,9 +31,9 @@ ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage);
 
 void FindDqConnections(const NNodes::TExprBase& node, TVector<NNodes::TDqConnection>& connections, bool& isPure);
 bool DqStageFirstInputIsBroadcast(const NNodes::TDqStageBase& stage);
-bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true);
-inline bool IsDqCompletePureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true) {
-    return node.Ref().IsComplete() && IsDqPureExpr(node, isPrecomputePure);
+bool IsDqPureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true, bool isToOptional = false);
+inline bool IsDqCompletePureExpr(const NNodes::TExprBase& node, bool isPrecomputePure = true, bool isToOptional = false) {
+    return node.Ref().IsComplete() && IsDqPureExpr(node, isPrecomputePure, isToOptional);
 }
 
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);

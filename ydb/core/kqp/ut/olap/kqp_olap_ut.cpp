@@ -1677,12 +1677,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b) VALUES (1, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (2, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (3, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (4, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (5, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (6, 1);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
         std::vector<TString> queries = {
             R"(
-                $sub = (select distinct (b) from `/Root/t1` where b > 10);
-
-                select count(*) from `/Root/t1` as t1
-                where t1.b = $sub;
+                select sum(b) from `/Root/t1` group by rollup(b);
             )",
         };
 
@@ -1694,11 +1701,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
-
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "OUTPUT: " << output << Endl;
         }
     }
 

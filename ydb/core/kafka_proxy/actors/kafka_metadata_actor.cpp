@@ -158,17 +158,12 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
 
 TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {
     TVector<TNodeInfo*> partitionNodes;
-    if (WithProxy) {
-        auto iter = Nodes.find(ProxyNodeId);
-        partitionNodes.push_back(&iter->second);
-    } else {
-        for (const auto& part : response->Partitions) {
-            auto iter = Nodes.find(part.NodeId);
-            if (iter == Nodes.end()) {
-                return {};
-            }
-            partitionNodes.push_back(&iter->second);
+    for (const auto& part : response->Partitions) {
+        auto iter = Nodes.find(part.NodeId);
+        if (iter == Nodes.end()) {
+            return {};
         }
+        partitionNodes.push_back(&iter->second);
     }
     return partitionNodes;
 }
@@ -344,13 +339,17 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
         auto& topic = Response->Topics[index];
-        auto topicNodes = CheckTopicNodes(ev.Get());
-        if (topicNodes.empty()) {
-                // Already tried YDB discovery. Throw error
-                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
-                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
+        if (!WithProxy) {
+            auto topicNodes = CheckTopicNodes(ev.Get());
+            if (topicNodes.empty()) {
+                    // Already tried YDB discovery. Throw error
+                    KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
+                    AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
+            } else {
+                AddTopicResponse(topic, ev.Get(), topicNodes);
+            }
         } else {
-            AddTopicResponse(topic, ev.Get(), topicNodes);
+            AddTopicResponse(topic, ev.Get(), {});
         }
         PendingTopicResponses.erase(PendingTopicResponses.begin());
     }

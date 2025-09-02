@@ -149,8 +149,7 @@ public:
             }
         }
 
-        TSecretInfo::TPtr secret = context.SS->Secrets.Value(path->PathId, nullptr);
-        Y_ABORT_UNLESS(secret);
+        Y_ABORT_UNLESS(context.SS->Secrets.contains(path->PathId));
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

@@ -19,7 +19,7 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
-    Y_UNIT_TEST(CreateSecretWithReboots) {
+    Y_UNIT_TEST(CreateSecret) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterSecretWithReboots) {
+    Y_UNIT_TEST(AlterSecret) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropSecretWithReboots) {
+    Y_UNIT_TEST(DropSecret) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

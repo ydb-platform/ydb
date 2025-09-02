@@ -763,6 +763,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ResourcePoolInfo.Drop();
             BackupCollectionInfo.Drop();
             SysViewInfo.Drop();
+            SecretInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1300,6 +1301,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ResourcePoolInfo);
             DESCRIPTION_PART(BackupCollectionInfo);
             DESCRIPTION_PART(SysViewInfo);
+            DESCRIPTION_PART(SecretInfo);
 
             #undef DESCRIPTION_PART
 

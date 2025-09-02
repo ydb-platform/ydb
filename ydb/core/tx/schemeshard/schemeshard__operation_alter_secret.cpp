@@ -177,6 +177,14 @@ public:
             return result;
         }
 
+        context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
+        context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(secretPath.Base()->PathId);
+        context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
         auto alterData = secretInfo->CreateNextVersion();
         alterData->Description.SetValue(alterSecretProto.GetValue());
         alterData->Description.SetVersion(secretInfo->AlterVersion);

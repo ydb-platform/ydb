@@ -52,6 +52,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateSecretAndIntermediateDirs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "dir1/dir2/test-secret"
+                Value: "test-value"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/dir1/dir2/test-secret");
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
+            ExpectEqualSecretDescription(describeResult, "test-secret", "test-value", 0);
+        }
+    }
+
     Y_UNIT_TEST(CreateExistingSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

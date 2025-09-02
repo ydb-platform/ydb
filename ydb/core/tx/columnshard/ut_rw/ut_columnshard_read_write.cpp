@@ -554,6 +554,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Max());
     csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+    csControllerGuard->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 

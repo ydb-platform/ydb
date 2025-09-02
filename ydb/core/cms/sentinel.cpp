@@ -1295,6 +1295,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                 }
             }
+            for (auto& [nodeId, node] : SentinelState->Nodes) {
+                auto* nodeState = record.AddNodesState();
+                nodeState->SetNodeId(nodeId);
+                nodeState->SetState(node.ActualState);
+            }
         }
 
         Send(ev->Sender, std::move(response));

@@ -158,10 +158,11 @@ class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::T
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
                 NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
-    {}
+    {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -189,10 +190,6 @@ private:
 
     const TString& GetTable() override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return AllRows;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -241,13 +238,13 @@ private:
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
         float cost = 0.0f;
+        TVector<std::pair<TSerializedCellVec, TString>> rows;
 
         // TODO: check that value is a list of structs
 
         // For each row in values
         TMemoryPool valueDataPool(256);
-        const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
-        for (const auto& r : rows) {
+        for (const auto& r : GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems()) {
             valueDataPool.Clear();
 
             ui64 sz = 0;
@@ -274,15 +271,16 @@ private:
             // Save serialized key and value
             TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            AllRows.emplace_back(std::move(serializedKey), std::move(serializedValue));
+            rows.emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(std::move(rows));
         RuCost = TUpsertCost::CostToRu(cost);
         return true;
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(AllRows, errorMessage);
+        Batch = RowsToBatch(*Rows, errorMessage);
         return Batch.get();
     }
 
@@ -309,16 +307,16 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
-    {}
+    {
+    }
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
@@ -357,10 +355,6 @@ private:
 
     const TString& GetTable() override {
         return GetProtoRequest(Request.get())->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return Rows;
     }
 
     const TString& GetSourceData() const override {
@@ -445,7 +439,7 @@ private:
 
     bool ExtractRows(TString& errorMessage) override {
         Y_ABORT_UNLESS(Batch);
-        Rows = BatchToRows(Batch, errorMessage);
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(BatchToRows(Batch, errorMessage));
         return errorMessage.empty();
     }
 
@@ -518,7 +512,6 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> Rows;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

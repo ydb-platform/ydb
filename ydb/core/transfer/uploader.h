@@ -153,7 +153,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));;
+        TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
         size_t SchemeCount = 0;
     };
     std::unordered_map<TString, Retry> Retries;

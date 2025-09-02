@@ -56,7 +56,7 @@ TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildS
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
 
 bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {}, const ui64 skipPointKeys = 0);
 
 enum ESortDirection : ui32 {
     None = 0,

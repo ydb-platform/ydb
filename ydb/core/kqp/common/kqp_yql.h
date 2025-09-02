@@ -109,12 +109,14 @@ public:
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
     static constexpr TStringBuf TabletIdName = "TabletId";
+    static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     TMaybe<ui64> SequentialInFlight;
     TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
+    ui64 PointPrefixLen = 0;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

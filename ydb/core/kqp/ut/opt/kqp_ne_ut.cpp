@@ -13,9 +13,14 @@ using namespace NYdb::NTable;
 class TItemsLimitsExtractor : public NJson::IScanCallback {
 public:
     THashMap<TString, TString> LimitsPerTable;
+    THashSet<TString> ReadsOverTable;
 
     bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
         Y_UNUSED(path, parent);
+
+        if (value.Has("Path")) {
+            ReadsOverTable.emplace(value["Path"].GetStringSafe());
+        }
 
         if (value.IsMap() && value.Has("ReadLimit") && value.Has("Path")) {
             TString path = value["Path"].GetStringSafe();
@@ -25,6 +30,21 @@ public:
         return true;
     }
 
+    TItemsLimitsExtractor& DoNoRead(TString table) {
+        UNIT_ASSERT_C(!ReadsOverTable.contains(table), "Query not expected to reading table " << table << ", but we READ IT.");
+        return *this;
+    }
+
+    TItemsLimitsExtractor& HasRead(TString table) {
+        UNIT_ASSERT_C(ReadsOverTable.contains(table), "Query expected to read table " << table << ", but we DON'T read it.");
+        return *this;
+    }
+
+    TItemsLimitsExtractor& HasLimit(TString table, TString limit) {
+        HasRead(table);
+        UNIT_ASSERT_VALUES_EQUAL(LimitsPerTable.at(table), limit);
+        return *this;
+    }
 };
 
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
@@ -4177,13 +4197,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         querySettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
         querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
 
-        {
-            TString query = Sprintf(R"(
-                SELECT * FROM `/Root/my_table`
-                ORDER BY a, b
-                LIMIT 10;
-            )");
-
+        auto DoQuery = [&](TString query) -> TItemsLimitsExtractor {
             auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
                 querySettings).GetValueSync();
 
@@ -4195,78 +4209,138 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
             plan.Scan(extractor);
+            return extractor;
+        };
 
-            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
-            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                ORDER BY a, b
+                LIMIT 10;)");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_b/indexImplTable", "10");
         }
 
         {
-            TString query = Sprintf(R"(
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123'
+                ORDER BY a, c
+                LIMIT 10;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' or a = '1123' or a = '13412'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            UNIT_ASSERT(
+                extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable") ||
+                extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable")
+            );
+
+            UNIT_ASSERT(
+                !extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable") &&
+                !extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable")
+            );
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' and c > '1'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' and c > '1' and c < '10'
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' and (
+                    (c > '1' and c < '10') or
+                    (c > '123')
+                )
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            extractor.HasRead("/Root/my_table/idx_my_table_table_a_c/indexImplTable");
+
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
+            UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
+                WHERE a = '123' and (c > '1' and c < '10')
+                ORDER BY c
+                LIMIT 10;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
+        }
+
+
+        {
+            auto extractor = DoQuery(R"(
                 SELECT a, c FROM `/Root/my_table`
                 ORDER BY a
                 LIMIT 10;
             )");
 
-            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                querySettings).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetStats()->GetPlan() << Endl;
-            Cerr << explainResult.GetStats()->GetAst() << Endl;
-
-            TItemsLimitsExtractor extractor;
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
-            plan.Scan(extractor);
-
-            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_c/indexImplTable"));
-            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_c/indexImplTable"], "10");
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "10");
         }
 
         {
-            TString query = Sprintf(R"(
+            auto extractor = DoQuery(R"(
                 SELECT * FROM `/Root/my_table`
                 ORDER BY a, b, id
                 LIMIT 10;
             )");
 
-            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                querySettings).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetStats()->GetPlan() << Endl;
-            Cerr << explainResult.GetStats()->GetAst() << Endl;
-
-            TItemsLimitsExtractor extractor;
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
-            plan.Scan(extractor);
-
-            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
-            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_b/indexImplTable", "10");
         }
 
         {
-            TString query = Sprintf(R"(
+            auto extractor = DoQuery(R"(
                 SELECT * FROM `/Root/my_table`
                 ORDER BY a DESC, b DESC, id DESC
                 LIMIT 10;
             )");
 
-            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                querySettings).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetStats()->GetPlan() << Endl;
-            Cerr << explainResult.GetStats()->GetAst() << Endl;
-
-            TItemsLimitsExtractor extractor;
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
-            plan.Scan(extractor);
-
-            UNIT_ASSERT(extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
-            UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_b/indexImplTable", "10");
         }
 
         {
@@ -4295,47 +4369,25 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
         }
 
-
         {
-            TString query = Sprintf(R"(
+            auto extractor = DoQuery(R"(
                 SELECT * FROM `/Root/my_table` VIEW PRIMARY KEY
                 ORDER BY a, b, id
                 LIMIT 10;
             )");
 
-            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                querySettings).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetStats()->GetPlan() << Endl;
-            Cerr << explainResult.GetStats()->GetAst() << Endl;
-
-            TItemsLimitsExtractor extractor;
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
-            plan.Scan(extractor);
+            UNIT_ASSERT(!extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
+            UNIT_ASSERT(!extractor.ReadsOverTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
 
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
         }
 
         {
-            TString query = Sprintf(R"(
+            auto extractor = DoQuery(R"(
                 SELECT * FROM `/Root/my_table`
                 ORDER BY a, b, id
             )");
-
-            auto explainResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                querySettings).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-            Cerr << explainResult.GetStats()->GetPlan() << Endl;
-            Cerr << explainResult.GetStats()->GetAst() << Endl;
-
-            TItemsLimitsExtractor extractor;
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan));
-            plan.Scan(extractor);
 
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_b/indexImplTable"));
             UNIT_ASSERT(!extractor.LimitsPerTable.contains("/Root/my_table/idx_my_table_table_a_с/indexImplTable"));
@@ -4466,7 +4518,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 LIMIT 1;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
             AssertSuccessResult(result);
-            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 0);
+            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 1);
         }
     }
 

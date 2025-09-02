@@ -140,10 +140,21 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
-bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
-{
-    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
+bool IsSortKeyPrimary(
+    const NYql::NNodes::TCoLambda& keySelector,
+    const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields,
+    const ui64 skipPointKeys
+) {
+    YQL_ENSURE(skipPointKeys <= tableDesc.Metadata->KeyColumnNames.size());
+    std::deque<TString> unsortedKeyColumns(tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys, tableDesc.Metadata->KeyColumnNames.end());
+    if (unsortedKeyColumns.empty()) {
+        return true;
+    }
+
+    THashSet<TString> sortedPointKeysSet(tableDesc.Metadata->KeyColumnNames.begin(), tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys);
+
+    auto checkKey = [keySelector, &sortedPointKeysSet, &passthroughFields] (NYql::NNodes::TExprBase key, TString unsorted) -> std::optional<bool> {
         if (!key.Maybe<TCoMember>()) {
             return false;
         }
@@ -154,13 +165,18 @@ bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TK
         }
 
         auto column = TString(member.Name().Value());
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
-        if (!columnIndex || *columnIndex != index) {
-            return false;
+        if (!sortedPointKeysSet.contains(column)) {
+            if (column != unsorted) {
+                return false;
+            }
         }
 
         if (passthroughFields && !passthroughFields->contains(column)) {
             return false;
+        }
+
+        if (sortedPointKeysSet.contains(column)) {
+            return std::nullopt;
         }
 
         return true;
@@ -170,12 +186,26 @@ bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TK
     if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
         auto tuple = maybeTuple.Cast();
         for (size_t i = 0; i < tuple.Size(); ++i) {
-            if (!checkKey(tuple.Item(i), i)) {
+            if (unsortedKeyColumns.empty()) {
+                return true;
+            }
+
+            auto result = checkKey(tuple.Item(i), unsortedKeyColumns.front());
+            if (!result.has_value()) {
+                continue;
+            } else if (!result.value()) {
                 return false;
+            } else {
+                unsortedKeyColumns.pop_front();
             }
         }
     } else {
-        if (!checkKey(lambdaBody, 0)) {
+        if (unsortedKeyColumns.empty()) {
+            return true;
+        }
+
+        auto result = checkKey(lambdaBody, unsortedKeyColumns.front());
+        if (result.has_value() && !result.value()) {
             return false;
         }
     }

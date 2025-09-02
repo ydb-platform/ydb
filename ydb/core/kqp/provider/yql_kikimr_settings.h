@@ -203,6 +203,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapPushdownAggregate = false;
 
     bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;

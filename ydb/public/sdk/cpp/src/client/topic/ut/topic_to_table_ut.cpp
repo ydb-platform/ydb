@@ -585,25 +585,33 @@ std::vector<TResultSet> TFixture::TQuerySession::Execute(const std::string& quer
                                                          bool commit,
                                                          const TParams& params)
 {
-    auto txQuery = dynamic_cast<NQuery::TTransaction*>(tx);
-    auto txControl = NQuery::TTxControl::Tx(*txQuery).CommitTx(commit);
+    while (true) {
+        auto txQuery = dynamic_cast<NQuery::TTransaction*>(tx);
+        auto txControl = NQuery::TTxControl::Tx(*txQuery).CommitTx(commit);
 
-    auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-    return result.GetResultSets();
+        auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
+        if (result.GetStatus() != EStatus::SESSION_BUSY) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetResultSets();
+        }
+        std::this_thread::sleep_for(100ms);
+    }
 }
 
 TFixture::ISession::TExecuteInTxResult TFixture::TQuerySession::ExecuteInTx(const std::string& query,
                                                                             bool commit,
                                                                             const TParams& params)
 {
-    auto txControl = NQuery::TTxControl::BeginTx().CommitTx(commit);
+    while (true) {
+        auto txControl = NQuery::TTxControl::BeginTx().CommitTx(commit);
 
-    auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-    return {result.GetResultSets(), std::make_unique<NQuery::TTransaction>(*result.GetTransaction())};
+        auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
+        if (result.GetStatus() != EStatus::SESSION_BUSY) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return {result.GetResultSets(), std::make_unique<NQuery::TTransaction>(*result.GetTransaction())};
+        }
+        std::this_thread::sleep_for(100ms);
+    }
 }
 
 std::unique_ptr<TTransactionBase> TFixture::TQuerySession::BeginTx()

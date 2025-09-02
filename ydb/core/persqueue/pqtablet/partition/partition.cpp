@@ -4330,6 +4330,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
     if (!counters) {
         return nullptr;
     }
+
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         return counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")

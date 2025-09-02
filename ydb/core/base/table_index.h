@@ -79,6 +79,8 @@ bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);
 
+}
+
 namespace NFulltext {
     // TODO: support utf-8 in fulltext index
     inline constexpr const char* TokenTypeName = "String";

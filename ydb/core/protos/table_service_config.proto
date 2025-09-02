@@ -293,10 +293,10 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = false];
+    optional bool EnableOlapSink = 55 [default = true];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
-    optional bool EnableCreateTableAs = 57 [default = false];
+    optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
@@ -312,7 +312,7 @@ message TTableServiceConfig {
 
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
-    optional bool EnableQueryServiceSpilling = 63 [ default = false ];
+    optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2];
 
@@ -320,7 +320,7 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "None" ];
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];

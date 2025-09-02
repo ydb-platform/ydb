@@ -2,6 +2,9 @@
 
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>
 
+#include <ydb/public/sdk/cpp/src/client/operation/impl.h>
+
+
 namespace NYdb::inline Dev::NBackup {
 
 namespace {
@@ -74,3 +77,19 @@ const TBackupCollectionRestoreResponse::TMetadata& TBackupCollectionRestoreRespo
 }
 
 } // namespace NYdb::inline Dev::NBackup
+
+namespace NYdb::inline Dev::NOperation {
+
+template NThreading::TFuture<NBackup::TIncrementalBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NBackup::TIncrementalBackupResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NBackup::TIncrementalBackupResponse>("incbackup", pageSize, pageToken);
+}
+
+template NThreading::TFuture<NBackup::TBackupCollectionRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NBackup::TBackupCollectionRestoreResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NBackup::TBackupCollectionRestoreResponse>("restore", pageSize, pageToken);
+}
+
+}

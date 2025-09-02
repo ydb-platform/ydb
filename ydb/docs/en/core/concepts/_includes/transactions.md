@@ -24,7 +24,7 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 If no [transaction mode](../transactions.md#modes) is specified for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
 
-In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with certain behaviors described below.
+In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with a certain behavior described below.
 
 #### Behavior for different types of statements
 

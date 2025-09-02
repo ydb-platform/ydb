@@ -173,7 +173,10 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::TabletIdName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
-        }else {
+        } else if (name == TKqpReadTableSettings::PointPrefixLenSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.PointPrefixLen = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
     }
@@ -271,6 +274,17 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
+    if (PointPrefixLen) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(PointPrefixLenSettingName)
+                .Value<TCoAtom>()
+                    .Value(ToString(PointPrefixLen))
+                    .Build()
+                .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
@@ -290,13 +304,13 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpUpsertRowsSettings::InplaceSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Inplace = true;
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.IsUpdate = true; 
+            settings.IsUpdate = true;
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
@@ -365,7 +379,7 @@ TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueT
 
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-        
+
         if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsConditionalDelete = true;

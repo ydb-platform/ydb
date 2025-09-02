@@ -5339,7 +5339,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 .ExpectedReads = 2
             });
             AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
-                .ExpectedReads = 5
+                .ExpectedReads = 2
             });
         }
         {

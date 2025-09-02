@@ -396,4 +396,5 @@ message TTableServiceConfig {
     optional bool EnableTempTablesForUser = 95 [default = false];
 
     optional bool EnableTopSortSelectIndex = 100 [ default = true ];
+    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 };

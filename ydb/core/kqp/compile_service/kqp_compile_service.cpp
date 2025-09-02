@@ -330,6 +330,7 @@ private:
         bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
 
         bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
+        bool enablePointPredicateSortAutoSelectIndex = TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -368,7 +369,8 @@ private:
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
-            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex)
+            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
+            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex)
         {
 
             QueryCache->Clear();

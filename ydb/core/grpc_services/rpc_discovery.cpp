@@ -126,8 +126,7 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        Y_ABORT_UNLESS(LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->InfoEntries.empty() &&
-            LookupResponse->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        Y_ABORT_UNLESS(LookupResponse->CachedMessageData && LookupResponse->CachedMessageData->IsValid());
 
         const TSet<TString> services(
             Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
@@ -141,9 +140,11 @@ public:
             cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
             cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
         } else {
-            auto cachedMessageData = NDiscovery::CreateCachedMessage(
-                {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
-                std::move(services), std::move(endpointId), NameserviceResponse, LookupResponse->CachedMessageData->BridgeInfo);
+            NDiscovery::TCachedMessageData cachedMessageData(
+                LookupResponse->CachedMessageData->InfoEntries,
+                NameserviceResponse, LookupResponse->CachedMessageData->BridgeInfo,
+                endpointId, services);
+
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }

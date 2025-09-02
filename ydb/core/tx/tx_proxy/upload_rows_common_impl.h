@@ -1245,15 +1245,9 @@ private:
                     << " from shard " << shardResponse.GetTabletID()
                     << " description: " << shardResponse.GetErrorDescription());
 
-        bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
-            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
-            shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
-
-        if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
-            if (isRetryableError) {
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
-            }
-
+        if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::OK) {
+            ShardUploadRetryStates.erase(shardId);
+        } else {
             if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
                 if (!shardResponse.HasOverloadSubscribed()) {
                     // Shard doesn't support overload subscriptions for this request
@@ -1265,19 +1259,23 @@ private:
                 }
             }
 
+            bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
+                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
+                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
+
             if (!isRetryableError || !Backoff.HasMore()) {
                 return ReplyWithError(
-                    TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()), ctx);
+                    TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()),
+                    shardResponse.GetErrorDescription()), ctx);
             }
+
+            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
         }
 
         // Notify the cache that we are done with the pipe
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
-        if (!isRetryableError) {
-            ShardUploadRetryStates.erase(shardId);
-        }
 
         return ReplyIfDone(ctx);
     }

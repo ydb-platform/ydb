@@ -922,7 +922,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr PartitionWriteQuotaUsagePerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
 

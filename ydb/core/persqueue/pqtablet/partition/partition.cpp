@@ -1976,9 +1976,6 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     if (TotalPartitionWriteSpeed) {
         ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        if (PartitionWriteQuotaUsagePerPartition) {
-            PartitionWriteQuotaUsagePerPartition->Set(quotaUsage);
-        }
         if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
             haveChanges = true;
             PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
@@ -4379,7 +4376,6 @@ void TPartition::SetupPerPartitionCounters() {
 
     SourceIdCountPerPartition = getCounter("topic.partition.producers_count", "SourceIdCount", false);
     TimeSinceLastWriteMsPerPartition = getCounter("topic.partition.write.idle_milliseconds", "TimeSinceLastWriteMs", false);
-    PartitionWriteQuotaUsagePerPartition = getCounter("topic.partition.write.throttled_microseconds", "PartitionWriteQuotaUsage", false);
 
     BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWrittenPerPartition", true);
     MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
@@ -4391,7 +4387,6 @@ void TPartition::ResetPerPartitionCounters() {
     WriteTimeLagMsByLastWritePerPartition.Reset();
     SourceIdCountPerPartition.Reset();
     TimeSinceLastWriteMsPerPartition.Reset();
-    PartitionWriteQuotaUsagePerPartition.Reset();
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
 }

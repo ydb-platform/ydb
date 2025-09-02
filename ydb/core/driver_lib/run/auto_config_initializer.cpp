@@ -415,6 +415,6 @@ namespace NKikimr {
         if (!config.HasUseAutoConfig() && hasSpecialFields) {
             return true;
         }
-        return config.GetUseAutoConfig()
+        return config.GetUseAutoConfig();
     }
 }

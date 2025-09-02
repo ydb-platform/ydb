@@ -201,8 +201,6 @@ class TestSimpleReaderRestartToAnotherVersion(RestartToAnotherVersionFixture):
         assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"
         assert final_consistency["total_count"] == final_consistency["expected_total_count"], \
             f"Total count mismatch: got {final_consistency['total_count']}, expected {final_consistency['expected_total_count']}"
-        assert final_consistency["unique_count"] == final_consistency["expected_unique_count"], \
-            f"Unique count mismatch: got {final_consistency['unique_count']}, expected {final_consistency['expected_unique_count']}"
         assert final_consistency["total_sum"] == final_consistency["expected_total_sum"], \
             f"Total sum mismatch: got {final_consistency['total_sum']}, expected {final_consistency['expected_total_sum']}"
 

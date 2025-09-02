@@ -753,19 +753,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
 
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
-        TVector<ui64> requestedTablets;
+        TVector<TActorId> requestedTablets;
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
-                if (blockedEnqueueRecords.empty()) {
+                bool firstMessage = requestedTablets.empty();
+                requestedTablets.push_back(ev->Recipient);
+
+                if (firstMessage) {
                     blockedEnqueueRecords.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP; // drop a message for one datashard
                 };
-
-                TEvDataShard::TEvUploadRowsRequest::TPtr* e = reinterpret_cast<TEvDataShard::TEvUploadRowsRequest::TPtr*>(&ev);
-                requestedTablets.push_back(e->Get()->Get()->Record.GetTableId());
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -784,21 +784,29 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             UNIT_ASSERT(tablets.size() == wasTablets + 1);
         };
 
-        splitShard(0, 10);
 
         DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, TBackoff(5));
 
-        splitShard(0, 4);
+        splitShard(0, 5);
 
         for (auto& ev : blockedEnqueueRecords) {
-            runtime.Send(ev.Release(), 0, true);
+            TEvDataShard::TEvUploadRowsRequest::TPtr* e = reinterpret_cast<TEvDataShard::TEvUploadRowsRequest::TPtr*>(&ev);
+
+            auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
+            response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+            response->Record.SetTabletID(e->Get()->Get()->Record.GetTableId());
+            runtime.Send(ev->Sender, ev->Recipient, response.Release());
         }
         blockedEnqueueRecords.clear();
 
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SUCCESS);
-        // Three messages were received: the first message was sent to the datashard, which did not splitted, and two messages were received
-        // by the datashards after the split of the datashard, in which we lost the message.
-        UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 3);
+        // Must receive 4 events:
+        // - splitted shard (event was blocked and unswered with status WRONG_SHARD_STATE)
+        // - other shard existed after create table
+        // - two shards created after split
+        UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 4);
+        THashSet<TActorId> requestedTabletsSet(requestedTablets.begin(), requestedTablets.end());
+        UNIT_ASSERT_VALUES_EQUAL(requestedTabletsSet.size(), 4);
     }
 
     void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool withBackoff = false) {

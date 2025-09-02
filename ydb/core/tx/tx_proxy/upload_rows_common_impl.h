@@ -1163,7 +1163,6 @@ private:
 
             // We expect to keep a reference to existing key and value data here
             uploadRetryStates[shardIdx]->Rows.emplace_back(std::move(keyColumns), std::move(valueColumns));
-
         }
 
         // Send requests to the shards

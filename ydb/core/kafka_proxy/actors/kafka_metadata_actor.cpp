@@ -30,7 +30,6 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
 
     if (WithProxy) {
-        Nodes.insert({ProxyNodeId, {Context->Config.GetProxy().GetHostname(), static_cast<ui32>(Context->Config.GetProxy().GetPort())}});
         AddProxyNodeToBrokers();
     } else {
         SendDiscoveryRequest();
@@ -124,6 +123,7 @@ void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsRespo
 }
 
 void TKafkaMetadataActor::AddProxyNodeToBrokers() {
+    Nodes.insert({ProxyNodeId, {Context->Config.GetProxy().GetHostname(), static_cast<ui32>(Context->Config.GetProxy().GetPort())}});
     AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
 }
 

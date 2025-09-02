@@ -204,7 +204,7 @@ void Init(
             config,
             protoConfig.GetCommon().GetIdsPrefix(),
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
+            yqSharedResources->UserSpaceYdbDriver,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }

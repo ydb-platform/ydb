@@ -73,7 +73,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    TYqSharedResources::TPtr YqSharedResources;
+    NYdb::TDriver Driver;
     const TStorageProxyMetricsPtr Metrics;
     bool Initialized = false;
 
@@ -82,7 +82,7 @@ public:
         const NKikimrConfig::TCheckpointsConfig& config,
         const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources,
+        NYdb::TDriver driver,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
@@ -143,20 +143,20 @@ TStorageProxy::TStorageProxy(
     const NKikimrConfig::TCheckpointsConfig& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , IdsPrefix(idsPrefix)
     , StorageConfig(Config.GetExternalStorage())
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources)
+    , Driver(std::move(driver))
     , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters)) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
 void TStorageProxy::Bootstrap() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
+    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
@@ -456,10 +456,10 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NKikimrConfig::TCheckpointsConfig& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    NYdb::TDriver driver,
     const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, idsPrefix, credentialsProviderFactory, yqSharedResources, counters));
+    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, idsPrefix, credentialsProviderFactory, std::move(driver), counters));
 }
 
 } // namespace NFq

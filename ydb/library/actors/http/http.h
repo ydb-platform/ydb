@@ -494,7 +494,6 @@ public:
         Stage = GetInitialStage();
         Line.Clear();
         Content.clear();
-        TString().swap(Content);
     }
 
     bool IsReady() const {
@@ -809,8 +808,6 @@ public:
     void Clear() {
         TSocketBuffer::Clear();
         HeaderType::Clear();
-        Content.clear();
-        TString().swap(Content);
     }
 
     void Reparse() {

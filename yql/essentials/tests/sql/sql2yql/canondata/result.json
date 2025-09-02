@@ -4969,34 +4969,6 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_optimizers-instant_contains_lookup_/sql.yql"
         }
     ],
-    "test_sql2yql.test[optimizers-logical_bools_with_side_effects]": [
-        {
-            "checksum": "3bdc7e6e36eeacf0d6ad2b2775da2918",
-            "size": 1634,
-            "uri": "https://{canondata_backend}/1597364/07a44921cc0913df3ac904326c95b1ace7b8b1d6/resource.tar.gz#test_sql2yql.test_optimizers-logical_bools_with_side_effects_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[optimizers-logical_bools_with_side_effects_override]": [
-        {
-            "checksum": "f6241802b7869a8c33bffc2f7d10dcc4",
-            "size": 1664,
-            "uri": "https://{canondata_backend}/1597364/07a44921cc0913df3ac904326c95b1ace7b8b1d6/resource.tar.gz#test_sql2yql.test_optimizers-logical_bools_with_side_effects_override_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[optimizers-logical_bools_with_side_effects_skipped]": [
-        {
-            "checksum": "dd563ebe62ccb1210d1eb4b67c396dc7",
-            "size": 1632,
-            "uri": "https://{canondata_backend}/1597364/07a44921cc0913df3ac904326c95b1ace7b8b1d6/resource.tar.gz#test_sql2yql.test_optimizers-logical_bools_with_side_effects_skipped_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[optimizers-logical_bools_with_side_effects_unreachable]": [
-        {
-            "checksum": "3f7ffb6772c9b6ec7c1b439efab6b3d7",
-            "size": 1634,
-            "uri": "https://{canondata_backend}/1597364/07a44921cc0913df3ac904326c95b1ace7b8b1d6/resource.tar.gz#test_sql2yql.test_optimizers-logical_bools_with_side_effects_unreachable_/sql.yql"
-        }
-    ],
     "test_sql2yql.test[optimizers-normalize_depends_on]": [
         {
             "checksum": "80ead6231737f8f72d3ee517c5161c3b",
@@ -5058,20 +5030,6 @@
             "checksum": "aa93581a70357f5777ba02259460030a",
             "size": 9198,
             "uri": "https://{canondata_backend}/1946324/3eeac3b09d3e5ac9803c40316b99fb8daa76be44/resource.tar.gz#test_sql2yql.test_optimizers-x_not_x_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[optimizers-x_not_x_side_effects]": [
-        {
-            "checksum": "f34a8367e396f68205fa5a66d52a2b1c",
-            "size": 3215,
-            "uri": "https://{canondata_backend}/1946324/3eeac3b09d3e5ac9803c40316b99fb8daa76be44/resource.tar.gz#test_sql2yql.test_optimizers-x_not_x_side_effects_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[optimizers-x_not_x_side_effects_fail]": [
-        {
-            "checksum": "c7ee72dcb1a632f56951d7957cd5f4e5",
-            "size": 1384,
-            "uri": "https://{canondata_backend}/1942671/1859298566ddd3ca648c9cc37fa74daa1593eddc/resource.tar.gz#test_sql2yql.test_optimizers-x_not_x_side_effects_fail_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-yql-10042_disable_fuse_depends_on]": [
@@ -7767,6 +7725,125 @@
             "checksum": "0da75f9a85034564b31a4f5679b6685b",
             "size": 2377,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_seq_mode-subquery_shared_subquery_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-empty_extend]": [
+        {
+            "checksum": "d69b093189d4d36fac952b5e9a8a4e93",
+            "size": 1220,
+            "uri": "https://{canondata_backend}/1937424/829694620f192ac796ebb22a220d918d7587c3dd/resource.tar.gz#test_sql2yql.test_side_effects-empty_extend_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-empty_join]": [
+        {
+            "checksum": "62284fa388be9a4428290bbbe86b120d",
+            "size": 2538,
+            "uri": "https://{canondata_backend}/1880306/b85ff54b893bfcdf53cdc0ab58c938a1b83ad94f/resource.tar.gz#test_sql2yql.test_side_effects-empty_join_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-empty_select_members]": [
+        {
+            "checksum": "d017ad0d0d5e34951ae992d4b49d6495",
+            "size": 1181,
+            "uri": "https://{canondata_backend}/1889210/a7f973e7c3b11afadc7002070c0dbdac12e2f1fb/resource.tar.gz#test_sql2yql.test_side_effects-empty_select_members_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-empty_top]": [
+        {
+            "checksum": "d52c4316f34e86cde4b64f5453bc195b",
+            "size": 1177,
+            "uri": "https://{canondata_backend}/1900335/ca367117bbf7f5c0fde44ad06e0ebda1b4ad719f/resource.tar.gz#test_sql2yql.test_side_effects-empty_top_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-exists]": [
+        {
+            "checksum": "36530bb01e3f77c562ee1c20ee9731c9",
+            "size": 1166,
+            "uri": "https://{canondata_backend}/1597364/692db2498794b9695a64b5578a32bf8ef39bc87c/resource.tar.gz#test_sql2yql.test_side_effects-exists_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-guess]": [
+        {
+            "checksum": "834a460d0092ce43e9c16c208cbb0b52",
+            "size": 1308,
+            "uri": "https://{canondata_backend}/1900335/7d86599c8617e87da0d75fcd7fbfa32f5594f922/resource.tar.gz#test_sql2yql.test_side_effects-guess_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-list_has_items]": [
+        {
+            "checksum": "d7adbea8159691ce24361d9aa9cf5851",
+            "size": 1165,
+            "uri": "https://{canondata_backend}/1942100/84db7f2f076b92219dc4424b3beeff19f3bb01a6/resource.tar.gz#test_sql2yql.test_side_effects-list_has_items_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-list_length]": [
+        {
+            "checksum": "582311e4322875380d3676e328938b62",
+            "size": 1163,
+            "uri": "https://{canondata_backend}/1781765/f9a5a43f776d6078eb449bc484214e2ed8f2ecee/resource.tar.gz#test_sql2yql.test_side_effects-list_length_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-logical_bools]": [
+        {
+            "checksum": "3bdc7e6e36eeacf0d6ad2b2775da2918",
+            "size": 1634,
+            "uri": "https://{canondata_backend}/1880306/b85ff54b893bfcdf53cdc0ab58c938a1b83ad94f/resource.tar.gz#test_sql2yql.test_side_effects-logical_bools_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-logical_bools_override]": [
+        {
+            "checksum": "f6241802b7869a8c33bffc2f7d10dcc4",
+            "size": 1664,
+            "uri": "https://{canondata_backend}/1900335/7724f1c36235d7746ec56023c94ed5839d893c0c/resource.tar.gz#test_sql2yql.test_side_effects-logical_bools_override_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-logical_bools_skipped]": [
+        {
+            "checksum": "dd563ebe62ccb1210d1eb4b67c396dc7",
+            "size": 1632,
+            "uri": "https://{canondata_backend}/1900335/7724f1c36235d7746ec56023c94ed5839d893c0c/resource.tar.gz#test_sql2yql.test_side_effects-logical_bools_skipped_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-logical_bools_unreachable]": [
+        {
+            "checksum": "3f7ffb6772c9b6ec7c1b439efab6b3d7",
+            "size": 1634,
+            "uri": "https://{canondata_backend}/1900335/7724f1c36235d7746ec56023c94ed5839d893c0c/resource.tar.gz#test_sql2yql.test_side_effects-logical_bools_unreachable_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-member]": [
+        {
+            "checksum": "165251f73f7888e16af1e42ba6db50f9",
+            "size": 1243,
+            "uri": "https://{canondata_backend}/1936947/c41a62a2c84ab3091c0596019c1f5c8c802ab135/resource.tar.gz#test_sql2yql.test_side_effects-member_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-nth]": [
+        {
+            "checksum": "b85db195a921ef48f9448eebb8efb68e",
+            "size": 1210,
+            "uri": "https://{canondata_backend}/1871182/ae2f0a15d89a98e9b4c0ece04fb8f2d75b7671f0/resource.tar.gz#test_sql2yql.test_side_effects-nth_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-way]": [
+        {
+            "checksum": "8206ca7c18822435e069d84c356692de",
+            "size": 1258,
+            "uri": "https://{canondata_backend}/1903885/484bbfb1da1233419fbfb6e9eee18dfad08f1c82/resource.tar.gz#test_sql2yql.test_side_effects-way_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-x_not_x]": [
+        {
+            "checksum": "f34a8367e396f68205fa5a66d52a2b1c",
+            "size": 3215,
+            "uri": "https://{canondata_backend}/1900335/7724f1c36235d7746ec56023c94ed5839d893c0c/resource.tar.gz#test_sql2yql.test_side_effects-x_not_x_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[side_effects-x_not_x_fail]": [
+        {
+            "checksum": "c7ee72dcb1a632f56951d7957cd5f4e5",
+            "size": 1384,
+            "uri": "https://{canondata_backend}/1880306/b85ff54b893bfcdf53cdc0ab58c938a1b83ad94f/resource.tar.gz#test_sql2yql.test_side_effects-x_not_x_fail_/sql.yql"
         }
     ],
     "test_sql2yql.test[type_literal-evaluate]": [
@@ -11683,26 +11760,6 @@
             "uri": "file://test_sql_format.test_optimizers-instant_contains_lookup_/formatted.sql"
         }
     ],
-    "test_sql_format.test[optimizers-logical_bools_with_side_effects]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-logical_bools_with_side_effects_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[optimizers-logical_bools_with_side_effects_override]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-logical_bools_with_side_effects_override_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[optimizers-logical_bools_with_side_effects_skipped]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-logical_bools_with_side_effects_skipped_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[optimizers-logical_bools_with_side_effects_unreachable]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-logical_bools_with_side_effects_unreachable_/formatted.sql"
-        }
-    ],
     "test_sql_format.test[optimizers-normalize_depends_on]": [
         {
             "uri": "file://test_sql_format.test_optimizers-normalize_depends_on_/formatted.sql"
@@ -11746,16 +11803,6 @@
     "test_sql_format.test[optimizers-x_not_x]": [
         {
             "uri": "file://test_sql_format.test_optimizers-x_not_x_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[optimizers-x_not_x_side_effects]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-x_not_x_side_effects_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[optimizers-x_not_x_side_effects_fail]": [
-        {
-            "uri": "file://test_sql_format.test_optimizers-x_not_x_side_effects_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-yql-10042_disable_fuse_depends_on]": [
@@ -12226,6 +12273,91 @@
     "test_sql_format.test[seq_mode-subquery_shared_subquery]": [
         {
             "uri": "file://test_sql_format.test_seq_mode-subquery_shared_subquery_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-empty_extend]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-empty_extend_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-empty_join]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-empty_join_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-empty_select_members]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-empty_select_members_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-empty_top]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-empty_top_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-exists]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-exists_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-guess]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-guess_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-list_has_items]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-list_has_items_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-list_length]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-list_length_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-logical_bools]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-logical_bools_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-logical_bools_override]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-logical_bools_override_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-logical_bools_skipped]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-logical_bools_skipped_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-logical_bools_unreachable]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-logical_bools_unreachable_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-member]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-member_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-nth]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-nth_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-way]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-way_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-x_not_x]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-x_not_x_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[side_effects-x_not_x_fail]": [
+        {
+            "uri": "file://test_sql_format.test_side_effects-x_not_x_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[type_literal-evaluate]": [

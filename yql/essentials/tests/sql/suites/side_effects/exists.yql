@@ -1,0 +1,4 @@
+/* custom error: Condition violated */
+pragma warning("disable","4510");
+
+select just(Yql::WithSideEffectsMode(Ensure(1,false),AsAtom('General'))) is not null

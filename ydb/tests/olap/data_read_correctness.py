@@ -47,6 +47,7 @@ class TestDataReadCorrectness(object):
     def test(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
+        self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
 
         self.ydb_client.query(
             f"""
@@ -70,9 +71,10 @@ class TestDataReadCorrectness(object):
             """
         )
 
-        logger.info(f"Result 'where id = 3': {result_sets[0].rows}")
-
         assert len(result_sets[0].rows) == 1
+
+        assert result_sets[0].rows[0]['id'] == 3
+        assert result_sets[0].rows[0]['value'] == 30
 
         result_sets = self.ydb_client.query(
             f"""
@@ -80,6 +82,10 @@ class TestDataReadCorrectness(object):
             """
         )
 
-        logger.info(f"Result '*': {result_sets[0].rows}")
-
         assert len(result_sets[0].rows) == self.rows_count
+
+        keys = [row['id'] for result_set in result_sets for row in result_set.rows]
+        values = [row['value'] for result_set in result_sets for row in result_set.rows]
+
+        assert keys == [i for i in range(self.rows_count)], keys
+        assert values == [i * 10 for i in range(self.rows_count)], values

@@ -1257,8 +1257,7 @@ private:
             shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
-            if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
-                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED) {
+            if (isRetryableError) {
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
             }
 
@@ -1283,7 +1282,7 @@ private:
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
-        if (!isRetryableError || !Backoff.HasMore()) {
+        if (!isRetryableError) {
             ShardUploadRetryStates.erase(shardId);
         }
 
@@ -1361,7 +1360,7 @@ private:
             return;
         }
 
-        if (!ShardUploadRetryStates.empty()) {
+        if (!ShardUploadRetryStates.empty() && Backoff.HasMore()) {
             return DoRetry(ctx);
         }
 

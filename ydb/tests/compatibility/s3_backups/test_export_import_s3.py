@@ -6,7 +6,6 @@ import yatest
 import os
 import json
 import sys
-import math
 
 from enum import Enum
 

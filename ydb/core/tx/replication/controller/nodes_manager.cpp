@@ -30,14 +30,15 @@ ui32 TNodesManager::GetRandomNode(const TString& tenant) const {
 void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx) {
     TenantNodes.emplace(tenant, THashSet<ui32>());
     NodeDiscoverers.emplace(
-        ctx.Register(CreateDiscoverer(&NService::MakeDiscoveryPath, tenant, ctx.SelfID, cache)), tenant
+        ctx.Register(CreateDiscoverer(&NService::MakeDiscoveryPath, tenant, false, ctx.SelfID, cache)), tenant
     );
 }
 
 TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
-    Y_ABORT_UNLESS(!ev->Get()->CachedMessageData->InfoEntries.empty());
-    Y_ABORT_UNLESS(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    auto* deserializedMessage = std::get_if<NDiscovery::TDeserializedMessage>(&ev->Get()->CachedMessageData);
+    Y_ABORT_UNLESS(deserializedMessage);
+    Y_ABORT_UNLESS(!deserializedMessage->InfoEntries.empty());
+    Y_ABORT_UNLESS(deserializedMessage->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
     TProcessResult result;
 
@@ -49,7 +50,7 @@ TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDi
     THashSet<ui32> newNodes;
     auto& curNodes = TenantNodes[it->second];
 
-    for (const auto& [actorId, _] : ev->Get()->CachedMessageData->InfoEntries) {
+    for (const auto& [actorId, _] : deserializedMessage->InfoEntries) {
         const ui32 nodeId = actorId.NodeId();
         newNodes.insert(nodeId);
         auto it = curNodes.find(nodeId);

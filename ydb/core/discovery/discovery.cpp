@@ -244,6 +244,13 @@ namespace NDiscovery {
     bool TCachedMessageData::IsValid() const {
         return Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok && !InfoEntries.empty();
     }
+
+    TEvDiscovery::TEvDiscoveryData* TCachedMessageData::ToEvent(bool returnSerializedMessage) const {
+        if (returnSerializedMessage && !CachedMessage.empty() && !CachedMessageSsl.empty()) {
+            return new TEvDiscovery::TEvDiscoveryData(TSerializedMessage{CachedMessage, CachedMessageSsl, Status});
+        }
+        return new TEvDiscovery::TEvDiscoveryData(TDeserializedMessage{InfoEntries, BridgeInfo, Status});
+    }
 }
 
 namespace NDiscoveryPrivate {
@@ -255,9 +262,11 @@ namespace NDiscoveryPrivate {
 
         struct TEvRequest: public TEventLocal<TEvRequest, EvRequest> {
             const TString Database;
+            bool ReturnSerializedMessage = true;
 
-            TEvRequest(const TString& db)
+            TEvRequest(const TString& db, bool returnSerializedMessage)
                 : Database(db)
+                , ReturnSerializedMessage(returnSerializedMessage)
             {
             }
         };
@@ -273,11 +282,11 @@ namespace NDiscoveryPrivate {
         struct TWaiter {
             TActorId ActorId;
             ui64 Cookie;
+            bool ReturnSerializedMessage;
         };
 
         struct TAwaitingRequest {
             TString Database;
-
             TWaiter Waiter;
         };
 
@@ -380,7 +389,7 @@ namespace NDiscoveryPrivate {
             if (auto it = Requested.find(path); it != Requested.end()) {
                 for (const auto& waiter : it->second) {
                     Send(waiter.ActorId,
-                        new TEvDiscovery::TEvDiscoveryData(newCachedData), 0, waiter.Cookie);
+                        newCachedData->ToEvent(waiter.ReturnSerializedMessage), 0, waiter.Cookie);
                 }
                 Requested.erase(it);
             }
@@ -411,7 +420,7 @@ namespace NDiscoveryPrivate {
 
             const auto* msg = ev->Get();
 
-            AwaitingRequests.push_back(TAwaitingRequest{msg->Database, {ev->Sender, ev->Cookie}});
+            AwaitingRequests.push_back(TAwaitingRequest{msg->Database, {ev->Sender, ev->Cookie, msg->ReturnSerializedMessage}});
         }
 
         void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
@@ -426,20 +435,20 @@ namespace NDiscoveryPrivate {
                 if (enableSubscriptions) {
                     cachedData = CachedNotAvailable.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie, msg->ReturnSerializedMessage});
                         return;
                     }
                 } else {
                     cachedData = OldCachedMessages.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie, msg->ReturnSerializedMessage});
                         return;
                     }
                     Request(msg->Database);
                 }
             }
 
-            Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(*cachedData), 0, ev->Cookie);
+            Send(ev->Sender, (*cachedData)->ToEvent(msg->ReturnSerializedMessage), 0, ev->Cookie);
         }
 
         void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
@@ -521,6 +530,7 @@ namespace NDiscoveryPrivate {
 class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
     TLookupPathFunc MakeLookupPath;
     const TString Database;
+    const bool ReturnSerializedMessage;
     const TActorId ReplyTo;
     const TActorId CacheId;
 
@@ -542,9 +552,11 @@ public:
 
     explicit TDiscoverer(
             TLookupPathFunc f, const TString& database,
+            bool returnSerializedMessage,
             const TActorId& replyTo, const TActorId& cacheId)
         : MakeLookupPath(f)
         , Database(database)
+        , ReturnSerializedMessage(returnSerializedMessage)
         , ReplyTo(replyTo)
         , CacheId(cacheId)
     {
@@ -566,8 +578,6 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
-        Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
-
         DLOG_T("Handle " << ev->ToString()
             << ": cookie# " << ev->Cookie);
 
@@ -669,9 +679,13 @@ public:
             }
         }
 
-        if (LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->IsValid()) {
+        auto lookupStatus = std::visit([](auto&& arg) {
+            return arg.Status;
+        }, LookupResponse->CachedMessageData);
+
+        if (lookupStatus != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
             DLOG_D("Lookup error"
-                << ": status# " << ui64(LookupResponse->CachedMessageData->Status));
+                << ": status# " << ui64(lookupStatus));
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database nodes resolve failed with no certain result"));
         }
@@ -703,7 +717,7 @@ public:
 
         const auto reqPath = MakeLookupPath(database);
 
-        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath), 0, ++LookupCookie);
+        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, ReturnSerializedMessage), 0, ++LookupCookie);
         LookupResponse.Reset();
     }
 
@@ -737,9 +751,10 @@ public:
 IActor* CreateDiscoverer(
         TLookupPathFunc f,
         const TString& database,
+        bool returnSerializedMessage,
         const TActorId& replyTo,
         const TActorId& cacheId) {
-    return new TDiscoverer(f, database, replyTo, cacheId);
+    return new TDiscoverer(f, database, returnSerializedMessage, replyTo, cacheId);
 }
 
 IActor* CreateDiscoveryCache(const TString& endpointId, const TMaybe<TActorId>& nameserviceActorId) {

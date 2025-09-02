@@ -62,7 +62,7 @@ public:
     }
     void Handle(TAutoPtr<NActors::IEventHandle>& ev) {
         Cerr << "Fake discovery cache: handle request\n";
-        Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(CachedMessage), 0, ev->Cookie);
+        Send(ev->Sender, CachedMessage->ToEvent(true), 0, ev->Cookie);
     }
 };
 
@@ -117,13 +117,15 @@ namespace NKafka::NTests {
             } else {
                 discoveryCacheActorID = runtime->Register(CreateDiscoveryCache());
             }
-            auto discoverer = runtime->Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", edge, discoveryCacheActorID));
+            auto discoverer = runtime->Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", true, edge, discoveryCacheActorID));
             Y_UNUSED(discoverer);
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(handle);
             UNIT_ASSERT(ev);
-            auto discoveryData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessage);
-            auto discoverySslData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessageSsl);
+            auto* serializedMessage = std::get_if<NDiscovery::TSerializedMessage>(&ev->CachedMessageData);
+            Y_ABORT_UNLESS(serializedMessage);
+            auto discoveryData = UnpackDiscoveryData(serializedMessage->CachedMessage);
+            auto discoverySslData = UnpackDiscoveryData(serializedMessage->CachedMessageSsl);
 
             auto checkEnpoints = [&] (ui32 port, ui32 sslPort) {
                 if (port) {

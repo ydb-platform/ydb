@@ -12,48 +12,16 @@ namespace NKikimr {
 
 namespace NDiscovery {
 
-class TCachedMessageData {
-public:
+struct TSerializedMessage {
     TString CachedMessage;
     TString CachedMessageSsl;
+    TEvStateStorage::TEvBoardInfo::EStatus Status;
+};
 
+struct TDeserializedMessage {
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
     TBridgeInfo::TPtr BridgeInfo;
     TEvStateStorage::TEvBoardInfo::EStatus Status;
-
-public:
-    TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
-                       const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries,
-                       const TBridgeInfo::TPtr& bridgeInfo = nullptr,
-                       TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
-        : CachedMessage(cachedMessage)
-        , CachedMessageSsl(cachedMessageSsl)
-        , InfoEntries(infoEntries)
-        , BridgeInfo(bridgeInfo)
-        , Status(status)
-    {}
-
-    TCachedMessageData(TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries,
-                       const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
-                       const TBridgeInfo::TPtr& bridgeInfo,
-                       const TString& endpointId = {},
-                       const TSet<TString>& services = {},
-                       TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
-        : InfoEntries(std::move(infoEntries))
-        , BridgeInfo(bridgeInfo)
-        , Status(status)
-    {
-        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services);
-    }
-
-    void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
-
-    void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
-                     const TBridgeInfo::TPtr& bridgeInfo,
-                     const TString& endpointId = {},
-                     const TSet<TString>& services = {});
-
-    bool IsValid() const;
 };
 
 }
@@ -85,14 +53,69 @@ struct TEvDiscovery {
     };
 
     struct TEvDiscoveryData : public TEventLocal<TEvDiscoveryData, EvDiscoveryData> {
-        std::shared_ptr<const NDiscovery::TCachedMessageData> CachedMessageData;
+        std::variant<NDiscovery::TSerializedMessage, NDiscovery::TDeserializedMessage> CachedMessageData;
 
         TEvDiscoveryData(
-                std::shared_ptr<const NDiscovery::TCachedMessageData> cachedMessageData)
+                NDiscovery::TSerializedMessage&& cachedMessageData)
+            : CachedMessageData(std::move(cachedMessageData))
+        {}
+
+        TEvDiscoveryData(
+                NDiscovery::TDeserializedMessage&& cachedMessageData)
             : CachedMessageData(std::move(cachedMessageData))
         {}
     };
 };
+
+namespace NDiscovery {
+
+class TCachedMessageData {
+public:
+    TString CachedMessage;
+    TString CachedMessageSsl;
+
+    TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+    TBridgeInfo::TPtr BridgeInfo;
+    TEvStateStorage::TEvBoardInfo::EStatus Status;
+
+public:
+    TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
+                        const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries,
+                        const TBridgeInfo::TPtr& bridgeInfo = nullptr,
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+        : CachedMessage(cachedMessage)
+        , CachedMessageSsl(cachedMessageSsl)
+        , InfoEntries(infoEntries)
+        , BridgeInfo(bridgeInfo)
+        , Status(status)
+    {}
+
+    TCachedMessageData(TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries,
+                        const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                        const TBridgeInfo::TPtr& bridgeInfo,
+                        const TString& endpointId = {},
+                        const TSet<TString>& services = {},
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+        : InfoEntries(std::move(infoEntries))
+        , BridgeInfo(bridgeInfo)
+        , Status(status)
+    {
+        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services);
+    }
+
+    void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
+
+    void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                        const TBridgeInfo::TPtr& bridgeInfo,
+                        const TString& endpointId = {},
+                        const TSet<TString>& services = {});
+
+    bool IsValid() const;
+
+    TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage) const;
+};
+
+}
 
 using TLookupPathFunc = std::function<TString(const TString&)>;
 
@@ -102,6 +125,7 @@ using TLookupPathFunc = std::function<TString(const TString&)>;
 IActor* CreateDiscoverer(
     TLookupPathFunc f,
     const TString& database,
+    bool returnSerializedMessage,
     const TActorId& replyTo,
     const TActorId& cacheId);
 

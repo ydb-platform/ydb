@@ -1,0 +1,11 @@
+--- contrib/python/marisa-trie/py2/ya.make	(index)
++++ contrib/python/marisa-trie/py2/ya.make	(working tree)
+@@ -32,7 +32,7 @@ SRCS(
+ PY_SRCS(
+     TOP_LEVEL
+     CYTHON_CPP
+-    src/marisa_trie.pyx
++    src/marisa_trie.pyx=marisa_trie
+ )
+ 
+ RESOURCE_FILES(

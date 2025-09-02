@@ -436,147 +436,137 @@ def delete_keys_recursively(data, keys_to_delete):
             delete_keys_recursively(item, keys_to_delete)
 
 
-def normalize_result_pdisks(result):
-    result = replace_values_by_key(result, ['AvailableSize',
-                                            'TotalSize',
-                                            'LogUsedSize',
-                                            'LogTotalSize',
-                                            'SystemSize',
-                                            'SlotSize',
-                                            'EnforcedDynamicSlotSize',
-                                            ])
-    result = replace_values_by_key_and_value(result, ['Status'], ['ACTIVE', 'INACTIVE'])
-    return result
-
-
-def normalize_result_vdisks(result):
-    return replace_values_by_key(result, ['AvailableSize',
-                                          'IncarnationGuid',
-                                          'InstanceGuid',
-                                          'WriteThroughput',
-                                          'ReadThroughput',
-                                          ])
-
-
-def normalize_result_groups(result):
-    return replace_values_by_key(result, ['Available',
-                                          'Limit',
-                                          ])
-
-
-def normalize_result_nodes(result):
-    result = replace_types_by_key(result, ['ClockSkewUs',
-                                           'ClockSkewMinUs',
-                                           'ClockSkewMaxUs',
-                                           'NetworkUtilization',
-                                           'NetworkUtilizationMin',
-                                           'NetworkUtilizationMax',
-                                           'NetworkWriteThroughput',
-                                           'PingTimeUs',
-                                           'PingTimeMinUs',
-                                           'PingTimeMaxUs',
-                                           'ReverseClockSkewUs',
-                                           'ReversePingTimeUs',
-                                           'Utilization',
-                                           'BytesWritten',
-                                           'ReceiveThroughput',
-                                           'SendThroughput',
-                                           'UptimeSeconds',
-                                           'Usage',
-                                           'TotalSessions',
-                                           ])
-    return replace_values_by_key(result, ['CpuUsage',
-                                          'DiskSpaceUsage',
-                                          'Address',
-                                          'Port',
-                                          'port',
-                                          'host',
-                                          'Host',
-                                          'PeerName',
-                                          'LoadAverage',
-                                          'MemoryStats',
-                                          'MemoryTotal',
-                                          'MemoryLimit',
-                                          'NumberOfCpus',
-                                          'CoresUsed',
-                                          'CoresTotal',
-                                          'RealNumberOfCpus',
-                                          'CreateTime',
-                                          'MaxDiskUsage',
-                                          'Roles',
-                                          'ConnectTime',
-                                          'Connections',
-                                          'ResolveHost',
-                                          ])
-
-
-def normalize_result_info(result):
-    return replace_values_by_key(result, ['ChangeTime',
-                                          'StartTime',
-                                          'ResponseTime',
-                                          'ResponseDuration',
-                                          'ProcessDuration',
-                                          ])
-
-
-def normalize_result_schema(result):
-    return replace_values_by_key(result, ['CreateStep',
-                                          'ACL',
-                                          'EffectiveACL',
-                                          'CreateTxId',
-                                          'PathId',
-                                          'PublicKeys',
-                                          'OriginalUserToken',
-                                          ])
-
-
-def normalize_result_cluster(result):
-    return replace_values_by_key(result, ['MapVersions',
-                                          'Versions',
-                                          'DataCenters',
-                                          'Metrics',
-                                          'StorageTotal',
-                                          'StorageUsed',
-                                          'ROT',
-                                          ])
-
-
-def normalize_result_healthcheck(result):
-    result = replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
-    delete_keys_recursively(result, ['issue_log'])
-    return result
-
-
-def normalize_result_replication(result):
-    result = replace_values_by_key(result, ['connection_string',
-                                            'endpoint',
-                                            'plan_step',
-                                            'tx_id'])
-    delete_keys_recursively(result, ['issue_log'])
-    return result
-
-
 def normalize_result(result):
-    delete_keys_recursively(result, ['Version',
+    delete_keys_recursively(result, {'Version',
                                      'MemoryUsed',
                                      'WriteThroughput',
                                      'ReadThroughput',
                                      'Read',
                                      'Write',
                                      'size_bytes',
-                                     ])
-    result = wipe_values_by_key(result, ['LatencyGetFast',
+                                     })
+    result = wipe_values_by_key(result, {'LatencyGetFast',
                                          'LatencyPutTabletLog',
                                          'LatencyPutUserData'
-                                         ])
-    result = normalize_result_nodes(result)
-    result = normalize_result_info(result)
-    result = normalize_result_schema(result)
-    result = normalize_result_groups(result)
-    result = normalize_result_pdisks(result)
-    result = normalize_result_vdisks(result)
-    result = normalize_result_cluster(result)
-    result = normalize_result_replication(result)
+                                         })
+
+    replace_with_types = set()
+    replace_with_values = set()
+
+    # nodes
+    replace_with_types.update({'ClockSkewUs',
+                               'ClockSkewMinUs',
+                               'ClockSkewMaxUs',
+                               'NetworkUtilization',
+                               'NetworkUtilizationMin',
+                               'NetworkUtilizationMax',
+                               'NetworkWriteThroughput',
+                               'PingTimeUs',
+                               'PingTimeMinUs',
+                               'PingTimeMaxUs',
+                               'ReverseClockSkewUs',
+                               'ReversePingTimeUs',
+                               'Utilization',
+                               'BytesWritten',
+                               'ReceiveThroughput',
+                               'SendThroughput',
+                               'UptimeSeconds',
+                               'Usage',
+                               'TotalSessions',
+                               })
+
+    replace_with_values.update({'CpuUsage',
+                                'DiskSpaceUsage',
+                                'Address',
+                                'Port',
+                                'port',
+                                'host',
+                                'Host',
+                                'PeerName',
+                                'LoadAverage',
+                                'MemoryStats',
+                                'MemoryTotal',
+                                'MemoryLimit',
+                                'NumberOfCpus',
+                                'CoresUsed',
+                                'CoresTotal',
+                                'RealNumberOfCpus',
+                                'CreateTime',
+                                'MaxDiskUsage',
+                                'Roles',
+                                'ConnectTime',
+                                'Connections',
+                                'ResolveHost',
+                                })
+
+    # info
+    replace_with_values.update({'ChangeTime',
+                                'StartTime',
+                                'ResponseTime',
+                                'ResponseDuration',
+                                'ProcessDuration',
+                                })
+
+    # schema
+    replace_with_values.update({'CreateStep',
+                                'ACL',
+                                'EffectiveACL',
+                                'CreateTxId',
+                                'PathId',
+                                'PublicKeys',
+                                'OriginalUserToken',
+                                })
+
+    # groups
+    replace_with_values.update({'Available',
+                                'Limit',
+                                })
+
+    # pdisks
+    replace_with_values.update({'TotalSize',
+                                'LogUsedSize',
+                                'LogTotalSize',
+                                'SystemSize',
+                                'SlotSize',
+                                'SlotCount',
+                                'EnforcedDynamicSlotSize',
+                                })
+
+    result = replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
+
+    # vdisks
+    replace_with_values.update({'AvailableSize',
+                                'AllocatedSize',
+                                'IncarnationGuid',
+                                'InstanceGuid',
+                                'WriteThroughput',
+                                'ReadThroughput',
+                                })
+
+    # cluster
+    replace_with_values.update({'MapVersions',
+                                'Versions',
+                                'DataCenters',
+                                'Metrics',
+                                'StorageTotal',
+                                'StorageUsed',
+                                'ROT',
+                                })
+
+    # replication
+    replace_with_values.update({'connection_string',
+                                'endpoint',
+                                'plan_step',
+                                'tx_id'})
+
+    result = replace_types_by_key(result, replace_with_types)
+    result = replace_values_by_key(result, replace_with_values)
+    return result
+
+
+def normalize_result_healthcheck(result):
+    result = replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
+    delete_keys_recursively(result, ['issue_log'])
     return result
 
 
@@ -623,7 +613,7 @@ def test_viewer_storage_nodes_all():
 
 
 def test_storage_groups():
-    return normalize_result(get_viewer("/storage/groups", {
+    return normalize_result(get_viewer("/viewer/groups", {
         'fields_required': 'all'
     }))
 

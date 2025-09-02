@@ -351,6 +351,12 @@ private:
 
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
+        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
+
+        bool enableOrderOptimizaionFSM = TableServiceConfig.GetEnableOrderOptimizaionFSM();
+
+        bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -391,7 +397,10 @@ private:
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
-            TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
+            TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
+            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
+            TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
+            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex)
         {
 
             QueryCache->Clear();

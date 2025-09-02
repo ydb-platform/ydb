@@ -55,7 +55,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AsyncInputError;
     NMonitoring::TDynamicCounters::TCounterPtr OtherEvent;
 
-    THashMap<TInstant, TInstant> WatermarkStartedAt;
+    TMap<TInstant, TInstant> WatermarkStartedAt;
 };
 
 }

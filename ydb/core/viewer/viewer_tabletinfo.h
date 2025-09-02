@@ -89,8 +89,6 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             TPathId domainRoot;
             if (AppData()) {
@@ -106,31 +104,15 @@ public:
                 FilterTenantId.second = pathId.LocalPathId;
             }
         }
-        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
-            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
-        } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
-            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
-        } else if (Database || SharedDatabase) {
-            RequestStateStorageEndpointsLookup(SharedDatabase ? SharedDatabase : Database);
-            Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
-            return;
-        }
-        CheckPath();
-    }
-
-    void CheckPath() {
-        BLOG_TRACE("CheckPath()");
-        const auto& params(Event->Get()->Request.GetParams());
-        ReplyWithDeadTabletsInfo = params.Has("path");
-        if (params.Has("path")) {
-            TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-            IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
+        ReplyWithDeadTabletsInfo = Params.Has("path");
+        if (Params.Has("path")) {
+            IsBase64Encode = FromStringWithDefault<bool>(Params.Get("base64"), IsBase64Encode);
             NKikimrSchemeOp::TDescribeOptions options;
             options.SetReturnBoundaries(true);
             options.SetReturnIndexTableBoundaries(true);
             options.SetShowPrivateTable(true);
-            RequestTxProxyDescribe(params.Get("path"), options);
-            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            RequestTxProxyDescribe(Params.Get("path"), options);
+            Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
         }
@@ -153,12 +135,6 @@ public:
             request->Record.MutableFilterTenantId()->SetPathId(FilterTenantId.GetPathId());
         }
         return request;
-    }
-
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ev);
-        CheckPath();
-        RequestDone();
     }
 
     TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
@@ -416,13 +392,6 @@ public:
             }
         }
         TBase::FilterResponse(response);
-    }
-
-    STATEFN(StateRequestedLookup) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
     }
 
     STATEFN(StateRequestedDescribe) {

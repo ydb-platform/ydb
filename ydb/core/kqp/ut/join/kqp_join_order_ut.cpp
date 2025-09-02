@@ -122,6 +122,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
+    appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
     appConfig.MutableFeatureFlags()->SetEnableViews(true);
     if (!useCBO) {

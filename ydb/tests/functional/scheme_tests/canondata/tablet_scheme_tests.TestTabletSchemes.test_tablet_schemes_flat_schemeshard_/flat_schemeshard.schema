@@ -8413,6 +8413,11 @@
                 "ColumnId": 9,
                 "ColumnName": "Round",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "IsEmpty",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8427,7 +8432,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

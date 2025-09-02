@@ -66,7 +66,7 @@ TAutoPtr<TLogBackend> TKikimrSetupBase::CreateLogBackend(const TServerSettings& 
     }
 }
 
-NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbose) {
+NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbosity) {
     const ui32 msgBusPort = PortManager.GetPort();
 
     NKikimr::Tests::TServerSettings serverSettings(msgBusPort, settings.AppConfig.GetAuthConfig(), settings.AppConfig.GetPQConfig());
@@ -89,8 +89,9 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-    serverSettings.SetVerbose(verbose);
+    serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
+    serverSettings.SetEnableStorageProxy(settings.AppConfig.GetQueryServiceConfig().GetCheckpointsConfig().GetEnabled());
 
     SetLoggerSettings(settings, serverSettings);
     SetFunctionRegistry(settings, serverSettings);
@@ -105,6 +106,23 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     }
 
     return serverSettings;
+}
+
+std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemStateInfo(TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider) {
+    if (!memoryInfoProvider) {
+        return std::nullopt;
+    }
+
+    NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+
+    const auto& memInfo = memoryInfoProvider->Get();
+    if (memInfo.CGroupLimit) {
+        systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+    } else if (memInfo.MemTotal) {
+        systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+    }
+
+    return systemStateInfo;
 }
 
 void TKikimrSetupBase::SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {

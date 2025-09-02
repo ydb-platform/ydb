@@ -31,6 +31,8 @@
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -86,6 +88,8 @@ class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Da
         TReattachState ReattachState;
         ui32 RestartCount = 0;
         bool Restarting = false;
+
+        ui64 OverloadSeqNo = 0;
     };
 
 public:
@@ -105,13 +109,17 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings)
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        ui64 generation)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(resultSetFormatSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
+        , QueryServiceConfig(queryServiceConfig)
+        , Generation(generation)
     {
         AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
@@ -342,6 +350,8 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
                 IgnoreFunc(TEvKqpNode::TEvStartKqpTasksResponse);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone);
+                IgnoreFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues);
                 default:
                     UnexpectedEvent("FinalizeState", ev->GetTypeRewrite());
             }
@@ -477,6 +487,8 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
+                hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
+                hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
@@ -487,6 +499,8 @@ private:
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default: {
                     CancelProposal(0);
@@ -652,11 +666,44 @@ private:
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+                if (res->Record.HasOverloadSubscribed()) {
+                    LOG_D("Shard " << shardId << " is overloaded. Waiting.");
+                    return;
+                }
+            }
             default:
             {
                 return ShardError(res->Record);
             }
         }
+    }
+
+    void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
+        TShardState* shardState = ShardStates.FindPtr(shardId);
+        YQL_ENSURE(shardState, "Unexpected overload ready from unknown tabletId " << shardId);
+        YQL_ENSURE(EvWriteTxs.contains(shardId), "Unexpected overload ready from unknown tabletId " << shardId);
+
+        if (seqNo == shardState->OverloadSeqNo) {
+            ExecuteEvWriteTransaction(shardId, *EvWriteTxs.at(shardId));
+        }
+    }
+
+    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
+    }
+
+    void HandlePrepare(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        OnOverloadReady(shardId, seqNo);
     }
 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
@@ -1166,6 +1213,7 @@ private:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1725,9 +1773,10 @@ private:
         YQL_ENSURE(result.second);
     }
 
-    void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
+    void ExecuteEvWriteTransaction(ui64 shardId, const NKikimrDataEvents::TEvWrite& evWrite) {
         YQL_ENSURE(!TxManager);
-        TShardState shardState;
+        YQL_ENSURE(Request.LocksOp != ELocksOp::Commit || !ImmediateTx);
+        TShardState& shardState = ShardStates[shardId];
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
 
@@ -1738,6 +1787,8 @@ private:
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
+
+        evWriteTransaction->Record.SetOverloadSubscribe(++shardState.OverloadSeqNo);
 
         LOG_D("State: " << CurrentStateFuncName()
             << ", Executing EvWrite (PREPARE) on shard: " << shardId
@@ -1775,9 +1826,6 @@ private:
         LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(evWriteTransaction.release(), shardId, true), 0, 0, std::move(traceId));
-
-        auto result = ShardStates.emplace(shardId, std::move(shardState));
-        YQL_ENSURE(result.second);
     }
 
     bool WaitRequired() const {
@@ -1884,6 +1932,7 @@ private:
 
         // TODO: move graph restoration outside of executer
         const bool graphRestored = RestoreTasksGraph();
+        StartCheckpointCoordinator();
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
@@ -2670,7 +2719,7 @@ private:
             ExecuteDatashardTransaction(shardId, *shardTx, isOlap.value_or(false));
         }
 
-        for (auto& [shardId, shardTx] : EvWriteTxs) {
+        for (const auto& [shardId, shardTx] : EvWriteTxs) {
             ExecuteEvWriteTransaction(shardId, *shardTx);
         }
 
@@ -2685,7 +2734,7 @@ private:
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
-            << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
+            << ", pending compute tasks: " << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
             << ", useFollowers: " << GetUseFollowers());
 
         // error
@@ -2784,6 +2833,10 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
+        }
         TBase::PassAway();
     }
 
@@ -2846,6 +2899,38 @@ private:
             LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
             PassAway();
         }
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
+        LOG_D("Coordinator saved zero checkpoint");
+        Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr&) {
+        LOG_D("TEvRaiseTransientIssues");
+    }
+
+    void StartCheckpointCoordinator() {
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
+            && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
+            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr);
+        if (!enableCheckpointCoordinator) {
+            return;
+        }
+        const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
+
+        FederatedQuery::StreamingDisposition streamingDisposition;
+        TString executionId = GetTasksGraph().GetMeta().UserRequestContext->CurrentExecutionId;
+        CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
+            ::NFq::TCoordinatorId(executionId, Generation),
+            NYql::NDq::MakeCheckpointStorageID(),
+            SelfId(),
+            checkpointsConfig,
+            Counters->Counters->GetKqpCounters(),
+            NFq::NProto::TGraphParams(),
+            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            streamingDisposition).Release());
+        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << Generation);
     }
 
 private:
@@ -2929,6 +3014,9 @@ private:
     ui64 LastShard = 0;
 
     const TDuration WaitCAStatsTimeout;
+
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    ui64 Generation = 0;
 };
 
 } // namespace
@@ -2940,11 +3028,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings)
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings), counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation);
 }
 
 } // namespace NKqp

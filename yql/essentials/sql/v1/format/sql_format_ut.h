@@ -1920,3 +1920,57 @@ Y_UNIT_TEST(ValueConstructor) {
     TSetup setup;
     setup.Run(cases);
 }
+
+Y_UNIT_TEST(CreateStreamingQuery) {
+    TCases cases = {{
+            "creAte sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "CREATE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }, {
+            "creAte sTReaMing qUErY If Not ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "CREATE STREAMING QUERY IF NOT EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }, {
+            "creAte oR ReplAce sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }, {
+            "creAte sTReaMing qUErY TheQuery wiTh (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AlterStreamingQuery) {
+    TCases cases = {{
+            "aLTer sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "ALTER STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }, {
+            "aLTer sTReaMing qUErY If ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }, {
+            "aLTer sTReaMing qUErY TheQuery sEt (option = tRuE)",
+            "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n);\n"
+        }, {
+            "aLTer sTReaMing qUErY TheQuery sEt (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+            "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"
+        }
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(DropStreamingQuery) {
+    TCases cases = {{
+            "dRop sTReaMing qUErY TheQuery",
+            "DROP STREAMING QUERY TheQuery;\n"
+        } , {
+            "dRop sTReaMing qUErY If ExIsTs TheQuery",
+            "DROP STREAMING QUERY IF EXISTS TheQuery;\n"
+        }
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}

@@ -116,9 +116,10 @@ target_commands-args_escaped="list"
 target_commands-flags="list"
 
 with_kapt="flag"
-kapt-classpaths="list"
 kapt-opts="list"
 kapt-processors="list"
+kapt-classpaths="list"
+kapt-ap_opts="list"
 
 [attrs.root]
 

@@ -19,6 +19,12 @@ namespace {
         return TNodeLocation(location);
     }
 
+    template<typename T>
+    T *FillInGroupGeneration(T *ev) {
+        ev->ForceGroupGeneration = 1;
+        return ev;
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeGet) {
@@ -55,7 +61,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                     TString data = "hello";
                     TLogoBlobID id(100500, 1, step++, 0, data.size(), 0);
                     runtime->WrapInActorContext(sender, [&] {
-                        SendToBSProxy(sender, groupIds[originalGroupIndex], new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                        SendToBSProxy(sender, groupIds[originalGroupIndex], FillInGroupGeneration(
+                            new TEvBlobStorage::TEvPut(id, data, TInstant::Max())));
                     });
                     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
                     UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -63,8 +70,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                     for (size_t i = 0; i < groupIds.size(); ++i) {
                         Cerr << "*** reading from i# " << i << Endl;
                         runtime->WrapInActorContext(sender, [&] {
-                            SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvGet(id, 0, 0,
-                                TInstant::Max(), NKikimrBlobStorage::FastRead));
+                            SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(new TEvBlobStorage::TEvGet(id, 0, 0,
+                                TInstant::Max(), NKikimrBlobStorage::FastRead)));
                         });
                         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
                         auto& m = *res->Get();
@@ -90,8 +97,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                     for (size_t i = 0; i < groupIds.size(); ++i) {
                         Cerr << "*** reading from i# " << i << Endl;
                         runtime->WrapInActorContext(sender, [&] {
-                            SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvGet(id, 0, 0,
-                                TInstant::Max(), NKikimrBlobStorage::FastRead));
+                            SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(new TEvBlobStorage::TEvGet(id, 0, 0,
+                                TInstant::Max(), NKikimrBlobStorage::FastRead)));
                         });
                         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
                         auto& m = *res->Get();
@@ -145,7 +152,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                     if (mask[i] & 1 << k) {
                         TLogoBlobID id(tabletId, k + 1, 1, 0, data.size(), 0);
                         runtime->WrapInActorContext(sender, [&] {
-                            SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                            SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(
+                                new TEvBlobStorage::TEvPut(id, data, TInstant::Max())));
                         });
                         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
                         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -170,8 +178,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
             for (size_t i = 0; maxId && i < groupIds.size(); ++i) {
                 Cerr << "*** reading from i# " << i << Endl;
                 runtime->WrapInActorContext(sender, [&] {
-                    SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvGet(m.Id, 0, 0,
-                        TInstant::Max(), NKikimrBlobStorage::FastRead));
+                    SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(new TEvBlobStorage::TEvGet(m.Id, 0, 0,
+                        TInstant::Max(), NKikimrBlobStorage::FastRead)));
                 });
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
                 auto& m = *res->Get();
@@ -227,7 +235,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                     if (mask[i] & 1 << k) {
                         TLogoBlobID id(tabletId, gen, k + 1, 0, data.size(), 0);
                         runtime->WrapInActorContext(sender, [&] {
-                            SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                            SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(new TEvBlobStorage::TEvPut(
+                                id, data, TInstant::Max())));
                         });
                         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
                         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -266,8 +275,8 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
                 Cerr << "*** reading from i# " << i << Endl;
                 for (size_t j = 0; j < blobs.size(); ++j) {
                     runtime->WrapInActorContext(sender, [&] {
-                        SendToBSProxy(sender, groupIds[i], new TEvBlobStorage::TEvGet(blobs[j], 0, 0,
-                            TInstant::Max(), NKikimrBlobStorage::FastRead));
+                        SendToBSProxy(sender, groupIds[i], FillInGroupGeneration(new TEvBlobStorage::TEvGet(blobs[j], 0, 0,
+                            TInstant::Max(), NKikimrBlobStorage::FastRead)));
                     });
                     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
                     auto& m = *res->Get();

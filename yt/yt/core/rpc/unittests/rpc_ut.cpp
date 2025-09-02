@@ -1155,6 +1155,7 @@ protected:
     TAttachmentsInputStreamPtr CreateStream(std::optional<TDuration> timeout = {})
     {
         return New<TAttachmentsInputStream>(
+            TRequestId(),
             BIND([=] {}),
             nullptr,
             timeout);
@@ -1292,6 +1293,7 @@ protected:
     {
         PullCallbackCounter_ = 0;
         return New<TAttachmentsOutputStream>(
+            TRequestId(),
             NCompression::ECodec::None,
             nullptr,
             BIND([this] {

@@ -636,6 +636,20 @@
             "uri": "https://{canondata_backend}/1942671/f9fe8b5ff2967f43b60e0f5b3fa5c2c4eff69207/resource.tar.gz#test.test_expr-list_top_sort-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-nth_no_tagged-default.txt-Debug]": [
+        {
+            "checksum": "2c4ad1d970316f96ebc28632ab698bee",
+            "size": 754,
+            "uri": "https://{canondata_backend}/1817427/efdcc8940db1bbb79de10bdec85748b9b022445e/resource.tar.gz#test.test_expr-nth_no_tagged-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-nth_no_tagged-default.txt-Results]": [
+        {
+            "checksum": "a6bb73c2dd1a49393d3b4b3e5b42f2f0",
+            "size": 2553,
+            "uri": "https://{canondata_backend}/1925842/421e1f73672cfe3018278a1db28d854870c0151d/resource.tar.gz#test.test_expr-nth_no_tagged-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-table_path-default.txt-Debug]": [
         {
             "checksum": "390c0d1fae8cdf69553f72184fc15801",
@@ -889,6 +903,20 @@
             "checksum": "71f164814672fba7d6bb48c998ecbd0d",
             "size": 6703,
             "uri": "https://{canondata_backend}/1597364/a08acb9a39de513be38f4870d1fa364d442a056c/resource.tar.gz#test.test_join-pushdown_all_sides-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[join-yql-20341-default.txt-Debug]": [
+        {
+            "checksum": "46998c353f7a1a6b343fd13e0b9c4162",
+            "size": 711,
+            "uri": "https://{canondata_backend}/1597364/bb2f74698c2de76c486449d89d7145772d00f69d/resource.tar.gz#test.test_join-yql-20341-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-yql-20341-default.txt-Results]": [
+        {
+            "checksum": "56b59a183e1b8b29385086f49496fcfb",
+            "size": 1837,
+            "uri": "https://{canondata_backend}/1597364/bb2f74698c2de76c486449d89d7145772d00f69d/resource.tar.gz#test.test_join-yql-20341-default.txt-Results_/results.txt"
         }
     ],
     "test.test[json-json_query/on_error-default.txt-Debug]": [

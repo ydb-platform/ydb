@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
     }
 
-    TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+    TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data", bool partitioned = true) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -192,13 +192,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     .AddNonNullableColumn(dataCol, EPrimitiveType::String);
             }
             tableBuilder.SetPrimaryKeyColumns({"pk"});
-            tableBuilder.BeginPartitioningSettings()
-                .SetMinPartitionsCount(3)
-            .EndPartitioningSettings();
-            auto partitions = TExplicitPartitions{}
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
-                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
-            tableBuilder.SetPartitionAtKeys(partitions);
+            if (partitioned) {
+                tableBuilder.BeginPartitioningSettings()
+                    .SetMinPartitionsCount(3)
+                .EndPartitioningSettings();
+                auto partitions = TExplicitPartitions{}
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
+                    .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
+                tableBuilder.SetPartitionAtKeys(partitions);
+            }
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -517,55 +519,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
     }
 
-    Y_UNIT_TEST(VectorIndexNoEmptyUpdate) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoOnlyCreateTableForVectorIndex(db, true);
-        DoCreateVectorIndex(session, false);
-
-        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-
-        // Insert to the table with index should succeed, but without updating the index
-        {
-            TString query1(Q_(R"(
-                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x11\x62\x03", "10"),
-                (11, "\x77\x75\x03", "11");
-            )"));
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-        }
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
-
-        // Update to the table with index should succeed, but without updating the index
-        {
-            TString query1(Q_("UPDATE `/Root/TestTable` SET data=\"20\" WHERE pk=10;"));
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-        }
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
-
-        // Delete from the table with index should succeed, but without updating the index
-        {
-            TString query1(Q_("DELETE FROM `/Root/TestTable`"));
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-        }
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
-    }
-
     void DoTestVectorIndexDelete(const TString& deleteQuery, bool returning, bool covered) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -837,6 +790,66 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+    }
+
+    // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
+    Y_UNIT_TEST_TWIN(EmptyVectorIndexUpdate, Partitioned) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoOnlyCreateTableForVectorIndex(db, false, "data", Partitioned);
+        DoCreateVectorIndex(session, false);
+
+        // Check that the index has a stub cluster hierarchy but the posting table is empty
+        const TString level = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplLevelTable");
+        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"  \\2\"]];[[1u];[9223372036854775810u];[\"  \\2\"]]]");
+        const TString posting = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(posting, "[]");
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x03", "10");
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        // Posting table should be updated
+        {
+            const TString query1(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TestTable/index1/indexImplPostingTable`;
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+        }
+
+        // The added vector should be found successfully
+        {
+            const TString query1(Q_(R"(
+                SELECT pk FROM `/Root/TestTable`
+                VIEW index1
+                ORDER BY Knn::CosineDistance(emb, "AA\x03")
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[10]]");
+        }
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {

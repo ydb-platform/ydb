@@ -276,6 +276,15 @@ public:
                 }
             );
 
+        // Category: Topic
+        static NRpcService::TRlConfig ruRlTopicConfig(
+            "serverless_rt_coordination_node_path",
+            "serverless_rt_topic_resource_ru",
+                {
+                    // no actions
+                }
+            );
+
         auto rlMode = Request_->Get()->GetRlMode();
         switch (rlMode) {
             case TRateLimiterMode::Rps:
@@ -289,6 +298,9 @@ public:
                 break;
             case TRateLimiterMode::RuManual:
                 RlConfig = &ruRlManualConfig;
+                break;
+            case TRateLimiterMode::RuTopic:
+                RlConfig = &ruRlTopicConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;

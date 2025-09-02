@@ -590,11 +590,11 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 
 class TCheckpointStorage : public ICheckpointStorage {
     TYdbConnectionPtr YdbConnection;
-    const NConfig::TYdbStorageConfig Config;
+    const NKikimrConfig::TCheckpointsConfig::TExternalStorage Config;
 
 public:
     explicit TCheckpointStorage(
-        const NConfig::TYdbStorageConfig& config,
+        const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
         const TYdbConnectionPtr& ydbConnection);
 
@@ -659,7 +659,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStorage::TCheckpointStorage(
-    const NConfig::TYdbStorageConfig& config,
+    const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
@@ -676,16 +676,16 @@ TFuture<TIssues> TCheckpointStorage::Init()
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
         auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-
             TStringStream ss;
-            ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
+            ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "'";
+            NYql::TIssue issue(ss.Str());
+            auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
             if (issues) {
-                ss << ", issues: ";
-                issues.PrintTo(ss);
+                for (const NYql::TIssue& i : issues) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+                }
             }
-
-            return MakeFuture(std::move(issues));
+            return MakeFuture(NYql::TIssues{issue});
         }
     }
 
@@ -1186,7 +1186,7 @@ TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NConfig::TYdbStorageConfig& config,
+    const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
 {

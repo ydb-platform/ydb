@@ -232,6 +232,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
 
@@ -1043,8 +1046,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
-        case NKikimrSchemeOp::ESchemeOpChangePathState:
-        {
+        case NKikimrSchemeOp::ESchemeOpChangePathState: {
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
@@ -1712,17 +1715,18 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
     const TVector<TString>* workingDir = nullptr;
-    bool lookupError = true;
+    bool lookupError = false;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
-        lookupError &= (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError);
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;
+        } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            lookupError = true;
         }
     }
 
     auto parts = GetFullPath(GetModifyScheme());
-    if (!resultSet.empty() && lookupError) {
+    if (!workingDir && lookupError) {
         const auto errText = TStringBuilder()
             << "Cannot resolve working dir, lookup error"
             << " path# " << JoinPath(parts);

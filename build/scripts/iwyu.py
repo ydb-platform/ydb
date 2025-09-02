@@ -22,7 +22,7 @@ EXTERNAL_PREFIXES = frozenset(
 INCLUDE_PATTERN = re.compile(r'#\s*include\s*[<"]([^">]+)[">]')
 COMMENT_PATTERN = re.compile(r'//.*')
 FILE_PATTERN = re.compile(r'^([^\s]+) should (add|remove) these lines:$', re.MULTILINE)
-ERROR_PATTERNS = frozenset(['error', 'failed'])
+ERROR_PATTERNS = frozenset(['error:', 'failed'])
 
 SECTION_MARKERS = (
     (' should add these lines:', 'add'),
@@ -198,14 +198,14 @@ def filter_facade_to_private_replacements_for_file(iwyu_output, file_name):
 
     full_lines = sections.get('full', [])
     content_lines = []
-    trailing_lines = []
 
     for line in full_lines:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith('(') and 'has correct' in stripped:
-            trailing_lines.append(line)
+        if stripped.startswith('(') and 'has correct #includes/fwd-decls' in stripped:
+            # Skip lines with "has correct #includes/fwd-decls"
+            continue
         elif parse_include_line(line) not in removed_from_add:
             content_lines.append(line)
 
@@ -226,14 +226,9 @@ def filter_facade_to_private_replacements_for_file(iwyu_output, file_name):
         result_parts.extend(
             [f"{file_name} should remove these lines:", *[line for line in filtered_remove if line.strip()], ""]
         )
-    if content_lines or trailing_lines:
+    if content_lines:
         result_parts.append(f"The full include-list for {file_name}:")
         result_parts.extend([line for line in content_lines if line.strip()])
-
-        if trailing_lines:
-            result_parts.append("")
-            result_parts.extend([line for line in trailing_lines if line.strip()])
-
         result_parts.append("")
 
     return '\n'.join(result_parts).rstrip()
@@ -327,7 +322,7 @@ def main():
 
     mapping_file = args.mapping_file if args.mapping_file else args.default_mapping_file
 
-    process = run_iwyu_command(args.iwyu_bin, filtered_clang_cmd, args.verbose, mapping_file)
+    process = run_iwyu_command(args.iwyu_bin, filtered_clang_cmd, None, mapping_file)
     _, stderr = process.communicate()
 
     iwyu_output = stderr.decode('utf-8', errors='replace')
@@ -336,10 +331,17 @@ def main():
     testing_src = os.path.relpath(args.testing_src, args.source_root)
     exit_code = determine_exit_code(iwyu_output, args.testing_src)
 
+    if args.verbose:
+        process = run_iwyu_command(args.iwyu_bin, filtered_clang_cmd, args.verbose, mapping_file)
+        _, iwyu_error = process.communicate()
+        iwyu_error = iwyu_error.decode('utf-8', errors='replace')
+    else:
+        iwyu_error = iwyu_output
+
     result = {
         "file": testing_src,
         "exit_code": exit_code,
-        "stderr": iwyu_output,
+        "stderr": iwyu_error,
         "stdout": iwyu_output,
     }
 

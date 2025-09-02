@@ -4797,6 +4797,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_EQUAL(defaultFamily.GetStorage(), EColumnStorage::ColumnStorage1);
             UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCache(), EColumnCache::ColumnCacheNone);
             UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCacheMode(), EColumnCacheMode::ColumnCacheModeRegular);
+            UNIT_ASSERT(!defaultFamily.HasStorageConfig());
 
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetName(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetName(), "c1");
@@ -12105,5 +12106,115 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
         });
+    }
+
+    Y_UNIT_TEST(DefaultStorageConfig) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                            StoragePools {
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            Name: "MyRoot"
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // pool-kind-1 used in generated default StorageConfig
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table1"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8" FamilyName: "in_memory"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Id: 1
+                                Name: "in_memory"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                              }
+                            })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1", true), {
+                NLs::ColumnFamiliesCount(2),
+                NLs::ColumnFamiliesHas(0, ""),
+                NLs::ColumnFamiliesHas(1, "in_memory"),
+                [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                    const auto& partConfig = tableDescription.GetPartitionConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 2);
+
+                    const auto& mainFamily = partConfig.GetColumnFamilies(0);
+                    UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0);
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetName(), "");
+
+                    UNIT_ASSERT(!mainFamily.HasStorage());
+
+                    UNIT_ASSERT(mainFamily.HasStorageConfig());
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetSysLog().GetPreferredPoolKind(), "pool-kind-1");
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetLog().GetPreferredPoolKind(), "pool-kind-1");
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetData().GetPreferredPoolKind(), "pool-kind-1");
+                }
+        });
+
+        // Table creation with legacy Storage parameter should not generate default pool
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "TableLegacyStorage"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Storage: ColumnStorage1
+                              }
+                            })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableLegacyStorage", true), {
+                NLs::ColumnFamiliesCount(1),
+                NLs::ColumnFamiliesHas(0, ""),
+                [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                    const auto& partConfig = tableDescription.GetPartitionConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1);
+
+                    const auto& mainFamily = partConfig.GetColumnFamilies(0);
+                    UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0);
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetName(), "");
+
+                    UNIT_ASSERT_EQUAL(mainFamily.GetStorage(), NKikimrSchemeOp::EColumnStorage::ColumnStorage1);
+
+                    UNIT_ASSERT(!mainFamily.HasStorageConfig());
+                }
+        });
+
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                            StoragePools {
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            StoragePools {
+                              Name: "pool-2"
+                              Kind: "pool-kind-2"
+                            }
+                            Name: "MyRoot"
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Can't infer the one default storage pool, so "Column families require StorageConfig specification"
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table2"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8" FamilyName: "in_memory"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Id: 1
+                                Name: "in_memory"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                              }
+                            })", {TEvSchemeShard::EStatus::StatusInvalidParameter});
     }
 }

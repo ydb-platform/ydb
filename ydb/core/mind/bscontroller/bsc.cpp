@@ -361,6 +361,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (Loaded) {
         ApplyStorageConfig();
     }
+
+    ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {

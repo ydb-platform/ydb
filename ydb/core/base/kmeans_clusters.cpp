@@ -434,9 +434,7 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             return nullptr;
         // no default case because VectorType_IsValid has already checked in ValidateSettings
         case Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_UNSPECIFIED:
-        case Ydb::Table::VectorIndexSettings_VectorType_VectorIndexSettings_VectorType_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case Ydb::Table::VectorIndexSettings_VectorType_VectorIndexSettings_VectorType_INT_MAX_SENTINEL_DO_NOT_USE_:
-            error = TStringBuilder() << "Invalid vector_type: " << Ydb::Table::VectorIndexSettings::VectorType_Name(settings.vector_type());
+            error = TStringBuilder() << "Invalid similarity: " << Ydb::Table::VectorIndexSettings::VectorType_Name(settings.vector_type());
             return nullptr;
     }
 }

@@ -395,9 +395,9 @@ db.GetTable<Employee>()
 
 - Удаление по первичному ключу
 
-  ```yql
-  DELETE FROM employee WHERE Id = ?;
-  ```
+```yql
+DELETE FROM employee WHERE Id = ?;
+```
 
 ### Массовые операции: вставка, обновление и удаление
 

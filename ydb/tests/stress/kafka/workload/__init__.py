@@ -84,7 +84,7 @@ class Workload(unittest.TestCase):
             targetTopicName = f"{self.target_topic_path}-{i}"
             self.create_topic(targetTopicName, [checkerConsumer])
             for j in range(self.num_workers):
-                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i * self.num_workers + j}", self.test_topic_path, targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i}", self.test_topic_path, targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 

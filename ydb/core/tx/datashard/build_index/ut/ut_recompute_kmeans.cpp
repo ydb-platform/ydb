@@ -14,7 +14,7 @@
 namespace NKikimr {
 using namespace Tests;
 using Ydb::Table::VectorIndexSettings;
-using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
 static constexpr const char* kMainTable = "/Root/table-main";
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvRecomputeKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
-    static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
+    static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
                                      const std::vector<TString>& level,
                                      VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
     {
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

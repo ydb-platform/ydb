@@ -130,7 +130,7 @@ namespace NKikimr {
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
                 TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
-                std::unique_ptr<IEventBase> res;
+                std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
@@ -142,7 +142,7 @@ namespace NKikimr {
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
                     double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
-                    const ui32 spaceCouldBeFreedViaCompaction = calcStat.GetTotalSpaceCouldBeFreedViaCompaction();
+                    const ui64 spaceCouldBeFreedViaCompaction = calcStat.GetTotalSpaceCouldBeFreedViaCompaction();
                     double spaceCouldBeFreedViaCompactionRatio = GetSpaceCouldBeFreedViaCompactionRatio(oos, spaceCouldBeFreedViaCompaction, DCtx->PDiskCtx->Dsk->ChunkSize);
                     double defragThresholdToRunCompaction = GetDefragThresholdToRunCompaction(oos, DCtx->VCfg->DefragThresholdToRunCompactionPerMille / 1000.0, hugeDefragFreeSpaceBorder);
 
@@ -168,7 +168,11 @@ namespace NKikimr {
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
                             (ChunksToDefrag, chunksToDefrag), (SpaceCouldBeFreedViaCompactionRatio, spaceCouldBeFreedViaCompactionRatio),
                             (DefragThresholdToRunCompaction, defragThresholdToRunCompaction));
-                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
+                        if (chunksToDefrag.Chunks.size() > 0) {
+                            res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
+                        } else {
+                            STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD07, VDISKP(DCtx->VCtx->VDiskLogPrefix, "no chunks to defrag"));
+                        }
                     } else {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (FreedChunks, freedChunks), (UsefulChunks, usefulChunks),

@@ -114,6 +114,8 @@ namespace NKikimr {
         bool TChain::Allocate(NPrivate::TChunkSlot *id) {
             if (FreeSpace.empty()) {
                 if (!ChunksSoftLocking) {
+                    Cerr << VDiskLogPrefix
+                        << "TChain::Allocate: no free slots in FreeSpace, strict mode, we can't steal a chunk from LockedChunks" << Endl;
                     return false; // strict mode, we can't steal a chunk from LockedChunks
                 }
                 auto it = LockedChunks.begin();
@@ -121,12 +123,15 @@ namespace NKikimr {
                     ++it;
                 }
                 if (it == LockedChunks.end()) {
+                    Cerr << VDiskLogPrefix
+                        << "TChain::Allocate: no free slots in LockedChunks" << Endl;
                     return false;
                 }
                 TFreeSpaceItem item = it->second;
                 Cerr << VDiskLogPrefix
                     << "TChain::Allocate: no free slots in FreeSpace, stealing chunk# " << it->first
-                    << " with " << item.NumFreeSlots << " free slots" << Endl;
+                    << " with " << item.NumFreeSlots << " free slots";
+                Y_VERIFY(it->second.NumFreeSlots);
                 FreeSpace.emplace(it->first, std::move(item));
                 LockedChunks.erase(it);
             }
@@ -306,7 +311,11 @@ namespace NKikimr {
                 ::Load(s, item.FreeSlots);
                 item.NumFreeSlots = item.FreeSlots.Count();
                 res.FreeSlotsInFreeSpace += item.NumFreeSlots;
-                res.FreeSpace.emplace(chunkId, std::move(item));
+                if (item.NumFreeSlots == 0) {
+                    res.LockedChunks.emplace(chunkId, std::move(item));
+                } else {
+                    res.FreeSpace.emplace(chunkId, std::move(item));
+                }
             }
 
             return res;

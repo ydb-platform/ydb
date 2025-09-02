@@ -222,9 +222,11 @@ namespace NKikimr {
                 for (const auto& [chunkIdx, chunk] : PerChunkMap) {
                     auto it = aggrSlots.try_emplace(chunk.SlotSize, chunk.NumberOfSlotsInChunk).first;
                     TAggrSlotInfo& aggr = it->second;
-                    aggr.UsefulSlots += chunk.UsefulSlots;
-                    aggr.OccupiedSlots += (chunk.UsefulSlots + chunk.UselessSlots);
-                    ++aggr.UsedChunks;
+                    if (chunk.UsefulSlots > 0) {
+                        aggr.UsefulSlots += chunk.UsefulSlots;
+                        aggr.OccupiedSlots += (chunk.UsefulSlots + chunk.UselessSlots);
+                        aggr.UsedChunks += 1;
+                    }
                 }
                 return aggrSlots;
             }
@@ -262,6 +264,7 @@ namespace NKikimr {
                 TChunksToDefrag result;
                 result.Chunks.reserve(maxChunksToDefrag);
 
+                std::unordered_set<ui32> fullSlotSizes;
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
                     if (chunk.UsefulSlots == 0 && !runCompAfterDefrag) {
@@ -274,6 +277,7 @@ namespace NKikimr {
                     // if we can put all current used slots into UsedChunks - 1, then defragment this chunk
                     if (a.NumberOfSlotsInChunk * (a.UsedChunks - 1) >= (runCompAfterDefrag ? a.UsefulSlots : a.OccupiedSlots)) {
                         --a.UsedChunks;
+                        a.OccupiedSlots -= chunk.UselessSlots;
                         ++result.FoundChunksToDefrag;
                         if (result.Chunks.size() < maxChunksToDefrag) {
                             result.Chunks.emplace_back(chunkIdx, chunk.SlotSize);

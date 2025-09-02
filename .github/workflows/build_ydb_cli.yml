@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
-          ref: ${{ inputs.commit_sha || 'main' }}
+          ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
 
       - name: Configure git
@@ -78,7 +78,7 @@ jobs:
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
-          
+
           if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
             MAJOR=$((MAJOR+1))
             MINOR=0
@@ -89,7 +89,7 @@ jobs:
           elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
             PATCH=$((PATCH+1))
           fi
-          
+
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
@@ -109,7 +109,7 @@ jobs:
           FIRST_LINE=$(head -n 1 ydb/apps/ydb/CHANGELOG.md)
           SECOND_LINE=$(head -n 2 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
           THIRD_LINE=$(head -n 3 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
-          
+
           if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
             echo "Error: CHANGELOG already has version format at the beginning"
             exit 1
@@ -127,11 +127,11 @@ jobs:
           echo "" > /tmp/changelog_header.md
           echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
           echo "" >> /tmp/changelog_header.md
-          
+
           # Combine new header with existing changelog
           cat /tmp/changelog_header.md ydb/apps/ydb/CHANGELOG.md > /tmp/new_changelog.md
           mv /tmp/new_changelog.md ydb/apps/ydb/CHANGELOG.md
-          
+
           git add ydb/apps/ydb/CHANGELOG.md
 
       - name: Commit changes
@@ -212,7 +212,7 @@ jobs:
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
       run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
-    
+
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
@@ -327,8 +327,13 @@ jobs:
 
       - name: Merge release branch to main
         run: |
+          # Fetch latest changes from main
+          git fetch origin main
           git checkout main
-          git merge "${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge release ${{ needs.prepare-release.outputs.new-version }}"
+          git reset --hard origin/main
+
+          # Merge release branch
+          git merge "${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge CLI release ${{ needs.prepare-release.outputs.new-version }}"
           git push origin main
 
       - name: Delete release branch
@@ -356,7 +361,7 @@ jobs:
         run: |
           # Delete the branch
           git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"
-          
+
           # Delete the tag
           git push origin --delete "CLI_${{ needs.prepare-release.outputs.new-version }}" || echo "Tag already deleted"
-      
+

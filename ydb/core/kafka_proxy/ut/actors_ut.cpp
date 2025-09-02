@@ -233,7 +233,7 @@ namespace NKafka::NTests {
             UNIT_ASSERT(ev);
             auto response = dynamic_cast<TMetadataResponseData*>(ev->Response.get());
             UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), expectedTopicCount);
-             if (!error) {
+            if (!error) {
                 for (const auto& topic : response->Topics) {
                     UNIT_ASSERT(topic.ErrorCode == EKafkaErrors::NONE_ERROR);
                 }

@@ -483,7 +483,7 @@ SELECT $foo;
 | ------- | ---------------------- |
 | on | Cтоимостный оптимизатор выключен для текущего запроса |
 | off | Cтоимостный оптимизатор выключен для текущего запроса |
-| auto | Cтоимостный оптимизатор работает в соотвествии с текущем уровнем CostBasedOptimizationLevel
+| auto | Cтоимостный оптимизатор работает в соотвествии с текущем уровнем [CostBasedOptimizationLevel](#costbasedoptimizationlevel)
 
 ### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 

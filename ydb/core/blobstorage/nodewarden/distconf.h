@@ -419,6 +419,7 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
+            bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TStringBuf> selfAssemblyUUID);

@@ -21,7 +21,11 @@ AS <запрос>
 
   * `security_invoker` (Bool) - опция, при включении которой запрос, хранящийся в представлении, будет исполнен от имени пользователя, читающего из представления, а не от имени создателя представления. {#security_invoker}
 
-{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
+{% note info %}
+
+При выборе имени для представления учитывайте общие [правила именования схемных объектов](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Замечания
 

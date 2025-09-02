@@ -434,7 +434,9 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
 
-    if (streamLookup.GetIsTableImmutable()) {
+    if (streamLookup.GetIsTableImmutable()
+        && graph.GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE)
+    {
         settings->SetAllowUseFollowers(true);
         settings->SetIsTableImmutable(true);
     }
@@ -1358,7 +1360,8 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         if (input.Meta.StreamLookupSettings) {
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable();
+            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable() &&
+                tasksGraph.GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE;
 
             if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);

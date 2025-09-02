@@ -44,9 +44,6 @@ void TFindIntervalBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
     if (additionalSources.size() > 0) {
         additionalResults.reserve(additionalSources.size());
         for (const auto& additionalSource : Context->GetAdditionalSources()) {
-            if (additionalSource == mainSource) {
-                continue;
-            }
             additionalResults.emplace_back(additionalSource, FindForSource(additionalSource->IndexKeyStart(), additionalSource->IndexKeyEnd(), additionalSource->IndexKeyStart().GetSchema()));
         }
     }

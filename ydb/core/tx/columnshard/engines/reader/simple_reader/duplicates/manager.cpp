@@ -309,8 +309,6 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     }
     sourcesToFetch.shrink_to_fit();
     Counters->OnFilterRequest(sourcesToFetch.size());
-    ExpectedIntersectionCount = sourcesToFetch.size();
-    memoryGuard->Update(sourcesToFetch.size() * sizeof(TPortionInfo::TConstPtr));
 
     LOCAL_LOG_TRACE("event", "request_filter")("source", request->Get()->GetSourceId())("fetching_sources", sourcesToFetch.size());
     AFL_VERIFY(sourcesToFetch.size());
@@ -324,25 +322,38 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         return;
     }
 
+    auto before = sourcesToFetch.size();
     if (LoadAdditionalPortions) {
         std::vector<TPortionInfo::TConstPtr> additionalSourcesToFetch;
+        std::vector<TPortionInfo::TConstPtr> additionalMainSources;
         {
             const auto collector = [&additionalSourcesToFetch](
                                        const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
                 additionalSourcesToFetch.emplace_back(portion);
             };
             for (const auto& additionalSource : sourcesToFetch) {
+                if (UsePortionsCache && PortionsCache.contains(additionalSource->GetPortionId())) {
+                    continue;
+                }
+                if (additionalSource->GetPortionId() == source->GetPortionId()) {
+                    continue;
+                }
+                additionalMainSources.push_back(additionalSource);
                 Intervals.EachIntersection(TPortionIntervalTree::TRange(additionalSource->IndexKeyStart(), true, additionalSource->IndexKeyEnd(), true), collector);
             }
         }
 
+        constructor->SetAdditionalSources(additionalMainSources);
         sourcesToFetch.insert(sourcesToFetch.end(), additionalSourcesToFetch.begin(), additionalSourcesToFetch.end());
         sourcesToFetch.shrink_to_fit();
         std::sort(sourcesToFetch.begin(), sourcesToFetch.end());
         sourcesToFetch.erase(std::unique(sourcesToFetch.begin(), sourcesToFetch.end()), sourcesToFetch.end());
-        constructor->SetAdditionalSources(sourcesToFetch); // Main is handled in task, TODO: remove it here?
     }
+    auto after = sourcesToFetch.size();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ADDITIONAL_PORTIONS")("before", before)("after", after);
 
+    ExpectedIntersectionCount = sourcesToFetch.size();
+    memoryGuard->Update(sourcesToFetch.size() * sizeof(TPortionInfo::TConstPtr));
     Counters->OnFetchedSources(sourcesToFetch.size());
 
     std::set<ui32> columns;
@@ -394,19 +405,16 @@ void TDuplicateManager::Handle(const NPrivate::TEvFindIntervalsResult::TPtr& ev)
     auto result = ev->Get()->ExtractResult();
     auto additionalResults = ev->Get()->ExtractAdditionalResults();
 
-    for (const auto& slice : result) {
-        BuildFilterForSlice(slice, context, allocationGuard, dataByPortion, context->GetRequest()->Get()->GetSourceId(), true);
-    }
-
     if (LoadAdditionalPortions) {
         for (const auto& [portion, additionalResult] : additionalResults) {
-            if (portion->GetPortionId() == context->GetRequest()->Get()->GetSourceId()) {
-                continue;
-            }
             for (const auto& slice : additionalResult) {
                 BuildFilterForSlice(slice, context, allocationGuard, dataByPortion, portion->GetPortionId(), false);
             }
         }
+    }
+
+    for (const auto& slice : result) {
+        BuildFilterForSlice(slice, context, allocationGuard, dataByPortion, context->GetRequest()->Get()->GetSourceId(), true);
     }
 }
 

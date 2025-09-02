@@ -1,6 +1,7 @@
 #include "discovery.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/statestorage.h>
@@ -286,6 +287,13 @@ namespace NDiscoveryPrivate {
         TMaybe<TString> EndpointId;
         TMaybe<TActorId> NameserviceActorId;
 
+        THashMap<ui64, TMonotonic> BoardLookupStartTime;
+        ui64 LastCookie = 0;
+
+        NMonitoring::TDynamicCounterPtr Counters;
+
+        NMonitoring::THistogramPtr BoardLookupLatency;
+
         auto Request(const TString& database) {
             auto result = Requested.emplace(database, TVector<TWaiter>());
             if (result.second) {
@@ -293,9 +301,11 @@ namespace NDiscoveryPrivate {
                 if (AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                     mode = EBoardLookupMode::Subscription;
                 }
+                auto cookie = ++LastCookie;
+                BoardLookupStartTime[cookie] = TMonotonic::Now();
                 CLOG_D("Lookup"
                     << ": path# " << database);
-                Register(CreateBoardLookupActor(database, SelfId(), mode));
+                Register(CreateBoardLookupActor(database, SelfId(), mode, {}, cookie));
             }
 
             return result.first;
@@ -337,6 +347,14 @@ namespace NDiscoveryPrivate {
             CLOG_T("Handle " << ev->Get()->ToString());
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
+
+            if (auto it = BoardLookupStartTime.find(ev->Cookie); it != BoardLookupStartTime.end()) {
+                auto duration = TMonotonic::Now() - it->second;
+                BoardLookupStartTime.erase(it);
+
+                BoardLookupLatency->Collect(duration.MicroSeconds());
+            }
+
             const auto& path = msg->Path;
 
             Y_ABORT_UNLESS(NameserviceResponse);
@@ -451,6 +469,12 @@ namespace NDiscoveryPrivate {
                 const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
             }
+
+            Counters = GetServiceCounters(AppData()->Counters, "grpc")->GetSubgroup("subsystem", "discovery");
+
+            BoardLookupLatency = Counters->GetNamedHistogram("sensor", "BoardLookupLatency_us",
+                NMonitoring::ExponentialHistogram(20, 2, 1));
+
             Become(&TThis::Initializing);
         }
 

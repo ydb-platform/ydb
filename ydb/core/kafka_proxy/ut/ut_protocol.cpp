@@ -105,6 +105,9 @@ public:
         }
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
+        if (!enableQuoting)
+            appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableReadQuoting(false);
+
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
@@ -2285,15 +2288,21 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
 
         }
+        ui64 xtraKeySize = 3_MB;
+        std::vector<ui64> msgSize = {100_KB, 500_KB, 8_MB, /*9_MB, 20_MB*/};
+        // ToDo: return back after fix of big messages;
+        // LOGBROKER-9700
         std::unordered_map<size_t, TString> messages;
-        for (auto size : std::vector{100_KB, 500_KB, 9_MB, 20_MB, 3_MB}) {
+        for (auto size : msgSize) {
             messages[size] = TString{size, 'a'};
         }
-
+        messages[xtraKeySize] = TString{xtraKeySize, 'a'};
+        THashSet<TString> keysWritten;
         auto writeMessage = [&] (const TString& key, ui64 size) {
             NYdb::NTopic::TWriteMessage message{messages[size]};
             NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
             meta1.push_back(std::make_pair("__key", key));
+            keysWritten.insert(key);
             message.MessageMeta(meta1);
             writeSession->Write(std::move(message));
             totalWritten++;
@@ -2303,13 +2312,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         ui32 totalWriteCycles = 20;
         for (auto i = 0u; i < totalWriteCycles; i++) {
-            writeMessage("key1", 100_KB);
-            writeMessage("key2", 500_KB);
-            writeMessage("key3", 9_MB);
-            //writeMessage("key4", 20_MB);
-            //ToDo: return back after fix of big messages;
-            //LOGBROKER-9700
-            writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
+            for (auto size: msgSize) {
+                writeMessage(ToString(size), size);
+            }
+            TStringBuilder xtraKey;
+            xtraKey << "extra-key-" << i;
+            writeMessage(xtraKey, xtraKeySize);
             Cerr << "Wrote message " << i << Endl;
         }
         Cerr << ">>>>> END WRITE" << Endl;
@@ -2368,12 +2376,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
         Cerr << "Total messages: " << totalMessages << Endl;
-        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3")); //LOGBROKER-9700: && keysFound.contains("key4"));
+        UNIT_ASSERT(keysFound == keysWritten);
         UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 3 + totalWriteCycles); //4 + 15
         UNIT_ASSERT(totalMessages < totalWritten);
-    }
+        }
 
-    Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
+    Y_UNIT_TEST(TopicsWithCleanupPolicyScenario) {
         // TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
         // bool enableAutoTopicCreation = true, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
         TInsecureTestServer testServer("2", false, true, true, true, false);

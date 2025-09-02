@@ -424,6 +424,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 }
 
 void TColumnShard::SendPeriodicStats() {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("old", "SendPeriodicStats");
     LOG_S_DEBUG("Send periodic stats.");
 
     if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
@@ -453,6 +454,7 @@ void TColumnShard::SendPeriodicStats() {
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }

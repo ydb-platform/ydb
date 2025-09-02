@@ -16,7 +16,7 @@ namespace NKikimr::NOlap {
 class TColumnShardStatisticsReporter : public NActors::TActorBootstrapped<TColumnShardStatisticsReporter> {
 private:
     TActorId StatsReportPipe;
-    ui64 SSId;
+    ui64 SSId = 0;
     NColumnShard::TColumnShard& Owner;
 
     void BuildSSPipe(const TActorContext& ctx);

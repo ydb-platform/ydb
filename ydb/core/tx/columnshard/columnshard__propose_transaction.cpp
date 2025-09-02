@@ -44,6 +44,7 @@ public:
         if (record.HasSchemeShardId()) {
             if (Self->CurrentSchemeShardId == 0) {
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("set", "CurrentSchemeShardId");
                 Self->TmpColumnShardStatisticsReporter->SetSSId(record.GetSchemeShardId(), ctx);
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {

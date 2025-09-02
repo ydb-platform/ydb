@@ -13,9 +13,11 @@ void TColumnShardStatisticsReporter::BuildSSPipe(const TActorContext& ctx) {
     NTabletPipe::TClientConfig clientConfig;
     StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SSId, clientConfig));
 
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("pipe", "built");
 }
 
 void TColumnShardStatisticsReporter::SetSSId(ui64 sSId, const TActorContext& ctx) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("SSId", SSId);
     if (!SSId) {
         SSId = sSId;
         BuildSSPipe(ctx);
@@ -23,9 +25,11 @@ void TColumnShardStatisticsReporter::SetSSId(ui64 sSId, const TActorContext& ctx
 }
 
 void TColumnShardStatisticsReporter::SendPeriodicStats() {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
     // LOG_S_DEBUG("Send periodic stats.");
 
     if (!StatsReportPipe) { //TODO CHECK IF PIPE VALID
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("no", "pipe");
         // LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
@@ -49,6 +53,8 @@ void TColumnShardStatisticsReporter::SendPeriodicStats() {
 
     Owner.FillOlapStats(ctx, ev);
     Owner.FillColumnTableStats(ctx, ev);
+
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }

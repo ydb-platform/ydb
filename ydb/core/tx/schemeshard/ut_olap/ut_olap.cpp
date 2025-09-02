@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
 
-        UNIT_ASSERT(false);
+        // UNIT_ASSERT(false);
 
 #if 0
         TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore", "ColumnTable");

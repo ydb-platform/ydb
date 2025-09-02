@@ -54,14 +54,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ inputs.commit_sha || 'main' }}
           fetch-depth: 0
 
       - name: Configure git
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+          git config --global user.email ydbot@ydb.tech
+          git config --global user.name YDBot
 
       - name: Read current version
         id: read-version
@@ -79,7 +79,11 @@ jobs:
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
           
-          if [ "${{ inputs.version-change }}" = "MINOR" ]; then
+          if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
+            MAJOR=$((MAJOR+1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ inputs.version-change }}" = "MINOR" ]; then
             MINOR=$((MINOR+1))
             PATCH=0
           elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
@@ -313,13 +317,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
 
       - name: Configure git
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+          git config --global user.email ydbot@ydb.tech
+          git config --global user.name YDBot
 
       - name: Merge release branch to main
         run: |
@@ -340,13 +344,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
 
       - name: Configure git
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+          git config --global user.email ydbot@ydb.tech
+          git config --global user.name YDBot
 
       - name: Delete release branch and tag
         run: |

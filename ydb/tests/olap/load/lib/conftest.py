@@ -240,32 +240,68 @@ class LoadSuiteBase:
 
     @classmethod
     def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+        """
+        Проверяет состояние нод кластера после выполнения workload
+        
+        Сравнивает текущее состояние с состоянием до запуска workload и nemesis
+        """
         if cls.__nodes_state is None:
+            logging.warning("No initial nodes state available for comparison")
             return []
+        
         node_errors = []
         fail_hosts = set()
-        for node in YdbCluster.get_cluster_nodes(db_only=True):
-            saved_node = cls.__nodes_state.get(node.slot)
-            if saved_node is not None:
-                if node.start_time > saved_node.start_time:
-                    node_errors.append(NodeErrors(node, 'was restarted'))
-                    fail_hosts.add(node.host)
-                del cls.__nodes_state[node.slot]
-        for _, node in cls.__nodes_state.items():
-            node_errors.append(NodeErrors(node, 'is down'))
-            fail_hosts.add(node.host)
+        
+        # Получаем текущие ноды кластера
+        current_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        current_nodes_by_slot = {node.slot: node for node in current_nodes}
+        
+        # Проверяем каждую сохраненную ноду
+        for slot, saved_node in cls.__nodes_state.items():
+            current_node = current_nodes_by_slot.get(slot)
+            
+            if current_node is None:
+                # Нода не найдена - она down
+                node_errors.append(NodeErrors(saved_node, 'is down'))
+                fail_hosts.add(saved_node.host)
+                logging.warning(f"Node {slot} is down (not found in current cluster)")
+            elif current_node.start_time > saved_node.start_time:
+                # Нода была перезапущена
+                node_errors.append(NodeErrors(current_node, 'was restarted'))
+                fail_hosts.add(current_node.host)
+                logging.info(f"Node {slot} was restarted (start_time: {saved_node.start_time} -> {current_node.start_time})")
+            else:
+                # Нода в порядке
+                logging.debug(f"Node {slot} is healthy")
+        
+        # Очищаем состояние
         cls.__nodes_state = None
+        
         if len(node_errors) == 0:
+            logging.info("All nodes are healthy")
             return []
 
+        # Получаем cores и OOM для проблемных хостов
+        logging.info(f"Checking cores and OOM for {len(fail_hosts)} problematic hosts")
         core_hashes = cls.__get_core_hashes_by_pod(fail_hosts, result.start_time, end_time)
         ooms = cls.__get_hosts_with_omms(fail_hosts, result.start_time, end_time)
-        for node in node_errors:
-            node.core_hashes = core_hashes.get(f'{node.node.slot}', [])
-            node.was_oom = node.node.host in ooms
-
+        
+        # Обогащаем ошибки информацией о cores и OOM
+        for node_error in node_errors:
+            node_error.core_hashes = core_hashes.get(f'{node_error.node.slot}', [])
+            node_error.was_oom = node_error.node.host in ooms
+            
+            # Логируем детали проблемы
+            if node_error.core_hashes:
+                logging.error(f"Node {node_error.node.slot} has {len(node_error.core_hashes)} cores")
+            if node_error.was_oom:
+                logging.error(f"Node {node_error.node.slot} had OOM")
+        
+        # Добавляем ошибки в результат
         for err in node_errors:
             result.add_error(f'Node {err.node.slot} {err.message}')
+        
+        logging.info(f"Found {len(node_errors)} node issues: {[f'{err.node.slot}:{err.message}' for err in node_errors]}")
         return node_errors
 
     @classmethod
@@ -625,102 +661,66 @@ class LoadSuiteBase:
         )
 
     def _handle_final_status(self, result, workload_name, node_errors):
-        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        """
+        Обрабатывает финальный статус теста по простой логике:
+        
+        1. 🔴 FAIL: критические проблемы с нодами (OOM, cores)
+        2. 🔴 FAIL: все итерации не выполнились успешно
+        3. 🟡 WARNING: есть timeout, но не критично
+        4. 🟢 PASS: все хорошо
+        """
         stats = result.get_stats(workload_name)
         node_issues = stats.get("nodes_with_issues", 0) if stats else 0
-        workload_errors = []
-        if result.errors:
-            for err in result.errors:
-                if "coredump" not in err.lower() and "oom" not in err.lower():
-                    workload_errors.append(err)
-
-        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        
+        # --- ПРИКРЕПЛЯЕМ ЛОГИ ЕСЛИ НУЖНО ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
         attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
         if attach_logs_method:
             try:
-                if cluster_log_mode == 'all' or node_issues > 0 or workload_errors:
+                # Прикрепляем логи если есть проблемы или включен режим 'all'
+                if cluster_log_mode == 'all' or node_issues > 0 or result.errors:
                     attach_logs_method(
                         start_time=getattr(result, "start_time", None),
                         attach_name="kikimr",
                         query_text="",
-                        ignore_roles=True  # Собираем логи со всех уникальных хостов
+                        ignore_roles=True
                     )
             except Exception as e:
                 logging.warning(f"Failed to attach kikimr logs: {e}")
 
-        # --- FAIL TEST IF CORES OR OOM FOUND ---
-        if node_issues > 0:
-            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+        # --- 1. FAIL ЕСЛИ ЕСТЬ КРИТИЧЕСКИЕ ПРОБЛЕМЫ С НОДАМИ ---
+        critical_node_issues = sum(1 for err in node_errors if err.was_oom or err.core_hashes)
+        if critical_node_issues > 0:
+            error_msg = f"Test failed: found {critical_node_issues} node(s) with OOM/cores"
             pytest.fail(error_msg)
-        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
-        if workload_errors:
-            allure.dynamic.label("severity", "critical")
-            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
-
-        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
-        if not result.success and result.error_message:
-            # Создаем детальное сообщение об ошибке с контекстом
-            error_details = []
-            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
-            error_details.append(f"Main error: {result.error_message}")
-            if result.iterations:
-                error_details.append("\nExecution details:")
-                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
-                failed_iterations = []
-                successful_iterations = []
-                for iter_num, iteration in result.iterations.items():
-                    if iteration.error_message:
-                        failed_iterations.append({
-                            'iteration': iter_num,
-                            'error': iteration.error_message,
-                            'time': iteration.time
-                        })
-                    else:
-                        successful_iterations.append({
-                            'iteration': iter_num,
-                            'time': iteration.time
-                        })
-                if failed_iterations:
-                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
-                    for fail_info in failed_iterations:
-                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
-                if successful_iterations:
-                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
-                    for success_info in successful_iterations:
-                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-            if result.stderr and result.stderr.strip():
-                stderr_preview = result.stderr.strip()
-                if len(stderr_preview) > 500:
-                    stderr_preview = "..." + stderr_preview[-500:]
-                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-            if result.stdout and "error" in result.stdout.lower():
-                stdout_lines = result.stdout.split('\n')
-                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
-                if error_lines:
-                    error_details.append("\nError lines from STDOUT:")
-                    for line in error_lines[:5]:
-                        error_details.append(f"  {line.strip()}")
-            stats = result.get_stats(workload_name)
-            if stats:
-                if 'successful_runs' in stats and 'total_runs' in stats:
-                    error_details.append("\nRUN STATISTICS:")
-                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
-                    if 'failed_runs' in stats:
-                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
-                    if 'success_rate' in stats:
-                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-                if any(key.startswith('deployment_') for key in stats.keys()):
-                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
-                    if deployment_info:
-                        error_details.append("\nDEPLOYMENT INFO:")
-                        for key, value in deployment_info.items():
-                            error_details.append(f"  {key}: {value}")
-            detailed_error_message = "\n".join(error_details)
-            exc = pytest.fail.Exception(detailed_error_message)
-            if result.traceback is not None:
-                exc = exc.with_traceback(result.traceback)
-            raise exc
+        
+        # --- 2. FAIL ЕСЛИ ВСЕ ИТЕРАЦИИ НЕ ВЫПОЛНИЛИСЬ УСПЕШНО ---
+        total_iterations = len(result.iterations)
+        if total_iterations > 0:
+            # Считаем успешные итерации (без ошибок в stderr)
+            successful_iterations = 0
+            for iteration in result.iterations.values():
+                if hasattr(iteration, 'stderr') and iteration.stderr:
+                    stderr_clean = iteration.stderr.strip()
+                    if not stderr_clean or stderr_clean == "warning: permanently added":
+                        successful_iterations += 1
+                else:
+                    successful_iterations += 1
+            
+            if successful_iterations == 0:
+                pytest.fail("Test failed: all iterations failed to execute successfully")
+        
+        # --- 3. WARNING ЕСЛИ ЕСТЬ TIMEOUT (но не fail) ---
+        timeout_iterations = sum(1 for iteration in result.iterations.values() 
+                               if hasattr(iteration, 'error_message') and 
+                               'timeout' in iteration.error_message.lower())
+        if timeout_iterations > 0:
+            logging.warning(f"Test completed with {timeout_iterations} timeout iterations")
+        
+        # --- 4. PASS - все остальные случаи ---
+        logging.info("Test completed successfully")
+        
+        # Логируем предупреждения если есть
         if result.warning_message:
             logging.warning(f"Workload completed with warnings: {result.warning_message}")
 

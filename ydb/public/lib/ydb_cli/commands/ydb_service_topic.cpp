@@ -412,6 +412,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("no-partition-counters", "Disable partition counters")
             .NoArgument()
             .StoreValue(&EnablePartitionCounters_, false);
+        config.Opts->MutuallyExclusive("partition-counters", "no-partition-counters");
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);

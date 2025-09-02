@@ -76,7 +76,8 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     auto& params = Context->Params;
     params->OverrideStatus(std::move(statusOverride));
     params->OverrideMessage(std::move(messageOverride));
-    params->OverrideBody(content.Str());
+    TString body = content.Str();
+    params->OverrideBody(std::move(body));
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {

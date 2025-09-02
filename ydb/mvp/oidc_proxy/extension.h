@@ -26,7 +26,7 @@ private:
     std::optional<TString> MessageOverride;
     std::optional<TString> BodyOverride;
 
-    NHttp::THttpIncomingResponsePtr Response;
+    NHttp::THttpIncomingResponsePtr OriginalResponse;
 
     TStringBuf GetOverride(const std::optional<TString>& override, TStringBuf original) const {
         if (override.has_value()) {
@@ -37,38 +37,38 @@ private:
 
 public:
     void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
-        Response = std::move(response);
+        OriginalResponse = std::move(response);
         HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-        if (Response) {
-            auto headers = NHttp::THeaders(Response->Headers);
+        if (OriginalResponse) {
+            auto headers = NHttp::THeaders(OriginalResponse->Headers);
             for (const auto& header : headers.Headers) {
                 HeadersOverride->Set(header.first, header.second);
             }
         }
     }
 
-    void OverrideStatus(const TString& status) {
-        StatusOverride = status;
+    void OverrideStatus(TString&& status) {
+        StatusOverride.emplace(std::move(status));
     }
 
-    void OverrideMessage(const TString& message) {
-        MessageOverride = message;
+    void OverrideMessage(TString&& message) {
+        MessageOverride.emplace(std::move(message));
     }
 
-    void OverrideBody(const TString& body) {
-        BodyOverride = body;
+    void OverrideBody(TString&& body) {
+        BodyOverride.emplace(std::move(body));
     }
 
     TStringBuf GetStatusOverride() const {
-        return GetOverride(StatusOverride, Response ? Response->Status : TStringBuf());
+        return GetOverride(StatusOverride, OriginalResponse ? OriginalResponse->Status : TStringBuf());
     }
 
     TStringBuf GetMessageOverride() const {
-        return GetOverride(MessageOverride, Response ? Response->Message : TStringBuf());
+        return GetOverride(MessageOverride, OriginalResponse ? OriginalResponse->Message : TStringBuf());
     }
 
     TStringBuf GetBodyOverride() const {
-        return GetOverride(BodyOverride, Response ? Response->Body : TStringBuf());
+        return GetOverride(BodyOverride, OriginalResponse ? OriginalResponse->Body : TStringBuf());
     }
 };
 

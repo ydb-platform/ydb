@@ -807,6 +807,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 4);
         THashSet<TActorId> requestedTabletsSet(requestedTablets.begin(), requestedTablets.end());
         UNIT_ASSERT_VALUES_EQUAL(requestedTabletsSet.size(), 4);
+
+        auto data = KqpSimpleExec(runtime, Q_(R"(
+            SELECT COUNT(*) FROM `/Root/table-1`
+        )"));
+        // DoStartUploadTestRows wrote 32 rows
+        UNIT_ASSERT_VALUES_EQUAL(data, "{ items { uint64_value: 32 } }");
     }
 
     void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool withBackoff = false) {

@@ -1,9 +1,22 @@
 name: Build-YDB-CLI
 run-name: Build YDB CLI
+
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
+      version-change:
+        description: Version part to increment
+        required: true
+        type: choice
+        options:
+          - PATCH
+          - MINOR
+        default: PATCH
       commit_sha:
+        description: Specific commit to use as base (optional, defaults to main)
         type: string
         default: ""
       build-linux-amd:
@@ -31,8 +44,110 @@ defaults:
     shell: bash
 
 jobs:
+  prepare-release:
+    name: Prepare release branch and update version
+    runs-on: ubuntu-latest
+    outputs:
+      branch-name: ${{ steps.create-branch.outputs.branch-name }}
+      new-version: ${{ steps.update-version.outputs.new-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.commit_sha || 'main' }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Read current version
+        id: read-version
+        run: |
+          CURRENT_VERSION=$(cat ydb/apps/ydb/version.txt)
+          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: update-version
+        run: |
+          CURRENT_VERSION="${{ steps.read-version.outputs.current-version }}"
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          
+          if [ "${{ inputs.version-change }}" = "MINOR" ]; then
+            MINOR=$((MINOR+1))
+            PATCH=0
+          elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
+            PATCH=$((PATCH+1))
+          fi
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Create release branch
+        id: create-branch
+        run: |
+          BRANCH_NAME="release/cli-${{ steps.update-version.outputs.new-version }}"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Created branch: $BRANCH_NAME"
+
+      - name: Check CHANGELOG format
+        run: |
+          # Check if the file starts with empty line - version - empty line pattern
+          HEAD_LINES=$(head -n 3 ydb/apps/ydb/CHANGELOG.md)
+          FIRST_LINE=$(head -n 1 ydb/apps/ydb/CHANGELOG.md)
+          SECOND_LINE=$(head -n 2 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
+          THIRD_LINE=$(head -n 3 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
+          
+          if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
+            echo "Error: CHANGELOG already has version format at the beginning"
+            exit 1
+          fi
+
+      - name: Update version file
+        run: |
+          echo "${{ steps.update-version.outputs.new-version }}" > ydb/apps/ydb/version.txt
+          git add ydb/apps/ydb/version.txt
+
+      - name: Update CHANGELOG
+        run: |
+          NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+          # Create temporary file with new changelog structure
+          echo "" > /tmp/changelog_header.md
+          echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
+          echo "" >> /tmp/changelog_header.md
+          
+          # Combine new header with existing changelog
+          cat /tmp/changelog_header.md ydb/apps/ydb/CHANGELOG.md > /tmp/new_changelog.md
+          mv /tmp/new_changelog.md ydb/apps/ydb/CHANGELOG.md
+          
+          git add ydb/apps/ydb/CHANGELOG.md
+
+      - name: Commit changes
+        run: |
+          git commit -m "Release ${{ steps.update-version.outputs.new-version }}"
+
+      - name: Create tag
+        run: |
+          TAG_NAME="CLI_${{ steps.update-version.outputs.new-version }}"
+          git tag "$TAG_NAME"
+          echo "Created tag: $TAG_NAME"
+
+      - name: Push branch and tag
+        run: |
+          git push origin "${{ steps.create-branch.outputs.branch-name }}"
+          git push origin "CLI_${{ steps.update-version.outputs.new-version }}"
+
   build-matrix:
     name: Build platform matrix
+    needs: prepare-release
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -72,7 +187,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
     name: Build ${{ matrix.os }} binary
-    needs: build-matrix
+    needs: [prepare-release, build-matrix]
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -81,7 +196,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
+        ref: ${{ needs.prepare-release.outputs.branch-name }}
 
     - name: Print debug information
       run: |
@@ -108,16 +223,16 @@ jobs:
 
   gather-and-push-to-s3:
     name: Gather built binaries and push to s3
-    needs: build-platform-specific-binary
+    needs: [prepare-release, build-platform-specific-binary]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit_sha }}
-      - name: Get YDB CLI version from ydb/apps/ydb/version.txt
+          ref: ${{ needs.prepare-release.outputs.branch-name }}
+      - name: Get YDB CLI version from prepare-release job
         id: getver
-        run: echo "cli_version=$(cat ydb/apps/ydb/version.txt)" >> $GITHUB_OUTPUT
+        run: echo "cli_version=${{ needs.prepare-release.outputs.new-version }}" >> $GITHUB_OUTPUT
       - name: Print YDB CLI version ${{ steps.getver.outputs.cli_version }}
         run: echo ${{ steps.getver.outputs.cli_version }}
 
@@ -188,4 +303,56 @@ jobs:
           S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
           S3_REGION: ru-central1
         run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.cli_version }} "s3://$S3_BUCKET/release/"
+
+  finalize-release:
+    name: Merge to main and finalize release
+    needs: [prepare-release, gather-and-push-to-s3]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Merge release branch to main
+        run: |
+          git checkout main
+          git merge "${{ needs.prepare-release.outputs.branch-name }}" --no-ff -m "Merge release ${{ needs.prepare-release.outputs.new-version }}"
+          git push origin main
+
+      - name: Delete release branch
+        run: |
+          git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}"
+
+  cleanup-on-failure:
+    name: Cleanup release branch on failure
+    needs: [prepare-release, gather-and-push-to-s3]
+    runs-on: ubuntu-latest
+    if: failure() && needs.prepare-release.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Delete release branch and tag
+        run: |
+          # Delete the branch
+          git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"
+          
+          # Delete the tag
+          git push origin --delete "CLI_${{ needs.prepare-release.outputs.new-version }}" || echo "Tag already deleted"
       

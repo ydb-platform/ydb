@@ -86,7 +86,7 @@ private:
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
-    THashSet<ui64> AddedNodes;
+    THashSet<ui64> BrokerNodes;
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;

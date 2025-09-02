@@ -1375,6 +1375,7 @@ namespace NSQLTranslationV1 {
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
+        NYql::TResetableSetting<TNodePtr, void> EnablePartitionCounters;
 
         bool IsSet() const {
             return MinPartitions ||
@@ -1388,7 +1389,8 @@ namespace NSQLTranslationV1 {
                    AutoPartitioningStabilizationWindow ||
                    AutoPartitioningUpUtilizationPercent ||
                    AutoPartitioningDownUtilizationPercent ||
-                   AutoPartitioningStrategy
+                   AutoPartitioningStrategy ||
+                   EnablePartitionCounters
             ;
         }
     };

@@ -110,6 +110,8 @@ private:
 }; // TPDiskInfo
 
 struct TNodeStatusComputer {
+    using ENodeState = ::NKikimr::ENodeState;
+
     ENodeState CurrentState = ENodeState::GOOD;
     ENodeState ActualState = ENodeState::GOOD;
     ui64 StateCounter = 0;

@@ -280,9 +280,6 @@ private:
 
     virtual TString GetDatabase() = 0;
     virtual const TString& GetTable() = 0;
-    virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const {
-        return *Rows;
-    };
     virtual bool CheckAccess(TString& errorMessage) = 0;
     virtual TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
@@ -975,7 +972,7 @@ private:
     void FindMinMaxKeys() {
         MinKey = {};
         MaxKey = {};
-        for (const auto& pair : GetRows()) {
+        for (const auto& pair : *Rows) {
              const auto& serializedKey = pair.first;
 
             if (MinKey.GetCells().empty()) {
@@ -1001,7 +998,7 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         Span && Span.Event("ResolveShards");
-        if (GetRows().empty()) {
+        if (Rows->empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
             return ReplyIfDone(ctx);
@@ -1101,7 +1098,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRows().size())}});
+        Span && Span.Event("MakeShardRequests", {{"rows", long(Rows->size())}});
         const auto* keyRange = GetKeyRange();
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
@@ -1109,7 +1106,7 @@ private:
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
-        for (const auto& keyValue : GetRows()) {
+        for (const auto& keyValue : *Rows) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
                 [this](const auto &partition, const auto& key) {
@@ -1194,7 +1191,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << GetRows().size() << " rows / "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << Rows->size() << " rows / "
             << shardRequestCount << " shards");
 
         // Sanity check: don't break when we don't have any shards for some reason

@@ -90,9 +90,7 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 | `string`                   | `Json`                                 | `Json`                   | Текстовый JSON. |
 | `byte[]`                   | `BinaryJson`                           | `JsonDocument`           | Бинарный JSON. |
 > \* Точное `Precision`/`Scale` можно задать атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]` или глобально через `YdbOptions(UseParametrizedDecimal: true)`.
-
 > Типы с таймзоной (`TzDate`/`TzDatetime`/`TzTimestamp`) **не используются как типы колонок**. При создании таблиц будут сведены к `Date`/`Datetime`/`Timestamp`. В выражениях/литералах допустимы.
-не поддерживается
 ---
 
 ### Генерация схемы из атрибутов
@@ -300,7 +298,6 @@ CREATE TABLE Students (
   }
   ```
 
-
 {% endlist %}
 
 **Сгенерированный DDL**:
@@ -322,7 +319,6 @@ ALTER TABLE employee
   ADD INDEX employee_full_name_idx GLOBAL
        ON (full_name);
 ```
-
 
 Пример использования:
 
@@ -352,13 +348,20 @@ db.Insert(employee);
 var loaded = db.GetTable<Employee>()
                .FirstOrDefault(e => e.Id == employee.Id);
 
+// Обновим Email/Department/Salary у сотрудника с заданным Id
+db.GetTable<Employee>()
+  .Where(e => e.Id == employee.Id)
+  .Set(e => e.Email,      "example+updated@bk.com")
+  .Set(e => e.Department, "Analytics")
+  .Set(e => e.Salary,     550000.000000000m)
+  .Update();
+
 // DELETE по первичному ключу
 db.GetTable<Employee>()
   .Where(e => e.Id == employee.Id)
   .Delete();
-
-
 ```
+
 **Примеры YQL, формируемые провайдером для простых операций:**
 
 - Вставка одной записи
@@ -377,10 +380,112 @@ db.GetTable<Employee>()
   WHERE e.Id = ?;
   ```
 
+- Обновление по первичному ключу
+
+  ```yql
+  UPDATE employee
+  SET
+      Email      = ?,
+      Department = ?,
+      Salary     = ?
+  WHERE Id = ?;
+  ```
+
+>Примечание: провайдер специально снимает алиас с таблицы для UPDATE, чтобы соответствовать правилам YQL, — это делает оптимизатор SQL провайдера.
+
 - Удаление по первичному ключу
 
   ```yql
   DELETE FROM employee WHERE Id = ?;
   ```
+
+### Массовые операции: вставка, обновление и удаление
+
+- Массовая вставка (BulkCopy)
+
+{% list tabs group=lang %}
+
+- C#
+```csharp
+var now  = DateTime.UtcNow;
+var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+{
+    Id      = i,
+    IntVal  = i,
+    DecVal  = 0m,
+    StrVal  = $"Name {i}",
+    BoolVal = (i & 1) == 0,
+    DtVal   = now,
+}); 
+```
+
+- YQL
+
+```yql
+DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+SELECT
+	COUNT(*) as COUNT_1
+FROM
+	SimpleEntity t
+WHERE
+	t.Id IN $Gen_List_Primitive_1 AND
+	(t.DecVal <> Decimal('1.23', 22, 9) OR t.StrVal <> 'updated'u OR t.StrVal IS NULL OR t.BoolVal = false)
+```
+
+{% endlist %}
+
+Массовое обновление (WHERE IN)
+
+{% list tabs group=lang %}
+
+- C#
+
+```csharp
+var ids = Enumerable.Range(0, 15_000).ToArray();
+
+table.Where(t => ids.Contains(t.Id))
+     .Set(_ => _.DecVal,  _ => 1.23m)
+     .Set(_ => _.StrVal,  _ => "updated")
+     .Set(_ => _.BoolVal, _ => true)
+     .Update();
+```
+
+- YQL
+
+```yql
+DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+UPDATE
+	SimpleEntity
+SET
+	DecVal = Decimal('1.23', 22, 9),
+	StrVal = 'updated'u,
+	BoolVal = true
+WHERE
+	SimpleEntity.Id IN $Gen_List_Primitive_1
+```
+
+{% endlist %}
+
+Массовое удаление (WHERE IN)
+
+{% list tabs group=lang %}
+
+- C#
+
+```csharp
+table.Delete(t => ids.Contains(t.Id));
+```
+
+- YQL
+
+```yql
+DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+DELETE FROM
+	SimpleEntity
+WHERE
+	SimpleEntity.Id IN $Gen_List_Primitive_1
+```
+
+{% endlist %}
 
 ---

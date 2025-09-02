@@ -154,6 +154,7 @@ namespace NKikimr::NStorage {
         void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
+        void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

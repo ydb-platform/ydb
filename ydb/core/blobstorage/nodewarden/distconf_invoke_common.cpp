@@ -162,6 +162,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kUpdateBridgeGroupInfo:
                         return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
 
+                    case TQuery::kNotifyBridgeSuspended:
+                        return NotifyBridgeSuspended(op.Command.GetNotifyBridgeSuspended());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }

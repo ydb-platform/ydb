@@ -200,6 +200,7 @@ namespace NKikimr::NStorage {
                                     break;
 
                                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                                case NKikimrBridge::TClusterState::SUSPENDED:
                                     state = T::SYNCHRONIZED;
                                     break;
 

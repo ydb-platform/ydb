@@ -479,6 +479,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         if (!outOfSpace && record.HasOverloadSubscribe()) {
             const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
             OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
+            OverloadSubscribers.ScheduleNotification(SelfId());
         }
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
@@ -504,7 +505,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
     WriteTasksQueue->Enqueue(TWriteTask(
-        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk));
+        arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }
 

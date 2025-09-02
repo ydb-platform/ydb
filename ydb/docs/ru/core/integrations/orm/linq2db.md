@@ -71,25 +71,25 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 ### Таблица соответствия .NET типов с типами {{ ydb-short-name }} {#types}
 
 | .NET тип(ы)                | Linq To DB `DataType`                  | Тип в {{ ydb-short-name }} | Примечание |
-|----------------------------|----------------------------------------|--------------------------|------------|
-| `bool`                     | `Boolean`                              | `Bool`                   | — |
-| `string`                   | `NVarChar`/`VarChar`/`Char`/`NChar`    | `Utf8`                   | Строка UTF‑8. |
-| `byte[]`                   | `VarBinary`/`Binary`/`Blob`            | `String`                 | Бинарные данные. |
-| `Guid`                     | `Guid`                                 | `Uuid`                   | — |
-| `DateOnly` / `DateTime`    | `Date`                                 | `Date`                   | Время игнорируется. |
-| `DateTime`                 | `DateTime`                             | `Datetime`               | Секундная точность. |
-| `DateTime`/`DateTimeOffset`| `DateTime2`                            | `Timestamp`              | Микросекунды. |
-| `TimeSpan`                 | `Interval`                             | `Interval`               | Длительность. |
-| `decimal`                  | `Decimal`                              | `Decimal(22,9)`          | По умолчанию 22,9 в DDL. |
-| `float`                    | `Single`                               | `Float`                  | — |
-| `double`                   | `Double`                               | `Double`                 | — |
-| `sbyte` / `byte`           | `SByte` / `Byte`                       | `Int8` / `Uint8`         | — |
-| `short` / `ushort`         | `Int16` / `UInt16`                     | `Int16` / `Uint16`       | — |
-| `int` / `uint`             | `Int32` / `UInt32`                     | `Int32` / `Uint32`       | — |
-| `long` / `ulong`           | `Int64` / `UInt64`                     | `Int64` / `Uint64`       | — |
-| `string`                   | `Json`                                 | `Json`                   | Текстовый JSON. |
-| `byte[]`                   | `BinaryJson`                           | `JsonDocument`           | Бинарный JSON. |
-> \* Точное `Precision`/`Scale` можно задать атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]` или глобально через `YdbOptions(UseParametrizedDecimal: true)`.
+|----------------------------|----------------------------------------|----------------------------|------------|
+| `bool`                     | `Boolean`                              | `Bool`                     | — |
+| `string`                   | `NVarChar`/`VarChar`/`Char`/`NChar`    | `Text`                     | Строка UTF‑8. |
+| `byte[]`                   | `VarBinary`/`Binary`/`Blob`            | `Bytes`                    | Бинарные данные. |
+| `Guid`                     | `Guid`                                 | `Uuid`                     | — |
+| `DateOnly` / `DateTime`    | `Date`                                 | `Date`                     | Время игнорируется. |
+| `DateTime`                 | `DateTime`                             | `Datetime`                 | Секундная точность. |
+| `DateTime`/`DateTimeOffset`| `DateTime2`                            | `Timestamp`                | Микросекунды. |
+| `TimeSpan`                 | `Interval`                             | `Interval`                 | Длительность. |
+| `decimal`                  | `Decimal`                              | `Decimal(22,9)`            | По умолчанию 22,9 в DDL. |
+| `float`                    | `Single`                               | `Float`                    | — |
+| `double`                   | `Double`                               | `Double`                   | — |
+| `sbyte` / `byte`           | `SByte` / `Byte`                       | `Int8` / `Uint8`           | — |
+| `short` / `ushort`         | `Int16` / `UInt16`                     | `Int16` / `Uint16`         | — |
+| `int` / `uint`             | `Int32` / `UInt32`                     | `Int32` / `Uint32`         | — |
+| `long` / `ulong`           | `Int64` / `UInt64`                     | `Int64` / `Uint64`         | — |
+| `string`                   | `Json`                                 | `Json`                     | Текстовый JSON. |
+| `byte[]`                   | `BinaryJson`                           | `JsonDocument`             | Бинарный JSON. |
+> Точное `Precision`/`Scale` можно задать атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]` или глобально через `YdbOptions(UseParametrizedDecimal: true)`.
 > Типы с таймзоной (`TzDate`/`TzDatetime`/`TzTimestamp`) **не используются как типы колонок**. При создании таблиц будут сведены к `Date`/`Datetime`/`Timestamp`. В выражениях/литералах допустимы.
 ---
 

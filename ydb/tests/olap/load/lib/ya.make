@@ -15,6 +15,7 @@ PY3_LIBRARY()
         workload_topic.py
         workload_kv.py
         workload_log.py
+        workload_mixed.py
         upload.py
 
     )

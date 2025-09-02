@@ -13,11 +13,13 @@ logger = logging.getLogger("YdbLogWorkload")
 
 
 class YdbLogWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, store_type, tables_prefix):
+    def __init__(self, endpoint, database, duration, store_type, tables_prefix):
         super().__init__(None, tables_prefix, 'log', None)
         self.store_type = store_type
         self.endpoint = endpoint
         self.database = database
+        self.duration = str(duration)
+        self.update_duration = str(duration // 3)
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -61,13 +63,13 @@ class YdbLogWorkload(WorkloadBase):
             # import command
             self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator']) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
-            self.get_command_prefix(subcmds=['run', 'bulk_upsert']) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'bulk_upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
             # upsert workload
-            self.get_command_prefix(subcmds=['run', 'upsert']) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
             # insert workload
-            self.get_command_prefix(subcmds=['run', 'insert']) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'insert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
         ]
 
         self.cmd_run(
@@ -91,7 +93,7 @@ class YdbLogWorkload(WorkloadBase):
                 self.get_command_prefix(subcmds=['run', 'select']) + [
                     '--client-timeout', '10000',
                     '--threads', '10',
-                    '--seconds', str(10 * len(upload_commands)),
+                    '--seconds', self.duration,
                 ]
             )
 

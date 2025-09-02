@@ -657,14 +657,6 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     TNodeOnNodeOwnedMap replaces;
     const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody);
 
-    // TODO(mbkkt) How to inline construction of these constants to construction of readLevel0?
-    const auto fromValues = ctx.Builder(pos)
-        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "0", TNodeFlags::Default).Seal()
-    .Build();
-    const auto toValues = ctx.Builder(pos)
-        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "1", TNodeFlags::Default).Seal()
-    .Build();
-
     auto listType = Build<TCoListType>(ctx, pos)
         .ItemType<TCoStructType>()
             .Add<TExprList>()
@@ -680,6 +672,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Build()
     .Done();
 
+    // Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
     auto lookupKey = Build<TCoAsStruct>(ctx, pos)
         .Add()
             .Add<TCoAtom>()

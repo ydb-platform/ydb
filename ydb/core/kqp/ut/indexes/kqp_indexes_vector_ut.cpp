@@ -971,9 +971,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             // from followers - should read
             CheckTableReads(session, postingTableName, true, true);
         } else {
-            // from leader - should NOT read
+            // from leader - should read
             CheckTableReads(session, postingTableName, false, true);
-            // from followers - should read
+            // from followers - should NOT read
             CheckTableReads(session, postingTableName, true, false);
         }
 

@@ -142,7 +142,9 @@ public:
             ConvertAlterConsumerToProto(consumer, consumerProto);
         }
 
-        request.set_set_enable_partition_counters(settings.EnablePartitionCounters_);
+        if (settings.EnablePartitionCounters_) {
+            request.set_set_enable_partition_counters(*settings.EnablePartitionCounters_);
+        }
 
         return request;
     }

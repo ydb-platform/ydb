@@ -7,8 +7,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/replication/common/backoff.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -77,7 +77,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString()
-                << ", iteration# " << Backoff.Iteration);
+                << ", iteration# " << Backoff.GetIteration());
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 return RetryDescribe(*it);

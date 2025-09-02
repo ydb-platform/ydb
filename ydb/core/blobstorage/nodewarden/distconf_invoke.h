@@ -24,6 +24,7 @@ namespace NKikimr::NStorage {
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
         bool InvokedWithoutScepter = false;
+        bool EnablingDistconf = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -160,7 +161,7 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
             bool requireScepter = true, bool mindPrev = true,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
+            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

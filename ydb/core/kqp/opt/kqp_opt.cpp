@@ -147,9 +147,18 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
 bool IsSortKeyPrimary(
     const NYql::NNodes::TCoLambda& keySelector,
     const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields,
+    const ui64 skipPointKeys
 ) {
-    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
+    YQL_ENSURE(skipPointKeys <= tableDesc.Metadata->KeyColumnNames.size());
+    std::deque<TString> unsortedKeyColumns(tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys, tableDesc.Metadata->KeyColumnNames.end());
+    if (unsortedKeyColumns.empty()) {
+        return true;
+    }
+
+    THashSet<TString> sortedPointKeysSet(tableDesc.Metadata->KeyColumnNames.begin(), tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys);
+
+    auto checkKey = [keySelector, &sortedPointKeysSet, &passthroughFields] (NYql::NNodes::TExprBase key, TString unsorted) -> std::optional<bool> {
         if (!key.Maybe<TCoMember>()) {
             return false;
         }
@@ -160,13 +169,18 @@ bool IsSortKeyPrimary(
         }
 
         auto column = TString(member.Name().Value());
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
-        if (!columnIndex || *columnIndex != index) {
-            return false;
+        if (!sortedPointKeysSet.contains(column)) {
+            if (column != unsorted) {
+                return false;
+            }
         }
 
         if (passthroughFields && !passthroughFields->contains(column)) {
             return false;
+        }
+
+        if (sortedPointKeysSet.contains(column)) {
+            return std::nullopt;
         }
 
         return true;
@@ -176,18 +190,56 @@ bool IsSortKeyPrimary(
     if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
         auto tuple = maybeTuple.Cast();
         for (size_t i = 0; i < tuple.Size(); ++i) {
-            if (!checkKey(tuple.Item(i), i)) {
+            if (unsortedKeyColumns.empty()) {
+                return true;
+            }
+
+            auto result = checkKey(tuple.Item(i), unsortedKeyColumns.front());
+            if (!result.has_value()) {
+                continue;
+            } else if (!result.value()) {
                 return false;
+            } else {
+                unsortedKeyColumns.pop_front();
             }
         }
     } else {
-        if (!checkKey(lambdaBody, 0)) {
+        if (unsortedKeyColumns.empty()) {
+            return true;
+        }
+
+        auto result = checkKey(lambdaBody, unsortedKeyColumns.front());
+        if (result.has_value() && !result.value()) {
             return false;
         }
     }
 
     return true;
 }
+
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
+    auto getDirection = [] (TExprBase expr) -> ESortDirection {
+        if (!expr.Maybe<TCoBool>()) {
+            return ESortDirection::Unknown;
+        }
+
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return ESortDirection::Reverse;
+        }
+
+        return ESortDirection::Forward;
+    };
+
+    auto direction = ESortDirection::None;
+    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            direction |= getDirection(expr);
+        }
+    } else {
+        direction |= getDirection(sortDirections);
+    }
+    return direction;
+};
 
 bool IsBuiltEffect(const TExprBase& effect) {
     // Stage with effect output

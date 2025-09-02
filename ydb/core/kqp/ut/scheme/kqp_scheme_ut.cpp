@@ -2642,9 +2642,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -2691,11 +2691,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PrefixTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -2740,9 +2740,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
            }
         }
@@ -2789,11 +2789,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PrefixTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -3713,7 +3713,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "building global unique index is disabled");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Adding a unique index to an existing table is disabled");
         }
     }
 
@@ -3744,7 +3744,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "building global unique index is disabled");
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "Adding a unique index to an existing table is disabled");
         }
     }
 

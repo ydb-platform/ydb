@@ -576,6 +576,15 @@ void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContex
     }
 }
 
+void TPartition::Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx) {
+    const NKikimrPQ::TBroadcastPartitionError& record = ev->Get()->Record;
+    for (const auto& group : record.GetMessageGroups()) {
+        for (const auto& error : group.GetErrors()) {
+            LogAndCollectError(error, ctx);
+        }
+    }
+}
+
 void TPartition::DestroyActor(const TActorContext& ctx)
 {
     // Reply to all outstanding requests in order to destroy corresponding actors
@@ -4019,6 +4028,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 
         if (!SubDomainOutOfSpace) {
             ProcessTxsAndUserActs(ctx);
+            ProcessReserveRequests(ctx);
         }
     }
 }

@@ -50,8 +50,8 @@ class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorEx
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
-    NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
 
     EState UploadState;
 

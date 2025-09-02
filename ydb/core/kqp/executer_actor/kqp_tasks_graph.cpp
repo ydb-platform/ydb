@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/program/program.h>
@@ -472,9 +472,9 @@ void BuildVectorResolveChannels(TKqpTasksGraph& graph, const TStageInfo& stageIn
     levelMeta->SetSchemaVersion(kqpMeta.GetVersion());
     levelMeta->SetTableKind((ui32)levelTableInfo->TableKind);
 
-    settings->SetLevelTableParentColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn).Id);
-    settings->SetLevelTableClusterColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn).Id);
-    settings->SetLevelTableCentroidColumnId(levelTableInfo->Columns.at(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn).Id);
+    settings->SetLevelTableParentColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::ParentColumn).Id);
+    settings->SetLevelTableClusterColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::IdColumn).Id);
+    settings->SetLevelTableCentroidColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::CentroidColumn).Id);
     *settings->MutableCopyColumnIndexes() = vectorResolve.GetCopyColumnIndexes();
     settings->SetVectorColumnIndex(vectorResolve.GetVectorColumnIndex());
     settings->SetClusterColumnOutPos(vectorResolve.GetClusterColumnOutPos());

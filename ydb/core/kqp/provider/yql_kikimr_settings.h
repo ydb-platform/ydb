@@ -216,6 +216,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapPushdownAggregate = false;
     bool EnableOrderOptimizaionFSM = false;
 
+    bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;

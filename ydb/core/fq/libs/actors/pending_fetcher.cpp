@@ -40,7 +40,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <ydb/core/fq/libs/common/compression.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
@@ -421,7 +421,7 @@ private:
         if (!task.dq_graph_compressed().empty()) {
             dqGraphs.reserve(task.dq_graph_compressed().size());
             for (auto& g : task.dq_graph_compressed()) {
-                TCompressor compressor(g.method());
+                NKikimr::NKqp::TCompressor compressor(g.method());
                 dqGraphs.emplace_back(compressor.Decompress(g.data()));
             }
         } else {

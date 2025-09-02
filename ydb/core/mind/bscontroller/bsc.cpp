@@ -361,6 +361,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (Loaded) {
         ApplyStorageConfig();
     }
+
+    ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -1290,7 +1292,7 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
     if (retriable) {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         ev->Record.CopyFrom(cmd.Request);
-        TActivationContext::Schedule(TDuration::MilliSeconds(cmd.Timer.NextBackoffMs()), new IEventHandle(
+        TActivationContext::Schedule(cmd.Timer.Next(), new IEventHandle(
             MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
     } else {
         cmd.Callback(record);

@@ -1,16 +1,15 @@
 #pragma once
 
+#include <util/system/unaligned_mem.h>
+
 #include <ydb/library/yql/utils/simd/simd.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
 
-
-
 template <typename TTraits>
 inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
-
     using TSimdI8 = typename TTraits::TSimdI8;
 
     while (size >= 8) {
@@ -52,14 +51,14 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
     return hash;
 
 }
+
 template
 __attribute__((target("avx2")))
 ui32 CalculateCRC32<NSimd::TSimdAVX2Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
 template
 __attribute__((target("sse4.2")))
 ui32 CalculateCRC32<NSimd::TSimdSSE42Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
-}
 
 }
-
+}
 }

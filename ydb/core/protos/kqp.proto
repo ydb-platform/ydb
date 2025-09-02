@@ -572,6 +572,7 @@ message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;
     optional NKqpProto.TKqpStatsQuery QueryStats = 3;
+    optional string QueryAst = 4;
 };
 
 message TKqpProxyNodeResources {

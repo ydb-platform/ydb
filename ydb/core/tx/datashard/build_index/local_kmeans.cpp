@@ -51,8 +51,8 @@ class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionH
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
-    NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
 
     EState State;
     const EState UploadState;
@@ -141,11 +141,11 @@ public:
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-            type.set_type_id(NTableIndex::ClusterIdType);
-            (*levelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*levelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+            (*levelTypes)[0] = {NTableIndex::NKMeans::ParentColumn, type};
+            (*levelTypes)[1] = {NTableIndex::NKMeans::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*levelTypes)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));

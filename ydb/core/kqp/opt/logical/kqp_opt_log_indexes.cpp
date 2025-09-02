@@ -1,5 +1,4 @@
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -460,7 +459,7 @@ auto LevelLambdaFrom(
             auto oldMember = arg.Maybe<TCoMember>();
             if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back()) {
                 auto newMember = Build<TCoMember>(ctx, pos)
-                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                    .Name().Build(NTableIndex::NKMeans::CentroidColumn)
                     .Struct(oldMember.Cast().Struct())
                 .Done();
                 replaces.emplace(oldMember.Raw(), newMember.Ptr());
@@ -484,7 +483,7 @@ auto LevelLambdaFrom(
             } else if (arg.Raw() == innerMap.Cast().Lambda().Args().Arg(0).Raw()) {
                 auto oldMember = innerMap.Cast().Input().Cast<TCoMember>();
                 newArgs.push_back(Build<TCoMember>(ctx, pos)
-                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                    .Name().Build(NTableIndex::NKMeans::CentroidColumn)
                     .Struct(oldMember.Struct())
                     .Done());
             } else {
@@ -506,7 +505,7 @@ auto LevelLambdaFrom(
         if (arg.Ref().Type() == NYql::TExprNode::Argument) {
             auto oldMember = flatMap.Cast().Input().Cast<TCoMember>();
             auto newMember = Build<TCoMember>(ctx, pos)
-                .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                .Name().Build(NTableIndex::NKMeans::CentroidColumn)
                 .Struct(oldMember.Struct())
             .Done();
             replaces.emplace(arg.Raw(), newMember.Ptr());
@@ -524,9 +523,9 @@ void RemapIdToParent(TExprContext& ctx, TPositionHandle pos, TExprNodePtr& read)
     .Done();
     TVector<TExprBase> mapMembers{
         Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn)
+            .Name().Build(NTableIndex::NKMeans::ParentColumn)
             .Value<TCoMember>().Struct(mapArg)
-                .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn)
+                .Name().Build(NTableIndex::NKMeans::IdColumn)
             .Build()
         .Done()
     };
@@ -640,8 +639,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     YQL_ENSURE(!implTable.Next->Next);
-    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable));
-    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::LevelTable));
+    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
 
     // TODO(mbkkt) It's kind of strange that almost everything here have same position
     const auto pos = match.Pos();
@@ -651,7 +650,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
     const auto levelColumns = BuildKeyColumnsList(pos, ctx,
-            std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
+            std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
     const auto& mainColumns = match.Columns();
 
     TNodeOnNodeOwnedMap replaces;
@@ -729,9 +728,9 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     const auto* prefixTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Next->Name);
     YQL_ENSURE(!implTable.Next->Next->Next);
-    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable));
-    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
-    YQL_ENSURE(prefixTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable));
+    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::LevelTable));
+    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
+    YQL_ENSURE(prefixTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PrefixTable));
 
     // TODO(mbkkt) It's kind of strange that almost everything here have same position
     const auto pos = match.Pos();
@@ -742,10 +741,10 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
     const auto levelColumns = BuildKeyColumnsList(pos, ctx,
-            std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
+            std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
     const auto prefixColumns = [&] {
         auto columns = indexDesc.KeyColumns;
-        columns.back().assign(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
+        columns.back().assign(NTableIndex::NKMeans::IdColumn);
         return BuildKeyColumnsList(pos, ctx, columns);
     }();
     const auto& mainColumns = match.Columns();

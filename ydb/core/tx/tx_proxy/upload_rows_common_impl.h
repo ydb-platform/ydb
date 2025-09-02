@@ -1351,7 +1351,7 @@ private:
             return;
         }
 
-        if (!ShardUploadRetryStates.empty() && Backoff.HasMore()) {
+        if (!ShardUploadRetryStates.empty()) {
             return DoRetry(ctx);
         }
 

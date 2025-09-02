@@ -180,6 +180,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 DefaultEnableSpillingNodes = 0;
 
     bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

@@ -546,6 +546,7 @@ private:
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
 
         bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
+        bool enablePointPredicateSortAutoSelectIndex = TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -577,10 +578,11 @@ private:
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
-            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex)
+            TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
+            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex)
         {
 
-            QueryCache->Clear();
+            QueryCache.Clear();
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Query cache was invalidated due to config change");

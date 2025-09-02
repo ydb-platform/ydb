@@ -1434,7 +1434,7 @@ public:
     }
 
     void StartWithLocalConfig() {
-        Logger.Out() << "Force start with local config" << Endl;
+        Logger.Out() << "Try force start with local config" << Endl;
         NKikimrConfig::TAppConfig yamlConfig;
         NYamlConfig::ResolveAndParseYamlConfig(
             YamlConfigString,
@@ -1445,8 +1445,9 @@ public:
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
         auto appConfig = GetActualDynConfig(yamlConfig, ConfigUpdateTracer);
         if (!appConfig) {
-            ythrow yexception() << "Not enabled YAML config";
+            return;
         }
+        Logger.Out() << "Success force start with local config" << Endl;
         return ApplyConfigForNode(*appConfig);
     }
 

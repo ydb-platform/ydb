@@ -830,7 +830,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             UNIT_ASSERT(!computer.Compute());
         }
         for (ui32 _ : xrange(4)) {
-            computer.AddState(ENodeState::BAD);
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
             UNIT_ASSERT(!computer.Compute());
             UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_BAD);
         }

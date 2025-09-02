@@ -820,7 +820,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
-        MarkNode(nodeId, ENodeState::BAD);
+        MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
 
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId

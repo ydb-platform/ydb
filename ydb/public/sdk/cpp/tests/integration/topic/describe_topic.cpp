@@ -122,4 +122,63 @@ TEST_F(Describe, TEST_NAME(Location)) {
     }
 }
 
+TEST_F(Describe, TEST_NAME(EnablePartitionCounters)) {
+    TTopicClient client(MakeDriver());
+
+    auto createTopic = [&](std::string topic, bool enablePartitionCounters) {
+        auto res = client.CreateTopic(topic, TCreateTopicSettings().EnablePartitionCounters(enablePartitionCounters)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto alterTopic = [&](std::string topic, bool enablePartitionCounters) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().EnablePartitionCounters(enablePartitionCounters)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto checkFlag = [&](std::string topic, bool expected) {
+        auto res = client.DescribeTopic(topic, {}).GetValueSync();
+        Y_ENSURE(res.IsSuccess());
+        return res.GetTopicDescription().GetEnablePartitionCounters() == expected;
+    };
+
+    {
+        const std::string topic("topic-with-counters");
+        createTopic(topic, true);
+        checkFlag(topic, true);
+        alterTopic(topic, false);
+        Y_ENSURE(checkFlag(topic, false));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, false));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters-by-default");
+        auto res = client.CreateTopic(topic).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+        Y_ENSURE(checkFlag(topic, false));
+        alterTopic(topic, true);
+        Y_ENSURE(checkFlag(topic, true));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, true));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters");
+        createTopic(topic, false);
+        Y_ENSURE(checkFlag(topic, false));
+        alterTopic(topic, true);
+        Y_ENSURE(checkFlag(topic, true));
+    }
+}
+
 }

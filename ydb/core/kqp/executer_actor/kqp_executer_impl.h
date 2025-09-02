@@ -783,7 +783,13 @@ protected:
                          YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
                     break;
                 }
-
+                case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    // TODO: anely-d here is supposed that all the task with the same reason
+                    for (auto& task : record.GetNotStartedTasks()) {
+                        Planner->SendStartKqpTasksRequest(task.GetrequestId(), SelfId());
+                    }
+                    break;
+                }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {
                     InternalError("KqpNode internal error");
                     break;

@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/shutdown/events.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -117,6 +118,7 @@ private:
             hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
+            hFunc(TEvKqp::TEvInitiateShutdownRequest, HandleWork);
             // misc
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
@@ -125,6 +127,16 @@ private:
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
                 Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
+            }
+        }
+    }
+
+    STATEFN(ShuttingDownState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            default: {
+                Send(ev->Sender, new TEvKqpNode::TEvNodeShutdowned());
+                Y_ABORT("Unexpected event 0x%x for TKqpNodeService", ev->GetTypeRewrite());
             }
         }
     }
@@ -180,7 +192,7 @@ private:
 
         if (bucket.Exists(txId, requester)) {
             LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            co_return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+            co_return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie);
         }
 
         NRm::EKqpMemoryPool memoryPool;
@@ -253,7 +265,7 @@ private:
             auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
-                ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
+                ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
                 bucket.NewRequest(std::move(request));
                 TerminateTx(txId, rmResult->GetFailReason());
                 co_return;
@@ -358,6 +370,17 @@ private:
         }
     }
 
+    void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
+        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+        ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
+        Become(&TKqpNodeService::ShuttingDownState);
+    }
+
+    void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
+        LOG_D("Can't handle StartRequest in ShuttingDown State");
+        auto& msg = ev->Get()->Record;
+        ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
+    }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_D("Subscribed for config changes");
@@ -484,7 +507,7 @@ private:
 
 private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
-        NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, const TString& message = "")
+        NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(txId);
@@ -493,6 +516,7 @@ private:
             resp->SetTaskId(task.GetId());
             resp->SetReason(reason);
             resp->SetMessage(message);
+            resp->SetrequestId(requestId);
         }
         Send(executer, ev.Release());
     }
@@ -507,7 +531,7 @@ private:
 
     // state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;
-
+    TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     bool AccountDefaultPoolInScheduler = false;
 };
 

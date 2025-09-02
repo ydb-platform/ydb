@@ -2955,6 +2955,34 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
         }
     }
+    Y_UNIT_TEST(TwoNodeOneShuttingDown) {
+        TKikimrRunner kikimr(TKikimrSettings()
+                                        .SetUseRealThreads(false)
+                                        .SetNodeCount(2));
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
+        auto querySession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        
+        auto shutdownState = new TKqpShutdownState();
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new NPrivateEvents::TEvInitiateShutdownRequest(shutdownState)));
+
+        ui32 evCount = 0;
+        auto grab = [](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (enabledCapture && ev->GetTypeRewrite() == NPrivateEvents::TEvInitiateShutdownRequest::EventType) {
+                ++evCount;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        
+        runtime.SetObserverFunc(grab);
+        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, TTxControl::NoTx()).GetValueSync(); });
+        runtime.DispatchEvents(opts);
+        
+        auto result = runtime.WaitFuture(alterFuture);
+
+    }
 }
 
 } // namespace NKqp

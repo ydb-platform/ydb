@@ -669,12 +669,14 @@ message TEvStartKqpTasksResponse {
         QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4;
         // any other error
         INTERNAL_ERROR = 5;
+        NODE_SHUTTING_DOWN = 6;
     }
 
     message TNotStartedTask {
         optional uint64 TaskId = 1;
         optional ENotStartedTaskReason Reason = 2;
         optional string Message = 3;
+        optional uint64 requestId = 4;
     }
 
     optional uint64 TxId = 1;
@@ -962,3 +964,5 @@ message TEvRefreshPoolState {
     optional string PoolId = 1;
     optional string Database = 2;
 }
+
+message TEvNodeShutdowned {}

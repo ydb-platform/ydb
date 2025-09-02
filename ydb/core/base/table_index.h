@@ -53,9 +53,6 @@ using TClusterId = ui64;
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
 
-// TODO: support utf-8 in fulltext index
-inline constexpr const char* TokenTypeName = "String";
-
 // Level and Posting tables
 inline constexpr const char* ParentColumn = "__ydb_parent";
 

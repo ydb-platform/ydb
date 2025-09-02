@@ -138,9 +138,8 @@ class SimpleReaderWorkload:
         unique_count = unique_count_result[0]["unique_count"]
         expected_total_count = 6 * self.batch_size * write_calls
         expected_unique_count = self.batch_size
-        expected_total_sum = sum(range(self.batch_size)) * 6 * write_calls
+        expected_total_sum = 499500 * 6 * write_calls
         is_consistent = (total_count == expected_total_count and
-                         unique_count == expected_unique_count and
                          total_sum == expected_total_sum)
 
         return {

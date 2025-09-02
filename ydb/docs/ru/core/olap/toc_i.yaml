@@ -2,7 +2,7 @@ items:
   - name: Обзор
     include:
       mode: link
-      path: medalion/toc_p.yaml
+      path: dwh/toc_p.yaml
   - name: Быстрый старт
     href: olap_quickstart.md
   - name: Основные функции

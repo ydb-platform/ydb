@@ -1348,7 +1348,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        pqTabletConfig->SetEnablePartitionCounters(request.enable_partition_counters());
+        if (request.has_set_enable_partition_counters()) {
+            pqTabletConfig->SetEnablePartitionCounters(request.set_enable_partition_counters());
+        }
 
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
     }

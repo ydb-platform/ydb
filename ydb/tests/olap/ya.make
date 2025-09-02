@@ -7,6 +7,8 @@ PY3TEST()
         order_by_with_limit.py
         test_quota_exhaustion.py
         tablets_movement.py
+        test_cs_many_updates.py
+        data_read_correctness.py
         zip_bomb.py
         test_cs_many_updates.py
     )

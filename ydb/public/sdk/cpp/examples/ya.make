@@ -4,6 +4,7 @@ RECURSE(
     pagination
     secondary_index
     secondary_index_builtin
+    time
     topic_reader
     ttl
     vector_index

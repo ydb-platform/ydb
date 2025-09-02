@@ -8,7 +8,7 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state);
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState::TWeakPtr state);
 
 // TODO move to yql/core
 bool CheckSupportedTypesOld(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, std::function<void(const TString&)> unsupportedTypeHandler);

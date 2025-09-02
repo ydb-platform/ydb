@@ -124,7 +124,7 @@ message TFeatureFlags {
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
-    optional bool EnableTempTables = 102 [default = false];
+    optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
     optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = true];
@@ -208,9 +208,9 @@ message TFeatureFlags {
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
-    optional bool EnableMoveColumnTable = 193 [default = false];
+    optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
-    optional bool EnableCompactionOverloadDetection = 197 [default = false];
+    optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
 }

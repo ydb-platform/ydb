@@ -1200,13 +1200,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        SetError(TUploadStatus(
-            Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly"));
-
-        ShardRepliesLeft.clear();
-        ShardUploadRetryStates.clear();
-
-        return ReplyIfDone(ctx);
+        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly", ctx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
@@ -1216,9 +1210,8 @@ private:
             ctx.SelfID << " Failed to connect to shard " <<  ev->Get()->TabletId);
 
         if (!Backoff.HasMore()) {
-            SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
-                Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
-            ShardUploadRetryStates.clear();
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)), ctx);
         }
 
         ShardRepliesLeft.erase(ev->Get()->TabletId);
@@ -1273,8 +1266,8 @@ private:
             }
 
             if (!isRetryableError || !Backoff.HasMore()) {
-                SetError(
-                    TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
+                return ReplyWithError(
+                    TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()), ctx);
             }
         }
 
@@ -1378,11 +1371,8 @@ private:
     void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
         AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
         LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << status.GetErrorMessage());
-
-        SetError(status);
-
-        Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
-        return ReplyIfDone(ctx);
+        RaiseIssue(NYql::TIssue(LogPrefix() << status.GetErrorMessage()));
+        ReplyWithResult(status, ctx);
     }
 
     void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {

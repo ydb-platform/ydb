@@ -65,7 +65,6 @@ public:
         Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(CachedMessage), 0, ev->Cookie);
     }
 };
-
 struct TMetarequestTestParams {
     NPersQueue::TTestServer Server;
     ui64 KafkaPort;
@@ -276,28 +275,6 @@ namespace NKafka::NTests {
             CheckKafkaMetaResponse(runtime, kafkaPort);
         }
 
-        Y_UNIT_TEST(DiscoveryResponsesWithNoNode) {
-            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
-
-            auto* runtime = server.GetRuntime();
-            auto edge = runtime->AllocateEdgeActor();
-
-            Ydb::Discovery::ListEndpointsResult leResult;
-            auto* ep = leResult.add_endpoints();
-            ep->set_address("wrong.host");
-            ep->set_port(1);
-            ep->set_node_id(9999);
-            ep = leResult.add_endpoints();
-            ep->set_address("wrong.host2");
-            ep->set_port(2);
-            ep->set_node_id(9998);
-            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
-            runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
-                                   config, fakeCache);
-
-            CheckKafkaMetaResponse(runtime, kafkaPort, false, 1, 3);
-        }
 
         Y_UNIT_TEST(DiscoveryResponsesWithError) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1");

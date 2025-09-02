@@ -100,25 +100,6 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     }
 }
 
-// void TKafkaMetadataActor::RequestICNodeCache() {
-//     Y_ABORT_UNLESS(!FallbackToIcDiscovery);
-//     FallbackToIcDiscovery = true;
-//     PendingResponses++;
-//     Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
-// }
-
-// void TKafkaMetadataActor::HandleNodesResponse(
-//         NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
-//         const NActors::TActorContext& ctx
-// ) {
-//     Y_ABORT_UNLESS(FallbackToIcDiscovery);
-//     for (const auto& [nodeId, index] : *ev->Get()->NodeIdsMapping) {
-//         Nodes[nodeId] = {(*ev->Get()->Nodes)[index].Host, (ui32)Context->Config.GetListeningPort()};
-//     }
-//     --PendingResponses;
-//     RespondIfRequired(ctx);
-// }
-
 void TKafkaMetadataActor::ProcessTopicsFromRequest() {
     TVector<TString> topicsToRequest;
     for (size_t i = 0; i < Message->Topics.size(); ++i) {
@@ -177,12 +158,17 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
 
 TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {
     TVector<TNodeInfo*> partitionNodes;
-    for (const auto& part : response->Partitions) {
-        auto iter = Nodes.find(part.NodeId);
-        if (iter == Nodes.end()) {
-            return {};
-        }
+    if (WithProxy) {
+        auto iter = Nodes.find(ProxyNodeId);
         partitionNodes.push_back(&iter->second);
+    } else {
+        for (const auto& part : response->Partitions) {
+            auto iter = Nodes.find(part.NodeId);
+            if (iter == Nodes.end()) {
+                return {};
+            }
+            partitionNodes.push_back(&iter->second);
+        }
     }
     return partitionNodes;
 }
@@ -360,15 +346,9 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         auto& topic = Response->Topics[index];
         auto topicNodes = CheckTopicNodes(ev.Get());
         if (topicNodes.empty()) {
-            // if (!FallbackToIcDiscovery) {
-            //     // Node info wasn't found via discovery, fallback to interconnect
-            //     RequestICNodeCache();
-            //     return;
-            // } else {
-                // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
+                // Already tried YDB discovery. Throw error
                 KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
                 AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            // }
         } else {
             AddTopicResponse(topic, ev.Get(), topicNodes);
         }

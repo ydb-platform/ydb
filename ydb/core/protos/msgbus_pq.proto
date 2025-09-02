@@ -1,4 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
 
@@ -36,6 +37,7 @@ message TPersQueuePartitionRequest {
         optional uint64 PartitionSessionId = 16;
         optional int64 LastOffset = 17;
 
+        optional uint64 SizeEstimate = 18;
     }
 
     message TCmdPublishDirectRead {
@@ -54,6 +56,7 @@ message TPersQueuePartitionRequest {
         optional uint64 Generation = 3;
         optional uint64 Step = 4;
         optional uint64 PartitionSessionId = 5;
+        optional bool RestoreSession = 6;
     }
 
     message TCmdDeleteSession {
@@ -65,9 +68,9 @@ message TPersQueuePartitionRequest {
         optional string ClientId = 1; // mandatory
         optional int64 Offset = 2; // mandatory
         optional string SessionId = 4; // if not set, then no checks
-
         optional bool MirrorerRequest = 10 [default = false];
         optional bool Strict = 11 [default = false];
+        optional string CommittedMetadata = 12; // optional
     }
 
     message TCmdGetClientOffset {
@@ -97,6 +100,9 @@ message TPersQueuePartitionRequest {
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
 
         optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
+
+        optional bool EnableKafkaDeduplication = 18 [ default = false ];
+        optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -254,7 +260,7 @@ message TPersQueueRequest {
     optional TPersQueueFetchRequest FetchRequest = 3;
 
     //only one from data, meta or fetch request must be set.
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
     optional string Ticket = 6; //if set, check for acl
 
     optional string RequestId = 100; //for logging
@@ -416,7 +422,12 @@ message TCmdReadResult {
     optional uint64 ReadFromTimestampMs = 12;
     optional uint64 SizeEstimate = 13;
     optional int64 LastOffset = 14;
+    optional uint64 StartOffset = 17;
     optional uint64 EndOffset = 15;
+    optional bool ReadingFinished = 16;
+    optional bool CommittedToEnd = 18;
+    repeated uint32 AdjacentPartitionIds = 19;
+    repeated uint32 ChildPartitionIds = 20;
 }
 
 
@@ -446,6 +457,8 @@ message TPersQueuePartitionResponse {
         optional uint32 TopicQuotedTimeMs = 11;
         optional uint32 TotalTimeInPartitionQueueMs = 9;
         optional uint32 WriteTimeMs = 10;
+
+        optional bool WrittenInTx = 12;
     }
 
     message TCmdGetMaxSeqNoResult {
@@ -467,7 +480,8 @@ message TPersQueuePartitionResponse {
         optional uint64 CreateTimestampMS = 6; //create Timestamp of record on Offset (next to be readed record); is not set if no such record exists (no lag)
         optional uint64 SizeLag = 7;
         optional uint64 WriteTimestampEstimateMS = 8;
-
+        optional bool ClientHasAnyCommits = 9;
+        optional string CommittedMetadata = 10;
     }
 
     message TCmdGetOwnershipResult {
@@ -492,6 +506,10 @@ message TPersQueuePartitionResponse {
     }
 
     message TCmdPublishDirectReadResult {
+        optional uint64 DirectReadId = 1;
+    }
+
+    message TCmdRestoreDirectReadSessionResult {
     }
 
 
@@ -503,6 +521,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPrepareDirectReadResult CmdPrepareReadResult = 7;
     optional TCmdPublishDirectReadResult CmdPublishReadResult = 8;
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
+    optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
 
     optional uint64 Cookie = 6;
 }

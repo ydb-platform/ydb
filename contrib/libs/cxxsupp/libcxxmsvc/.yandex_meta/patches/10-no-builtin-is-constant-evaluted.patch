@@ -1,0 +1,13 @@
+diff --git a/include/__format/format_parse_context.h b/include/__format/format_parse_context.h
+index 3147be8..d16859c 100644
+--- a/include/__format/format_parse_context.h
++++ b/include/__format/format_parse_context.h
+@@ -26,7 +26,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+ // If the compiler has no concepts support, the format header will be disabled.
+ // Without concepts support enable_if needs to be used and that too much effort
+ // to support compilers with partial C++20 support.
+-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
++#if !defined(_LIBCPP_HAS_NO_CONCEPTS) && !defined(_LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED)
+ 
+ template <class _CharT>
+ class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_parse_context {

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "flat_dbase_scheme.h"
 #include "flat_sausage_solid.h"
 #include "flat_sausage_grind.h"
 #include "flat_page_iface.h"
+#include "util_channel.h"
 
 #include <util/system/types.h>
 #include <util/generic/vector.h>
@@ -26,9 +28,10 @@ namespace NWriter {
             ui32 MaxBlobSize = 8 * 1024 * 1024; /* Page collection max blob size */
         };
 
-        ui8 BlobsChannel = 1;   /* Channel for external blobs */
-        ui8 OuterChannel = 1;   /* Channel for packed cell values */
-        ui8 ExtraChannel = 1;   /* Channel for storing additional data */
+        TVector<ui8> BlobsChannels = {NTable::TScheme::DefaultChannel};   /* Channel for external blobs */
+        ui8 OuterChannel = NTable::TScheme::DefaultChannel;   /* Channel for packed cell values */
+        ui8 ExtraChannel = NTable::TScheme::DefaultChannel;   /* Channel for storing additional data */
+        NUtil::TChannelsShares ChannelsShares; /* Channels shares for data distribution */
         TVector<TGroup> Groups; /* Per-group page collection settings */
         TVector<TSlot> Slots;   /* Storage slots, referred by rooms */
         bool StickyFlatIndex = true;

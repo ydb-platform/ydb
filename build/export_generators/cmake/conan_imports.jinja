@@ -1,0 +1,37 @@
+{%- for conan_import in conan_imports -%}
+{%-     set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
+{%-     set search = search_and_dstdir[0]|trim -%}
+{%-     set dstdir = search_and_dstdir[1]|trim -%}
+{%-     set srcdir_and_mask = rsplit(search, ",", 2) -%}
+{%-     set srcdir = srcdir_and_mask[0]|trim -%}
+{%-     set mask = srcdir_and_mask[1]|trim -%}
+{%-     if "bin" in srcdir %}
+            {{ shift }}for bindir in dep.cpp_info.bindirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=bindir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-         if "swig" in mask %}
+                # SWIG recipe under Conan2 does not set SWIG_LIB, do it manually here or else build fails
+                if os.path.exists(os.path.join(bindir, "swig")):
+                    env = Environment()
+                    if not env.vars(self).get("SWIG_LIB"):
+                        env.define("SWIG_LIB", os.path.join(bindir, "swiglib"))
+{%-         endif -%}
+{%-     elif "res" in srcdir %}
+            {{ shift }}for resdir in dep.cpp_info.resdirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=resdir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     elif "build" in srcdir %}
+            {{ shift }}for builddir in dep.cpp_info.builddirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=builddir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     elif ("src" in srcdir) or ("source" in srcdir) %}
+            {{ shift }}for srcdir in dep.cpp_info.srcdirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=srcdir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     elif "lib" in srcdir %}
+            {{ shift }}for libdir in dep.cpp_info.libdirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=libdir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     elif "include" in srcdir %}
+            {{ shift }}for includedir in dep.cpp_info.includedirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=includedir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     elif "frame" in srcdir %}
+            {{ shift }}for framedir in dep.cpp_info.frameworkdirs:
+                {{ shift }}copy(self, pattern="{{ mask }}", src=framedir, dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-     endif -%}
+{%- endfor -%}

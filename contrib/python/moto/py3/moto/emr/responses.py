@@ -1,35 +1,40 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
+from typing import Any, Callable, Dict, List, Pattern
 
-import pytz
-
-from urllib.parse import urlparse
 from moto.core.responses import AWSServiceSpec
 from moto.core.responses import BaseResponse
 from moto.core.responses import xml_to_json_response
 from moto.core.utils import tags_from_query_string
 from .exceptions import ValidationException
-from .models import emr_backends
+from .models import emr_backends, ElasticMapReduceBackend
 from .utils import steps_from_query_string, Unflattener, ReleaseLabel
 
 
-def generate_boto3_response(operation):
+def generate_boto3_response(
+    operation: str,
+) -> Callable[
+    [Callable[["ElasticMapReduceResponse"], str]],
+    Callable[["ElasticMapReduceResponse"], str],
+]:
     """The decorator to convert an XML response to JSON, if the request is
     determined to be from boto3. Pass the API action as a parameter.
 
     """
 
-    def _boto3_request(method):
+    def _boto3_request(
+        method: Callable[["ElasticMapReduceResponse"], str]
+    ) -> Callable[["ElasticMapReduceResponse"], str]:
         @wraps(method)
-        def f(self, *args, **kwargs):
-            rendered = method(self, *args, **kwargs)
+        def f(self: "ElasticMapReduceResponse") -> str:
+            rendered = method(self)
             if "json" in self.headers.get("Content-Type", []):
                 self.response_headers.update(
                     {
                         "x-amzn-requestid": "2690d7eb-ed86-11dd-9877-6fad448a8419",
-                        "date": datetime.now(pytz.utc).strftime(
+                        "date": datetime.now(timezone.utc).strftime(
                             "%a, %d %b %Y %H:%M:%S %Z"
                         ),
                         "content-type": "application/x-amz-json-1.1",
@@ -48,27 +53,29 @@ class ElasticMapReduceResponse(BaseResponse):
 
     # EMR end points are inconsistent in the placement of region name
     # in the URL, so parsing it out needs to be handled differently
-    region_regex = [
+    emr_region_regex: List[Pattern[str]] = [
         re.compile(r"elasticmapreduce\.(.+?)\.amazonaws\.com"),
         re.compile(r"(.+?)\.elasticmapreduce\.amazonaws\.com"),
     ]
 
     aws_service_spec = AWSServiceSpec("data/emr/2009-03-31/service-2.json")
 
-    def get_region_from_url(self, request, full_url):
-        parsed = urlparse(full_url)
-        for regex in self.region_regex:
-            match = regex.search(parsed.netloc)
+    def __init__(self) -> None:
+        super().__init__(service_name="emr")
+
+    def get_region_from_url(self, request: Any, full_url: str) -> str:
+        for regex in ElasticMapReduceResponse.emr_region_regex:
+            match = regex.search(self.parsed_url.netloc)
             if match:
                 return match.group(1)
         return self.default_region
 
     @property
-    def backend(self):
-        return emr_backends[self.region]
+    def backend(self) -> ElasticMapReduceBackend:
+        return emr_backends[self.current_account][self.region]
 
     @generate_boto3_response("AddInstanceGroups")
-    def add_instance_groups(self):
+    def add_instance_groups(self) -> str:
         jobflow_id = self._get_param("JobFlowId")
         instance_groups = self._get_list_prefix("InstanceGroups.member")
         for item in instance_groups:
@@ -77,12 +84,12 @@ class ElasticMapReduceResponse(BaseResponse):
             self._parse_ebs_configuration(item)
             # Adding support for auto_scaling_policy
             Unflattener.unflatten_complex_params(item, "auto_scaling_policy")
-        instance_groups = self.backend.add_instance_groups(jobflow_id, instance_groups)
+        fake_groups = self.backend.add_instance_groups(jobflow_id, instance_groups)
         template = self.response_template(ADD_INSTANCE_GROUPS_TEMPLATE)
-        return template.render(instance_groups=instance_groups)
+        return template.render(instance_groups=fake_groups)
 
     @generate_boto3_response("AddJobFlowSteps")
-    def add_job_flow_steps(self):
+    def add_job_flow_steps(self) -> str:
         job_flow_id = self._get_param("JobFlowId")
         steps = self.backend.add_job_flow_steps(
             job_flow_id, steps_from_query_string(self._get_list_prefix("Steps.member"))
@@ -91,18 +98,15 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(steps=steps)
 
     @generate_boto3_response("AddTags")
-    def add_tags(self):
+    def add_tags(self) -> str:
         cluster_id = self._get_param("ResourceId")
         tags = tags_from_query_string(self.querystring, prefix="Tags")
         self.backend.add_tags(cluster_id, tags)
         template = self.response_template(ADD_TAGS_TEMPLATE)
         return template.render()
 
-    def cancel_steps(self):
-        raise NotImplementedError
-
     @generate_boto3_response("CreateSecurityConfiguration")
-    def create_security_configuration(self):
+    def create_security_configuration(self) -> str:
         name = self._get_param("Name")
         security_configuration = self._get_param("SecurityConfiguration")
         resp = self.backend.create_security_configuration(
@@ -112,28 +116,28 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(name=name, creation_date_time=resp.creation_date_time)
 
     @generate_boto3_response("DescribeSecurityConfiguration")
-    def describe_security_configuration(self):
+    def describe_security_configuration(self) -> str:
         name = self._get_param("Name")
         security_configuration = self.backend.get_security_configuration(name=name)
         template = self.response_template(DESCRIBE_SECURITY_CONFIGURATION_TEMPLATE)
         return template.render(security_configuration=security_configuration)
 
     @generate_boto3_response("DeleteSecurityConfiguration")
-    def delete_security_configuration(self):
+    def delete_security_configuration(self) -> str:
         name = self._get_param("Name")
         self.backend.delete_security_configuration(name=name)
         template = self.response_template(DELETE_SECURITY_CONFIGURATION_TEMPLATE)
         return template.render()
 
     @generate_boto3_response("DescribeCluster")
-    def describe_cluster(self):
+    def describe_cluster(self) -> str:
         cluster_id = self._get_param("ClusterId")
         cluster = self.backend.describe_cluster(cluster_id)
         template = self.response_template(DESCRIBE_CLUSTER_TEMPLATE)
         return template.render(cluster=cluster)
 
     @generate_boto3_response("DescribeJobFlows")
-    def describe_job_flows(self):
+    def describe_job_flows(self) -> str:
         created_after = self._get_param("CreatedAfter")
         created_before = self._get_param("CreatedBefore")
         job_flow_ids = self._get_multi_param("JobFlowIds.member")
@@ -145,7 +149,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(clusters=clusters)
 
     @generate_boto3_response("DescribeStep")
-    def describe_step(self):
+    def describe_step(self) -> str:
         cluster_id = self._get_param("ClusterId")
         step_id = self._get_param("StepId")
         step = self.backend.describe_step(cluster_id, step_id)
@@ -153,7 +157,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(step=step)
 
     @generate_boto3_response("ListBootstrapActions")
-    def list_bootstrap_actions(self):
+    def list_bootstrap_actions(self) -> str:
         cluster_id = self._get_param("ClusterId")
         marker = self._get_param("Marker")
         bootstrap_actions, marker = self.backend.list_bootstrap_actions(
@@ -163,7 +167,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(bootstrap_actions=bootstrap_actions, marker=marker)
 
     @generate_boto3_response("ListClusters")
-    def list_clusters(self):
+    def list_clusters(self) -> str:
         cluster_states = self._get_multi_param("ClusterStates.member")
         created_after = self._get_param("CreatedAfter")
         created_before = self._get_param("CreatedBefore")
@@ -175,7 +179,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(clusters=clusters, marker=marker)
 
     @generate_boto3_response("ListInstanceGroups")
-    def list_instance_groups(self):
+    def list_instance_groups(self) -> str:
         cluster_id = self._get_param("ClusterId")
         marker = self._get_param("Marker")
         instance_groups, marker = self.backend.list_instance_groups(
@@ -185,7 +189,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(instance_groups=instance_groups, marker=marker)
 
     @generate_boto3_response("ListInstances")
-    def list_instances(self):
+    def list_instances(self) -> str:
         cluster_id = self._get_param("ClusterId")
         marker = self._get_param("Marker")
         instance_group_id = self._get_param("InstanceGroupId")
@@ -200,7 +204,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(instances=instances, marker=marker)
 
     @generate_boto3_response("ListSteps")
-    def list_steps(self):
+    def list_steps(self) -> str:
         cluster_id = self._get_param("ClusterId")
         marker = self._get_param("Marker")
         step_ids = self._get_multi_param("StepIds.member")
@@ -212,7 +216,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(steps=steps, marker=marker)
 
     @generate_boto3_response("ModifyCluster")
-    def modify_cluster(self):
+    def modify_cluster(self) -> str:
         cluster_id = self._get_param("ClusterId")
         step_concurrency_level = self._get_param("StepConcurrencyLevel")
         cluster = self.backend.modify_cluster(cluster_id, step_concurrency_level)
@@ -220,16 +224,16 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render(cluster=cluster)
 
     @generate_boto3_response("ModifyInstanceGroups")
-    def modify_instance_groups(self):
+    def modify_instance_groups(self) -> str:
         instance_groups = self._get_list_prefix("InstanceGroups.member")
         for item in instance_groups:
             item["instance_count"] = int(item["instance_count"])
-        instance_groups = self.backend.modify_instance_groups(instance_groups)
+        self.backend.modify_instance_groups(instance_groups)
         template = self.response_template(MODIFY_INSTANCE_GROUPS_TEMPLATE)
-        return template.render(instance_groups=instance_groups)
+        return template.render()
 
     @generate_boto3_response("RemoveTags")
-    def remove_tags(self):
+    def remove_tags(self) -> str:
         cluster_id = self._get_param("ResourceId")
         tag_keys = self._get_multi_param("TagKeys.member")
         self.backend.remove_tags(cluster_id, tag_keys)
@@ -237,7 +241,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render()
 
     @generate_boto3_response("RunJobFlow")
-    def run_job_flow(self):
+    def run_job_flow(self) -> str:
         instance_attrs = dict(
             master_instance_type=self._get_param("Instances.MasterInstanceType"),
             slave_instance_type=self._get_param("Instances.SlaveInstanceType"),
@@ -305,7 +309,7 @@ class ElasticMapReduceResponse(BaseResponse):
                         config.pop(key)
                 config["properties"] = {}
                 map_items = self._get_map_prefix(
-                    "Configurations.member.{0}.Properties.entry".format(idx)
+                    f"Configurations.member.{idx}.Properties.entry"
                 )
                 config["properties"] = map_items
 
@@ -348,7 +352,7 @@ class ElasticMapReduceResponse(BaseResponse):
         if security_configuration:
             kwargs["security_configuration"] = security_configuration
 
-        kerberos_attributes = {}
+        kerberos_attributes: Dict[str, Any] = {}
         kwargs["kerberos_attributes"] = kerberos_attributes
 
         realm = self._get_param("KerberosAttributes.Realm")
@@ -412,13 +416,13 @@ class ElasticMapReduceResponse(BaseResponse):
         template = self.response_template(RUN_JOB_FLOW_TEMPLATE)
         return template.render(cluster=cluster)
 
-    def _has_key_prefix(self, key_prefix, value):
+    def _has_key_prefix(self, key_prefix: str, value: Dict[str, Any]) -> bool:
         for key in value:  # iter on both keys and values
             if key.startswith(key_prefix):
                 return True
         return False
 
-    def _parse_ebs_configuration(self, instance_group):
+    def _parse_ebs_configuration(self, instance_group: Dict[str, Any]) -> None:
         key_ebs_config = "ebs_configuration"
         ebs_configuration = dict()
         # Filter only EBS config keys
@@ -436,7 +440,7 @@ class ElasticMapReduceResponse(BaseResponse):
             iops = "iops"
             volumes_per_instance = "volumes_per_instance"
 
-            key_ebs_optimized = "{0}._{1}".format(key_ebs_config, ebs_optimized)
+            key_ebs_optimized = f"{key_ebs_config}._{ebs_optimized}"
             # EbsOptimized config
             if key_ebs_optimized in ebs_configuration:
                 instance_group.pop(key_ebs_optimized)
@@ -447,17 +451,15 @@ class ElasticMapReduceResponse(BaseResponse):
             # Ebs Blocks
             ebs_blocks = []
             idx = 1
-            keyfmt = "{0}._{1}.member.{{}}".format(
-                key_ebs_config, ebs_block_device_configs
-            )
+            keyfmt = f"{key_ebs_config}._{ebs_block_device_configs}.member.{{}}"
             key = keyfmt.format(idx)
             while self._has_key_prefix(key, ebs_configuration):
-                vlespc_keyfmt = "{0}._{1}._{{}}".format(key, volume_specification)
+                vlespc_keyfmt = f"{key}._{volume_specification}._{{}}"
                 vol_size = vlespc_keyfmt.format(size_in_gb)
                 vol_iops = vlespc_keyfmt.format(iops)
                 vol_type = vlespc_keyfmt.format(volume_type)
 
-                ebs_block = dict()
+                ebs_block: Dict[str, Any] = dict()
                 ebs_block[volume_specification] = dict()
                 if vol_size in ebs_configuration:
                     instance_group.pop(vol_size)
@@ -475,7 +477,7 @@ class ElasticMapReduceResponse(BaseResponse):
                         volume_type
                     ] = ebs_configuration.pop(vol_type)
 
-                per_instance = "{0}._{1}".format(key, volumes_per_instance)
+                per_instance = f"{key}._{volumes_per_instance}"
                 if per_instance in ebs_configuration:
                     instance_group.pop(per_instance)
                     ebs_block[volumes_per_instance] = int(
@@ -492,7 +494,7 @@ class ElasticMapReduceResponse(BaseResponse):
             instance_group[key_ebs_config] = ebs_configuration
 
     @generate_boto3_response("SetTerminationProtection")
-    def set_termination_protection(self):
+    def set_termination_protection(self) -> str:
         termination_protection = self._get_bool_param("TerminationProtected")
         job_ids = self._get_multi_param("JobFlowIds.member")
         self.backend.set_termination_protection(job_ids, termination_protection)
@@ -500,7 +502,7 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render()
 
     @generate_boto3_response("SetVisibleToAllUsers")
-    def set_visible_to_all_users(self):
+    def set_visible_to_all_users(self) -> str:
         visible_to_all_users = self._get_param("VisibleToAllUsers")
         job_ids = self._get_multi_param("JobFlowIds.member")
         self.backend.set_visible_to_all_users(job_ids, visible_to_all_users)
@@ -508,14 +510,14 @@ class ElasticMapReduceResponse(BaseResponse):
         return template.render()
 
     @generate_boto3_response("TerminateJobFlows")
-    def terminate_job_flows(self):
+    def terminate_job_flows(self) -> str:
         job_ids = self._get_multi_param("JobFlowIds.member.")
         self.backend.terminate_job_flows(job_ids)
         template = self.response_template(TERMINATE_JOB_FLOWS_TEMPLATE)
         return template.render()
 
     @generate_boto3_response("PutAutoScalingPolicy")
-    def put_auto_scaling_policy(self):
+    def put_auto_scaling_policy(self) -> str:
         cluster_id = self._get_param("ClusterId")
         cluster = self.backend.describe_cluster(cluster_id)
         instance_group_id = self._get_param("InstanceGroupId")
@@ -529,12 +531,11 @@ class ElasticMapReduceResponse(BaseResponse):
         )
 
     @generate_boto3_response("RemoveAutoScalingPolicy")
-    def remove_auto_scaling_policy(self):
-        cluster_id = self._get_param("ClusterId")
+    def remove_auto_scaling_policy(self) -> str:
         instance_group_id = self._get_param("InstanceGroupId")
-        instance_group = self.backend.remove_auto_scaling_policy(instance_group_id)
+        self.backend.remove_auto_scaling_policy(instance_group_id)
         template = self.response_template(REMOVE_AUTO_SCALING_POLICY)
-        return template.render(cluster_id=cluster_id, instance_group=instance_group)
+        return template.render()
 
 
 ADD_INSTANCE_GROUPS_TEMPLATE = """<AddInstanceGroupsResponse xmlns="http://elasticmapreduce.amazonaws.com/doc/2009-03-31">
@@ -817,7 +818,14 @@ DESCRIBE_JOB_FLOWS_TEMPLATE = """<DescribeJobFlowsResponse xmlns="http://elastic
                   <member>{{ arg | escape }}</member>
                   {% endfor %}
                 </Args>
-                <Properties/>
+                <Properties>
+                {% for key, val in step.properties.items() %}
+                  <member>
+                    <Key>{{ key }}</Key>
+                    <Value>{{ val | escape }}</Value>
+                  </member>
+                {% endfor %}
+                </Properties>
               </HadoopJarStep>
               <Name>{{ step.name | escape }}</Name>
             </StepConfig>
@@ -849,10 +857,10 @@ DESCRIBE_STEP_TEMPLATE = """<DescribeStepResponse xmlns="http://elasticmapreduce
         <MainClass/>
         <Properties>
           {% for key, val in step.properties.items() %}
-          <member>
+          <entry>
             <key>{{ key }}</key>
             <value>{{ val | escape }}</value>
-          </member>
+          </entry>
           {% endfor %}
         </Properties>
       </Config>
@@ -1177,10 +1185,10 @@ LIST_STEPS_TEMPLATE = """<ListStepsResponse xmlns="http://elasticmapreduce.amazo
           <MainClass/>
           <Properties>
             {% for key, val in step.properties.items() %}
-            <member>
+            <entry>
               <key>{{ key }}</key>
               <value>{{ val | escape }}</value>
-            </member>
+            </entry>
             {% endfor %}
           </Properties>
         </Config>

@@ -83,6 +83,10 @@ TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, TPositionHandl
     return BuildColumnsListImpl(columns, pos, ctx);
 }
 
+TCoAtomList BuildColumnsList(const TVector<TStringBuf>& columns, NYql::TPositionHandle pos,NYql::TExprContext& ctx) {
+    return BuildColumnsListImpl(columns, pos, ctx);
+}
+
 TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle pos, TExprContext& ctx) {
     return BuildColumnsListImpl(columns, pos, ctx);
 }
@@ -170,72 +174,6 @@ NYql::NNodes::TDqStage ReplaceTableSourceSettings(NYql::NNodes::TDqStage stage, 
         .Done();
 }
 
-bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
-{
-    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
-        if (!key.Maybe<TCoMember>()) {
-            return false;
-        }
-
-        auto member = key.Cast<TCoMember>();
-        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
-            return false;
-        }
-
-        auto column = TString(member.Name().Value());
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
-        if (!columnIndex || *columnIndex != index) {
-            return false;
-        }
-
-        if (passthroughFields && !passthroughFields->contains(column)) {
-            return false;
-        }
-
-        return true;
-    };
-
-    auto lambdaBody = keySelector.Body();
-    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
-        auto tuple = maybeTuple.Cast();
-        for (size_t i = 0; i < tuple.Size(); ++i) {
-            if (!checkKey(tuple.Item(i), i)) {
-                return false;
-            }
-        }
-    } else {
-        if (!checkKey(lambdaBody, 0)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
-    auto getDirection = [] (TExprBase expr) -> ESortDirection {
-        if (!expr.Maybe<TCoBool>()) {
-            return ESortDirection::Unknown;
-        }
-
-        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
-            return ESortDirection::Reverse;
-        }
-
-        return ESortDirection::Forward;
-    };
-
-    auto direction = ESortDirection::None;
-    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
-        for (const auto& expr : maybeList.Cast()) {
-            direction |= getDirection(expr);
-        }
-    } else {
-        direction |= getDirection(sortDirections);
-    }
-    return direction;
-};
 
 TExprNode::TPtr MakeMessage(TStringBuf message, TPositionHandle pos, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Utf8", { ctx.NewAtom(pos, message) });

@@ -32,7 +32,6 @@ class TPrettyTable {
 public:
     class TRow {
         friend class TPrettyTable;
-        friend class std::allocator<TRow>; // for emplace_back()
 
         // header row ctor
         explicit TRow(const TVector<TString>& columnNames) {
@@ -53,7 +52,7 @@ public:
             TString lines = TStringBuilder() << data;
 
             for (auto& line : StringSplitter(lines).Split('\n')) {
-                if (line.Empty()) {
+                if (line.empty()) {
                     continue;
                 }
 
@@ -61,6 +60,12 @@ public:
             }
 
             return *this;
+        }
+
+        template <typename T>
+        TRow& WriteToLastColumn(const T& data) {
+            Y_ABORT_UNLESS(!Columns.empty());
+            return Column(Columns.size() - 1, data);
         }
 
         inline TRow& FreeText(const TString& text) {
@@ -91,7 +96,7 @@ public:
         , Config(config)
     {
         if (Config.Header) {
-            Rows.emplace_back(columnNames);
+            Rows.emplace_back(TRow{columnNames});
         }
     }
 

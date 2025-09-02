@@ -1,27 +1,34 @@
+import contextlib
 import copy
 import warnings
 from collections import OrderedDict
-from datetime import datetime
+from typing import Any, Dict, ItemsView, List, Tuple, Optional, Set
 from moto import settings
 
-from moto.core import get_account_id
 from moto.core import CloudFormationModel
-from moto.core.utils import camelcase_to_underscores
+from moto.core.utils import camelcase_to_underscores, utcnow
+from moto.ec2.models.fleets import Fleet
+from moto.ec2.models.elastic_network_interfaces import NetworkInterface
+from moto.ec2.models.launch_templates import LaunchTemplateVersion
 from moto.ec2.models.instance_types import (
     INSTANCE_TYPE_OFFERINGS,
     InstanceTypeOfferingBackend,
 )
+from moto.ec2.models.security_groups import SecurityGroup
+from moto.ec2.models.subnets import Subnet
 from moto.packages.boto.ec2.blockdevicemapping import BlockDeviceMapping
 from moto.packages.boto.ec2.instance import Instance as BotoInstance
 from moto.packages.boto.ec2.instance import Reservation
 
 from ..exceptions import (
     AvailabilityZoneNotFromRegionError,
-    EC2ClientError,
     InvalidInstanceIdError,
     InvalidInstanceTypeError,
+    InvalidParameterCombination,
     InvalidParameterValueErrorUnknownAttribute,
+    InvalidSecurityGroupNotFoundError,
     OperationNotPermitted4,
+    InvalidSubnetIdError,
 )
 from ..utils import (
     convert_tag_spec,
@@ -35,14 +42,14 @@ from ..utils import (
 from .core import TaggedEC2Resource
 
 
-class InstanceState(object):
-    def __init__(self, name="pending", code=0):
+class InstanceState:
+    def __init__(self, name: str = "pending", code: int = 0):
         self.name = name
         self.code = code
 
 
-class StateReason(object):
-    def __init__(self, message="", code=""):
+class StateReason:
+    def __init__(self, message: str = "", code: str = ""):
         self.message = message
         self.code = code
 
@@ -62,16 +69,24 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         "groupSet",
         "ebsOptimized",
         "sriovNetSupport",
+        "disableApiStop",
     }
 
-    def __init__(self, ec2_backend, image_id, user_data, security_groups, **kwargs):
+    def __init__(
+        self,
+        ec2_backend: Any,
+        image_id: str,
+        user_data: Any,
+        security_groups: List[SecurityGroup],
+        **kwargs: Any,
+    ):
         super().__init__()
         self.ec2_backend = ec2_backend
         self.id = random_instance_id()
-        self.owner_id = get_account_id()
-        self.lifecycle = kwargs.get("lifecycle")
+        self.owner_id = ec2_backend.account_id
+        self.lifecycle: Optional[str] = kwargs.get("lifecycle")
 
-        nics = kwargs.get("nics", {})
+        nics = copy.deepcopy(kwargs.get("nics", []))
 
         launch_template_arg = kwargs.get("launch_template", {})
         if launch_template_arg and not image_id:
@@ -93,9 +108,10 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         self._state_reason = StateReason()
         self.user_data = user_data
         self.security_groups = security_groups
-        self.instance_type = kwargs.get("instance_type", "m1.small")
+        self.instance_type: str = kwargs.get("instance_type", "m1.small")
         self.region_name = kwargs.get("region_name", "us-east-1")
         placement = kwargs.get("placement", None)
+        self.placement_hostid = kwargs.get("placement_hostid")
         self.subnet_id = kwargs.get("subnet_id")
         if not self.subnet_id:
             self.subnet_id = next(
@@ -104,6 +120,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         in_ec2_classic = not bool(self.subnet_id)
         self.key_name = kwargs.get("key_name")
         self.ebs_optimized = kwargs.get("ebs_optimized", False)
+        self.monitoring_state = kwargs.get("monitoring_state", "disabled")
         self.source_dest_check = "true"
         self.launch_time = utc_date_and_time()
         self.ami_launch_index = kwargs.get("ami_launch_index", 0)
@@ -111,8 +128,10 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         self.instance_initiated_shutdown_behavior = (
             kwargs.get("instance_initiated_shutdown_behavior") or "stop"
         )
+        self.hibernation_options = kwargs.get("hibernation_options")
         self.sriov_net_support = "simple"
         self._spot_fleet_id = kwargs.get("spot_fleet_id", None)
+        self._fleet_id = kwargs.get("fleet_id", None)
         self.associate_public_ip = kwargs.get("associate_public_ip", False)
         if in_ec2_classic:
             # If we are in EC2-Classic, autoassign a public IP
@@ -122,11 +141,11 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         ami = amis[0] if amis else None
         if ami is None:
             warnings.warn(
-                "Could not find AMI with image-id:{0}, "
+                f"Could not find AMI with image-id:{self.image_id}, "
                 "in the near future this will "
                 "cause an error.\n"
                 "Use ec2_backend.describe_images() to "
-                "find suitable image for your test".format(self.image_id),
+                "find suitable image for your test",
                 PendingDeprecationWarning,
             )
 
@@ -134,6 +153,8 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         self.virtualization_type = ami.virtualization_type if ami else "paravirtual"
         self.architecture = ami.architecture if ami else "x86_64"
         self.root_device_name = ami.root_device_name if ami else None
+        self.disable_api_stop = False
+        self.iam_instance_profile = kwargs.get("iam_instance_profile")
 
         # handle weird bug around user_data -- something grabs the repr(), so
         # it must be clean
@@ -143,7 +164,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
                 self.user_data[0] = self.user_data[0].decode("utf-8")
 
         if self.subnet_id:
-            subnet = ec2_backend.get_subnet(self.subnet_id)
+            subnet: Subnet = ec2_backend.get_subnet(self.subnet_id)
             self._placement.zone = subnet.availability_zone
 
             if self.associate_public_ip is None:
@@ -154,9 +175,9 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         else:
             self._placement.zone = ec2_backend.region_name + "a"
 
-        self.block_device_mapping = BlockDeviceMapping()
+        self.block_device_mapping: BlockDeviceMapping = BlockDeviceMapping()
 
-        self._private_ips = set()
+        self._private_ips: Set[str] = set()
         self.prep_nics(
             nics,
             private_ip=kwargs.get("private_ip"),
@@ -165,17 +186,18 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         )
 
     @property
-    def vpc_id(self):
+    def vpc_id(self) -> Optional[str]:
         if self.subnet_id:
-            subnet = self.ec2_backend.get_subnet(self.subnet_id)
-            return subnet.vpc_id
+            with contextlib.suppress(InvalidSubnetIdError):
+                subnet: Subnet = self.ec2_backend.get_subnet(self.subnet_id)
+                return subnet.vpc_id
         if self.nics and 0 in self.nics:
             return self.nics[0].subnet.vpc_id
         return None
 
-    def __del__(self):
+    def __del__(self) -> None:
         try:
-            subnet = self.ec2_backend.get_subnet(self.subnet_id)
+            subnet: Subnet = self.ec2_backend.get_subnet(self.subnet_id)
             for ip in self._private_ips:
                 subnet.del_subnet_ip(ip)
         except Exception:
@@ -185,14 +207,14 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
 
     def add_block_device(
         self,
-        size,
-        device_path,
-        snapshot_id=None,
-        encrypted=False,
-        delete_on_termination=False,
-        kms_key_id=None,
-        volume_type=None,
-    ):
+        size: int,
+        device_path: str,
+        snapshot_id: Optional[str],
+        encrypted: bool,
+        delete_on_termination: bool,
+        kms_key_id: Optional[str],
+        volume_type: Optional[str],
+    ) -> None:
         volume = self.ec2_backend.create_volume(
             size=size,
             zone_name=self._placement.zone,
@@ -205,13 +227,13 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
             volume.id, self.id, device_path, delete_on_termination
         )
 
-    def setup_defaults(self):
+    def setup_defaults(self) -> None:
         # Default have an instance with root volume should you not wish to
         # override with attach volume cmd.
         volume = self.ec2_backend.create_volume(size=8, zone_name=self._placement.zone)
         self.ec2_backend.attach_volume(volume.id, self.id, "/dev/sda1", True)
 
-    def teardown_defaults(self):
+    def teardown_defaults(self) -> None:
         for device_path in list(self.block_device_mapping.keys()):
             volume = self.block_device_mapping[device_path]
             volume_id = volume.volume_id
@@ -220,54 +242,58 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
                 self.ec2_backend.delete_volume(volume_id)
 
     @property
-    def get_block_device_mapping(self):
+    def get_block_device_mapping(self) -> ItemsView[str, Any]:  # type: ignore[misc]
         return self.block_device_mapping.items()
 
     @property
-    def private_ip(self):
+    def private_ip(self) -> Optional[str]:
         return self.nics[0].private_ip_address
 
     @property
-    def private_dns(self):
-        formatted_ip = self.private_ip.replace(".", "-")
+    def private_dns(self) -> str:
+        formatted_ip = self.private_ip.replace(".", "-")  # type: ignore[union-attr]
         if self.region_name == "us-east-1":
-            return "ip-{0}.ec2.internal".format(formatted_ip)
+            return f"ip-{formatted_ip}.ec2.internal"
         else:
-            return "ip-{0}.{1}.compute.internal".format(formatted_ip, self.region_name)
+            return f"ip-{formatted_ip}.{self.region_name}.compute.internal"
 
     @property
-    def public_ip(self):
+    def public_ip(self) -> Optional[str]:
         return self.nics[0].public_ip
 
     @property
-    def public_dns(self):
+    def public_dns(self) -> Optional[str]:
         if self.public_ip:
             formatted_ip = self.public_ip.replace(".", "-")
             if self.region_name == "us-east-1":
-                return "ec2-{0}.compute-1.amazonaws.com".format(formatted_ip)
+                return f"ec2-{formatted_ip}.compute-1.amazonaws.com"
             else:
-                return "ec2-{0}.{1}.compute.amazonaws.com".format(
-                    formatted_ip, self.region_name
-                )
-
-    @staticmethod
-    def cloudformation_name_type():
+                return f"ec2-{formatted_ip}.{self.region_name}.compute.amazonaws.com"
         return None
 
     @staticmethod
-    def cloudformation_type():
+    def cloudformation_name_type() -> str:
+        return ""
+
+    @staticmethod
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-instance.html
         return "AWS::EC2::Instance"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any,
+    ) -> "Instance":
         from ..models import ec2_backends
 
         properties = cloudformation_json["Properties"]
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         security_group_ids = properties.get("SecurityGroups", [])
         group_names = [
             ec2_backend.get_security_group_from_id(group_id).name
@@ -302,12 +328,16 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         return instance
 
     @classmethod
-    def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
-    ):
+    def delete_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> None:
         from ..models import ec2_backends
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         all_instances = ec2_backend.all_instances()
 
         # the resource_name for instances is the stack name, logical id, and random suffix separated
@@ -322,13 +352,15 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
                     tag["key"] == "aws:cloudformation:logical-id"
                     and tag["value"] == logical_id
                 ):
-                    instance.delete(region_name)
+                    instance.delete(account_id, region_name)
 
     @property
-    def physical_resource_id(self):
+    def physical_resource_id(self) -> str:
         return self.id
 
-    def start(self):
+    def start(self) -> InstanceState:
+        previous_state = copy.copy(self._state)
+
         for nic in self.nics.values():
             nic.start()
 
@@ -338,52 +370,68 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         self._reason = ""
         self._state_reason = StateReason()
 
-    def stop(self):
+        return previous_state
+
+    def stop(self) -> InstanceState:
+        previous_state = copy.copy(self._state)
+
         for nic in self.nics.values():
             nic.stop()
 
         self._state.name = "stopped"
         self._state.code = 80
 
-        self._reason = "User initiated ({0})".format(
-            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-        )
+        self._reason = f"User initiated ({utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')})"
         self._state_reason = StateReason(
             "Client.UserInitiatedShutdown: User initiated shutdown",
             "Client.UserInitiatedShutdown",
         )
 
-    def is_running(self):
+        return previous_state
+
+    def is_running(self) -> bool:
         return self._state.name == "running"
 
-    def delete(self, region):  # pylint: disable=unused-argument
+    def delete(
+        self, account_id: str, region: str  # pylint: disable=unused-argument
+    ) -> None:
         self.terminate()
 
-    def terminate(self):
+    def terminate(self) -> InstanceState:
+        previous_state = copy.copy(self._state)
+
         for nic in self.nics.values():
             nic.stop()
 
         self.teardown_defaults()
 
-        if self._spot_fleet_id:
-            spot_fleet = self.ec2_backend.get_spot_fleet_request(self._spot_fleet_id)
-            for spec in spot_fleet.launch_specs:
+        if self._spot_fleet_id or self._fleet_id:
+            fleet = self.ec2_backend.get_spot_fleet_request(self._spot_fleet_id)
+            if not fleet:
+                fleet = self.ec2_backend.get_fleet(
+                    self._spot_fleet_id
+                ) or self.ec2_backend.get_fleet(self._fleet_id)
+            for spec in fleet.launch_specs:
                 if (
                     spec.instance_type == self.instance_type
                     and spec.subnet_id == self.subnet_id
                 ):
                     break
-            spot_fleet.fulfilled_capacity -= spec.weighted_capacity
-            spot_fleet.spot_requests = [
-                req for req in spot_fleet.spot_requests if req.instance != self
+            fleet.fulfilled_capacity -= spec.weighted_capacity
+            fleet.spot_requests = [
+                req for req in fleet.spot_requests if req.instance != self
             ]
+            if isinstance(fleet, Fleet):
+                fleet.on_demand_instances = [
+                    inst
+                    for inst in fleet.on_demand_instances
+                    if inst["instance"] != self
+                ]
 
         self._state.name = "terminated"
         self._state.code = 48
 
-        self._reason = "User initiated ({0})".format(
-            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-        )
+        self._reason = f"User initiated ({utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')})"
         self._state_reason = StateReason(
             "Client.UserInitiatedShutdown: User initiated shutdown",
             "Client.UserInitiatedShutdown",
@@ -398,7 +446,9 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
                 ].id
             )
 
-    def reboot(self):
+        return previous_state
+
+    def reboot(self) -> None:
         self._state.name = "running"
         self._state.code = 16
 
@@ -406,16 +456,37 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         self._state_reason = StateReason()
 
     @property
-    def dynamic_group_list(self):
+    def dynamic_group_list(self) -> List[SecurityGroup]:
         return self.security_groups
 
+    def _get_private_ip_from_nic(self, nic: Dict[str, Any]) -> Optional[str]:
+        private_ip = nic.get("PrivateIpAddress")
+        if private_ip:
+            return private_ip
+        for address in nic.get("PrivateIpAddresses", []):
+            if address.get("Primary") == "true":
+                return address.get("PrivateIpAddress")
+        return None
+
     def prep_nics(
-        self, nic_spec, private_ip=None, associate_public_ip=None, security_groups=None
-    ):
-        self.nics = {}
+        self,
+        nic_spec: List[Dict[str, Any]],
+        private_ip: Optional[str] = None,
+        associate_public_ip: Optional[bool] = None,
+        security_groups: Optional[List[SecurityGroup]] = None,
+    ) -> None:
+        self.nics: Dict[int, NetworkInterface] = {}
+        for nic in nic_spec:
+            if int(nic.get("DeviceIndex")) == 0:  # type: ignore[arg-type]
+                nic_associate_public_ip = nic.get("AssociatePublicIpAddress")
+                if nic_associate_public_ip is not None:
+                    associate_public_ip = nic_associate_public_ip == "true"
+                if private_ip is None:
+                    private_ip = self._get_private_ip_from_nic(nic)
+                break
 
         if self.subnet_id:
-            subnet = self.ec2_backend.get_subnet(self.subnet_id)
+            subnet: Subnet = self.ec2_backend.get_subnet(self.subnet_id)
             if not private_ip:
                 private_ip = subnet.get_available_subnet_ip(instance=self)
             else:
@@ -442,7 +513,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
 
         # Flesh out data structures and associations
         for nic in nic_spec:
-            device_index = int(nic.get("DeviceIndex"))
+            device_index = int(nic.get("DeviceIndex"))  # type: ignore[arg-type]
 
             nic_id = nic.get("NetworkInterfaceId")
             if nic_id:
@@ -457,18 +528,20 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
                     nic.update(primary_nic)
 
                 if "SubnetId" in nic:
-                    subnet = self.ec2_backend.get_subnet(nic["SubnetId"])
+                    nic_subnet: Subnet = self.ec2_backend.get_subnet(nic["SubnetId"])
                 else:
                     # Get default Subnet
                     zone = self._placement.zone
-                    subnet = self.ec2_backend.get_default_subnet(availability_zone=zone)
+                    nic_subnet = self.ec2_backend.get_default_subnet(
+                        availability_zone=zone
+                    )
 
                 group_ids = nic.get("SecurityGroupId") or []
                 if security_groups:
                     group_ids.extend([group.id for group in security_groups])
 
                 use_nic = self.ec2_backend.create_network_interface(
-                    subnet,
+                    nic_subnet,
                     nic.get("PrivateIpAddress"),
                     device_index=device_index,
                     public_ip_auto_assign=nic.get("AssociatePublicIpAddress", False),
@@ -477,7 +550,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
 
             self.attach_eni(use_nic, device_index)
 
-    def attach_eni(self, eni, device_index):
+    def attach_eni(self, eni: NetworkInterface, device_index: int) -> str:
         device_index = int(device_index)
         self.nics[device_index] = eni
 
@@ -490,8 +563,8 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
 
         return eni.attachment_id
 
-    def detach_eni(self, eni):
-        self.nics.pop(eni.device_index, None)
+    def detach_eni(self, eni: NetworkInterface) -> None:
+        self.nics.pop(eni.device_index, None)  # type: ignore[arg-type]
         eni.instance = None
         eni.attachment_id = None
         eni.attach_time = None
@@ -499,7 +572,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
         eni.device_index = None
 
     @classmethod
-    def has_cfn_attr(cls, attr):
+    def has_cfn_attr(cls, attr: str) -> bool:
         return attr in [
             "AvailabilityZone",
             "PrivateDnsName",
@@ -508,7 +581,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
             "PublicIp",
         ]
 
-    def get_cfn_attribute(self, attribute_name):
+    def get_cfn_attribute(self, attribute_name: str) -> Any:
         from moto.cloudformation.exceptions import UnformattedGetAttTemplateException
 
         if attribute_name == "AvailabilityZone":
@@ -523,7 +596,7 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
             return self.public_ip
         raise UnformattedGetAttTemplateException()
 
-    def applies(self, filters):
+    def applies(self, filters: List[Dict[str, Any]]) -> bool:
         if filters:
             applicable = False
             for f in filters:
@@ -540,22 +613,29 @@ class Instance(TaggedEC2Resource, BotoInstance, CloudFormationModel):
 
 
 class InstanceBackend:
-    def __init__(self):
-        self.reservations = OrderedDict()
+    def __init__(self) -> None:
+        self.reservations: Dict[str, Reservation] = OrderedDict()
 
-    def get_instance(self, instance_id):
+    def get_instance(self, instance_id: str) -> Instance:
         for instance in self.all_instances():
             if instance.id == instance_id:
                 return instance
         raise InvalidInstanceIdError(instance_id)
 
-    def add_instances(self, image_id, count, user_data, security_group_names, **kwargs):
+    def add_instances(
+        self,
+        image_id: str,
+        count: int,
+        user_data: Optional[str],
+        security_group_names: List[str],
+        **kwargs: Any,
+    ) -> Reservation:
         location_type = "availability-zone" if kwargs.get("placement") else "region"
         default_region = "us-east-1"
         if settings.ENABLE_KEYPAIR_VALIDATION:
-            self.describe_key_pairs(key_names=[kwargs.get("key_name")])
+            self.describe_key_pairs(key_names=[kwargs.get("key_name")])  # type: ignore[attr-defined]
         if settings.ENABLE_AMI_VALIDATION:
-            self.describe_images(ami_ids=[image_id] if image_id else [])
+            self.describe_images(ami_ids=[image_id] if image_id else [])  # type: ignore[attr-defined]
         valid_instance_types = INSTANCE_TYPE_OFFERINGS[location_type]
         if "region_name" in kwargs and kwargs.get("placement"):
             valid_availability_zones = {
@@ -582,18 +662,21 @@ class InstanceBackend:
         ):
             if settings.EC2_ENABLE_INSTANCE_TYPE_VALIDATION:
                 raise InvalidInstanceTypeError(kwargs["instance_type"])
-        new_reservation = Reservation()
-        new_reservation.id = random_reservation_id()
 
         security_groups = [
-            self.get_security_group_by_name_or_id(name) for name in security_group_names
+            self.get_security_group_by_name_or_id(name) for name in security_group_names  # type: ignore[attr-defined]
         ]
 
         for sg_id in kwargs.pop("security_group_ids", []):
             if isinstance(sg_id, str):
-                security_groups.append(self.get_security_group_from_id(sg_id))
+                sg = self.get_security_group_from_id(sg_id)  # type: ignore[attr-defined]
+                if sg is None:
+                    raise InvalidSecurityGroupNotFoundError(sg_id)
+                security_groups.append(sg)
             else:
                 security_groups.append(sg_id)
+
+        new_reservation = Reservation(reservation_id=random_reservation_id())
 
         self.reservations[new_reservation.id] = new_reservation
 
@@ -648,13 +731,13 @@ class InstanceBackend:
                 new_instance.lifecycle = "spot"
             # Tag all created volumes.
             for _, device in new_instance.get_block_device_mapping:
-                volumes = self.describe_volumes(volume_ids=[device.volume_id])
+                volumes = self.describe_volumes(volume_ids=[device.volume_id])  # type: ignore
                 for volume in volumes:
                     volume.add_tags(volume_tags)
 
         return new_reservation
 
-    def run_instances(self):
+    def run_instances(self) -> None:
         """
         The Placement-parameter is validated to verify the availability-zone exists for the current region.
 
@@ -671,37 +754,41 @@ class InstanceBackend:
         # Fake method here to make implementation coverage script aware that this method is implemented
         pass
 
-    def start_instances(self, instance_ids):
+    def start_instances(
+        self, instance_ids: List[str]
+    ) -> List[Tuple[Instance, InstanceState]]:
         started_instances = []
         for instance in self.get_multi_instances_by_id(instance_ids):
-            instance.start()
-            started_instances.append(instance)
+            previous_state = instance.start()
+            started_instances.append((instance, previous_state))
 
         return started_instances
 
-    def stop_instances(self, instance_ids):
+    def stop_instances(
+        self, instance_ids: List[str]
+    ) -> List[Tuple[Instance, InstanceState]]:
         stopped_instances = []
         for instance in self.get_multi_instances_by_id(instance_ids):
-            instance.stop()
-            stopped_instances.append(instance)
+            previous_state = instance.stop()
+            stopped_instances.append((instance, previous_state))
 
         return stopped_instances
 
-    def terminate_instances(self, instance_ids):
+    def terminate_instances(
+        self, instance_ids: List[str]
+    ) -> List[Tuple[Instance, InstanceState]]:
         terminated_instances = []
         if not instance_ids:
-            raise EC2ClientError(
-                "InvalidParameterCombination", "No instances specified"
-            )
+            raise InvalidParameterCombination("No instances specified")
         for instance in self.get_multi_instances_by_id(instance_ids):
             if instance.disable_api_termination == "true":
                 raise OperationNotPermitted4(instance.id)
-            instance.terminate()
-            terminated_instances.append(instance)
+            previous_state = instance.terminate()
+            terminated_instances.append((instance, previous_state))
 
         return terminated_instances
 
-    def reboot_instances(self, instance_ids):
+    def reboot_instances(self, instance_ids: List[str]) -> List[Instance]:
         rebooted_instances = []
         for instance in self.get_multi_instances_by_id(instance_ids):
             instance.reboot()
@@ -709,20 +796,26 @@ class InstanceBackend:
 
         return rebooted_instances
 
-    def modify_instance_attribute(self, instance_id, key, value):
+    def modify_instance_attribute(
+        self, instance_id: str, key: str, value: Any
+    ) -> Instance:
         instance = self.get_instance(instance_id)
         setattr(instance, key, value)
         return instance
 
-    def modify_instance_security_groups(self, instance_id, new_group_id_list):
+    def modify_instance_security_groups(
+        self, instance_id: str, new_group_id_list: List[str]
+    ) -> Instance:
         instance = self.get_instance(instance_id)
         new_group_list = []
         for new_group_id in new_group_id_list:
-            new_group_list.append(self.get_security_group_from_id(new_group_id))
+            new_group_list.append(self.get_security_group_from_id(new_group_id))  # type: ignore[attr-defined]
         setattr(instance, "security_groups", new_group_list)
         return instance
 
-    def describe_instance_attribute(self, instance_id, attribute):
+    def describe_instance_attribute(
+        self, instance_id: str, attribute: str
+    ) -> Tuple[Instance, Any]:
         if attribute not in Instance.VALID_ATTRIBUTES:
             raise InvalidParameterValueErrorUnknownAttribute(attribute)
 
@@ -734,13 +827,15 @@ class InstanceBackend:
         value = getattr(instance, key)
         return instance, value
 
-    def describe_instance_credit_specifications(self, instance_ids):
+    def describe_instance_credit_specifications(
+        self, instance_ids: List[str]
+    ) -> List[Instance]:
         queried_instances = []
         for instance in self.get_multi_instances_by_id(instance_ids):
             queried_instances.append(instance)
         return queried_instances
 
-    def all_instances(self, filters=None):
+    def all_instances(self, filters: Any = None) -> List[Instance]:
         instances = []
         for reservation in self.all_reservations():
             for instance in reservation.instances:
@@ -748,7 +843,7 @@ class InstanceBackend:
                     instances.append(instance)
         return instances
 
-    def all_running_instances(self, filters=None):
+    def all_running_instances(self, filters: Any = None) -> List[Instance]:
         instances = []
         for reservation in self.all_reservations():
             for instance in reservation.instances:
@@ -756,7 +851,9 @@ class InstanceBackend:
                     instances.append(instance)
         return instances
 
-    def get_multi_instances_by_id(self, instance_ids, filters=None):
+    def get_multi_instances_by_id(
+        self, instance_ids: List[str], filters: Any = None
+    ) -> List[Instance]:
         """
         :param instance_ids: A string list with instance ids
         :return: A list with instance objects
@@ -776,13 +873,16 @@ class InstanceBackend:
 
         return result
 
-    def get_instance_by_id(self, instance_id):
+    def get_instance_by_id(self, instance_id: str) -> Optional[Instance]:
         for reservation in self.all_reservations():
             for instance in reservation.instances:
                 if instance.id == instance_id:
                     return instance
+        return None
 
-    def get_reservations_by_instance_ids(self, instance_ids, filters=None):
+    def get_reservations_by_instance_ids(
+        self, instance_ids: List[str], filters: Any = None
+    ) -> List[Reservation]:
         """Go through all of the reservations and filter to only return those
         associated with the given instance_ids.
         """
@@ -813,10 +913,12 @@ class InstanceBackend:
             reservations = filter_reservations(reservations, filters)
         return reservations
 
-    def describe_instances(self, filters=None):
+    def describe_instances(self, filters: Any = None) -> List[Reservation]:
         return self.all_reservations(filters)
 
-    def describe_instance_status(self, instance_ids, include_all_instances, filters):
+    def describe_instance_status(
+        self, instance_ids: List[str], include_all_instances: bool, filters: Any
+    ) -> List[Instance]:
         if instance_ids:
             return self.get_multi_instances_by_id(instance_ids, filters)
         elif include_all_instances:
@@ -824,7 +926,7 @@ class InstanceBackend:
         else:
             return self.all_running_instances(filters)
 
-    def all_reservations(self, filters=None):
+    def all_reservations(self, filters: Any = None) -> List[Reservation]:
         reservations = [
             copy.copy(reservation) for reservation in self.reservations.copy().values()
         ]
@@ -832,13 +934,15 @@ class InstanceBackend:
             reservations = filter_reservations(reservations, filters)
         return reservations
 
-    def _get_template_from_args(self, launch_template_arg):
+    def _get_template_from_args(
+        self, launch_template_arg: Dict[str, Any]
+    ) -> LaunchTemplateVersion:
         template = (
-            self.describe_launch_templates(
+            self.describe_launch_templates(  # type: ignore[attr-defined]
                 template_ids=[launch_template_arg["LaunchTemplateId"]]
             )[0]
             if "LaunchTemplateId" in launch_template_arg
-            else self.describe_launch_templates(
+            else self.describe_launch_templates(  # type: ignore[attr-defined]
                 template_names=[launch_template_arg["LaunchTemplateName"]]
             )[0]
         )

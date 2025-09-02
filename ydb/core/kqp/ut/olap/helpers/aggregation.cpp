@@ -7,12 +7,12 @@
 namespace NKikimr::NKqp {
 
 void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
-    auto settings = TKikimrSettings()
-        .SetWithSampleTables(false);
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("SIMPLE");
     TKikimrRunner kikimr(settings);
 
     TLocalHelper(kikimr).CreateTestOlapTable();
     auto tableClient = kikimr.GetTableClient();
+    Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").Initialize();
 
     {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -42,17 +42,16 @@ void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
     TPortManager tp;
     ui16 mbusport = tp.GetPort(2134);
     auto settings = Tests::TServerSettings(mbusport)
-        .SetDomainName("Root")
-        .SetUseRealThreads(false)
-        .SetNodeCount(2);
+        .SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
     Tests::TServer::TPtr server = new Tests::TServer(settings);
 
     auto runtime = server->GetRuntime();
+    Tests::NCommon::TLoggerInit(runtime).Initialize();
+    Tests::NCommon::TLoggerInit(runtime).SetComponents({ NKikimrServices::GROUPED_MEMORY_LIMITER }, "CS").Initialize();
     auto sender = runtime->AllocateEdgeActor();
 
     InitRoot(server, sender);
-    Tests::NCommon::TLoggerInit(runtime).Initialize();
 
     ui32 numShards = 1;
     ui32 numIterations = 10;

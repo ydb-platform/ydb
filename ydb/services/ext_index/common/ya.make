@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/public/api/protos
+    ydb/core/base
     ydb/core/protos
     contrib/libs/apache/arrow
 )

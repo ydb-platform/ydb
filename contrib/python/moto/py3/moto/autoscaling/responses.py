@@ -1,20 +1,18 @@
-import datetime
-
 from moto.core.responses import BaseResponse
-from moto.core.utils import (
-    amz_crc32,
-    amzn_request_id,
-    iso_8601_datetime_with_milliseconds,
-)
-from .models import autoscaling_backends
+from moto.core.utils import iso_8601_datetime_with_milliseconds
+from moto.utilities.aws_headers import amz_crc32, amzn_request_id
+from .models import autoscaling_backends, AutoScalingBackend
 
 
 class AutoScalingResponse(BaseResponse):
-    @property
-    def autoscaling_backend(self):
-        return autoscaling_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="autoscaling")
 
-    def create_launch_configuration(self):
+    @property
+    def autoscaling_backend(self) -> AutoScalingBackend:
+        return autoscaling_backends[self.current_account][self.region]
+
+    def create_launch_configuration(self) -> str:
         instance_monitoring_string = self._get_param("InstanceMonitoring.Enabled")
         if instance_monitoring_string == "true":
             instance_monitoring = True
@@ -22,20 +20,20 @@ class AutoScalingResponse(BaseResponse):
             instance_monitoring = False
         params = self._get_params()
         self.autoscaling_backend.create_launch_configuration(
-            name=params.get("LaunchConfigurationName"),
-            image_id=params.get("ImageId"),
+            name=params.get("LaunchConfigurationName"),  # type: ignore[arg-type]
+            image_id=params.get("ImageId"),  # type: ignore[arg-type]
             key_name=params.get("KeyName"),
-            ramdisk_id=params.get("RamdiskId"),
-            kernel_id=params.get("KernelId"),
+            ramdisk_id=params.get("RamdiskId"),  # type: ignore[arg-type]
+            kernel_id=params.get("KernelId"),  # type: ignore[arg-type]
             security_groups=self._get_multi_param("SecurityGroups.member"),
-            user_data=params.get("UserData"),
-            instance_type=params.get("InstanceType"),
+            user_data=params.get("UserData"),  # type: ignore[arg-type]
+            instance_type=params.get("InstanceType"),  # type: ignore[arg-type]
             instance_monitoring=instance_monitoring,
             instance_profile_name=params.get("IamInstanceProfile"),
             spot_price=params.get("SpotPrice"),
-            ebs_optimized=params.get("EbsOptimized"),
-            associate_public_ip_address=params.get("AssociatePublicIpAddress"),
-            block_device_mappings=params.get("BlockDeviceMappings"),
+            ebs_optimized=params.get("EbsOptimized"),  # type: ignore[arg-type]
+            associate_public_ip_address=params.get("AssociatePublicIpAddress"),  # type: ignore[arg-type]
+            block_device_mappings=params.get("BlockDeviceMappings"),  # type: ignore[arg-type]
             instance_id=params.get("InstanceId"),
             metadata_options=params.get("MetadataOptions"),
             classic_link_vpc_id=params.get("ClassicLinkVPCId"),
@@ -44,7 +42,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(CREATE_LAUNCH_CONFIGURATION_TEMPLATE)
         return template.render()
 
-    def describe_launch_configurations(self):
+    def describe_launch_configurations(self) -> str:
         names = self._get_multi_param("LaunchConfigurationNames.member")
         all_launch_configurations = (
             self.autoscaling_backend.describe_launch_configurations(names)
@@ -55,9 +53,8 @@ class AutoScalingResponse(BaseResponse):
             start = all_names.index(marker) + 1
         else:
             start = 0
-        max_records = self._get_int_param(
-            "MaxRecords", 50
-        )  # the default is 100, but using 50 to make testing easier
+        # the default is 100, but using 50 to make testing easier
+        max_records = self._get_int_param("MaxRecords") or 50
         launch_configurations_resp = all_launch_configurations[
             start : start + max_records
         ]
@@ -70,13 +67,14 @@ class AutoScalingResponse(BaseResponse):
             launch_configurations=launch_configurations_resp, next_token=next_token
         )
 
-    def delete_launch_configuration(self):
-        launch_configurations_name = self.querystring.get("LaunchConfigurationName")[0]
+    def delete_launch_configuration(self) -> str:
+        launch_configurations_name = self.querystring.get("LaunchConfigurationName")[0]  # type: ignore[index]
         self.autoscaling_backend.delete_launch_configuration(launch_configurations_name)
         template = self.response_template(DELETE_LAUNCH_CONFIGURATION_TEMPLATE)
         return template.render()
 
-    def create_auto_scaling_group(self):
+    def create_auto_scaling_group(self) -> str:
+        params = self._get_params()
         self.autoscaling_backend.create_auto_scaling_group(
             name=self._get_param("AutoScalingGroupName"),
             availability_zones=self._get_multi_param("AvailabilityZones.member"),
@@ -86,6 +84,7 @@ class AutoScalingResponse(BaseResponse):
             instance_id=self._get_param("InstanceId"),
             launch_config_name=self._get_param("LaunchConfigurationName"),
             launch_template=self._get_dict_param("LaunchTemplate."),
+            mixed_instance_policy=params.get("MixedInstancesPolicy"),
             vpc_zone_identifier=self._get_param("VPCZoneIdentifier"),
             default_cooldown=self._get_int_param("DefaultCooldown"),
             health_check_period=self._get_int_param("HealthCheckGracePeriod"),
@@ -95,6 +94,7 @@ class AutoScalingResponse(BaseResponse):
             placement_group=self._get_param("PlacementGroup"),
             termination_policies=self._get_multi_param("TerminationPolicies.member"),
             tags=self._get_list_prefix("Tags.member"),
+            capacity_rebalance=self._get_bool_param("CapacityRebalance", False),
             new_instances_protected_from_scale_in=self._get_bool_param(
                 "NewInstancesProtectedFromScaleIn", False
             ),
@@ -102,9 +102,45 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(CREATE_AUTOSCALING_GROUP_TEMPLATE)
         return template.render()
 
+    def put_scheduled_update_group_action(self) -> str:
+        self.autoscaling_backend.put_scheduled_update_group_action(
+            name=self._get_param("AutoScalingGroupName"),
+            desired_capacity=self._get_int_param("DesiredCapacity"),
+            max_size=self._get_int_param("MaxSize"),
+            min_size=self._get_int_param("MinSize"),
+            scheduled_action_name=self._get_param("ScheduledActionName"),
+            start_time=self._get_param("StartTime"),
+            end_time=self._get_param("EndTime"),
+            recurrence=self._get_param("Recurrence"),
+        )
+        template = self.response_template(PUT_SCHEDULED_UPDATE_GROUP_ACTION_TEMPLATE)
+        return template.render()
+
+    def describe_scheduled_actions(self) -> str:
+        scheduled_actions = self.autoscaling_backend.describe_scheduled_actions(
+            autoscaling_group_name=self._get_param("AutoScalingGroupName"),
+            scheduled_action_names=self._get_multi_param("ScheduledActionNames.member"),
+        )
+        template = self.response_template(DESCRIBE_SCHEDULED_ACTIONS)
+        return template.render(scheduled_actions=scheduled_actions)
+
+    def delete_scheduled_action(self) -> str:
+        auto_scaling_group_name = self._get_param("AutoScalingGroupName")
+        scheduled_action_name = self._get_param("ScheduledActionName")
+        self.autoscaling_backend.delete_scheduled_action(
+            auto_scaling_group_name=auto_scaling_group_name,
+            scheduled_action_name=scheduled_action_name,
+        )
+        template = self.response_template(DELETE_SCHEDULED_ACTION_TEMPLATE)
+        return template.render()
+
+    def describe_scaling_activities(self) -> str:
+        template = self.response_template(DESCRIBE_SCALING_ACTIVITIES_TEMPLATE)
+        return template.render()
+
     @amz_crc32
     @amzn_request_id
-    def attach_instances(self):
+    def attach_instances(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         instance_ids = self._get_multi_param("InstanceIds.member")
         self.autoscaling_backend.attach_instances(group_name, instance_ids)
@@ -113,7 +149,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def set_instance_health(self):
+    def set_instance_health(self) -> str:
         instance_id = self._get_param("InstanceId")
         health_status = self._get_param("HealthStatus")
         if health_status not in ["Healthy", "Unhealthy"]:
@@ -124,7 +160,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def detach_instances(self):
+    def detach_instances(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         instance_ids = self._get_multi_param("InstanceIds.member")
         should_decrement_string = self._get_param("ShouldDecrementDesiredCapacity")
@@ -140,7 +176,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def attach_load_balancer_target_groups(self):
+    def attach_load_balancer_target_groups(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         target_group_arns = self._get_multi_param("TargetGroupARNs.member")
 
@@ -152,7 +188,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def describe_load_balancer_target_groups(self):
+    def describe_load_balancer_target_groups(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         target_group_arns = (
             self.autoscaling_backend.describe_load_balancer_target_groups(group_name)
@@ -162,7 +198,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def detach_load_balancer_target_groups(self):
+    def detach_load_balancer_target_groups(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         target_group_arns = self._get_multi_param("TargetGroupARNs.member")
 
@@ -172,7 +208,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(DETACH_LOAD_BALANCER_TARGET_GROUPS_TEMPLATE)
         return template.render()
 
-    def describe_auto_scaling_groups(self):
+    def describe_auto_scaling_groups(self) -> str:
         names = self._get_multi_param("AutoScalingGroupNames.member")
         token = self._get_param("NextToken")
         all_groups = self.autoscaling_backend.describe_auto_scaling_groups(names)
@@ -191,7 +227,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(DESCRIBE_AUTOSCALING_GROUPS_TEMPLATE)
         return template.render(groups=groups, next_token=next_token)
 
-    def update_auto_scaling_group(self):
+    def update_auto_scaling_group(self) -> str:
         self.autoscaling_backend.update_auto_scaling_group(
             name=self._get_param("AutoScalingGroupName"),
             availability_zones=self._get_multi_param("AvailabilityZones.member"),
@@ -210,41 +246,41 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(UPDATE_AUTOSCALING_GROUP_TEMPLATE)
         return template.render()
 
-    def delete_auto_scaling_group(self):
+    def delete_auto_scaling_group(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         self.autoscaling_backend.delete_auto_scaling_group(group_name)
         template = self.response_template(DELETE_AUTOSCALING_GROUP_TEMPLATE)
         return template.render()
 
-    def set_desired_capacity(self):
+    def set_desired_capacity(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         desired_capacity = self._get_int_param("DesiredCapacity")
         self.autoscaling_backend.set_desired_capacity(group_name, desired_capacity)
         template = self.response_template(SET_DESIRED_CAPACITY_TEMPLATE)
         return template.render()
 
-    def create_or_update_tags(self):
+    def create_or_update_tags(self) -> str:
         tags = self._get_list_prefix("Tags.member")
 
         self.autoscaling_backend.create_or_update_tags(tags)
         template = self.response_template(UPDATE_AUTOSCALING_GROUP_TEMPLATE)
         return template.render()
 
-    def delete_tags(self):
+    def delete_tags(self) -> str:
         tags = self._get_list_prefix("Tags.member")
 
         self.autoscaling_backend.delete_tags(tags)
         template = self.response_template(UPDATE_AUTOSCALING_GROUP_TEMPLATE)
         return template.render()
 
-    def describe_auto_scaling_instances(self):
+    def describe_auto_scaling_instances(self) -> str:
         instance_states = self.autoscaling_backend.describe_auto_scaling_instances(
             instance_ids=self._get_multi_param("InstanceIds.member")
         )
         template = self.response_template(DESCRIBE_AUTOSCALING_INSTANCES_TEMPLATE)
         return template.render(instance_states=instance_states)
 
-    def put_lifecycle_hook(self):
+    def put_lifecycle_hook(self) -> str:
         lifecycle_hook = self.autoscaling_backend.create_lifecycle_hook(
             name=self._get_param("LifecycleHookName"),
             as_name=self._get_param("AutoScalingGroupName"),
@@ -255,7 +291,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(CREATE_LIFECYLE_HOOK_TEMPLATE)
         return template.render(lifecycle_hook=lifecycle_hook)
 
-    def describe_lifecycle_hooks(self):
+    def describe_lifecycle_hooks(self) -> str:
         lifecycle_hooks = self.autoscaling_backend.describe_lifecycle_hooks(
             as_name=self._get_param("AutoScalingGroupName"),
             lifecycle_hook_names=self._get_multi_param("LifecycleHookNames.member"),
@@ -263,27 +299,27 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(DESCRIBE_LIFECYCLE_HOOKS_TEMPLATE)
         return template.render(lifecycle_hooks=lifecycle_hooks)
 
-    def delete_lifecycle_hook(self):
+    def delete_lifecycle_hook(self) -> str:
         as_name = self._get_param("AutoScalingGroupName")
         name = self._get_param("LifecycleHookName")
         self.autoscaling_backend.delete_lifecycle_hook(as_name, name)
         template = self.response_template(DELETE_LIFECYCLE_HOOK_TEMPLATE)
         return template.render()
 
-    def put_scaling_policy(self):
+    def put_scaling_policy(self) -> str:
         params = self._get_params()
         policy = self.autoscaling_backend.put_scaling_policy(
-            name=params.get("PolicyName"),
+            name=params.get("PolicyName"),  # type: ignore[arg-type]
             policy_type=params.get("PolicyType", "SimpleScaling"),
-            metric_aggregation_type=params.get("MetricAggregationType"),
-            adjustment_type=params.get("AdjustmentType"),
-            as_name=params.get("AutoScalingGroupName"),
-            min_adjustment_magnitude=params.get("MinAdjustmentMagnitude"),
+            metric_aggregation_type=params.get("MetricAggregationType"),  # type: ignore[arg-type]
+            adjustment_type=params.get("AdjustmentType"),  # type: ignore[arg-type]
+            as_name=params.get("AutoScalingGroupName"),  # type: ignore[arg-type]
+            min_adjustment_magnitude=params.get("MinAdjustmentMagnitude"),  # type: ignore[arg-type]
             scaling_adjustment=self._get_int_param("ScalingAdjustment"),
             cooldown=self._get_int_param("Cooldown"),
             target_tracking_config=params.get("TargetTrackingConfiguration", {}),
             step_adjustments=params.get("StepAdjustments", []),
-            estimated_instance_warmup=params.get("EstimatedInstanceWarmup"),
+            estimated_instance_warmup=params.get("EstimatedInstanceWarmup"),  # type: ignore[arg-type]
             predictive_scaling_configuration=params.get(
                 "PredictiveScalingConfiguration", {}
             ),
@@ -291,7 +327,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(CREATE_SCALING_POLICY_TEMPLATE)
         return template.render(policy=policy)
 
-    def describe_policies(self):
+    def describe_policies(self) -> str:
         policies = self.autoscaling_backend.describe_policies(
             autoscaling_group_name=self._get_param("AutoScalingGroupName"),
             policy_names=self._get_multi_param("PolicyNames.member"),
@@ -300,13 +336,13 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(DESCRIBE_SCALING_POLICIES_TEMPLATE)
         return template.render(policies=policies)
 
-    def delete_policy(self):
+    def delete_policy(self) -> str:
         group_name = self._get_param("PolicyName")
         self.autoscaling_backend.delete_policy(group_name)
         template = self.response_template(DELETE_POLICY_TEMPLATE)
         return template.render()
 
-    def execute_policy(self):
+    def execute_policy(self) -> str:
         group_name = self._get_param("PolicyName")
         self.autoscaling_backend.execute_policy(group_name)
         template = self.response_template(EXECUTE_POLICY_TEMPLATE)
@@ -314,7 +350,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def attach_load_balancers(self):
+    def attach_load_balancers(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         load_balancer_names = self._get_multi_param("LoadBalancerNames.member")
         self.autoscaling_backend.attach_load_balancers(group_name, load_balancer_names)
@@ -323,7 +359,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def describe_load_balancers(self):
+    def describe_load_balancers(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         load_balancers = self.autoscaling_backend.describe_load_balancers(group_name)
         template = self.response_template(DESCRIBE_LOAD_BALANCERS_TEMPLATE)
@@ -331,7 +367,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def detach_load_balancers(self):
+    def detach_load_balancers(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         load_balancer_names = self._get_multi_param("LoadBalancerNames.member")
         self.autoscaling_backend.detach_load_balancers(group_name, load_balancer_names)
@@ -340,7 +376,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def enter_standby(self):
+    def enter_standby(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         instance_ids = self._get_multi_param("InstanceIds.member")
         should_decrement_string = self._get_param("ShouldDecrementDesiredCapacity")
@@ -361,12 +397,12 @@ class AutoScalingResponse(BaseResponse):
             should_decrement=should_decrement,
             original_size=original_size,
             desired_capacity=desired_capacity,
-            timestamp=iso_8601_datetime_with_milliseconds(datetime.datetime.utcnow()),
+            timestamp=iso_8601_datetime_with_milliseconds(),
         )
 
     @amz_crc32
     @amzn_request_id
-    def exit_standby(self):
+    def exit_standby(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         instance_ids = self._get_multi_param("InstanceIds.member")
         (
@@ -379,10 +415,10 @@ class AutoScalingResponse(BaseResponse):
             standby_instances=standby_instances,
             original_size=original_size,
             desired_capacity=desired_capacity,
-            timestamp=iso_8601_datetime_with_milliseconds(datetime.datetime.utcnow()),
+            timestamp=iso_8601_datetime_with_milliseconds(),
         )
 
-    def suspend_processes(self):
+    def suspend_processes(self) -> str:
         autoscaling_group_name = self._get_param("AutoScalingGroupName")
         scaling_processes = self._get_multi_param("ScalingProcesses.member")
         self.autoscaling_backend.suspend_processes(
@@ -391,7 +427,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(SUSPEND_PROCESSES_TEMPLATE)
         return template.render()
 
-    def resume_processes(self):
+    def resume_processes(self) -> str:
         autoscaling_group_name = self._get_param("AutoScalingGroupName")
         scaling_processes = self._get_multi_param("ScalingProcesses.member")
         self.autoscaling_backend.resume_processes(
@@ -400,7 +436,7 @@ class AutoScalingResponse(BaseResponse):
         template = self.response_template(RESUME_PROCESSES_TEMPLATE)
         return template.render()
 
-    def set_instance_protection(self):
+    def set_instance_protection(self) -> str:
         group_name = self._get_param("AutoScalingGroupName")
         instance_ids = self._get_multi_param("InstanceIds.member")
         protected_from_scale_in = self._get_bool_param("ProtectedFromScaleIn")
@@ -412,7 +448,7 @@ class AutoScalingResponse(BaseResponse):
 
     @amz_crc32
     @amzn_request_id
-    def terminate_instance_in_auto_scaling_group(self):
+    def terminate_instance_in_auto_scaling_group(self) -> str:
         instance_id = self._get_param("InstanceId")
         should_decrement_string = self._get_param("ShouldDecrementDesiredCapacity")
         if should_decrement_string == "true":
@@ -430,14 +466,50 @@ class AutoScalingResponse(BaseResponse):
             should_decrement=should_decrement,
             original_size=original_size,
             desired_capacity=desired_capacity,
-            timestamp=iso_8601_datetime_with_milliseconds(datetime.datetime.utcnow()),
+            timestamp=iso_8601_datetime_with_milliseconds(),
         )
 
-    def describe_tags(self):
+    def describe_tags(self) -> str:
         filters = self._get_params().get("Filters", [])
         tags = self.autoscaling_backend.describe_tags(filters=filters)
         template = self.response_template(DESCRIBE_TAGS_TEMPLATE)
         return template.render(tags=tags, next_token=None)
+
+    def enable_metrics_collection(self) -> str:
+        group_name = self._get_param("AutoScalingGroupName")
+        metrics = self._get_params().get("Metrics")
+        self.autoscaling_backend.enable_metrics_collection(group_name, metrics)  # type: ignore[arg-type]
+        template = self.response_template(ENABLE_METRICS_COLLECTION_TEMPLATE)
+        return template.render()
+
+    def put_warm_pool(self) -> str:
+        params = self._get_params()
+        group_name = params.get("AutoScalingGroupName")
+        max_capacity = params.get("MaxGroupPreparedCapacity")
+        min_size = params.get("MinSize")
+        pool_state = params.get("PoolState")
+        instance_reuse_policy = params.get("InstanceReusePolicy")
+        self.autoscaling_backend.put_warm_pool(
+            group_name=group_name,  # type: ignore[arg-type]
+            max_capacity=max_capacity,
+            min_size=min_size,
+            pool_state=pool_state,
+            instance_reuse_policy=instance_reuse_policy,
+        )
+        template = self.response_template(PUT_WARM_POOL_TEMPLATE)
+        return template.render()
+
+    def describe_warm_pool(self) -> str:
+        group_name = self._get_param("AutoScalingGroupName")
+        warm_pool = self.autoscaling_backend.describe_warm_pool(group_name=group_name)
+        template = self.response_template(DESCRIBE_WARM_POOL_TEMPLATE)
+        return template.render(pool=warm_pool)
+
+    def delete_warm_pool(self) -> str:
+        group_name = self._get_param("AutoScalingGroupName")
+        self.autoscaling_backend.delete_warm_pool(group_name=group_name)
+        template = self.response_template(DELETE_WARM_POOL_TEMPLATE)
+        return template.render()
 
 
 CREATE_LAUNCH_CONFIGURATION_TEMPLATE = """<CreateLaunchConfigurationResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
@@ -573,6 +645,44 @@ CREATE_AUTOSCALING_GROUP_TEMPLATE = """<CreateAutoScalingGroupResponse xmlns="ht
 </ResponseMetadata>
 </CreateAutoScalingGroupResponse>"""
 
+PUT_SCHEDULED_UPDATE_GROUP_ACTION_TEMPLATE = """<PutScheduledUpdateGroupActionResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+<RequestId></RequestId>
+</ResponseMetadata>
+</PutScheduledUpdateGroupActionResponse>"""
+
+DESCRIBE_SCHEDULED_ACTIONS = """<DescribeScheduledActionsResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+  <DescribeScheduledActionsResult>
+    <ScheduledUpdateGroupActions>
+      {% for scheduled_action in scheduled_actions %}
+      <member>
+        <AutoScalingGroupName>{{ scheduled_action.name }}</AutoScalingGroupName>
+        <ScheduledActionName> {{ scheduled_action.scheduled_action_name }}</ScheduledActionName>
+        {% if scheduled_action.start_time %}
+        <StartTime>{{ scheduled_action.start_time }}</StartTime>
+        {% endif %}
+        {% if scheduled_action.end_time %}
+        <EndTime>{{ scheduled_action.end_time }}</EndTime>
+        {% endif %}
+        {% if scheduled_action.recurrence %}
+        <Recurrence>{{ scheduled_action.recurrence }}</Recurrence>
+        {% endif %}
+        <MinSize>{{ scheduled_action.min_size }}</MinSize>
+        <MaxSize>{{ scheduled_action.max_size }}</MaxSize>
+        <DesiredCapacity>{{ scheduled_action.desired_capacity }}</DesiredCapacity>
+      </member>
+      {% endfor %}
+    </ScheduledUpdateGroupActions>
+  </DescribeScheduledActionsResult>
+</DescribeScheduledActionsResponse>
+"""
+
+DELETE_SCHEDULED_ACTION_TEMPLATE = """<DeleteScheduledActionResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+    <RequestId>70a76d42-9665-11e2-9fdf-211deEXAMPLE</RequestId>
+  </ResponseMetadata>
+</DeleteScheduledActionResponse>"""
+
 ATTACH_LOAD_BALANCER_TARGET_GROUPS_TEMPLATE = """<AttachLoadBalancerTargetGroupsResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
 <AttachLoadBalancerTargetGroupsResult>
 </AttachLoadBalancerTargetGroupsResult>
@@ -666,13 +776,60 @@ DESCRIBE_AUTOSCALING_GROUPS_TEMPLATE = """<DescribeAutoScalingGroupsResponse xml
         <AutoScalingGroupName>{{ group.name }}</AutoScalingGroupName>
         <HealthCheckType>{{ group.health_check_type }}</HealthCheckType>
         <CreatedTime>2013-05-06T17:47:15.107Z</CreatedTime>
-        <EnabledMetrics/>
         {% if group.launch_config_name %}
         <LaunchConfigurationName>{{ group.launch_config_name }}</LaunchConfigurationName>
+        {% elif group.mixed_instance_policy %}
+        <MixedInstancesPolicy>
+          <LaunchTemplate>
+            <LaunchTemplateSpecification>
+              <LaunchTemplateId>{{ group.launch_template.id }}</LaunchTemplateId>
+              <Version>{{ group.launch_template_version }}</Version>
+              <LaunchTemplateName>{{ group.launch_template.name }}</LaunchTemplateName>
+            </LaunchTemplateSpecification>
+            {% if group.mixed_instance_policy.get("LaunchTemplate", {}).get("Overrides", []) %}
+            <Overrides>
+              {% for member in group.mixed_instance_policy.get("LaunchTemplate", {}).get("Overrides", []) %}
+              <member>
+                {% if member.get("InstanceType") %}
+                <InstanceType>{{ member.get("InstanceType") }}</InstanceType>
+                {% endif %}
+                {% if member.get("WeightedCapacity") %}
+                <WeightedCapacity>{{ member.get("WeightedCapacity") }}</WeightedCapacity>
+                {% endif %}
+              </member>
+              {% endfor %}
+            </Overrides>
+            {% endif %}
+          </LaunchTemplate>
+          {% if group.mixed_instance_policy.get("InstancesDistribution") %}
+          <InstancesDistribution>
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandAllocationStrategy") %}
+            <OnDemandAllocationStrategy>{{ group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandAllocationStrategy") }}</OnDemandAllocationStrategy>
+            {% endif %}
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandBaseCapacity") %}
+            <OnDemandBaseCapacity>{{ group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandBaseCapacity") }}</OnDemandBaseCapacity>
+            {% endif %}
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandPercentageAboveBaseCapacity") %}
+            <OnDemandPercentageAboveBaseCapacity>{{ group.mixed_instance_policy.get("InstancesDistribution").get("OnDemandPercentageAboveBaseCapacity") }}</OnDemandPercentageAboveBaseCapacity>
+            {% endif %}
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("SpotAllocationStrategy") %}
+            <SpotAllocationStrategy>{{ group.mixed_instance_policy.get("InstancesDistribution").get("SpotAllocationStrategy") }}</SpotAllocationStrategy>
+            {% endif %}
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("SpotInstancePools") %}
+            <SpotInstancePools>{{ group.mixed_instance_policy.get("InstancesDistribution").get("SpotInstancePools") }}</SpotInstancePools>
+            {% endif %}
+            {% if group.mixed_instance_policy.get("InstancesDistribution").get("SpotMaxPrice") %}
+            <SpotMaxPrice>{{ group.mixed_instance_policy.get("InstancesDistribution").get("SpotMaxPrice") }}</SpotMaxPrice>
+            {% endif %}
+          </InstancesDistribution>
+          {% endif %}
+        </MixedInstancesPolicy>
         {% elif group.launch_template %}
         <LaunchTemplate>
           <LaunchTemplateId>{{ group.launch_template.id }}</LaunchTemplateId>
-          <Version>{{ group.launch_template_version }}</Version>
+          {% if group.provided_launch_template_version %}}
+          <Version>{{ group.provided_launch_template_version }}</Version>
+          {% endif %}
           <LaunchTemplateName>{{ group.launch_template.name }}</LaunchTemplateName>
         </LaunchTemplate>
         {% endif %}
@@ -698,6 +855,7 @@ DESCRIBE_AUTOSCALING_GROUPS_TEMPLATE = """<DescribeAutoScalingGroupsResponse xml
           {% endfor %}
         </Instances>
         <DesiredCapacity>{{ group.desired_capacity }}</DesiredCapacity>
+        <CapacityRebalance>{{ 'true' if group.capacity_rebalance else 'false' }}</CapacityRebalance>
         <AvailabilityZones>
           {% for availability_zone in group.availability_zones %}
           <member>{{ availability_zone }}</member>
@@ -744,6 +902,29 @@ DESCRIBE_AUTOSCALING_GROUPS_TEMPLATE = """<DescribeAutoScalingGroupsResponse xml
         <PlacementGroup>{{ group.placement_group }}</PlacementGroup>
         {% endif %}
         <NewInstancesProtectedFromScaleIn>{{ group.new_instances_protected_from_scale_in|string|lower }}</NewInstancesProtectedFromScaleIn>
+        {% if group.metrics %}
+        <EnabledMetrics>
+          {% for met in group.metrics %}
+          <member>
+          <Metric>{{ met }}</Metric>
+          <Granularity>1Minute</Granularity>
+          </member>
+          {% endfor %}
+        </EnabledMetrics>
+        {% endif %}
+        <ServiceLinkedRoleARN>{{ group.service_linked_role }}</ServiceLinkedRoleARN>
+        {% if group.warm_pool %}
+        <WarmPoolConfiguration>
+          <MaxGroupPreparedCapacity>{{ group.warm_pool.max_capacity }}</MaxGroupPreparedCapacity>
+          <MinSize>{{ group.warm_pool.min_size or 0 }}</MinSize>
+          {% if group.warm_pool.pool_state %}
+          <PoolState>{{ group.warm_pool.pool_state }}</PoolState>
+          {% endif %}
+          <InstanceReusePolicy>
+            <ReuseOnScaleIn>{{ 'true' if group.warm_pool.instance_reuse_policy["ReuseOnScaleIn"] else 'false' }}</ReuseOnScaleIn>
+          </InstanceReusePolicy>
+        </WarmPoolConfiguration>
+        {% endif %}
       </member>
       {% endfor %}
     </AutoScalingGroups>
@@ -767,6 +948,14 @@ DELETE_AUTOSCALING_GROUP_TEMPLATE = """<DeleteAutoScalingGroupResponse xmlns="ht
     <RequestId>70a76d42-9665-11e2-9fdf-211deEXAMPLE</RequestId>
   </ResponseMetadata>
 </DeleteAutoScalingGroupResponse>"""
+
+DESCRIBE_SCALING_ACTIVITIES_TEMPLATE = """<DescribeScalingActivitiesResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<DescribeScalingActivitiesResult>
+</DescribeScalingActivitiesResult>
+<ResponseMetadata>
+<RequestId></RequestId>
+</ResponseMetadata>
+</DescribeScalingActivitiesResponse>"""
 
 DESCRIBE_AUTOSCALING_INSTANCES_TEMPLATE = """<DescribeAutoScalingInstancesResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
   <DescribeAutoScalingInstancesResult>
@@ -893,6 +1082,38 @@ DESCRIBE_SCALING_POLICIES_TEMPLATE = """<DescribePoliciesResponse xmlns="http://
               <Statistic>{{ policy.target_tracking_config["CustomizedMetricSpecification"].get("Statistic") }}</Statistic>
               {% if policy.target_tracking_config["CustomizedMetricSpecification"].get("Unit") %}
               <Unit>{{ policy.target_tracking_config["CustomizedMetricSpecification"].get("Unit") }}</Unit>
+              {% endif %}
+              {% if policy.target_tracking_config["CustomizedMetricSpecification"].get("Metrics") %}
+              <Metrics>
+                {% for metric in policy.target_tracking_config["CustomizedMetricSpecification"].get("Metrics", []) %}
+                <member>
+                  <Id>{{ metric.get("Id") }}</Id>
+                  {% if metric.get("MetricStat") is none %}
+                  <Expression>{{ metric.get("Expression") }}</Expression>
+                  {% endif %}
+                  {% if metric.get("Expression") is none %}
+                  <MetricStat>
+                    <Metric>
+                      <Namespace>{{ metric.get("MetricStat", {}).get("Metric", {}).get("Namespace") }}</Namespace>
+                      <MetricName>{{ metric.get("MetricStat", {}).get("Metric", {}).get("MetricName") }}</MetricName>
+                      <Dimensions>
+                      {% for dim in metric.get("MetricStat", {}).get("Metric", {}).get("Dimensions", []) %}
+                        <member>
+                          <Name>{{ dim.get("Name") }}</Name>
+                          <Value>{{ dim.get("Value") }}</Value>
+                        </member>
+                      {% endfor %}
+                      </Dimensions>
+                    </Metric>
+                    <Stat>{{ metric.get("MetricStat", {}).get("Stat") }}</Stat>
+                    <Unit>{{ metric.get("MetricStat", {}).get("Unit") }}</Unit>
+                  </MetricStat>
+                  {% endif %}
+                  <Label>{{ metric.get("Label") }}</Label>
+                  <ReturnData>{{ 'true' if metric.get("ReturnData") is none else metric.get("ReturnData") }}</ReturnData>
+                </member>
+                {% endfor %}
+              </Metrics>
               {% endif %}
             </CustomizedMetricSpecification>
             {% endif %}
@@ -1219,3 +1440,53 @@ DESCRIBE_TAGS_TEMPLATE = """<DescribeTagsResponse xmlns="http://autoscaling.amaz
     {% endif %}
   </DescribeTagsResult>
 </DescribeTagsResponse>"""
+
+
+ENABLE_METRICS_COLLECTION_TEMPLATE = """<EnableMetricsCollectionResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+   <RequestId></RequestId>
+</ResponseMetadata>
+</EnableMetricsCollectionResponse>"""
+
+
+PUT_WARM_POOL_TEMPLATE = """<PutWarmPoolResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+   <RequestId></RequestId>
+</ResponseMetadata>
+<PutWarmPoolResult></PutWarmPoolResult>
+</PutWarmPoolResponse>"""
+
+
+DESCRIBE_WARM_POOL_TEMPLATE = """<DescribeWarmPoolResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+   <RequestId></RequestId>
+</ResponseMetadata>
+<DescribeWarmPoolResult>
+  {% if pool %}
+  <WarmPoolConfiguration>
+    {% if pool.max_capacity %}
+    <MaxGroupPreparedCapacity>{{ pool.max_capacity }}</MaxGroupPreparedCapacity>
+    {% endif %}
+    <MinSize>{{ pool.min_size }}</MinSize>
+    {% if pool.pool_state %}
+    <PoolState>{{ pool.pool_state }}</PoolState>
+    {% endif %}
+    {% if pool.instance_reuse_policy %}
+    <InstanceReusePolicy>
+      <ReuseOnScaleIn>{{ 'true' if pool.instance_reuse_policy["ReuseOnScaleIn"] else 'false' }}</ReuseOnScaleIn>
+    </InstanceReusePolicy>
+    {% endif %}
+  </WarmPoolConfiguration>
+  {% endif %}
+  <Instances>
+  </Instances>
+</DescribeWarmPoolResult>
+</DescribeWarmPoolResponse>"""
+
+
+DELETE_WARM_POOL_TEMPLATE = """<DeleteWarmPoolResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+<ResponseMetadata>
+   <RequestId></RequestId>
+</ResponseMetadata>
+<DeleteWarmPoolResult></DeleteWarmPoolResult>
+</DeleteWarmPoolResponse>"""

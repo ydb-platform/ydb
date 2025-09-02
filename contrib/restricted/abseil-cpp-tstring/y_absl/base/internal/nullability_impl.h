@@ -19,10 +19,11 @@
 #include <type_traits>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-
+Y_ABSL_NAMESPACE_BEGIN
 namespace nullability_internal {
 
 // `IsNullabilityCompatible` checks whether its first argument is a class
@@ -101,6 +102,7 @@ using NullabilityUnknownImpl
     = T;
 
 }  // namespace nullability_internal
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // Y_ABSL_BASE_INTERNAL_NULLABILITY_IMPL_H_

@@ -8,6 +8,11 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+from datetime import timedelta
+from typing import Any, Literal, Optional
+
+from hypothesis.internal.compat import ExceptionGroup
+
 
 class HypothesisException(Exception):
     """Generic parent class for exceptions thrown by Hypothesis."""
@@ -23,7 +28,7 @@ class UnsatisfiedAssumption(HypothesisException):
     If you're seeing this error something has gone wrong.
     """
 
-    def __init__(self, reason=None):
+    def __init__(self, reason: Optional[str] = None) -> None:
         self.reason = reason
 
 
@@ -34,7 +39,7 @@ class NoSuchExample(HypothesisException):
     unable to find one.
     """
 
-    def __init__(self, condition_string, extra=""):
+    def __init__(self, condition_string: str, extra: str = "") -> None:
         super().__init__(f"No examples found of condition {condition_string}{extra}")
 
 
@@ -51,10 +56,47 @@ class Unsatisfiable(_Trimmable):
     """
 
 
+class ChoiceTooLarge(HypothesisException):
+    """An internal error raised by choice_from_index."""
+
+
 class Flaky(_Trimmable):
+    """Base class for indeterministic failures. Usually one of the more
+    specific subclasses (FlakyFailure or FlakyStrategyDefinition) is raised."""
+
+
+class FlakyReplay(Flaky):
+    """Internal error raised by the conjecture engine if flaky failures are
+    detected during replay.
+
+    Carries information allowing the runner to reconstruct the flakiness as
+    a FlakyFailure exception group for final presentation.
+    """
+
+    def __init__(self, reason, interesting_origins=None):
+        super().__init__(reason)
+        self.reason = reason
+        self._interesting_origins = interesting_origins
+
+
+class FlakyStrategyDefinition(Flaky):
+    """This function appears to cause inconsistent data generation.
+
+    Common causes for this problem are:
+        1. The strategy depends on external state. e.g. it uses an external
+           random number generator. Try to make a version that passes all the
+           relevant state in from Hypothesis.
+    """
+
+
+class _WrappedBaseException(Exception):
+    """Used internally for wrapping BaseExceptions as components of FlakyFailure."""
+
+
+class FlakyFailure(ExceptionGroup, Flaky):
     """This function appears to fail non-deterministically: We have seen it
     fail when passed this example at least once, but a subsequent invocation
-    did not fail.
+    did not fail, or caused a distinct error.
 
     Common causes for this problem are:
         1. The function depends on external state. e.g. it uses an external
@@ -66,6 +108,19 @@ class Flaky(_Trimmable):
            how long it takes. Try breaking it up into smaller functions which
            don't do that and testing those instead.
     """
+
+    def __new__(cls, msg, group):
+        # The Exception mixin forces this an ExceptionGroup (only accepting
+        # Exceptions, not BaseException). Usually BaseException is raised
+        # directly and will hence not be part of a FlakyFailure, but I'm not
+        # sure this assumption holds everywhere. So wrap any BaseExceptions.
+        group = list(group)
+        for i, exc in enumerate(group):
+            if not isinstance(exc, Exception):
+                err = _WrappedBaseException()
+                err.__cause__ = err.__context__ = exc
+                group[i] = err
+        return ExceptionGroup.__new__(cls, msg, group)
 
 
 class InvalidArgument(_Trimmable, TypeError):
@@ -129,7 +184,7 @@ class Frozen(HypothesisException):
     after freeze() has been called."""
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name == "MultipleFailures":
         from hypothesis._settings import note_deprecation
         from hypothesis.internal.compat import BaseExceptionGroup
@@ -149,7 +204,7 @@ def __getattr__(name):
 class DeadlineExceeded(_Trimmable):
     """Raised when an individual test body has taken too long to run."""
 
-    def __init__(self, runtime, deadline):
+    def __init__(self, runtime: timedelta, deadline: timedelta) -> None:
         super().__init__(
             "Test took %.2fms, which exceeds the deadline of %.2fms"
             % (runtime.total_seconds() * 1000, deadline.total_seconds() * 1000)
@@ -157,7 +212,9 @@ class DeadlineExceeded(_Trimmable):
         self.runtime = runtime
         self.deadline = deadline
 
-    def __reduce__(self):
+    def __reduce__(
+        self,
+    ) -> tuple[type["DeadlineExceeded"], tuple[timedelta, timedelta]]:
         return (type(self), (self.runtime, self.deadline))
 
 
@@ -166,7 +223,7 @@ class StopTest(BaseException):
     the Hypothesis engine, which should then continue normally.
     """
 
-    def __init__(self, testcounter):
+    def __init__(self, testcounter: int) -> None:
         super().__init__(repr(testcounter))
         self.testcounter = testcounter
 
@@ -175,19 +232,49 @@ class DidNotReproduce(HypothesisException):
     pass
 
 
-class Found(Exception):
+class Found(HypothesisException):
     """Signal that the example matches condition. Internal use only."""
-
-    hypothesis_internal_never_escalate = True
 
 
 class RewindRecursive(Exception):
     """Signal that the type inference should be rewound due to recursive types. Internal use only."""
 
-    def __init__(self, target):
+    def __init__(self, target: object) -> None:
         self.target = target
 
 
 class SmallSearchSpaceWarning(HypothesisWarning):
     """Indicates that an inferred strategy does not span the search space
     in a meaningful way, for example by only creating default instances."""
+
+
+CannotProceedScopeT = Literal["verified", "exhausted", "discard_test_case", "other"]
+
+
+class BackendCannotProceed(HypothesisException):
+    """UNSTABLE API
+
+    Raised by alternative backends when the PrimitiveProvider cannot proceed.
+    This is expected to occur inside one of the `.draw_*()` methods, or for
+    symbolic execution perhaps in `.realize(...)`.
+
+    The optional `scope` argument can enable smarter integration:
+
+        verified:
+            Do not request further test cases from this backend.  We _may_
+            generate more test cases with other backends; if one fails then
+            Hypothesis will report unsound verification in the backend too.
+
+        exhausted:
+            Do not request further test cases from this backend; finish testing
+            with test cases generated with the default backend.  Common if e.g.
+            native code blocks symbolic reasoning very early.
+
+        discard_test_case:
+            This particular test case could not be converted to concrete values;
+            skip any further processing and continue with another test case from
+            this backend.
+    """
+
+    def __init__(self, scope: CannotProceedScopeT = "other", /) -> None:
+        self.scope = scope

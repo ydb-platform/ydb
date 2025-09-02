@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT 
+	^
+        <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf
+        	    Digest::Sha512(key) AS sha512
+	            ^
+            <tmp_path>/program.sql:<main>:6:13: Error: UDF 'Digest.Sha512' is not available before version 2025.03
+            	    Digest::Sha512(key) AS sha512
+	            ^

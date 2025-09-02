@@ -44,12 +44,23 @@ message TPartitionStats {
     optional uint64 TxRejectedBySpace = 19;
 
     optional TTtlStats TtlStats = 20;
+
+    optional uint64 ByKeyFilterSize = 21;
+    optional uint32 FollowerId = 22;
+
+    optional uint64 LocksAcquired = 23;
+    optional uint64 LocksWholeShard = 24;
+    optional uint64 LocksBroken = 25;
 }
 
 message TPartitionStatsResult {
     optional TPartitionStatsKey Key = 1;
-    optional TPartitionStats Stats = 2;
+    repeated TPartitionStats Stats = 2;
     optional string Path = 3;
+}
+
+message TPartitionStatsFilter {
+    optional TPartitionStats NotLess = 1;
 }
 
 message TEvGetPartitionStats {
@@ -63,6 +74,8 @@ message TEvGetPartitionStats {
     optional bool ToInclusive = 6;
 
     optional bool IncludePathColumn = 7;
+
+    optional TPartitionStatsFilter Filter = 8;
 }
 
 message TEvGetPartitionStatsResult {
@@ -124,8 +137,10 @@ enum EStatsType {
     METRICS_ONE_HOUR = 8;
     TOP_REQUEST_UNITS_ONE_MINUTE = 9;
     TOP_REQUEST_UNITS_ONE_HOUR = 10;
-    TOP_PARTITIONS_ONE_MINUTE = 11;
-    TOP_PARTITIONS_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_CPU_ONE_MINUTE = 11;
+    TOP_PARTITIONS_BY_CPU_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_TLI_ONE_MINUTE = 13;
+    TOP_PARTITIONS_BY_TLI_ONE_HOUR = 14;
 }
 
 message TEvGetQueryStats {
@@ -166,10 +181,13 @@ message TPDiskInfo {
     optional string StatusV2 = 12;
     optional uint64 StatusChangeTimestamp = 13;
     optional uint64 EnforcedDynamicSlotSize = 14;
-    optional uint32 ExpectedSlotCount = 15;
+    optional uint32 ExpectedSlotCount = 15; // either inferred or user-defined
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
+    optional string State = 19;
+    optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
+    optional uint64 InferPDiskSlotCountFromUnitSize = 21;
     // metrics ?
     // physical location ?
     // config ?
@@ -212,7 +230,11 @@ message TVSlotInfo {
     optional string StatusV2 = 12;
     optional string Kind = 13;
     optional bool IsBeingDeleted = 14;
-    // metrics ?
+    optional string DiskSpace = 15;
+    optional bool Replicated = 16;
+    optional string State = 17;
+    optional bool IsThrottling = 18;
+    optional uint32 ThrottlingRate = 19;
 }
 
 message TVSlotEntry {
@@ -257,6 +279,12 @@ message TGroupInfo {
     // desired disk categories ?
     // down/persisted down ?
     // metrics ?
+    optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    optional string OperatingStatus = 17;
+    optional string ExpectedStatus = 18;
+    optional uint32 ProxyGroupId = 19;
+    optional uint32 BridgePileId = 20;
+    optional uint32 GroupSizeInUnits = 21;
 }
 
 message TGroupEntry {
@@ -295,6 +323,7 @@ message TStoragePoolInfo {
     optional string VDiskKindV2 = 12;
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
+    optional uint32 DefaultGroupSizeInUnits = 15;
     // metrics ?
 }
 
@@ -592,6 +621,10 @@ message TTopPartitionsInfo {
     optional uint64 RowCount = 7;
     optional uint64 IndexSize = 8;
     optional uint32 InFlightTxCount = 9;
+    optional uint32 FollowerId = 10;
+    optional uint64 LocksAcquired = 11;
+    optional uint64 LocksWholeShard = 12;
+    optional uint64 LocksBroken = 13;
 }
 
 message TTopPartitionsEntry {
@@ -618,8 +651,7 @@ message TEvGetTopPartitionsResponse {
 
 // partitions stats collector -> SVP
 message TEvSendTopPartitions {
-    repeated TTopPartitionsInfo Partitions = 1;
+    repeated TTopPartitionsInfo PartitionsByCpu = 1;
+    repeated TTopPartitionsInfo PartitionsByTli = 3;
     optional uint64 TimeUs = 2;
 }
-
-

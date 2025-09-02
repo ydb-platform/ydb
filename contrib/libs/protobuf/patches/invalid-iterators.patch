@@ -1,0 +1,11 @@
+--- contrib/libs/protobuf/src/google/protobuf/generated_message_tctable_gen.cc	(index)
++++ contrib/libs/protobuf/src/google/protobuf/generated_message_tctable_gen.cc	(working tree)
+@@ -431,7 +431,7 @@ std::vector<uint8_t> GenerateFieldNames(
+     ++count;
+   }
+   // The message name is stored at the beginning of the string
+-  TProtoStringType message_name = descriptor->full_name();
++  std::string message_name = descriptor->full_name();
+   if (message_name.size() > kMaxNameLength) {
+     static constexpr int kNameHalfLength = (kMaxNameLength - 3) / 2;
+     message_name = y_absl::StrCat(

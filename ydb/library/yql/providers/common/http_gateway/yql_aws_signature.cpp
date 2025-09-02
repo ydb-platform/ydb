@@ -63,11 +63,11 @@ TString TAwsSignature::GetAuthorization() const {
 }
 
 TString TAwsSignature::GetXAmzContentSha256() const {
-    return HashSHA256(TStringBuilder{} << "\"" << Payload << "\"");
+    return HashSHA256(TStringBuilder{} << Payload);
 }
 
 TString TAwsSignature::GetAmzDate() const {
-    return CurrentTime.FormatLocalTime("%Y%m%dT%H%M%SZ");
+    return CurrentTime.FormatGmTime("%Y%m%dT%H%M%SZ");
 }
 
 TString TAwsSignature::GetContentType() const {
@@ -112,7 +112,7 @@ TString TAwsSignature::CalcSignature() const {
 }
 
 TString TAwsSignature::GetDate() const {
-    return CurrentTime.FormatLocalTime("%Y%m%d");
+    return CurrentTime.FormatGmTime("%Y%m%d");
 }
 
 TString TAwsSignature::HmacSHA256(TStringBuf key, TStringBuf data) {
@@ -138,11 +138,11 @@ TString TAwsSignature::HashSHA256(TStringBuf data) {
     return to_lower(HexEncode(hash, SHA256_DIGEST_LENGTH));
 }
 
-TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash) {
+TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash, bool encodePercent) {
     TStringStream result;
     for (const char ch : input) {
         if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' ||
-            ch == '-' || ch == '~' || ch == '.') {
+            ch == '-' || ch == '~' || ch == '.' || (ch == '%' && !encodePercent)) {
             result << ch;
         } else if (ch == '/') {
             if (encodeSlash) {
@@ -158,7 +158,8 @@ TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash) {
 }
 
 void TAwsSignature::PrepareCgiParameters() {
-    TCgiParameters cgi(Cgi);
+    TCgiParameters cgi;
+    cgi.ScanAddAll(Cgi);
     TMap<TString, TVector<TString>> sortedCgi;
 
     for (const auto& [key, value] : cgi) {
@@ -174,11 +175,10 @@ void TAwsSignature::PrepareCgiParameters() {
 
         auto printSingleParam = [&canonicalCgi](const TString& key, const TVector<TString>& values) {
             auto it = values.begin();
-            canonicalCgi << UriEncode(key, true) << "=" << UriEncode(*it, true);
+            canonicalCgi << UriEncode(key, true, true) << "=" << UriEncode(*it, true, true);
             while (++it != values.end()) {
-                canonicalCgi << "&" << UriEncode(key, true) << "=" << UriEncode(*it, true);
+                canonicalCgi << "&" << UriEncode(key, true, true) << "=" << UriEncode(*it, true, true);
             }
-
         };
 
         auto it = sortedCgi.begin();

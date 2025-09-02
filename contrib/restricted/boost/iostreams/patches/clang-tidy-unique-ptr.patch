@@ -1,0 +1,10 @@
+--- contrib/restricted/boost/iostreams/include/boost/iostreams/chain.hpp	(b92e22f2baa7a4b746902dd4641a3025ca1f424f)
++++ contrib/restricted/boost/iostreams/include/boost/iostreams/chain.hpp	(working tree)
+@@ -250,6 +250,7 @@ private:
+             
+ #else
+ 
++        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+         std::unique_ptr<streambuf_t>
+             buf(new streambuf_t(t, buffer_size, pback_size));
+             

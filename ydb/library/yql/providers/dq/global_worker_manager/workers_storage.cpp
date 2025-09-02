@@ -1,7 +1,7 @@
 #include "workers_storage.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/scope.h>
 
@@ -435,6 +435,9 @@ TVector<TWorkerInfo::TPtr> TWorkersStorage::TryAllocate(const NDq::IScheduler::T
             }
             const auto workerInfo = *it++;
             if (workerInfo->Stopping) {
+                continue;
+            }
+            if (!filter.MatchHost(workerInfo)) {
                 continue;
             }
             filter.Visit([&](const auto& file) {

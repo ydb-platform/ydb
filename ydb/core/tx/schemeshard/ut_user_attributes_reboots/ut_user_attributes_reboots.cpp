@@ -1,7 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -12,6 +10,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
     Y_UNIT_TEST(InSubdomain) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
@@ -36,7 +35,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
                                               NLs::UserAttrsEqual(userAttrs)});
             }
 
-            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0", 
+            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0",
                                        AlterUserAttrs({}, userAttrsKeys), {pathVer}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -119,6 +118,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
 
     Y_UNIT_TEST(AllowedSymbolsReboots) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "Dir0:");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::PathVersionEqual(11)});
+                                   {NLs::PathVersionEqual(12)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir@"),
                                    {NLs::Finished, NLs::PathVersionEqual(5)});

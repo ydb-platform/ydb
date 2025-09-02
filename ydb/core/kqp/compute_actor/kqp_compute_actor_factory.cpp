@@ -12,75 +12,69 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
         , NRm::EKqpMemoryPool memoryPool
         , std::shared_ptr<IKqpNodeState> state
-        , ui64 txId
-        , ui64 taskId
-        , ui64 limit
-        , ui64 reasonableSpillingTreshold)
+        , TIntrusivePtr<NRm::TTxState> tx
+        , TIntrusivePtr<NRm::TTaskState> task
+        , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
     , State(std::move(state))
-    , TxId(txId)
-    , TaskId(taskId)
-    , ReasonableSpillingTreshold(reasonableSpillingTreshold)
+    , Tx(std::move(tx))
+    , Task(std::move(task))
     {
     }
 
     ~TMemoryQuotaManager() override {
         if (State) {
-            State->OnTaskTerminate(TxId, TaskId, Success);
+            State->OnTaskTerminate(Tx->TxId, Task->TaskId, Success);
         }
 
-        ResourceManager->FreeResources(TxId, TaskId);
+        ResourceManager->FreeResources(Tx, Task);
     }
 
     bool AllocateExtraQuota(ui64 extraSize) override {
-        auto result = ResourceManager->AllocateResources(TxId, TaskId,
+        auto result = ResourceManager->AllocateResources(Tx, Task,
             NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize});
 
         if (!result) {
             AFL_WARN(NKikimrServices::KQP_COMPUTE)
                 ("problem", "cannot_allocate_memory")
-                ("tx_id", TxId)
-                ("task_id", TaskId)
+                ("tx_id", Tx->TxId)
+                ("task_id", Task->TaskId)
                 ("memory", extraSize);
 
             return false;
         }
 
-        TotalQueryAllocationsSize = result.TotalAllocatedQueryMemory;
-
         return true;
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        ResourceManager->FreeResources(TxId, TaskId,
-            NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize}
-        );
+        NRm::TKqpResourcesRequest request = NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize};
+        ResourceManager->FreeResources(Tx, Task, Task->FitRequest(request));
     }
 
     bool IsReasonableToUseSpilling() const override {
-        return TotalQueryAllocationsSize >= ReasonableSpillingTreshold;
+        return Task->IsReasonableToStartSpilling();
     }
 
     TString MemoryConsumptionDetails() const override {
-        return ResourceManager->GetTxResourcesUsageDebugInfo(TxId);
+        return Tx->ToString();
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
             ("problem", "finish_compute_actor")
-            ("tx_id", TxId)("task_id", TaskId)("success", success)("message", issues.ToOneLineString());
+            ("tx_id", Tx->TxId)("task_id", Task->TaskId)("success", success)("message", issues.ToOneLineString());
         Success = success;
     }
 
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
     NRm::EKqpMemoryPool MemoryPool;
     std::shared_ptr<IKqpNodeState> State;
-    ui64 TxId;
-    ui64 TaskId;
+    TIntrusivePtr<NRm::TTxState> Tx;
+    TIntrusivePtr<NRm::TTaskState> Task;
     bool Success = true;
-    ui64 TotalQueryAllocationsSize = 0;
     ui64 ReasonableSpillingTreshold = 0;
 };
 
@@ -92,7 +86,9 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
-    std::atomic<ui64> ReasonableSpillingTreshold = 0;
+    std::atomic<ui64> MinMemAllocSize = 1_MB;
+    std::atomic<ui64> MinMemFreeSize = 32_MB;
+    std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -106,21 +102,47 @@ public:
         ApplyConfig(config);
     }
 
-    void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config)
+    void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) override
     {
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
-        ReasonableSpillingTreshold.store(config.GetReasonableSpillingTreshold());
+        ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
+        MinMemAllocSize.store(config.GetMinMemAllocSize());
+        MinMemFreeSize.store(config.GetMinMemFreeSize());
     }
 
-    TActorId CreateKqpComputeActor(TCreateArgs&& args) {
+    TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
+        memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
+        memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
+        if (args.Task->HasBufferPageAllocSize()) {
+            memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();
+        }
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
+        NRm::TKqpResourcesRequest resourcesRequest;
+        resourcesRequest.MemoryPool = args.MemoryPool;
+        resourcesRequest.ExecutionUnits = 1;
+        resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
+
+        NScheduler::TSchedulableActorOptions schedulableOptions {
+            .Query = args.Query,
+            .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
+        };
+
+        TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
+
+        auto rmResult = ResourceManager_->AllocateResources(
+            args.TxInfo, task, resourcesRequest);
+
+        if (!rmResult) {
+            return NRm::TKqpRMAllocateResult{rmResult};
+        }
 
         {
             ui32 inputChannelsCount = 0;
@@ -130,6 +152,7 @@ public:
 
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
+            memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                 ("ch_size", estimation.ChannelBufferMemoryLimit)
                 ("ch_count", estimation.ChannelBuffersCount)
@@ -147,15 +170,19 @@ public:
             ResourceManager_,
             args.MemoryPool,
             std::move(args.State),
-            args.TxId,
-            args.Task->GetId(),
-            limit,
-            ReasonableSpillingTreshold.load());
+            std::move(args.TxInfo),
+            std::move(task),
+            limit);
 
         auto runtimeSettings = args.RuntimeSettings;
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
+        runtimeSettings.WithProgressStats = args.WithProgressStats;
+
+        if (runtimeSettings.UseSpilling) {
+            args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
+        }
 
         if (args.Deadline) {
             runtimeSettings.Timeout = args.Deadline - TAppData::TimeProvider->Now();
@@ -195,10 +222,12 @@ public:
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
-            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
-            IActor* computeActor = CreateKqpScanComputeActor(args.ExecuterId, args.TxId, args.Task,
-                AsyncIoFactory, runtimeSettings, memoryLimits,
-                std::move(args.TraceId), std::move(args.Arena));
+            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
+            IActor* computeActor = CreateKqpScanComputeActor(
+                args.ExecuterId, args.TxId,
+                args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
+                std::move(args.TraceId), std::move(args.Arena),
+                std::move(schedulableOptions), args.BlockTrackingMode);
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -208,7 +237,8 @@ public:
                 GUCSettings = std::make_shared<TGUCSettings>(args.SerializedGUCSettings);
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings);
+                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }
@@ -223,4 +253,4 @@ std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfi
     return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
 }
 
-}
+} // namespace NKikimr::NKqp::NComputeActor

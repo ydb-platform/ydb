@@ -1,9 +1,9 @@
 #include "yql_expr_minikql.h"
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/testlib/minikql_compile.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {

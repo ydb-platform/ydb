@@ -18,12 +18,12 @@ from
    and   ss_customer_sk= c_customer_sk
    and   ca_address_sk = c_current_addr_sk
    and   ss_item_sk = i_item_sk
-   and   ca_gmt_offset = -6
-   and   i_category = 'Sports'
+   and   ca_gmt_offset = -5
+   and   i_category = 'Jewelry'
    and   (p_channel_dmail = 'Y' or p_channel_email = 'Y' or p_channel_tv = 'Y')
-   and   s_gmt_offset = -6
-   and   d_year = 2001
-   and   d_moy  = 12) promotional_sales cross join
+   and   s_gmt_offset = -5
+   and   d_year = 1998
+   and   d_moy  = 11) promotional_sales cross join
   (select sum(ss_ext_sales_price) total
    from  {{store_sales}} as store_sales
         cross join {{store}} as store
@@ -36,11 +36,11 @@ from
    and   ss_customer_sk= c_customer_sk
    and   ca_address_sk = c_current_addr_sk
    and   ss_item_sk = i_item_sk
-   and   ca_gmt_offset = -6
-   and   i_category = 'Sports'
-   and   s_gmt_offset = -6
-   and   d_year = 2001
-   and   d_moy  = 12) all_sales
+   and   ca_gmt_offset = -5
+   and   i_category = 'Jewelry'
+   and   s_gmt_offset = -5
+   and   d_year = 1998
+   and   d_moy  = 11) all_sales
 order by promotions, total
 limit 100;
 

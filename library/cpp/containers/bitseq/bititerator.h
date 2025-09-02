@@ -1,8 +1,8 @@
 #pragma once
 
 #include "traits.h"
+#include <bit>
 
-#include <library/cpp/pop_count/popcount.h>
 
 template <typename T>
 class TBitIterator {
@@ -49,7 +49,7 @@ public:
         if (!Mask)
             return *Data & TTraits::ElemMask(count);
 
-        auto usedBits = (size_t)PopCount(Mask - 1);
+        auto usedBits = (size_t)std::popcount(Mask - 1u);
         TWord result = Current >> usedBits;
         auto leftInCurrent = TTraits::NumBits - usedBits;
         if (count <= leftInCurrent)
@@ -72,7 +72,7 @@ public:
             return Current & TTraits::ElemMask(count);
         }
 
-        auto usedBits = (size_t)PopCount(Mask - 1);
+        auto usedBits = (size_t)std::popcount(Mask - 1u);
         TWord result = Current >> usedBits;
         auto leftInCurrent = TTraits::NumBits - usedBits;
         if (count < leftInCurrent) {
@@ -97,7 +97,7 @@ public:
         if (!count)
             return;
 
-        int leftInCurrent = (size_t)PopCount(~(Mask - 1));
+        int leftInCurrent = std::popcount(static_cast<TWord>(~(Mask - 1u)));
         if (count < leftInCurrent) {
             Mask <<= count;
             return;

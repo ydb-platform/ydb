@@ -16,7 +16,6 @@
  * limitations under the License.
  */
 
-#include <boost/format.hpp>
 #include <cctype>
 #include <sstream>
 #include <utility>
@@ -25,7 +24,6 @@
 #include "Schema.hh"
 #include "ValidSchema.hh"
 
-using boost::format;
 using std::make_pair;
 using std::ostringstream;
 using std::shared_ptr;
@@ -37,8 +35,7 @@ using SymbolMap = std::map<Name, NodePtr>;
 
 static bool validate(const NodePtr &node, SymbolMap &symbolMap) {
     if (!node->isValid()) {
-        throw Exception(format("Schema is invalid, due to bad node of type %1%")
-                        % node->type());
+        throw Exception("Schema is invalid, due to bad node of type {}", node->type());
     }
 
     if (node->hasName()) {
@@ -51,7 +48,7 @@ static bool validate(const NodePtr &node, SymbolMap &symbolMap) {
 
         if (node->type() == AVRO_SYMBOLIC) {
             if (!found) {
-                throw Exception(format("Symbolic name \"%1%\" is unknown") % node->name());
+                throw Exception("Symbolic name \"{}\" is unknown", node->name());
             }
 
             shared_ptr<NodeSymbolic> symNode =

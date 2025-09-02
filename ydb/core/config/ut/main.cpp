@@ -1,4 +1,5 @@
 #include <ydb/core/config/utils/config_traverse.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -115,7 +116,8 @@ public:
                     << " " << (field ? FieldName(field) : RootName())
                     << " = " << (field ? field->number() : 0) << ";"
                     << (loop != -1 ? Loop() : "")  << std::endl;
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
     }
 
     void PrintLoops() const {
@@ -130,7 +132,8 @@ public:
                 path.push_back(DescriptorName(d));
                 std::cout << JoinSeq(" -> ", path) << std::endl;
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
 
     }
 
@@ -141,7 +144,8 @@ public:
             if (field && field->is_required()) {
                 fields[typePath.back()->file()][typePath.back()][field].insert(ConstructFullFieldPath(fieldPath, field));
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
         return fields;
     }
 
@@ -260,6 +264,16 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/ActorSystemConfig/ServiceExecutor/ExecutorId/ExecutorId",
             "/AppConfig/SqsConfig/AuthConfig/OauthToken/TokenFile/TokenFile",
             "/AppConfig/SqsConfig/AuthConfig/Jwt/JwtFile/JwtFile",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Path/Project/Project",
+            "/AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Path/Cluster/Cluster",
+            "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Value/Value",
         };
 
         TSet<TVector<ui64>> allowedNumberPaths = {
@@ -348,6 +362,16 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {1, 7, 2, 2}, // /AppConfig/ActorSystemConfig/ServiceExecutor/ExecutorId/ExecutorId
             {27, 67, 1, 1, 1}, // /AppConfig/SqsConfig/AuthConfig/OauthToken/TokenFile/TokenFile
             {27, 67, 2, 1, 1}, // /AppConfig/SqsConfig/AuthConfig/Jwt/JwtFile/JwtFile
+            {73, 21, 1, 100, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Activation/ByHour/Hour/Hour
+            {73, 21, 1, 100, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage
+            {73, 21, 1, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Name/Name
+            {73, 21, 1, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Settings/Value/Value
+            {73, 21, 1, 8, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Path/Project/Project
+            {73, 21, 1, 8, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/ClusterMapping/Path/Cluster/Cluster
+            {73, 21, 2, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Hour/Hour
+            {73, 21, 2, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Activation/ByHour/Percentage/Percentage
+            {73, 21, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Name/Name
+            {73, 21, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Solomon/DefaultSettings/Value/Value
         };
 
         for (const auto& [file, typeToField] : fields) {

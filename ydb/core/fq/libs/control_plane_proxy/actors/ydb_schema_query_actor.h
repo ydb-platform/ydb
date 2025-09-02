@@ -45,6 +45,7 @@ NActors::IActor* MakeDeleteConnectionActor(
     TDuration requestTimeout,
     TCounters& counters,
     const NConfig::TCommonConfig& commonConfig,
+    const TComputeConfig& computeConfig,
     TSigner::TPtr signer);
 
 /// Binding manipulation actors

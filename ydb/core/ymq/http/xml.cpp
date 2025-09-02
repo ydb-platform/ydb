@@ -74,6 +74,16 @@ static TString BoolToString(const bool b) {
     return TString(b ? "true" : "false");
 }
 
+void WriteQueueTagsToXml(const TListQueueTagsResponse& rec, TXmlStringBuilder& xmlBuilder) {
+    for (size_t i = 0; i < rec.TagsSize(); ++i) {
+        const auto& tag = rec.GetTags(i);
+        XML_ELEM("Tag") {
+            XML_ELEM_CONT("Key", tag.GetKey());
+            XML_ELEM_CONT("Value", tag.GetValue());
+        }
+    }
+}
+
 void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStringBuilder& xmlBuilder) {
     if (rec.HasApproximateNumberOfMessages()) {
         XML_ELEM("Attribute") {
@@ -749,6 +759,55 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                         }
                         XML_ELEM("ResponseMetadata") {
                             XML_ELEM_CONT("RequestId", resp.GetListDeadLetterSourceQueues().GetRequestId());
+                        }
+                    }
+                }
+            }
+            result << XML_RESULT();
+            break;
+        }
+
+        case TSqsResponse::kListQueueTags: {
+            HANDLE_ERROR(ListQueueTags);
+            XML_BUILDER() {
+                XML_DOC() {
+                    XML_ELEM("ListQueueTagsResponse") {
+                        XML_ELEM("ListQueueTagsResult") {
+                            const auto& rec = resp.GetListQueueTags();
+                            WriteQueueTagsToXml(rec, xmlBuilder);
+                        }
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", resp.GetListQueueTags().GetRequestId());
+                        }
+                    }
+                }
+            }
+            result << XML_RESULT();
+            break;
+        }
+
+        case TSqsResponse::kTagQueue: {
+            HANDLE_ERROR(TagQueue);
+            XML_BUILDER() {
+                XML_DOC() {
+                    XML_ELEM("TagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", resp.GetTagQueue().GetRequestId());
+                        }
+                    }
+                }
+            }
+            result << XML_RESULT();
+            break;
+        }
+
+        case TSqsResponse::kUntagQueue: {
+            HANDLE_ERROR(UntagQueue);
+            XML_BUILDER() {
+                XML_DOC() {
+                    XML_ELEM("UntagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", resp.GetUntagQueue().GetRequestId());
                         }
                     }
                 }

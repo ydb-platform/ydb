@@ -28,8 +28,8 @@ public:
 
     TString GetRemainedParamsString() const;
 
-    // Throws exception on failure
-    void ValidateResetFeatures() const;
+    // Returns error description
+    [[nodiscard]] std::optional<TString> ValidateResetFeatures() const;
 
     template <class T>
     std::optional<T> Extract(const TString& featureId, const std::optional<T> noExistsValue = {}) {

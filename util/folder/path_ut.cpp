@@ -52,7 +52,7 @@ namespace {
     TTestDirectory::~TTestDirectory() {
         Path_.ForceDelete();
     }
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(TestMkDirs) {
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         // mkdir(2) places umask(2) on mode argument.
         const int mask = Umask(0);
         Umask(mask);
-        UNIT_ASSERT_VALUES_EQUAL(stat.Mode& MODE0777, mode & ~mask);
+        UNIT_ASSERT_VALUES_EQUAL(stat.Mode & MODE0777, mode & ~mask);
     }
 #endif
 
@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     };
 #endif
 
-    Y_UNIT_TEST(TestForceDeleteErrorUnlink) {
+    Y_UNIT_TEST(TestForceDeleteErrorRemove) {
         TTempDir tempDir;
 
         const TFsPath testDir = TFsPath(tempDir()).Child("dir");
@@ -680,14 +680,17 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         Y_DEFER {
             Chmod(testFile.c_str(), MODE0777);
         };
+        // Checks that dir/file with readonly attribute will be deleted
+        // on Windows
+        UNIT_ASSERT_NO_EXCEPTION(testFile.ForceDelete());
 #else
         Chmod(testDir.c_str(), S_IRUSR | S_IXUSR);
         Y_DEFER {
             Chmod(testDir.c_str(), MODE0777);
         };
+        UNIT_ASSERT_EXCEPTION_CONTAINS(testFile.ForceDelete(), TIoException,
+                                       "failed to delete");
 #endif
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(testFile.ForceDelete(), TIoException, "failed to delete");
     }
 
     Y_UNIT_TEST(TestForceDeleteErrorRmdir) {
@@ -698,6 +701,10 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         MakePathIfNotExist(testSubdir.c_str());
 
 #ifdef _win_
+        if (IsWine()) {
+            // Broken since f8699c0a71a528d287b84cd0bc5b5bb7cec924f0 (5.11 wine-version)
+            return;
+        }
         Chmod(testSubdir.c_str(), 0);
         Y_DEFER {
             Chmod(testSubdir.c_str(), MODE0777);
@@ -894,4 +901,4 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
             UNIT_ASSERT_VALUES_EQUAL(split2.at(1), DIR_B);
         }
     }
-}
+} // Y_UNIT_TEST_SUITE(TFsPathTests)

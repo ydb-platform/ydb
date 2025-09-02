@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/library/conclusion/status.h>
-
+#include <ydb/library/accessor/positive_integer.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
 #include <util/datetime/base.h>
@@ -25,6 +25,13 @@ public:
         : PlanStep(planStep)
         , TxId(txId) {
     }
+
+    constexpr TSnapshot(const TPositiveIncreasingControlInteger planStep, const ui64 txId) noexcept
+        : PlanStep(planStep.Val())
+        , TxId(txId) {
+    }
+
+    NJson::TJsonValue SerializeToJson() const;
 
     constexpr TInstant GetPlanInstant() const noexcept {
         return TInstant::MilliSeconds(PlanStep);
@@ -53,6 +60,12 @@ public:
     static constexpr TSnapshot Max() noexcept {
         return TSnapshot(-1ll, -1ll);
     }
+
+    static TSnapshot MaxForPlanInstant(const TInstant planInstant) noexcept;
+
+    static TSnapshot MaxForPlanStep(const ui64 planStep) noexcept;
+
+    static TSnapshot MaxForPlanStep(const TPositiveIncreasingControlInteger planStep) noexcept;
 
     constexpr bool operator==(const TSnapshot&) const noexcept = default;
 
@@ -89,6 +102,10 @@ public:
 
     TString DebugString() const;
     NJson::TJsonValue DebugJson() const;
+
+    explicit operator size_t() const {
+        return CombineHashes(PlanStep, TxId);
+    }
 };
 
 } // namespace NKikimr::NOlap

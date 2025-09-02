@@ -3,6 +3,10 @@ option cc_enable_arenas = true;
 
 package NYql.NPq.NProto;
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
 message TToken {
     string Name = 1; // Key in secure params.
     // TODO: token type (oauth, tvm, iam etc).
@@ -21,6 +25,45 @@ message TWatermarks {
     bool IdlePartitionsEnabled = 4;
 }
 
+message TDqPqFederatedCluster {
+    string Name = 1;
+    string Endpoint = 2;
+    string Database = 3;
+    uint32 PartitionsCount = 4;
+}
+
+// For streaming queries only
+message StreamingDisposition {
+    message FromTime {
+        google.protobuf.Timestamp timestamp = 1;
+    }
+
+    message TimeAgo {
+        google.protobuf.Duration duration = 1;
+    }
+
+    message FromLastCheckpoint {
+        // By default if new query streams set doesn't equal to old query streams set,
+        // error will occur and query won't be allowed to load offsets for streams for the last checkpoint.
+        // If this flag is set all offsets that can be matched with previous query checkpoint will be matched.
+        // Others will use "fresh" streaming disposition.
+        bool force = 1;
+    }
+
+    oneof disposition {
+        google.protobuf.Empty oldest = 1; // Start processing with the oldest offset
+        google.protobuf.Empty fresh = 2; // Start processing with the fresh offset
+        FromTime from_time = 3; // Start processing with offset from the specified time
+        TimeAgo time_ago = 4; // Start processing with offset some time ago
+        FromLastCheckpoint from_last_checkpoint = 5; // Start processing with offset which corresponds to the last checkpoint
+    }
+}
+
+message TTaskSensorLabel {
+    string Label = 1;
+    string Value = 2;
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -33,6 +76,20 @@ message TDqPqTopicSource {
     string DatabaseId = 9;
     repeated string MetadataFields = 10;
     TWatermarks Watermarks = 11;
+    repeated string Columns = 12;
+    repeated string ColumnTypes = 13;
+    string Predicate = 14;
+    bool SharedReading = 15;
+    string ReconnectPeriod = 16; // disabled by default, example of a parameter: 5m
+    bool EnabledLLVM = 17;
+    string ReadGroup = 18;
+    string Format = 19;
+    string RowType = 20; // Final row type with metadata columns
+    repeated TDqPqFederatedCluster FederatedClusters = 21;
+    StreamingDisposition Disposition = 22;
+    repeated TTaskSensorLabel TaskSensorLabel = 23;
+    string WatermarkExpr = 24;
+    repeated uint64 NodeIds = 25;
 }
 
 message TDqPqTopicSink {

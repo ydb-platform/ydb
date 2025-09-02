@@ -117,104 +117,90 @@ public:
     }
 };
 
+template<class T = TSocketDescriptor> // for tests
 class TBufferedWriter {
 public:
-    TBufferedWriter(TSocketDescriptor* socket, size_t size)
+    TBufferedWriter(T* socket, size_t size)
         : Socket(socket)
-        , Buffer(size)
         , BufferSize(size) {
     }
 
     void write(const char* src, size_t length) {
-        size_t possible = std::min(length, Buffer.Avail());
-        if (possible > 0) {
-            Buffer.Append(src, possible);
-        }
-        if (0 == Buffer.Avail()) {
-            flush();
-        }
-        size_t left = length - possible;
-        if (left >= BufferSize) {
-            if (Chunks.empty()) {
-                // optimization for reduce memory copy
-                ssize_t res = Socket->Send(src + possible, left);
-                if (res > 0) {
-                    left -= res;
-                    possible += res;
-                }
-            }
-            if (left > 0) {
-                Buffer.Reserve(left);
-                Buffer.Append(src + possible, left);
-                flush();
-            }
-        } else if (left > 0) {
-            Buffer.Append(src + possible, left);
-        }
-    }
+        size_t left = length;
+        size_t offset = 0;
 
-    ssize_t flush() {
-        if (!Buffer.Empty()) {
-            Chunks.emplace_back(std::move(Buffer));
-            Buffer.Reserve(BufferSize);
-        }
-        while(!Chunks.empty()) {
-            auto& chunk = Chunks.front();
-            ssize_t res = Socket->Send(chunk.Data(), chunk.Size());
-            if (res > 0) {
-                if (static_cast<size_t>(res) == chunk.Size()) {
-                    Chunks.pop_front();
-                } else {
-                    chunk.Shift(res);
-                }
-            } else if (-res == EINTR) {
-                continue;
-            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                return 0;
+        do {
+            TBuffer& buffer = GetOrCreateFrontBuffer();
+            if (buffer.Avail() < left) {
+                size_t avail = buffer.Avail();
+                buffer.Append(src + offset, avail);
+                offset += avail;
+                left -= avail;
+                BuffersDeque.push_front(TBuffer(BufferSize));
             } else {
-                return res;
+                buffer.Append(src + offset, left);
+                break;
+            }
+        } while (left > 0);
+    }
+
+    [[nodiscard]] ssize_t flush() {
+        size_t totalWritten = 0;
+
+        while (!BuffersDeque.empty()) {
+            TBuffer& buffer = BuffersDeque.back();
+            ssize_t left = buffer.Size() - CurrentBufferOffset;
+            while (left > 0) {
+                ssize_t res = Send(buffer.Data() + CurrentBufferOffset, left);
+                if (res < 0) {
+                    return res;
+                } else if (res == left) {
+                    totalWritten += res;
+                    CurrentBufferOffset = 0;
+                    BuffersDeque.pop_back();
+                    break;
+                } else {
+                    left -= res;
+                    CurrentBufferOffset += res;
+                    totalWritten += res;
+                }
             }
         }
 
-        return 0;
+        return totalWritten;
     }
 
-    const char* Data() {
-        return Buffer.Data();
+    TBuffer& GetFrontBuffer() {
+        return GetOrCreateFrontBuffer();
     }
 
-    const TBuffer& GetBuffer() {
-        return Buffer;
+    bool Empty() const {
+        return BuffersDeque.empty();
     }
 
-    size_t Size() {
-        return Buffer.Size();
-    }
-
-    bool Empty() {
-        return Buffer.Empty() && Chunks.empty();
+    const TDeque<TBuffer>& GetBuffersDeque() const {
+        return BuffersDeque;
     }
 
 private:
-    TSocketDescriptor* Socket;
-    TBuffer Buffer;
-    size_t BufferSize; 
+    T* Socket;
+    size_t BufferSize;
+    TDeque<TBuffer> BuffersDeque = {};
+    size_t CurrentBufferOffset = 0;
 
-    struct Chunk {
-        Chunk(TBuffer&& buffer)
-            : Buffer(std::move(buffer))
-            , Position(0) {
+    ssize_t Send(const char* data, size_t length) {
+        ssize_t res = Socket->Send(data, length);
+        
+        return res;
+    }
+
+    TBuffer& GetOrCreateFrontBuffer() {
+        if (BuffersDeque.empty()) {
+            BuffersDeque.push_front(TBuffer(BufferSize));
         }
-
-        TBuffer Buffer;
-        size_t Position;
-
-        const char* Data() { return Buffer.Data() + Position; }
-        size_t Size() { return Buffer.Size() - Position; }
-        void Shift(size_t size) { Position += size; }
-    };
-    std::deque<Chunk> Chunks;
-
+        return BuffersDeque.front();
+    }
 };
 
 } // namespace NKikimr::NRawSocket
+

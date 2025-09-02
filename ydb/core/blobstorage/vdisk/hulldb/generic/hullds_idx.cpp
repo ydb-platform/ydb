@@ -17,6 +17,7 @@ namespace NKikimr {
             case StateCompPolicyAtWork: return "Policy At Work";
             case StateCompInProgress:   return "Compaction In Progress";
             case StateWaitCommit:       return "Committing";
+            case StateWaitPreCompact:   return "Waiting Huge Blob Pre-compaction";
             default:                    return "UNKNOWN";
         }
     }
@@ -200,7 +201,7 @@ namespace NKikimr {
                         DIV_CLASS("col-md-1") {
                             TAG(TH5) { str << "Fresh"; }
                             const char *comp = Fresh.CompactionInProgress() ? "Compaction In Progress" : "No Compaction";
-                            H6_CLASS ("text-info") {str << comp << " W:" << FreshCompWritesInFlight;}
+                            H6_CLASS ("text-info") {str << comp << " R:" << FreshCompReadsInFlight << "/W:" << FreshCompWritesInFlight;}
                         }
                         DIV_CLASS("col-md-11") {Fresh.OutputHtml(str);}
                     }
@@ -220,6 +221,7 @@ namespace NKikimr {
     void TLevelIndex<TKey, TMemRec>::OutputProto(NKikimrVDisk::LevelIndexStat *stat) const {
         NKikimrVDisk::FreshStat *fresh = stat->mutable_fresh();
         fresh->set_compaction_writes_in_flight(FreshCompWritesInFlight);
+        fresh->set_compaction_reads_in_flight(FreshCompReadsInFlight);
         Fresh.OutputProto(fresh);
         NKikimrVDisk::SliceStat *slice = stat->mutable_slice();
         slice->set_compaction_writes_in_flight(HullCompWritesInFlight);

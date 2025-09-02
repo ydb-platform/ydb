@@ -39,9 +39,7 @@ public:
                     follower.InitiateStop(SideEffects);
                     db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                 }
-                if (!tablet->InitiateBlockStorage(SideEffects, std::numeric_limits<ui32>::max())) {
-                    Self->DeleteTabletWithoutStorage(tablet, SideEffects);
-                }
+                Self->BlockStorageForDelete(tabletId, SideEffects);
             } else {
                 BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << tabletId << " already in ETabletState::Deleting");
             }

@@ -17,6 +17,7 @@ namespace NYT::NSkiffExt {
 extern const TString SparseColumnsName;
 extern const TString OtherColumnsName;
 extern const TString KeySwitchColumnName;
+extern const TString RemainingRowBytesColumnName;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,8 +37,9 @@ public:
 
     bool IsRequired() const;
     bool IsNullable() const;
-    std::optional<NSkiff::EWireType> Simplify() const;
-    NSkiff::EWireType ValidatedSimplify() const;
+
+    NSkiff::EWireType ValidatedGetDeoptionalizeType(bool simplify) const;
+    std::optional<NSkiff::EWireType> GetDeoptionalizeType(bool simplify) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,6 +57,7 @@ struct TSkiffTableDescription
 
     std::optional<size_t> RowIndexFieldIndex;
     std::optional<size_t> RangeIndexFieldIndex;
+    std::optional<size_t> RemainingRowBytesFieldIndex;
 
     // $row_index/$range_index field can be written in several modes.
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;
@@ -76,12 +79,16 @@ struct TSkiffTableColumnIds
 
 std::vector<TSkiffTableDescription> CreateTableDescriptionList(
     const std::vector<std::shared_ptr<NSkiff::TSkiffSchema>>& skiffSchema,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName);
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName);
 
 std::vector<std::shared_ptr<NSkiff::TSkiffSchema>> ParseSkiffSchemas(
     const NYTree::IMapNodePtr& skiffSchemaRegistry,
     const NYTree::IListNodePtr& tableSkiffSchemas);
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::pair<std::shared_ptr<NSkiff::TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<NSkiff::TSkiffSchema> skiffSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 

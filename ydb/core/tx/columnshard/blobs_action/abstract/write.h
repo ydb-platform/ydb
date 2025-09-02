@@ -23,7 +23,9 @@ private:
     THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
+    YDB_FLAG_ACCESSOR(Bulk, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
+
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;

@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "logging.h"
 #include "private_events.h"
+#include "target_base.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -141,7 +142,7 @@ public:
         CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
 
         Replication = Self->Find(pathId);
         if (!Replication) {
@@ -150,7 +151,7 @@ public:
             return true;
         }
 
-        if (record.GetIncludeStats()) {
+        if (record.GetIncludeStats() && !Replication->GetConfig().HasTransferSpecific()) {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
                 if (!target) {
@@ -187,6 +188,7 @@ public:
         Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
+        Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;
@@ -195,16 +197,36 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        bool isTransfer = replication->GetConfig().HasTransferSpecific();
+        if (isTransfer) {
+            auto& specific = replication->GetConfig().GetTransferSpecific();
+
+            auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+            transferSpecific.MutableTarget()->SetSrcPath(specific.GetTarget().GetSrcPath());
+            transferSpecific.MutableTarget()->SetDstPath(specific.GetTarget().GetDstPath());
+            transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
+            transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
+        }
+
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
                 continue;
             }
 
+            if (isTransfer) {
+                // transfer always has one target
+                auto& specific = replication->GetConfig().GetTransferSpecific();
+
+                auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
+            }
+
             auto& item = *Result->Record.AddTargets();
             item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
+
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }
@@ -253,9 +275,12 @@ public:
         case TReplication::EState::Done:
             state.MutableDone();
             break;
+        case TReplication::EState::Paused:
+            state.MutablePaused();
+            break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
                 issue->set_message(replication->GetIssue());
             }
             break;

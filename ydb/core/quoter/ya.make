@@ -17,7 +17,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/tx/scheme_cache
     ydb/core/util
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/time_series_vec
 )
 

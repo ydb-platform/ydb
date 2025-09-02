@@ -1,0 +1,23 @@
+--- contrib/python/jsonschema/py3/jsonschema/tests/test_cli.py	(index)
++++ contrib/python/jsonschema/py3/jsonschema/tests/test_cli.py	(working tree)
+@@ -49,7 +49,7 @@ class TestParser(TestCase):
+         arguments = cli.parse_args(
+             [
+                 "--validator",
+-                "jsonschema.tests.test_cli.TestParser.FakeValidator",
++                "__tests__.test_cli.TestParser.FakeValidator",  # XXX Arcadia
+                 "--instance", self.instance_file,
+                 self.schema_file,
+             ]
+@@ -141,11 +141,3 @@ class TestCLI(TestCase):
+         self.assertFalse(stdout.getvalue())
+         self.assertEqual(stderr.getvalue(), "1 - 9\t1 - 8\t2 - 7\t")
+         self.assertEqual(exit_code, 1)
+-
+-    def test_version(self):
+-        version = subprocess.check_output(
+-            [sys.executable, "-m", "jsonschema", "--version"],
+-            stderr=subprocess.STDOUT,
+-        )
+-        version = version.decode("utf-8").strip()
+-        self.assertEqual(version, __version__)

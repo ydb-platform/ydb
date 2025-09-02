@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "pull_parser.h"
+#include "protobuf_interop.h"
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -66,6 +67,9 @@ void Deserialize(unsigned long long& value, TYsonPullParserCursor* cursor);
 // double
 void Deserialize(double& value, TYsonPullParserCursor* cursor);
 
+// std::string
+void Deserialize(std::string& value, TYsonPullParserCursor* cursor);
+
 // TString
 void Deserialize(TString& value, TYsonPullParserCursor* cursor);
 
@@ -109,6 +113,9 @@ void Deserialize(
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void Deserialize(T& value, TYsonPullParserCursor* cursor);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, TYsonPullParserCursor* cursor);
 
 // TCompactVector.
 template <class T, size_t N>
@@ -139,11 +146,11 @@ void Deserialize(
     std::enable_if_t<ArePullParserDeserializable<T...>(), void*> = nullptr);
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
+template <NMpl::CAssociative TContainer>
 void Deserialize(
-    C<T...>& value,
+    TContainer& value,
     TYsonPullParserCursor* cursor,
-    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename C<T...>::value_type>::Type>(), void*> = nullptr);
+    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename TContainer::value_type>::Type>(), void*> = nullptr);
 
 template <class E, class T, E Min, E Max>
 void Deserialize(
@@ -159,6 +166,18 @@ void Deserialize(std::unique_ptr<T>& value, TYsonPullParserCursor* cursor);
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, TYsonPullParserCursor* cursor);
+
+void DeserializeProtobufMessage(
+    google::protobuf::Message& message,
+    const NYson::TProtobufMessageType* type,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYson::TProtobufWriterOptions& options = {});
+
+template <class T>
+    requires std::derived_from<T, google::protobuf::Message>
+void Deserialize(
+    T& message,
+    NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

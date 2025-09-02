@@ -2,7 +2,8 @@
 
 [![codecov](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures/branch/master/graph/badge.svg)](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures)
 [![CI](https://github.com/dev-petrov/pytest-lazy-fixtures/workflows/CI/badge.svg)](https://github.com/dev-petrov/pytest-lazy-fixtures/actions/workflows/ci-test.yml)
-[![PyPI version](https://badge.fury.io/py/pytest-lazy-fixtures.svg)](https://badge.fury.io/py/pytest-lazy-fixtures)
+[![PyPI version](https://badge.fury.io/py/pytest-lazy-fixtures.svg)](https://pypi.org/project/pytest-lazy-fixtures/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/pytest-lazy-fixtures)](https://pypistats.org/packages/pytest-lazy-fixtures)
 
 Use your fixtures in `@pytest.mark.parametrize`.
 
@@ -13,6 +14,7 @@ Improvements that have been made in this project:
 1. You can use fixtures in any data structures
 2. You can access the attributes of fixtures
 3. You can use functions in fixtures
+4. It is compatible with [pytest-deadfixtures](https://github.com/jllorencetti/pytest-deadfixtures)
 
 ## Installation
 
@@ -22,7 +24,7 @@ pip install pytest-lazy-fixtures
 
 ## Usage
 
-To use your fixtures inside `@pytest.mark.parametrize` you can use `lf` (`lazy_fixture`) or `pytest.lazy_fixtures`.
+To use your fixtures inside `@pytest.mark.parametrize` you can use `lf` (`lazy_fixture`).
 
 ```python
 import pytest
@@ -33,10 +35,6 @@ def one():
     return 1
 
 @pytest.mark.parametrize('arg1,arg2', [('val1', lf('one'))])
-def test_func(arg1, arg2):
-    assert arg2 == 1
-
-@pytest.mark.parametrize('arg1,arg2', [('val1', pytest.lazy_fixtures('one'))])
 def test_func(arg1, arg2):
     assert arg2 == 1
 ```
@@ -75,7 +73,7 @@ def test_func(arg1, arg2):
     assert arg2 == 1
 ```
 
-And there is some useful wrapper called `lfc` (`lazy_fixture_callable`) or `pytest.lazy_fixtures_callable`.
+And there is some useful wrapper called `lfc` (`lazy_fixture_callable`).
 It can work with any callable and your fixtures, e.g.
 
 ```python

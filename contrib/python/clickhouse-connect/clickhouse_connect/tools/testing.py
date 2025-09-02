@@ -1,7 +1,7 @@
 from typing import Sequence, Optional, Union, Dict, Any
 
 from clickhouse_connect.driver import Client
-from clickhouse_connect.driver.query import quote_identifier, str_query_value
+from clickhouse_connect.driver.binding import quote_identifier, str_query_value
 
 
 class TableContext:

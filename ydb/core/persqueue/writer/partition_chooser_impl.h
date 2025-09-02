@@ -86,7 +86,13 @@ TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGro
     }
 
     std::sort(Partitions.begin(), Partitions.end(),
-        [](const TPartitionInfo& a, const TPartitionInfo& b) { return !b.ToBound || (a.ToBound && a.ToBound < b.ToBound); });
+        [](const TPartitionInfo& a, const TPartitionInfo& b) {
+            if (!a.ToBound.has_value() || !b.ToBound.has_value()) {
+                return a.ToBound.has_value() > b.ToBound.has_value();
+            }
+            return a.ToBound < b.ToBound;
+        }
+    );
 }
 
 template<class THasher>
@@ -121,15 +127,10 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
 //
 template<class THasher>
 THashChooser<THasher>::THashChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+    Partitions.resize(config.GetPartitions().size());
     for(const auto& p : config.GetPartitions()) {
-        if (NKikimrPQ::ETopicPartitionStatus::Active == p.GetStatus()) {
-            Partitions.emplace_back(TPartitionInfo{p.GetPartitionId(),
-                                    p.GetTabletId()});
-        }
+        Partitions[p.GetPartitionId()] = TPartitionInfo{p.GetPartitionId(), p.GetTabletId()};
     }
-
-    std::sort(Partitions.begin(), Partitions.end(),
-        [](const TPartitionInfo& a, const TPartitionInfo& b) { return a.PartitionId < b.PartitionId; });
 }
 
 template<class THasher>
@@ -142,12 +143,10 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
 
 template<class THasher>
 const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::GetPartition(ui32 partitionId) const {
-    auto it = std::lower_bound(Partitions.begin(), Partitions.end(), partitionId,
-                    [](const TPartitionInfo& partition, const ui32 value) { return value > partition.PartitionId; });
-    if (it == Partitions.end()) {
+    if (partitionId >= Partitions.size()) {
         return nullptr;
     }
-    return it->PartitionId == partitionId ? it : nullptr;
+    return &Partitions[partitionId];
 }
 
 template<class THasher>
@@ -161,21 +160,4 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
 
 
 } // namespace NPartitionChooser
-
-
-inline IActor* CreatePartitionChooserActorM(TActorId parentId,
-                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                                    NPersQueue::TTopicConverterPtr& fullConverter,
-                                    const TString& sourceId,
-                                    std::optional<ui32> preferedPartition,
-                                    bool withoutHash) {
-    auto chooser = CreatePartitionChooser(config, withoutHash);
-    if (SplitMergeEnabled(config.GetPQTabletConfig())) {
-        return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
-    } else {
-        return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
-    }
-}
-
-
 } // namespace NKikimr::NPQ

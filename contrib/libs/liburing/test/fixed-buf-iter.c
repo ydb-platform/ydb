@@ -64,7 +64,7 @@ static int test(struct io_uring *ring)
 		return 1;
 	}
 
-	if (cqe->res < 0) { 
+	if (cqe->res < 0) {
 		fprintf(stderr, "Error in async operation: %s\n", strerror(-cqe->res));
 		return 1;
 	}
@@ -88,6 +88,8 @@ static int test(struct io_uring *ring)
 		return 1;
 	}
 	io_uring_cqe_seen(ring, cqe);
+	for (i = 0; i < BUFFERS; i++)
+		free(iov[i].iov_base);
 	return 0;
 }
 

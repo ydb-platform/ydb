@@ -7,8 +7,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -35,6 +35,10 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[CancelScriptExecution]";
+        case TOperationId::INCREMENTAL_BACKUP:
+            return "[CancelIncrementalBackup]";
+        case TOperationId::RESTORE:
+            return "[CancelBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -43,18 +47,18 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     IEventBase* MakeRequest() override {
         switch (OperationId.GetKind()) {
         case TOperationId::EXPORT:
-            return new TEvExport::TEvCancelExportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvExport::TEvCancelExportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::IMPORT:
-            return new TEvImport::TEvCancelImportRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
-            return new TEvIndexBuilder::TEvCancelRequest(TxId, DatabaseName, RawOperationId);
+            return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
     }
 
     bool NeedAllocateTxId() const {
-        const Ydb::TOperationId::EKind kind = OperationId.GetKind();
+        const TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX;
@@ -109,6 +113,12 @@ public:
                 SendCancelScriptExecutionOperation();
                 break;
 
+            case TOperationId::INCREMENTAL_BACKUP:
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental backup yet");
+
+            case TOperationId::RESTORE:
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental restore yet");
+
             default:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Unknown operation kind");
             }
@@ -141,7 +151,7 @@ public:
     }
 
     void SendCancelScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(DatabaseName, OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(GetDatabaseName(), OperationId));
     }
 
 private:

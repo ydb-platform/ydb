@@ -1,16 +1,15 @@
 UNITTEST()
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
     channel_scheduler_ut.cpp
+    connection_checker_ut.cpp
     event_holder_pool_ut.cpp
     interconnect_ut.cpp
     large.cpp

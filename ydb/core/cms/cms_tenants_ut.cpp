@@ -441,14 +441,14 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)));
-        // Limit should work for any mode because we are restarting one node already.
+        // Limit should work for any mode except force because we are restarting one node already.
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         env.CheckPermissionRequest("user", false, false, false, true,
                                    MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-        env.CheckPermissionRequest("user", false, false, false, true,
-                                   MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP,
+        env.CheckPermissionRequest("user", false, /* dry */ true, false, true,
+                                   MODE_FORCE_RESTART, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
 
         env.CheckDonePermission("user", res1.second[0]);
@@ -505,27 +505,24 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
         UNIT_ASSERT_VALUES_EQUAL(res1.second.size(), 1);
-        // Limit should work for any mode because we are restarting one node already.
+        // Limit should work for any mode except force because we are restarting one node already.
         env.CheckRequest("user", res1.first, false, TStatus::DISALLOW_TEMP, 0);
         env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP, 0);
-        env.CheckRequest("user", res1.first, false, MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP, 0);
+        env.CheckRequest("user", res1.first, /* dry */ true, MODE_FORCE_RESTART, TStatus::ALLOW, 2);
 
         env.CheckDonePermission("user", res1.second[0]);
 
-        auto res2 = env.ExtractPermissions
-            (env.CheckRequest("user", res1.first, false, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL, 1));
-
-        env.CheckDonePermission("user", res2.second[0]);
+        env.CheckRequest("user", res1.first, /* dry */ true, MODE_FORCE_RESTART, TStatus::ALLOW, 2);
 
         // Now shutdown one node and try various modes again. Only MODE_FORCE_RESTART
-        // should allow to restart another node.
+        // should allow to restart nodes.
         {
             TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
             TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
         }
         env.CheckRequest("user", res1.first, false, TStatus::DISALLOW_TEMP, 0);
         env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP, 0);
-        env.CheckRequest("user", res1.first, false, MODE_FORCE_RESTART, TStatus::ALLOW, 1);
+        env.CheckRequest("user", res1.first, false, MODE_FORCE_RESTART, TStatus::ALLOW, 2);
     }
 
     Y_UNIT_TEST(TestTenantLimitForceRestartModeScheduled) {

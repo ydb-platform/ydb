@@ -4,7 +4,7 @@ import time
 
 from ydb.tests.library.nemesis.safety_warden import SafetyWarden
 
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.util import PDiskState
 
 

@@ -141,8 +141,16 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         }
 
         const auto& settings = tableInfo->TTLSettings().GetEnabled();
-        const TDuration expireAfter = TDuration::Seconds(settings.GetExpireAfterSeconds());
-        const TInstant wallClock = ctx.Now() - expireAfter;
+
+        auto expireAfter = GetExpireAfter(settings, true);
+        if (expireAfter.IsFail()) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Invalid TTL settings: " << expireAfter.GetErrorMessage()
+                    << ": shardIdx: " << tableShardInfo.ShardIdx << ": pathId: " << shardInfo.PathId
+                    << ", at schemeshard: " << Self->TabletID());
+            return false;
+        }
+        const TInstant wallClock = ctx.Now() - *expireAfter;
 
         NKikimrTxDataShard::TEvConditionalEraseRowsRequest request;
         request.SetTableId(shardInfo.PathId.LocalPathId);
@@ -230,7 +238,8 @@ private:
             }
 
             auto index = GetIndex(childPath);
-            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
+                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                 continue;
             }
 
@@ -267,6 +276,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
+        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 
@@ -282,8 +292,9 @@ private:
         }
 
         for (const ui32 mainColumnId : mainTable->KeyColumnIds) {
-            Y_ABORT_UNLESS(mainTable->Columns.contains(mainColumnId));
-            const TString& mainKey = mainTable->Columns.at(mainColumnId).Name;
+            auto it = mainTable->Columns.find(mainColumnId);
+            Y_ABORT_UNLESS(it != mainTable->Columns.end());
+            const TString& mainKey = it->second.Name;
 
             if (keys.contains(mainKey)) {
                 continue;
@@ -296,7 +307,7 @@ private:
         return result;
     }
 
-    static THashMap<TString, ui32> MakeColumnNameToId(const THashMap<ui32, TTableInfo::TColumn>& columns) {
+    static THashMap<TString, ui32> MakeColumnNameToId(const TMap<ui32, TTableInfo::TColumn>& columns) {
         THashMap<TString, ui32> result;
 
         for (const auto& [id, column] : columns) {

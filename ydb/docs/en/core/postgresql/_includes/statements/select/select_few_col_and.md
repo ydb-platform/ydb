@@ -1,5 +1,5 @@
 ```sql
 SELECT id, name, lastname
-FROM people 
+FROM people
 WHERE age > 30 AND age < 45;
-```  
+```

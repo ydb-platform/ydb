@@ -63,6 +63,9 @@ message MeteringConfig {
         // Default value is inherited from parent or equals 60 seconds for root.
         uint64 billing_period_sec = 2;
 
+        // User-defined labels.
+        map<string, string> labels = 3 [(map_key).length.le = 256, (length).le = 10240, (size).le = 100];
+
         // Billing metric JSON fields (inherited from parent if not set)
         google.protobuf.Struct metric_fields = 10;
     }
@@ -266,6 +269,11 @@ message DescribeResourceResult {
 //
 
 message AcquireResourceRequest {
+    // If cancel_after is set greater than zero and less than operation_timeout
+    // and resource is not ready after cancel_after time,
+    // the result code of this operation will be CANCELLED and resource will not be spent.
+    // It is recommended to specify both operation_timeout and cancel_after.
+    // cancel_after should be less than operation_timeout and non zero.
     Ydb.Operations.OperationParams operation_params = 1;
 
     // Path of a coordination node.

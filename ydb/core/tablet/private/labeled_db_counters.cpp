@@ -1,6 +1,5 @@
 #include "labeled_db_counters.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <util/string/split.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 
@@ -31,7 +30,7 @@ void TPQCounters::Apply(ui64 tabletId, const NKikimr::TTabletLabeledCountersBase
         }
     }
 
-    auto& el = LabeledCountersByGroup.InsertIfAbsent(group, new TAggregatedLabeledCounters(
+    auto el = LabeledCountersByGroup.InsertIfAbsent(group, new TAggregatedLabeledCounters(
         labeledCounters->GetCounters().Size(), labeledCounters->GetAggrFuncs(),
         labeledCounters->GetNames(), labeledCounters->GetTypes(), groupNames));
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "actor.h"
-#include "executor_thread.h"
 
 #include <util/system/defaults.h>
 

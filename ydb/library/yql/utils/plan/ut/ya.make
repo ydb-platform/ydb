@@ -5,10 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/ast
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/ast
+    yql/essentials/providers/common/provider
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

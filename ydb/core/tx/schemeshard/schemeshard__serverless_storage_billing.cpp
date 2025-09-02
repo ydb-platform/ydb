@@ -32,7 +32,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         const TSubDomainInfo::TDiskSpaceUsage& spaceUsage = domainDescr->GetDiskSpaceUsage();
 
         if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxServerlessStorageBilling: unable to make a bill, domain is not a serverless db"
                          << ", schemeshardId: " << Self->SelfTabletId()
                          << ", domainId: " << Self->ParentDomainId);
@@ -46,7 +46,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         TimeToNextBill = TimeGrid.GetNext(cur).Start;
 
         if (!Self->AllowServerlessStorageBilling) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxServerlessStorageBilling: unable to make a bill, AllowServerlessStorageBilling is false"
                          << ", schemeshardId: " << Self->SelfTabletId()
                          << ", domainId: " << Self->ParentDomainId
@@ -68,7 +68,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                          << ", schemeshardId: " << Self->SelfTabletId()
                          << ", domainId: " << Self->ParentDomainId
@@ -166,6 +166,15 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                  {"finish", toBill.End.Seconds()}
              }},
         };
+
+        for (const auto& [k, v] : dbRootEl->UserAttrs->Attrs) {
+            auto label = TStringBuf(k);
+            if (!label.SkipPrefix("label_")) {
+                continue;
+            }
+
+            json["labels"][label] = v;
+        }
 
         TStringBuilder billRecord;
         NJson::WriteJson(&billRecord.Out, &json, /*formatOutput=*/false, /*sortkeys=*/false);

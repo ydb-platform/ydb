@@ -8,8 +8,12 @@
 
 #include <time.h>
 
-#define AWS_DATE_TIME_STR_MAX_LEN 100
-#define AWS_DATE_TIME_STR_MAX_BASIC_LEN 20
+AWS_PUSH_SANE_WARNING_LEVEL
+
+enum {
+    AWS_DATE_TIME_STR_MAX_LEN = 100,
+    AWS_DATE_TIME_STR_MAX_BASIC_LEN = 20,
+};
 
 struct aws_byte_buf;
 struct aws_byte_cursor;
@@ -76,11 +80,14 @@ AWS_COMMON_API void aws_date_time_init_epoch_secs(struct aws_date_time *dt, doub
  * Initializes dt to be the time represented by date_str in format 'fmt'. Returns AWS_OP_SUCCESS if the
  * string was successfully parsed, returns  AWS_OP_ERR if parsing failed.
  *
+ * The parser is lenient regarding AWS_DATE_FORMAT_ISO_8601 vs AWS_DATE_FORMAT_ISO_8601_BASIC.
+ * Regardless of which you pass in, both "2002-10-02T08:05:09Z" and "20021002T080509Z" would be accepted.
+ *
  * Notes for AWS_DATE_FORMAT_RFC822:
  * If no time zone information is provided, it is assumed to be local time (please don't do this).
  *
- * If the time zone is something other than something indicating Universal Time (e.g. Z, UT, UTC, or GMT) or an offset
- * from UTC (e.g. +0100, -0700), parsing will fail.
+ * Only time zones indicating Universal Time (e.g. Z, UT, UTC, or GMT),
+ * or offsets from UTC (e.g. +0100, -0700), are accepted.
  *
  * Really, it's just better if you always use Universal Time.
  */
@@ -155,5 +162,6 @@ AWS_COMMON_API bool aws_date_time_dst(const struct aws_date_time *dt, bool local
 AWS_COMMON_API time_t aws_date_time_diff(const struct aws_date_time *a, const struct aws_date_time *b);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_DATE_TIME_H */

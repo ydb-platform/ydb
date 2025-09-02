@@ -17,20 +17,29 @@ except ImportError:
         pass
 
 
-def _make_node(Name, Fields, Attributes, Bases):
-    NBFields = len(Fields)
+try:
+    from ast import type_param
+except ImportError:
+    class type_param(AST):
+        pass
 
+
+def _make_node(Name, Fields, Attributes, Bases):
+
+    # This constructor is used a lot during conversion from ast to gast,
+    # then as the primary way to build ast nodes. So we tried to optimized it
+    # for speed and not for readability.
     def create_node(self, *args, **kwargs):
-        if args:
-            if len(args) + len([k for k in kwargs if k in Fields]) != NBFields:
-                raise TypeError(
-                    "{} constructor takes either 0 or {} mandatory arguments".
-                    format(Name, NBFields))
-            for argname, argval in zip(Fields, args):
-                setattr(self, argname, argval)
-        if kwargs:
-            for argname, argval in kwargs.items():
-                setattr(self, argname, argval)
+        if len(args) > len(Fields):
+            raise TypeError(
+                "{} constructor takes at most {} positional arguments".
+                format(Name, len(Fields)))
+
+        # it's faster to iterate rather than zipping or enumerate
+        for i in range(len(args)):
+            setattr(self, Fields[i], args[i])
+        if kwargs:  # cold branch
+            self.__dict__.update(kwargs)
 
     setattr(_sys.modules[__name__],
             Name,
@@ -51,16 +60,16 @@ _nodes = (
 
     # stmt
     ('FunctionDef', (('name', 'args', 'body', 'decorator_list', 'returns',
-                      'type_comment'),
+                      'type_comment', 'type_params'),
                      ('lineno', 'col_offset', 'end_lineno', 'end_col_offset',),
                      (stmt,))),
-    ('AsyncFunctionDef', (('name', 'args', 'body',
-                           'decorator_list', 'returns',
-                           'type_comment'),
+    ('AsyncFunctionDef', (('name', 'args', 'body', 'decorator_list', 'returns',
+                           'type_comment', 'type_params',),
                           ('lineno', 'col_offset',
                            'end_lineno', 'end_col_offset',),
                           (stmt,))),
-    ('ClassDef', (('name', 'bases', 'keywords', 'body', 'decorator_list',),
+    ('ClassDef', (('name', 'bases', 'keywords', 'body', 'decorator_list',
+                   'type_params',),
                   ('lineno', 'col_offset', 'end_lineno', 'end_col_offset',),
                   (stmt,))),
     ('Return', (('value',),
@@ -72,6 +81,9 @@ _nodes = (
     ('Assign', (('targets', 'value', 'type_comment'),
                 ('lineno', 'col_offset', 'end_lineno', 'end_col_offset',),
                 (stmt,))),
+    ('TypeAlias', (('name', 'type_params', 'value'),
+                  ('lineno', 'col_offset', 'end_lineno', 'end_col_offset',),
+                  (stmt,))),
     ('AugAssign', (('target', 'op', 'value',),
                    ('lineno', 'col_offset', 'end_lineno', 'end_col_offset',),
                    (stmt,))),
@@ -340,7 +352,24 @@ _nodes = (
 
     # type_ignore
     ('type_ignore', ((), ('lineno', 'tag'), (TypeIgnore,))),
+
+    # type_param
+    ('TypeVar', (('name', 'bound',),
+                 ('lineno', 'col_offset',
+                  'end_lineno', 'end_col_offset'),
+                 (type_param,))),
+    ('ParamSpec', (('name',),
+                 ('lineno', 'col_offset',
+                  'end_lineno', 'end_col_offset'),
+                 (type_param,))),
+    ('TypeVarTuple', (('name',),
+                 ('lineno', 'col_offset',
+                  'end_lineno', 'end_col_offset'),
+                 (type_param,))),
     )
+
+
+
 
 for name, descr in _nodes:
     _make_node(name, *descr)
@@ -440,3 +469,95 @@ def increment_lineno(node, n=1):
         if 'end_lineno' in child._attributes:
             child.end_lineno = (getattr(child, 'end_lineno', 0) or 0) + n
     return node
+
+if _sys.version_info.major == 3 and _sys.version_info.minor >= 13:
+    dump = _ast.dump
+else:
+    # Code import from Lib/ast.py
+    #
+    # minor changes: getattr(x, y, ...) is None => getattr(x, y, 42) is None
+    #
+    def dump(
+        node, annotate_fields=True, include_attributes=False,
+        # *,  # removed for compatibility with python2 :-/
+        indent=None, show_empty=False,
+    ):
+        """
+        Return a formatted dump of the tree in node.  This is mainly useful for
+        debugging purposes.  If annotate_fields is true (by default),
+        the returned string will show the names and the values for fields.
+        If annotate_fields is false, the result string will be more compact by
+        omitting unambiguous field names.  Attributes such as line
+        numbers and column offsets are not dumped by default.  If this is wanted,
+        include_attributes can be set to true.  If indent is a non-negative
+        integer or string, then the tree will be pretty-printed with that indent
+        level. None (the default) selects the single line representation.
+        If show_empty is False, then empty lists and fields that are None
+        will be omitted from the output for better readability.
+        """
+        def _format(node, level=0):
+            if indent is not None:
+                level += 1
+                prefix = '\n' + indent * level
+                sep = ',\n' + indent * level
+            else:
+                prefix = ''
+                sep = ', '
+            if isinstance(node, AST):
+                cls = type(node)
+                args = []
+                args_buffer = []
+                allsimple = True
+                keywords = annotate_fields
+                for name in node._fields:
+                    try:
+                        value = getattr(node, name)
+                    except AttributeError:
+                        keywords = True
+                        continue
+                    if value is None and getattr(cls, name, 42) is None:
+                        keywords = True
+                        continue
+                    if (
+                        not show_empty
+                        and (value is None or value == [])
+                        # Special cases:
+                        # `Constant(value=None)` and `MatchSingleton(value=None)`
+                        and not isinstance(node, (Constant, MatchSingleton))
+                    ):
+                        args_buffer.append(repr(value))
+                        continue
+                    elif not keywords:
+                        args.extend(args_buffer)
+                        args_buffer = []
+                    value, simple = _format(value, level)
+                    allsimple = allsimple and simple
+                    if keywords:
+                        args.append('%s=%s' % (name, value))
+                    else:
+                        args.append(value)
+                if include_attributes and node._attributes:
+                    for name in node._attributes:
+                        try:
+                            value = getattr(node, name)
+                        except AttributeError:
+                            continue
+                        if value is None and getattr(cls, name, 42) is None:
+                            continue
+                        value, simple = _format(value, level)
+                        allsimple = allsimple and simple
+                        args.append('%s=%s' % (name, value))
+                if allsimple and len(args) <= 3:
+                    return '%s(%s)' % (node.__class__.__name__, ', '.join(args)), not args
+                return '%s(%s%s)' % (node.__class__.__name__, prefix, sep.join(args)), False
+            elif isinstance(node, list):
+                if not node:
+                    return '[]', True
+                return '[%s%s]' % (prefix, sep.join(_format(x, level)[0] for x in node)), False
+            return repr(node), True
+
+        if not isinstance(node, AST):
+            raise TypeError('expected AST, got %r' % node.__class__.__name__)
+        if indent is not None and not isinstance(indent, str):
+            indent = ' ' * indent
+        return _format(node)[0]

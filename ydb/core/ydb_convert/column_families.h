@@ -133,6 +133,10 @@ namespace NKikimr {
                 }
             }
 
+            if (settings.has_external_data_channels_count()) {
+                MutableDefaultFamily()->MutableStorageConfig()->SetExternalChannelsCount(settings.external_data_channels_count());
+            }
+
             return true;
         }
 
@@ -144,6 +148,12 @@ namespace NKikimr {
             if (familySettings.name().empty()) {
                 *code = Ydb::StatusIds::BAD_REQUEST;
                 *error = "Missing column family name";
+                return false;
+            }
+
+            if (familySettings.has_compression_level()) {
+                *code = Ydb::StatusIds::BAD_REQUEST;
+                *error = "Field `COMPRESSION_LEVEL` is not supported for OLTP tables";
                 return false;
             }
 
@@ -177,13 +187,15 @@ namespace NKikimr {
                 case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
                     break;
                 case Ydb::FeatureFlag::ENABLED:
-                    *code = Ydb::StatusIds::BAD_REQUEST;
-                    *error = TStringBuilder()
-                        << "Setting keep_in_memory to ENABLED is not supported in column family '"
-                        << familySettings.name() << "'";
-                    return false;
+                    if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting keep_in_memory to ENABLED is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
+                    break;
                 case Ydb::FeatureFlag::DISABLED:
-                    family->ClearColumnCache();
+                    family->SetColumnCache(NKikimrSchemeOp::ColumnCacheNone);
                     break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;
@@ -206,22 +218,13 @@ namespace NKikimr {
                 return true;
             }
 
-            const auto* defaultFamily = FindDefaultFamily();
-            if (!defaultFamily) {
-                *code = Ydb::StatusIds::BAD_REQUEST;
-                *error = TStringBuilder()
-                    << "Missing 'default' column family in the table definition";
-                return false;
-            }
-
-            if (!defaultFamily->HasStorageConfig() ||
-                !defaultFamily->GetStorageConfig().HasSysLog() ||
-                !defaultFamily->GetStorageConfig().HasLog())
-            {
-                *code = Ydb::StatusIds::BAD_REQUEST;
-                *error = TStringBuilder()
-                    << "Column families cannot be used without tablet_commit_log0 and tablet_commit_log1 media defined";
-                return false;
+            for (size_t index = 0; index < PartitionConfig->ColumnFamiliesSize(); ++index) {
+                auto columnFamily = PartitionConfig->GetColumnFamilies(index);
+                if (columnFamily.HasColumnCodecLevel()) {
+                    *code = Ydb::StatusIds::BAD_REQUEST;
+                    *error = "Field `COMPRESSION_LEVEL` is not supported for OLTP tables";
+                    return false;
+                }
             }
 
             return true;

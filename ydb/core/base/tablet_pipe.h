@@ -54,7 +54,10 @@ namespace NKikimr {
         struct TEvConnectResult : public TEventPB<TEvConnectResult, NKikimrTabletPipe::TEvConnectResult, EvConnectResult> {
             TEvConnectResult() {}
 
-            TEvConnectResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TActorId& clientId, const TActorId& serverId, bool leader, ui32 generation)
+            TEvConnectResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
+                    const TActorId& clientId, const TActorId& serverId,
+                    bool leader, ui32 generation,
+                    TString&& versionInfo)
             {
                 Record.SetStatus(status);
                 Record.SetTabletId(tabletId);
@@ -63,6 +66,9 @@ namespace NKikimr {
                 Record.SetLeader(leader);
                 Record.SetSupportsDataInPayload(true);
                 Record.SetGeneration(generation);
+                if (!versionInfo.empty()) {
+                    Record.SetVersionInfo(std::move(versionInfo));
+                }
             }
         };
 
@@ -121,7 +127,10 @@ namespace NKikimr {
         };
 
         struct TEvClientConnected : public TEventLocal<TEvClientConnected, EvClientConnected> {
-            TEvClientConnected(ui64 tabletId, NKikimrProto::EReplyStatus status, const TActorId& clientId, const TActorId& serverId, bool leader, bool dead, ui64 generation)
+            TEvClientConnected(ui64 tabletId, NKikimrProto::EReplyStatus status,
+                    const TActorId& clientId, const TActorId& serverId,
+                    bool leader, bool dead, ui64 generation,
+                    TString&& versionInfo = {})
                 : TabletId(tabletId)
                 , Status(status)
                 , ClientId(clientId)
@@ -129,7 +138,20 @@ namespace NKikimr {
                 , Leader(leader)
                 , Dead(dead)
                 , Generation(generation)
+                , VersionInfo(std::move(versionInfo))
             {}
+
+            TString ToString() const override {
+                return TStringBuilder() << ToStringHeader() << " {"
+                    << " TabletId: " << TabletId
+                    << " Status: " << Status
+                    << " ServerId: " << ServerId
+                    << " Leader: " << Leader
+                    << " Dead: " << Dead
+                    << " Generation: " << Generation
+                    << " VersionInfo: " << VersionInfo
+                << " }";
+            }
 
             const ui64 TabletId;
             const NKikimrProto::EReplyStatus Status;
@@ -138,6 +160,7 @@ namespace NKikimr {
             const bool Leader;
             const bool Dead;
             const ui64 Generation;
+            TString VersionInfo;
         };
 
         struct TEvServerConnected : public TEventLocal<TEvServerConnected, EvServerConnected> {
@@ -161,6 +184,14 @@ namespace NKikimr {
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
+
+            TString ToString() const override {
+                return TStringBuilder() << ToStringHeader() << " {"
+                    << " TabletId: " << TabletId
+                    << " ClientId: " << ClientId
+                    << " ServerId: " << ServerId
+                << " }";
+            }
 
             const ui64 TabletId;
             const TActorId ClientId;
@@ -206,13 +237,13 @@ namespace NKikimr {
         };
 
         struct TEvActivate : public TEventLocal<TEvActivate, EvActivate> {
-            TEvActivate(ui64 tabletId, const TActorId& ownerId, const TActorId& recipientId, bool leader, ui32 generation)
+            TEvActivate(ui64 tabletId, const TActorId& ownerId, const TActorId& recipientId, bool leader, ui32 generation, const TString& versionInfo)
                 : TabletId(tabletId)
                 , OwnerId(ownerId)
                 , RecipientId(recipientId)
                 , Leader(leader)
                 , Generation(generation)
-                
+                , VersionInfo(versionInfo)
             {}
 
             const ui64 TabletId;
@@ -220,6 +251,7 @@ namespace NKikimr {
             const TActorId RecipientId;
             const bool Leader;
             const ui32 Generation;
+            TString VersionInfo;
         };
 
         struct TEvShutdown : public TEventLocal<TEvShutdown, EvShutdown> {
@@ -297,7 +329,7 @@ namespace NKikimr {
             // Creates and activated server, returns serverId.
             // Created server will forward messages to the specified recipent.
             virtual TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipient,
-                                    bool leader = true, ui64 generation = 0) = 0;
+                                    bool leader = true, ui64 generation = 0, const TString &versionInfo = {}) = 0;
 
             // Rejects connect with an error.
             virtual void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader = true) = 0;
@@ -314,7 +346,8 @@ namespace NKikimr {
 
             // Activates all inactive servers, created by Enqueue.
             // All activated servers will forward messages to the specified recipent.
-            virtual void Activate(TActorIdentity owner, TActorId recipientId, bool leader = true, ui64 generation = 0) = 0;
+            virtual void Activate(TActorIdentity owner, TActorId recipientId,
+                                  bool leader = true, ui64 generation = 0, const TString &versionInfo = {}) = 0;
 
             // Cleanup resources after reset
             virtual void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) = 0;
@@ -323,6 +356,8 @@ namespace NKikimr {
             virtual bool IsStopped() const = 0;
         };
 
+        struct TClientConfig;
+
         struct TClientRetryPolicy {
             ui32 RetryLimitCount = std::numeric_limits<ui32>::max();
             TDuration MinRetryTime = TDuration::MilliSeconds(10);
@@ -330,7 +365,7 @@ namespace NKikimr {
             ui32 BackoffMultiplier = 2;
             bool DoFirstRetryInstantly = true;
 
-            operator bool() const {
+            explicit operator bool() const {
                 return RetryLimitCount != 0;
             }
 
@@ -347,6 +382,9 @@ namespace NKikimr {
             static TClientRetryPolicy WithRetries() {
                 return {};
             }
+
+            // Allow implicit conversion from retry policy to client config
+            operator TClientConfig() const;
         };
 
         struct TClientRetryState {
@@ -365,19 +403,26 @@ namespace NKikimr {
             bool PreferLocal = false;
             bool CheckAliveness = false;
             bool ExpectShutdown = false;
-            TClientRetryPolicy RetryPolicy;
 
-            TClientConfig()
-                : RetryPolicy(TClientRetryPolicy::WithoutRetries())
-            {}
+            // The default client config policy is without retries
+            // The default-constructed policy itself uses retries however
+            TClientRetryPolicy RetryPolicy = TClientRetryPolicy::WithoutRetries();
 
-            TClientConfig(TClientRetryPolicy retryPolicy)
-                : RetryPolicy(std::move(retryPolicy))
-            {}
+            // Client skips the first resolve attempt when specified
+            // Useful when tablet is already resolved externally
+            TActorId HintTablet{}; // e.g. TEvInfo::CurrentLeader
+            TActorId HintTabletActor{}; // e.g. TEvInfo::CurrentLeaderTablet
         };
 
+        // Allow implicit conversion from retry policy to client config
+        inline TClientRetryPolicy::operator TClientConfig() const {
+            return TClientConfig{
+                .RetryPolicy = *this,
+            };
+        }
+
         // Returns client actor.
-        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = TClientConfig());
+        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = {});
 
         // Sends data via client actor.
         // Payload will be delivered as a event to the owner of server.
@@ -402,7 +447,8 @@ namespace NKikimr {
         IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie);
 
         // Promotes server actor to the active state.
-        void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader, ui64 generation = 0);
+        void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId,
+                bool leader, ui64 generation, const TString& versionInfo);
 
         // Destroys server actor.
         void CloseServer(TActorIdentity owner, TActorId serverId);

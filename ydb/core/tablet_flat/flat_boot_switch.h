@@ -51,7 +51,7 @@ namespace NBoot {
         };
 
         struct TCompactionChanges {
-            NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyUnset;
+            NKikimrCompaction::ECompactionStrategy Strategy = NKikimrCompaction::CompactionStrategyUnset;
             THashMap<ui64, TString> KeyValues;
         };
 
@@ -152,7 +152,7 @@ namespace NBoot {
                         }
                     }
 
-                    Y_ABORT_UNLESS(one.LargeGlobIds.size(), "Part bundle has no page collections");
+                    Y_ENSURE(one.LargeGlobIds.size(), "Part bundle has no page collections");
 
                     if (bundle.HasLegacy())
                         one.Legacy = bundle.GetLegacy();
@@ -248,13 +248,12 @@ namespace NBoot {
         }
 
         void InitTable(ui32 table) {
-            Y_ABORT_UNLESS(table != Max<ui32>(), "Invalid table id in switch");
+            Y_ENSURE(table != Max<ui32>(), "Invalid table id in switch");
             if (Table == Max<ui32>()) {
                 Table = table;
             } else {
-                Y_ABORT_UNLESS(Table == table,
-                    "Inconsistent table id in switch (have %" PRIu32 ", new %" PRIu32 ")",
-                    Table, table);
+                Y_ENSURE(Table == table,
+                    "Inconsistent table id in switch (have " << Table << ", new " << table << ")");
             }
         }
 

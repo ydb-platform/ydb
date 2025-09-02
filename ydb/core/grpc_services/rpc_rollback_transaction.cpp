@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
@@ -7,8 +8,8 @@
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -46,10 +47,13 @@ private:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
+
         TString sessionId;
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+        ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());
 
         if (CheckSession(req->session_id(), Request_.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -74,7 +78,9 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
+
+        const auto& record = ev->Get()->Record;
         AddServerHintsIfAny(record);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {

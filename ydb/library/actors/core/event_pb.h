@@ -19,6 +19,7 @@ namespace NActorsProto {
 } // NActorsProto
 
 namespace NActors {
+    TString EventPBBaseToString(const TString& header, const TString& dbgStr);
 
     class TRopeStream : public NProtoBuf::io::ZeroCopyInputStream {
         TRope::TConstIterator Iter;
@@ -183,9 +184,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            TStringStream ss;
-            ss << ToStringHeader() << " " << Record.ShortDebugString();
-            return ss.Str();
+            return EventPBBaseToString(ToStringHeader(), Record.ShortDebugString());
         }
 
         bool IsSerializable() const override {
@@ -203,10 +202,12 @@ namespace NActors {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
         }
 
-        static IEventBase* Load(TEventSerializedData *input) {
-            THolder<TEventPBBase> ev(new TEv());
+        static TEv* Load(const TEventSerializedData *input) {
+            THolder<TEv> holder(new TEv());
+            TEventPBBase* ev = holder.Get();
             if (!input->GetSize()) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
+                Y_ENSURE(ev->Record.ParseFromString(TString()),
+                    "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
             } else {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 ui64 size = input->GetSize();
@@ -218,11 +219,11 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ABORT("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
                 }
             }
             ev->CachedByteSize = input->GetSize();
-            return ev.Release();
+            return holder.Release();
         }
 
         size_t GetCachedByteSize() const {
@@ -258,7 +259,7 @@ namespace NActors {
         }
 
         const TRope& GetPayload(ui32 id) const {
-            Y_ABORT_UNLESS(id < Payload.size());
+            Y_ENSURE(id < Payload.size());
             return Payload[id];
         }
 
@@ -333,12 +334,7 @@ namespace NActors {
     };
 
     template <typename TEv, typename TRecord, ui32 TEventType>
-    class TEventPB : public TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > {
-        typedef TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > TPbBase;
-        // NOTE: No extra fields allowed: TEventPB must be a "template typedef"
-    public:
-        using TPbBase::TPbBase;
-    };
+    using TEventPB = TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> >;
 
     template <typename TEv, typename TRecord, ui32 TEventType, size_t InitialBlockSize = 512, size_t MaxBlockSize = 16*1024>
     using TEventPBWithArena = TEventPBBase<TEv, TRecord, TEventType, TArenaRecordHolder<TRecord, InitialBlockSize, MaxBlockSize> >;
@@ -406,7 +402,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return GetRecord().ShortDebugString();
+            return EventPBBaseToString(TBase::ToStringHeader(),  GetRecord().ShortDebugString());
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {

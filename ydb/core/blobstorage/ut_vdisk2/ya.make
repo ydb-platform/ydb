@@ -3,7 +3,6 @@ UNITTEST()
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-TIMEOUT(600)
 
 IF (SANITIZER_TYPE)
     ENV(TIMEOUT=400)
@@ -24,7 +23,8 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
     ydb/core/blobstorage/vdisk/common
     ydb/core/tx/scheme_board
-    ydb/library/yql/public/udf/service/stub
+    yql/essentials/public/udf/service/stub
+    ydb/core/util/actorsys_test
 )
 
 END()

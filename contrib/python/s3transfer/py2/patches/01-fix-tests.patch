@@ -1,0 +1,331 @@
+--- contrib/python/s3transfer/py2/tests/functional/test_copy.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_copy.py	(working tree)
+@@ -13,8 +13,8 @@
+ from botocore.exceptions import ClientError
+ from botocore.stub import Stubber
+ 
+-from tests import BaseGeneralInterfaceTest
+-from tests import FileSizeProvider
++from __tests__ import BaseGeneralInterfaceTest
++from __tests__ import FileSizeProvider
+ from s3transfer.manager import TransferManager
+ from s3transfer.manager import TransferConfig
+ from s3transfer.utils import MIN_UPLOAD_CHUNKSIZE
+--- contrib/python/s3transfer/py2/tests/functional/test_crt.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_crt.py	(working tree)
+@@ -20,8 +20,8 @@ from botocore.session import Session
+ 
+ from s3transfer.subscribers import BaseSubscriber
+ 
+-from tests import FileCreator
+-from tests import requires_crt, HAS_CRT
++from __tests__ import FileCreator
++from __tests__ import requires_crt, HAS_CRT
+ 
+ if HAS_CRT:
+     import s3transfer.crt
+--- contrib/python/s3transfer/py2/tests/functional/test_delete.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_delete.py	(working tree)
+@@ -10,7 +10,7 @@
+ # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+-from tests import BaseGeneralInterfaceTest
++from __tests__ import BaseGeneralInterfaceTest
+ from s3transfer.manager import TransferManager
+ 
+ 
+--- contrib/python/s3transfer/py2/tests/functional/test_download.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_download.py	(working tree)
+@@ -19,14 +19,14 @@ import glob
+ 
+ from botocore.exceptions import ClientError
+ 
+-from tests import StreamWithError
+-from tests import FileSizeProvider
+-from tests import RecordingSubscriber
+-from tests import RecordingOSUtils
+-from tests import NonSeekableWriter
+-from tests import BaseGeneralInterfaceTest
+-from tests import skip_if_windows
+-from tests import skip_if_using_serial_implementation
++from __tests__ import StreamWithError
++from __tests__ import FileSizeProvider
++from __tests__ import RecordingSubscriber
++from __tests__ import RecordingOSUtils
++from __tests__ import NonSeekableWriter
++from __tests__ import BaseGeneralInterfaceTest
++from __tests__ import skip_if_windows
++from __tests__ import skip_if_using_serial_implementation
+ from s3transfer.compat import six
+ from s3transfer.compat import SOCKET_ERROR
+ from s3transfer.exceptions import RetriesExceededError
+--- contrib/python/s3transfer/py2/tests/functional/test_manager.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_manager.py	(working tree)
+@@ -14,8 +14,8 @@ from io import BytesIO
+ from botocore.awsrequest import create_request_object
+ import mock
+ 
+-from tests import skip_if_using_serial_implementation
+-from tests import StubbedClientTest
++from __tests__ import skip_if_using_serial_implementation
++from __tests__ import StubbedClientTest
+ from s3transfer.exceptions import CancelledError
+ from s3transfer.exceptions import FatalError
+ from s3transfer.futures import BaseExecutor
+--- contrib/python/s3transfer/py2/tests/functional/test_processpool.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_processpool.py	(working tree)
+@@ -19,8 +19,8 @@ import botocore.exceptions
+ import botocore.session
+ from botocore.stub import Stubber
+ 
+-from tests import unittest
+-from tests import FileCreator
++from __tests__ import unittest
++from __tests__ import FileCreator
+ from s3transfer.compat import six
+ from s3transfer.exceptions import CancelledError
+ from s3transfer.processpool import ProcessTransferConfig
+--- contrib/python/s3transfer/py2/tests/functional/test_upload.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_upload.py	(working tree)
+@@ -21,10 +21,10 @@ from botocore.exceptions import ClientError
+ from botocore.awsrequest import AWSRequest
+ from botocore.stub import ANY
+ 
+-from tests import BaseGeneralInterfaceTest
+-from tests import RecordingSubscriber
+-from tests import RecordingOSUtils
+-from tests import NonSeekableReader
++from __tests__ import BaseGeneralInterfaceTest
++from __tests__ import RecordingSubscriber
++from __tests__ import RecordingOSUtils
++from __tests__ import NonSeekableReader
+ from s3transfer.compat import six
+ from s3transfer.manager import TransferManager
+ from s3transfer.manager import TransferConfig
+--- contrib/python/s3transfer/py2/tests/functional/test_utils.py	(index)
++++ contrib/python/s3transfer/py2/tests/functional/test_utils.py	(working tree)
+@@ -15,8 +15,8 @@ import shutil
+ import socket
+ import tempfile
+ 
+-from tests import unittest
+-from tests import skip_if_windows
++from __tests__ import unittest
++from __tests__ import skip_if_windows
+ from s3transfer.utils import OSUtils
+ 
+ 
+--- contrib/python/s3transfer/py2/tests/unit/test_bandwidth.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_bandwidth.py	(working tree)
+@@ -16,7 +16,7 @@ import tempfile
+ 
+ import mock
+ 
+-from tests import unittest
++from __tests__ import unittest
+ from s3transfer.bandwidth import RequestExceededException
+ from s3transfer.bandwidth import RequestToken
+ from s3transfer.bandwidth import TimeUtils
+--- contrib/python/s3transfer/py2/tests/unit/test_compat.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_compat.py	(working tree)
+@@ -18,8 +18,8 @@ import signal
+ 
+ from botocore.compat import six
+ 
+-from tests import unittest
+-from tests import skip_if_windows
++from __tests__ import unittest
++from __tests__ import skip_if_windows
+ from s3transfer.compat import seekable, readable
+ from s3transfer.compat import BaseManager
+ 
+--- contrib/python/s3transfer/py2/tests/unit/test_copies.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_copies.py	(working tree)
+@@ -10,8 +10,8 @@
+ # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+-from tests import BaseTaskTest
+-from tests import RecordingSubscriber
++from __tests__ import BaseTaskTest
++from __tests__ import RecordingSubscriber
+ from s3transfer.copies import CopyObjectTask
+ from s3transfer.copies import CopyPartTask
+ 
+--- contrib/python/s3transfer/py2/tests/unit/test_crt.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_crt.py	(working tree)
+@@ -18,8 +18,8 @@ from botocore.credentials import CredentialResolver, ReadOnlyCredentials
+ from s3transfer.exceptions import TransferNotDoneError
+ from s3transfer.utils import CallArgs
+ 
+-from tests import FileCreator
+-from tests import requires_crt, HAS_CRT
++from __tests__ import FileCreator
++from __tests__ import requires_crt, HAS_CRT
+ 
+ if HAS_CRT:
+     import awscrt.s3
+--- contrib/python/s3transfer/py2/tests/unit/test_delete.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_delete.py	(working tree)
+@@ -10,7 +10,7 @@
+ # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+-from tests import BaseTaskTest
++from __tests__ import BaseTaskTest
+ from s3transfer.delete import DeleteObjectTask
+ 
+ 
+--- contrib/python/s3transfer/py2/tests/unit/test_download.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_download.py	(working tree)
+@@ -17,13 +17,13 @@ import tempfile
+ import socket
+ import mock
+ 
+-from tests import BaseTaskTest
+-from tests import BaseSubmissionTaskTest
+-from tests import StreamWithError
+-from tests import FileCreator
+-from tests import unittest
+-from tests import RecordingExecutor
+-from tests import NonSeekableWriter
++from __tests__ import BaseTaskTest
++from __tests__ import BaseSubmissionTaskTest
++from __tests__ import StreamWithError
++from __tests__ import FileCreator
++from __tests__ import unittest
++from __tests__ import RecordingExecutor
++from __tests__ import NonSeekableWriter
+ from s3transfer.compat import six
+ from s3transfer.compat import SOCKET_ERROR
+ from s3transfer.exceptions import RetriesExceededError
+--- contrib/python/s3transfer/py2/tests/unit/test_futures.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_futures.py	(working tree)
+@@ -17,9 +17,9 @@ import traceback
+ import mock
+ from concurrent.futures import ThreadPoolExecutor
+ 
+-from tests import unittest
+-from tests import RecordingExecutor
+-from tests import TransferCoordinatorWithInterrupt
++from __tests__ import unittest
++from __tests__ import RecordingExecutor
++from __tests__ import TransferCoordinatorWithInterrupt
+ from s3transfer.exceptions import CancelledError
+ from s3transfer.exceptions import FatalError
+ from s3transfer.exceptions import TransferNotDoneError
+--- contrib/python/s3transfer/py2/tests/unit/test_manager.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_manager.py	(working tree)
+@@ -14,8 +14,8 @@ import time
+ 
+ from concurrent.futures import ThreadPoolExecutor
+ 
+-from tests import unittest
+-from tests import TransferCoordinatorWithInterrupt
++from __tests__ import unittest
++from __tests__ import TransferCoordinatorWithInterrupt
+ from s3transfer.exceptions import CancelledError
+ from s3transfer.exceptions import FatalError
+ from s3transfer.futures import TransferCoordinator
+--- contrib/python/s3transfer/py2/tests/unit/test_processpool.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_processpool.py	(working tree)
+@@ -22,11 +22,11 @@ from botocore.exceptions import ReadTimeoutError
+ from botocore.client import BaseClient
+ from botocore.config import Config
+ 
+-from tests import unittest
+-from tests import skip_if_windows
+-from tests import FileCreator
+-from tests import StreamWithError
+-from tests import StubbedClientTest
++from __tests__ import unittest
++from __tests__ import skip_if_windows
++from __tests__ import FileCreator
++from __tests__ import StreamWithError
++from __tests__ import StubbedClientTest
+ from s3transfer.compat import six
+ from s3transfer.constants import PROCESS_USER_AGENT
+ from s3transfer.exceptions import RetriesExceededError
+--- contrib/python/s3transfer/py2/tests/unit/test_s3transfer.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_s3transfer.py	(working tree)
+@@ -14,11 +14,11 @@ import os
+ import tempfile
+ import shutil
+ import socket
+-from tests import unittest
++from __tests__ import unittest
+ from contextlib import closing
+ 
+ import mock
+-from botocore.vendored import six
++from botocore.compat import six
+ from concurrent import futures
+ 
+ from s3transfer.exceptions import RetriesExceededError
+--- contrib/python/s3transfer/py2/tests/unit/test_subscribers.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_subscribers.py	(working tree)
+@@ -10,7 +10,7 @@
+ # distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ # ANY KIND, either express or implied. See the License for the specific
+ # language governing permissions and limitations under the License.
+-from tests import unittest
++from __tests__ import unittest
+ from s3transfer.exceptions import InvalidSubscriberMethodError
+ from s3transfer.subscribers import BaseSubscriber
+ 
+--- contrib/python/s3transfer/py2/tests/unit/test_tasks.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_tasks.py	(working tree)
+@@ -14,10 +14,10 @@ from concurrent import futures
+ from functools import partial
+ from threading import Event
+ 
+-from tests import unittest
+-from tests import RecordingSubscriber
+-from tests import BaseTaskTest
+-from tests import BaseSubmissionTaskTest
++from __tests__ import unittest
++from __tests__ import RecordingSubscriber
++from __tests__ import BaseTaskTest
++from __tests__ import BaseSubmissionTaskTest
+ from s3transfer.futures import TransferCoordinator
+ from s3transfer.futures import BoundedExecutor
+ from s3transfer.subscribers import BaseSubscriber
+--- contrib/python/s3transfer/py2/tests/unit/test_upload.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_upload.py	(working tree)
+@@ -18,13 +18,13 @@ import math
+ 
+ from botocore.stub import ANY
+ 
+-from tests import unittest
+-from tests import BaseTaskTest
+-from tests import BaseSubmissionTaskTest
+-from tests import FileSizeProvider
+-from tests import RecordingSubscriber
+-from tests import RecordingExecutor
+-from tests import NonSeekableReader
++from __tests__ import unittest
++from __tests__ import BaseTaskTest
++from __tests__ import BaseSubmissionTaskTest
++from __tests__ import FileSizeProvider
++from __tests__ import RecordingSubscriber
++from __tests__ import RecordingExecutor
++from __tests__ import NonSeekableReader
+ from s3transfer.compat import six
+ from s3transfer.futures import IN_MEMORY_UPLOAD_TAG
+ from s3transfer.manager import TransferConfig
+--- contrib/python/s3transfer/py2/tests/unit/test_utils.py	(index)
++++ contrib/python/s3transfer/py2/tests/unit/test_utils.py	(working tree)
+@@ -21,9 +21,9 @@ import io
+ 
+ import mock
+ 
+-from tests import unittest
+-from tests import RecordingSubscriber
+-from tests import NonSeekableWriter
++from __tests__ import unittest
++from __tests__ import RecordingSubscriber
++from __tests__ import NonSeekableWriter
+ from s3transfer.compat import six
+ from s3transfer.futures import TransferFuture
+ from s3transfer.futures import TransferMeta

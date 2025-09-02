@@ -1,9 +1,11 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
@@ -29,12 +31,14 @@ struct TQueryInfo {
 
     std::string Query;
     std::string ExpectedResult;
+    std::string QueryName;
     NYdb::TParams Params;
     bool UseReadRows = false;
     bool UseStaleRO = false;
     TString TablePath;
     std::optional<NYdb::TValue> KeyToRead;
     std::optional<NYdb::NTable::TAlterTableSettings> AlterTable;
+    std::function<NYdb::TStatus(NYdb::NTable::TTableClient& tableClient)> TableOperation;
 
     std::optional<std::function<void(NYdb::NTable::TReadRowsResult)>> ReadRowsResultCallback;
     std::optional<std::function<void(NYdb::NTable::TDataQueryResult)>> DataQueryResultCallback;
@@ -72,7 +76,10 @@ public:
             TString Schema;
         };
 
-        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow>;
+        struct TSkip {
+        };
+
+        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow, TSkip>;
 
         template<class T>
         TDataPortion(const TString& table, T&& data, ui64 size)
@@ -99,7 +106,7 @@ public:
 
     virtual TDataPortions GenerateDataPortion() = 0;
     YDB_READONLY_DEF(std::string, Name);
-    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY_PROTECT(ui64, Size, 0);
 };
 
 using TBulkDataGeneratorList = std::vector<std::shared_ptr<IBulkDataGenerator>>;
@@ -142,6 +149,7 @@ public:
     };
 public:
     virtual ~IWorkloadQueryGenerator() = default;
+    virtual void Init() = 0;
     virtual std::string GetDDLQueries() const = 0;
     virtual TQueryInfoList GetInitialData() = 0;
     virtual TVector<std::string> GetCleanPaths() const = 0;
@@ -173,10 +181,31 @@ public:
         return {};
     }
     virtual TString GetWorkloadName() const = 0;
+    virtual TString GetDescription(ECommandType /*commandType*/, int /*workloadType*/) const {
+        return TString();
+    }
+
+    virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
+    virtual void Init() {};
+
+    void SetClients(NYdb::NQuery::TQueryClient* queryClient, NYdb::NScheme::TSchemeClient* schemeClient,
+        NYdb::NTable::TTableClient* tableClient, NYdb::NTopic::TTopicClient* topicClient)
+    {
+        QueryClient = queryClient;
+        SchemeClient = schemeClient;
+        TableClient = tableClient;
+        TopicClient = topicClient;
+    }
 
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;
+    bool Verbose = false;
+
+    NYdb::NQuery::TQueryClient* QueryClient = nullptr;
+    NYdb::NScheme::TSchemeClient* SchemeClient = nullptr;
+    NYdb::NTable::TTableClient* TableClient = nullptr;
+    NYdb::NTopic::TTopicClient* TopicClient = nullptr;
 };
 
 template<class TP>
@@ -189,6 +218,9 @@ public:
 
     const TParams& GetParams() const {
         return Params;
+    }
+
+    void Init() override {
     }
 
 protected:

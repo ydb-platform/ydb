@@ -932,6 +932,7 @@ function onPDiskInfo(pDisksInfo) {
                     case 'InitialCommonLogParseError':
                     case 'CommonLoggerInitError':
                     case 'OpenFileError':
+                    case 'Stopped':
                         pDiskBlock.style.backgroundColor = red;
                         pDisk.Color = red;
                         state = pDisk.State;

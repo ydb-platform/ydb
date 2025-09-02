@@ -116,7 +116,7 @@ public:
 
     TFuture<IPersistentQueueRowsetPtr> Poll()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto promise = NewPromise<IPersistentQueueRowsetPtr>();
         auto state = GetState();
@@ -155,7 +155,7 @@ private:
         int BatchesRowCount = 0;
         i64 BatchesDataWeight = 0;
         THashMap<int, TTablet> TabletMap;
-        std::atomic<bool> Failed = {false};
+        std::atomic<bool> Failed = false;
     };
 
     using TStatePtr = TIntrusivePtr<TState>;
@@ -679,10 +679,7 @@ private:
                 batch.EndRowIndex - 1,
                 transaction->GetId());
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Error confirming persistent queue rows",
-                batch.TabletIndex,
-                batch.BeginRowIndex,
-                batch.EndRowIndex - 1)
+            THROW_ERROR_EXCEPTION("Error confirming persistent queue rows")
                 << TErrorAttribute("poller_id", PollerId_)
                 << TErrorAttribute("transaction_id", transaction->GetId())
                 << TErrorAttribute("tablet_index", batch.TabletIndex)

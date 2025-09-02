@@ -4,7 +4,8 @@ namespace NKikimr::NTestShard {
 
     TLoadActor::TLoadActor(ui64 tabletId, ui32 generation, TActorId tablet,
             const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings)
-        : TabletId(tabletId)
+        : TActor(&TThis::StateFunc)
+        , TabletId(tabletId)
         , Generation(generation)
         , Tablet(tablet)
         , Settings(settings)
@@ -12,6 +13,20 @@ namespace NKikimr::NTestShard {
 
     TLoadActor::~TLoadActor() {
         ClearKeys();
+    }
+
+    void TLoadActor::Registered(TActorSystem *sys, const TActorId& owner) {
+        TActor::Registered(sys, owner);
+        TabletActorId = owner;
+        auto ev = std::make_unique<IEventHandle>(TEvents::TSystem::Bootstrap, 0, SelfId(), owner, nullptr, 0);
+        if (Settings.HasSecondsBeforeLoadStart()) {
+            sys->Schedule(TDuration::Seconds(Settings.GetSecondsBeforeLoadStart()), ev.release());
+        } else {
+            sys->Send(ev.release());
+        }
+
+        auto *appData = AppData();
+        appData->Icb->RegisterSharedControl(DisableWrites, "TestShardControls.DisableWrites");
     }
 
     void TLoadActor::ClearKeys() {
@@ -25,18 +40,16 @@ namespace NKikimr::NTestShard {
         ConfirmedKeys.clear();
     }
 
-    void TLoadActor::Bootstrap(const TActorId& parentId) {
+    void TLoadActor::Bootstrap() {
         STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
-        TabletActorId = parentId;
         if (Settings.HasStorageServerHost()) {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
                 Settings.GetStorageServerPort()));
-            Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+            Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
         } else {
             RunValidation(true);
         }
         NextWriteTimestamp = TActivationContext::Monotonic();
-        Become(&TThis::StateFunc);
     }
 
     void TLoadActor::PassAway() {
@@ -46,7 +59,7 @@ namespace NKikimr::NTestShard {
         if (ValidationActorId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
         }
-        TActorBootstrapped::PassAway();
+        TActor::PassAway();
     }
 
     void TLoadActor::HandleWakeup() {
@@ -79,7 +92,7 @@ namespace NKikimr::NTestShard {
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight()) {
+            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites) {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
@@ -111,6 +124,12 @@ namespace NKikimr::NTestShard {
 
             if (!DoSomeActionInFlight && (canWriteMore || canReadMore)) {
                 TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                DoSomeActionInFlight = true;
+            }
+
+            if (!DoSomeActionInFlight && ReadsInFlight.empty() && WritesInFlight.empty() && PatchesInFlight.empty() &&
+                    DeletesInFlight.empty() && TransitionInFlight.empty()) {
+                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
                 DoSomeActionInFlight = true;
             }
         }

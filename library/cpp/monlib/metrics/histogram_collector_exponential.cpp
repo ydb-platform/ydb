@@ -22,7 +22,7 @@ namespace NMonitoring {
         {
         }
 
-        void Collect(double value, ui64 count) override {
+        void Collect(double value, ui64 count) noexcept override {
             ui32 index = Max<ui32>();
             if (value <= MinValue_) {
                 index = 0;
@@ -35,12 +35,30 @@ namespace NMonitoring {
             Values_.Add(index, count);
         }
 
-        void Reset() override {
+        void Reset() noexcept override {
             Values_.Reset();
         }
 
         IHistogramSnapshotPtr Snapshot() const override {
             return new TExponentialHistogramSnapshot(Base_, Scale_, Values_.Copy());
+        }
+
+        THolder<IHistogramCollector> Clone() override {
+            return MakeHolder<TExponentialHistogramCollector>(TExponentialHistogramCollector(Values_, Base_, Scale_));
+        }
+
+    private:
+        TExponentialHistogramCollector(TAtomicsArray const& values, double base, double scale)
+            : Values_(values.Size())
+            , Base_(base)
+            , Scale_(scale)
+            , MinValue_(scale)
+            , MaxValue_(scale * std::pow(base, values.Size() - 2))
+            , LogOfBase_(std::log(base))
+        {
+            for(size_t i = 0; i < Values_.Size(); ++i) {
+                Values_.Add(i, values[i]);
+            }
         }
 
     private:

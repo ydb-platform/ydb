@@ -35,7 +35,7 @@ namespace orc {
 
   class PositionProvider {
    private:
-    std::list<uint64_t>::const_iterator position;
+    std::list<uint64_t>::const_iterator position_;
 
    public:
     PositionProvider(const std::list<uint64_t>& positions);
@@ -60,14 +60,14 @@ namespace orc {
    */
   class SeekableArrayInputStream : public SeekableInputStream {
    private:
-    const char* data;
-    uint64_t length;
-    uint64_t position;
-    uint64_t blockSize;
+    const char* data_;
+    uint64_t length_;
+    uint64_t position_;
+    uint64_t blockSize_;
 
    public:
-    SeekableArrayInputStream(const unsigned char* list, uint64_t length, uint64_t block_size = 0);
-    SeekableArrayInputStream(const char* list, uint64_t length, uint64_t block_size = 0);
+    SeekableArrayInputStream(const unsigned char* list, uint64_t length, uint64_t blockSize = 0);
+    SeekableArrayInputStream(const char* list, uint64_t length, uint64_t blockSize = 0);
     virtual ~SeekableArrayInputStream() override;
     virtual bool Next(const void** data, int* size) override;
     virtual void BackUp(int count) override;
@@ -82,14 +82,14 @@ namespace orc {
    */
   class SeekableFileInputStream : public SeekableInputStream {
    private:
-    MemoryPool& pool;
-    InputStream* const input;
-    const uint64_t start;
-    const uint64_t length;
-    const uint64_t blockSize;
-    std::unique_ptr<DataBuffer<char> > buffer;
-    uint64_t position;
-    uint64_t pushBack;
+    MemoryPool& pool_;
+    InputStream* const input_;
+    const uint64_t start_;
+    const uint64_t length_;
+    const uint64_t blockSize_;
+    std::unique_ptr<DataBuffer<char> > buffer_;
+    uint64_t position_;
+    uint64_t pushBack_;
 
    public:
     SeekableFileInputStream(InputStream* input, uint64_t offset, uint64_t byteCount,

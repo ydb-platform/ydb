@@ -1,0 +1,21 @@
+{#- empty string #}
+plugins {
+    id("java-library")
+    id("com.google.protobuf") version "{{ ver_protobuf }}"
+{%- if publish %}
+    `maven-publish`
+    `signing`
+{%- endif %}
+{%- if with_kotlin and kotlin_version %}
+    kotlin("jvm") version "{{ kotlin_version }}"
+{%- endif %}
+}
+
+{%- if jdk_version %}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
+    }
+}
+{%- endif -%}

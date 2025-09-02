@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/string.h>
 
@@ -34,16 +34,24 @@ public:
         return DateTimeFormatName;
     }
 
-    TExprNode::TPtr GetDateTimeFormat() {
+    TExprNode::TPtr GetDateTimeFormat() const {
         return DateTimeFormat;
     }
 
-    TExprNode::TPtr GetTimestampFormatName() {
+    TExprNode::TPtr GetTimestampFormatName() const {
         return TimestampFormatName;
     }
 
-    TExprNode::TPtr GetTimestampFormat() {
+    TExprNode::TPtr GetTimestampFormat() const {
         return TimestampFormat;
+    }
+
+    TExprNode::TPtr GetDateFormat() const {
+        return DateFormat;
+    }
+
+    TExprNode::TPtr GetWatermark() const {
+        return Watermark;
     }
 
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
@@ -60,8 +68,10 @@ private:
     TExprNode::TPtr DateTimeFormat;
     TExprNode::TPtr TimestampFormatName;
     TExprNode::TPtr TimestampFormat;
+    TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
+    TExprNode::TPtr Watermark;
 };
 
 } // namespace NYql

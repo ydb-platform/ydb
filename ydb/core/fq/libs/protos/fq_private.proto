@@ -55,6 +55,7 @@ message GetTaskRequest {
         string query_executor = 1 [(Ydb.length).le = 100];
     }
     Filter filter = 5;
+    uint32 node_id = 6;
 }
 
 message SignedIdentity {
@@ -120,6 +121,9 @@ message GetTaskResult {
         NFq.NConfig.TYdbStorageConfig compute_connection = 37;
         google.protobuf.Duration result_ttl = 38;
         map<string, Ydb.TypedValue> parameters = 39;
+
+        google.protobuf.Timestamp request_submitted_at = 40;
+        repeated uint64 node_id = 41;       // use any nodes if empty 
     }
     repeated Task tasks = 1;
 }
@@ -166,6 +170,7 @@ message PingTaskRequest {
     bool dump_raw_statistics = 38;
     repeated Ydb.ValuePair flat_stats = 39;
     int32 current_load = 40;
+    string timeline = 41;
 }
 
 message PingTaskResult {

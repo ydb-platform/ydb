@@ -1,31 +1,17 @@
 #include "logger_owner.h"
 
-#include <yt/yt/core/misc/serialize.h>
+#include <yt/yt/core/phoenix/type_def.h>
 
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TLoggerOwner::Save(TStreamSaveContext& context) const
+void TLoggerOwner::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Save;
-
-    Save(context, Logger);
+    PHOENIX_REGISTER_FIELD(1, Logger);
 }
 
-void TLoggerOwner::Load(TStreamLoadContext& context)
-{
-    using NYT::Load;
-
-    Load(context, Logger);
-}
-
-void TLoggerOwner::Persist(const TStreamPersistenceContext& context)
-{
-    using NYT::Persist;
-
-    Persist(context, Logger);
-}
+PHOENIX_DEFINE_TYPE(TLoggerOwner);
 
 ////////////////////////////////////////////////////////////////////////////////
 

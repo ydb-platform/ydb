@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import tarfile
 
 
@@ -16,7 +17,11 @@ def main():
 
     for asrc in [x for x in args.input if x.endswith('.asrc') and os.path.exists(x)]:
         with tarfile.open(asrc, 'r') as tar:
-            tar.extractall(path=args.output)
+            if sys.version_info >= (3, 12):
+                tar.extractall(path=args.output, filter='data')
+            else:
+                tar.extractall(path=args.output)
+
 
 
 if __name__ == '__main__':

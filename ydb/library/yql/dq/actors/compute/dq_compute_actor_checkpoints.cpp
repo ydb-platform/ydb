@@ -3,7 +3,7 @@
 #include "dq_compute_actor_impl.h"
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <algorithm>
 
@@ -50,15 +50,6 @@ constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
 TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << checkpoint.GetGeneration() << "." << checkpoint.GetId();
-}
-
-bool IsIngressTask(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (!input.HasSource()) {
-            return false;
-        }
-    }
-    return true;
 }
 
 std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPlan& plan) {
@@ -131,7 +122,7 @@ TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& 
     , Owner(owner)
     , TxId(txId)
     , Task(std::move(task))
-    , IngressTask(IsIngressTask(Task))
+    , IngressTask(IsIngress(Task))
     , CheckpointStorage(MakeCheckpointStorageID())
     , ComputeActor(computeActor)
     , PendingCheckpoint(Task)
@@ -407,7 +398,7 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvInterconnect::TEvNodeConnect
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_D("Handle undelivered");
-    if (!EventsQueue.HandleUndelivered(ev)) {
+    if (EventsQueue.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
         LOG_E("TEvUndelivered: " << ev->Get()->SourceType);
     }
 }
@@ -592,6 +583,30 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& tas
         }
     }
     return NDqProto::CHECKPOINTING_MODE_DISABLED;
+}
+
+bool IsIngress(const TDqTaskSettings& task) {
+    // No inputs at all or the only inputs are sources.
+    for (const auto& input : task.GetInputs()) {
+        if (!input.HasSource()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsEgress(const TDqTaskSettings& task) {
+    for (const auto& output : task.GetOutputs()) {
+        if (output.HasSink()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasState(const TDqTaskSettings& task) {
+    Y_UNUSED(task);
+    return true;
 }
 
 } // namespace NYql::NDq

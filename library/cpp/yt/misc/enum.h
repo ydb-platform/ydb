@@ -26,22 +26,18 @@ namespace NYT {
 template <class T>
 void GetEnumTraitsImpl(T);
 
+template <class T, class S>
+constexpr bool CanFitSubtype();
+
 template <class T>
 using TEnumTraitsImpl = decltype(GetEnumTraitsImpl(T()));
 
 template <class T>
-constexpr bool IsEnumDomainSizeKnown()
-{
-    if constexpr(requires{ TEnumTraitsImpl<T>::DomainSize; }) {
-        return true;
-    } else {
-        return false;
-    }
-}
+constexpr std::optional<T> TryGetEnumUnknownValueImpl(T);
 
 template <
     class T,
-    bool = IsEnumDomainSizeKnown<T>()
+    bool DomainSizeKnown = requires{ TEnumTraitsImpl<T>::DomainSize; }
 >
 struct TEnumTraitsWithKnownDomain
 { };
@@ -59,7 +55,7 @@ struct TEnumTraits
 };
 
 template <class T>
-struct TEnumTraitsWithKnownDomain<T, true>
+struct TEnumTraitsWithKnownDomain<T, /*DomainSizeKnown*/ true>
 {
     static constexpr int GetDomainSize();
 
@@ -73,6 +69,8 @@ struct TEnumTraitsWithKnownDomain<T, true>
         requires (!TEnumTraitsImpl<T>::IsBitEnum);
 
     // For bit enums only.
+    static constexpr T GetAllSetValue()
+        requires (TEnumTraitsImpl<T>::IsBitEnum);
     static std::vector<T> Decompose(T value)
         requires (TEnumTraitsImpl<T>::IsBitEnum);
 };
@@ -86,20 +84,25 @@ struct TEnumTraits<T, true>
     static constexpr bool IsStringSerializableEnum = TEnumTraitsImpl<T>::IsStringSerializableEnum;
     static constexpr bool IsMonotonic = TEnumTraitsImpl<T>::IsMonotonic;
 
-    static TStringBuf GetTypeName();
+    static constexpr TStringBuf GetTypeName();
 
-    static std::optional<TStringBuf> FindLiteralByValue(T value);
-    static std::optional<T> FindValueByLiteral(TStringBuf literal);
+    static constexpr std::optional<T> TryGetUnknownValue();
+    static constexpr std::optional<TStringBuf> FindLiteralByValue(T value);
+    static constexpr std::optional<T> FindValueByLiteral(TStringBuf literal);
+
+    static constexpr bool IsKnownValue(T value)
+        requires (!TEnumTraitsImpl<T>::IsBitEnum);
+    static constexpr bool IsValidValue(T value);
 
     static TString ToString(T value);
-    static T FromString(TStringBuf literal);
+    static constexpr T FromString(TStringBuf literal);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Defines a smart enumeration with a specific underlying type.
 /*!
- * \param enumType Enumeration enumType.
+ * \param enumType Enumeration type.
  * \param seq Enumeration domain encoded as a <em>sequence</em>.
  * \param underlyingType Underlying type.
  */
@@ -124,35 +127,37 @@ struct TEnumTraits<T, true>
 
 //! Defines a smart enumeration with a specific underlying type.
 /*!
- * \param enumType Enumeration enumType.
+ * \param enumType Enumeration type.
  * \param seq Enumeration domain encoded as a <em>sequence</em>.
  * \param underlyingType Underlying type.
  */
 #define DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(enumType, underlyingType, seq) \
     ENUM__CLASS(enumType, underlyingType, seq) \
+    ENUM__BITWISE_OPS(enumType) \
     ENUM__BEGIN_TRAITS(enumType, underlyingType, true, false, seq) \
     ENUM__VALIDATE_UNIQUE(enumType) \
+    ENUM__ALL_SET_VALUE(enumType, seq) \
     ENUM__END_TRAITS(enumType) \
-    ENUM__BITWISE_OPS(enumType) \
     static_assert(true)
 
 //! Defines a smart enumeration with a specific underlying type.
 //! Duplicate enumeration values are allowed.
 /*!
- * \param enumType Enumeration enumType.
+ * \param enumType Enumeration type.
  * \param seq Enumeration domain encoded as a <em>sequence</em>.
  * \param underlyingType Underlying type.
  */
 #define DEFINE_AMBIGUOUS_BIT_ENUM_WITH_UNDERLYING_TYPE(enumType, underlyingType, seq) \
     ENUM__CLASS(enumType, underlyingType, seq) \
-    ENUM__BEGIN_TRAITS(enumType, underlyingType, true, false, seq) \
-    ENUM__END_TRAITS(enumType) \
     ENUM__BITWISE_OPS(enumType) \
+    ENUM__BEGIN_TRAITS(enumType, underlyingType, true, false, seq) \
+    ENUM__ALL_SET_VALUE(enumType, seq) \
+    ENUM__END_TRAITS(enumType) \
     static_assert(true)
 
 //! Defines a smart enumeration with the default |unsigned int| underlying type.
 /*!
- * \param enumType Enumeration enumType.
+ * \param enumType Enumeration type.
  * \param seq Enumeration domain encoded as a <em>sequence</em>.
  */
 #define DEFINE_BIT_ENUM(enumType, seq) \
@@ -160,7 +165,7 @@ struct TEnumTraits<T, true>
 
 //! Defines a smart enumeration with a specific underlying type and IsStringSerializable attribute.
 /*!
- * \param enumType Enumeration enumType.
+ * \param enumType Enumeration type.
  * \param seq Enumeration domain encoded as a <em>sequence</em>.
  * \param underlyingType Underlying type.
  */
@@ -183,6 +188,18 @@ struct TEnumTraits<T, true>
 #define DEFINE_STRING_SERIALIZABLE_ENUM(enumType, seq) \
     DEFINE_STRING_SERIALIZABLE_ENUM_WITH_UNDERLYING_TYPE(enumType, int, seq)
 
+//! When enum from another representation (e.g. string or protobuf integer),
+//! instructs the parser to treat undeclared values as |unknownValue|.
+/*!
+ * \param enumType Enumeration type.
+ * \param unknownValue A sentinel value of #enumType.
+ */
+#define DEFINE_ENUM_UNKNOWN_VALUE(enumType, unknownValue) \
+    [[maybe_unused]] constexpr std::optional<enumType> TryGetEnumUnknownValueImpl(enumType) \
+    { \
+        return enumType::unknownValue; \
+    }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Returns |true| iff the enumeration value is not bitwise zero.
@@ -194,6 +211,23 @@ constexpr bool Any(E value) noexcept;
 template <typename E>
     requires TEnumTraits<E>::IsBitEnum
 constexpr bool None(E value) noexcept;
+
+//! Returns the number of set bits in |value|.
+//!
+//! Note that this may not be equivalent of "number of set variants", because
+//! variants themselves are not required to have popcount of 1.
+//!
+//! For example, given an enum:
+//! DEFINE_BIT_ENUM(EMyEnum,
+//!    ((Read)  (1))
+//!    ((Write) (2))
+//!    ((Both)  (3))
+//! );
+//!
+//! `PopCount(EMyEnum::Both)` will return 2.
+template <typename E>
+    requires TEnumTraits<E>::IsBitEnum
+constexpr int PopCount(E value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -4,10 +4,10 @@
 namespace NKikimr {
 namespace NTable {
 
-void TPageCollectionComponents::ParsePacket(TSharedData meta) {
-    Y_DEBUG_ABORT_UNLESS(!Packet, "Packet is already parsed");
+void TPageCollectionComponents::ParsePageCollection(TSharedData meta) {
+    Y_DEBUG_ABORT_UNLESS(!PageCollection, "PageCollection is already parsed");
 
-    Packet = new NPageCollection::TPageCollection(LargeGlobId, std::move(meta));
+    PageCollection = new NPageCollection::TPageCollection(LargeGlobId, std::move(meta));
 }
 
 TEpoch TPartComponents::GetEpoch() const {
@@ -15,7 +15,7 @@ TEpoch TPartComponents::GetEpoch() const {
         return Epoch;
     }
 
-    Y_ABORT_UNLESS(PageCollectionComponents && PageCollectionComponents[0].Packet,
+    Y_ENSURE(PageCollectionComponents && PageCollectionComponents[0].PageCollection,
         "PartComponents has neither a known epoch, nor a parsed meta packet");
 
     return TLoader::GrabEpoch(*this);

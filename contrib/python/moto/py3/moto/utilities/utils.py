@@ -1,46 +1,50 @@
 import json
 import hashlib
-import random
-import string
 import pkgutil
 
+from typing import Any, Dict, Iterator, List, TypeVar, Tuple, Optional, MutableMapping
 
-from collections.abc import MutableMapping
 
-
-def str2bool(v):
+def str2bool(v: Any) -> Optional[bool]:
     if v in ("yes", True, "true", "True", "TRUE", "t", "1"):
         return True
     elif v in ("no", False, "false", "False", "FALSE", "f", "0"):
         return False
+    return None
 
 
-def random_string(length=None):
-    n = length or 20
-    random_str = "".join(
-        [random.choice(string.ascii_letters + string.digits) for i in range(n)]
-    )
-    return random_str
-
-
-def load_resource(package, resource, as_json=True):
+def load_resource(package: str, resource: str) -> Any:
     """
     Open a file, and return the contents as JSON.
     Usage:
     load_resource(__name__, "resources/file.json")
     """
-    resource = pkgutil.get_data(package, resource)
-    return json.loads(resource) if as_json else resource.decode("utf-8")
+    return json.loads(pkgutil.get_data(package, resource))  # type: ignore
 
 
-def merge_multiple_dicts(*args):
+def load_resource_as_str(package: str, resource: str) -> str:
+    return load_resource_as_bytes(package, resource).decode("utf-8")  # type: ignore
+
+
+def load_resource_as_bytes(package: str, resource: str) -> bytes:
+    return pkgutil.get_data(package, resource)  # type: ignore
+
+
+def merge_multiple_dicts(*args: Any) -> Dict[str, Any]:
     result = {}
     for d in args:
         result.update(d)
     return result
 
 
-def filter_resources(resources, filters, attr_pairs):
+RESOURCE_TYPE = TypeVar("RESOURCE_TYPE")
+
+
+def filter_resources(
+    resources: List[RESOURCE_TYPE],
+    filters: Any,
+    attr_pairs: Tuple[Tuple[str, ...], ...],
+) -> List[RESOURCE_TYPE]:
     """
     Used to filter resources. Usually in get and describe apis.
     """
@@ -58,43 +62,43 @@ def filter_resources(resources, filters, attr_pairs):
     return result
 
 
-def md5_hash(data=None):
+def md5_hash(data: Any = None) -> Any:
     """
     MD5-hashing for non-security usecases.
     Required for Moto to work in FIPS-enabled systems
     """
     args = (data,) if data else ()
     try:
-        return hashlib.md5(*args, usedforsecurity=False)
+        return hashlib.md5(*args, usedforsecurity=False)  # type: ignore
     except TypeError:
         # The usedforsecurity-parameter is only available as of Python 3.9
         return hashlib.md5(*args)
 
 
-class LowercaseDict(MutableMapping):
+class LowercaseDict(MutableMapping[str, Any]):
     """A dictionary that lowercases all keys"""
 
-    def __init__(self, *args, **kwargs):
-        self.store = dict()
+    def __init__(self, *args: Any, **kwargs: Any):
+        self.store: Dict[str, Any] = dict()
         self.update(dict(*args, **kwargs))  # use the free update to set keys
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.store[self._keytransform(key)]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         self.store[self._keytransform(key)] = value
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         del self.store[self._keytransform(key)]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self.store)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.store)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.store)
 
-    def _keytransform(self, key):
+    def _keytransform(self, key: str) -> str:
         return key.lower()

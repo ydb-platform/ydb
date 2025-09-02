@@ -6,7 +6,6 @@ SRCS(
     auth_mocks.cpp
     auth_multi_factory.cpp
     attributes_md5.cpp
-    cfg.cpp
     change_visibility.cpp
     count_queues.cpp
     cleanup_queue_data.cpp
@@ -26,6 +25,7 @@ SRCS(
     log.cpp
     list_dead_letter_source_queues.cpp
     list_permissions.cpp
+    list_queue_tags.cpp
     list_queues.cpp
     list_users.cpp
     local_rate_limiter_allocator.cpp
@@ -45,9 +45,11 @@ SRCS(
     send_message.cpp
     service.cpp
     set_queue_attributes.cpp
+    tag_queue.cpp
     proxy_service.cpp
     queues_list_reader.cpp
     queue_schema.cpp
+    untag_queue.cpp
     user_settings_names.cpp
     user_settings_reader.cpp
 )
@@ -58,7 +60,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/ycloud/impl
     library/cpp/logger
     library/cpp/lwtrace/mon
@@ -86,11 +88,14 @@ PEERDIR(
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
     ydb/library/mkql_proto/protos
+    ydb/library/security
     ydb/public/lib/scheme_types
     ydb/public/lib/value
-    ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/library/yql/minikql
+    ydb/public/sdk/cpp/src/client/types/credentials
+    yql/essentials/minikql
     ydb/public/lib/deprecated/client
+    ydb/core/ymq/actor/cloud_events
+    ydb/core/ymq/actor/cfg
 )
 
 YQL_LAST_ABI_VERSION()
@@ -105,7 +110,11 @@ GENERATE_ENUM_SERIALIZATION(queue_schema.h)
 
 END()
 
+RECURSE(
+    cfg
+    cloud_events
+)
+
 RECURSE_FOR_TESTS(
-    ut
     yc_search_ut
 )

@@ -85,9 +85,7 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
         if (auto it = Map_.find(key); it != Map_.end()) {
             auto& entry = it->second;
             if (entry->Promise.IsSet() && entry->IsExpired(now)) {
-                NConcurrency::TDelayedExecutor::CancelAndClear(entry->ProbationCookie);
-                Map_.erase(it);
-                OnRemoved(key);
+                Erase(it);
             } else {
                 HitCounter_.Increment();
                 entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(Config()->ExpireAfterAccessTime);
@@ -173,12 +171,10 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
 
         for (auto index : preliminaryIndexesToPopulate) {
             const auto& key = keys[index];
-            if (auto it = Map_.find(keys[index]); it != Map_.end()) {
+            if (auto it = Map_.find(key); it != Map_.end()) {
                 auto& entry = it->second;
                 if (entry->Promise.IsSet() && entry->IsExpired(now)) {
-                    NConcurrency::TDelayedExecutor::CancelAndClear(entry->ProbationCookie);
-                    Map_.erase(it);
-                    OnRemoved(key);
+                    Erase(it);
                 } else {
                     handleHit(index, entry);
                     continue;
@@ -282,9 +278,7 @@ void TAsyncExpiringCache<TKey, TValue>::InvalidateActive(const TKey& key)
 
     auto guard = WriterGuard(SpinLock_);
     if (auto it = Map_.find(key); it != Map_.end() && it->second->Promise.IsSet()) {
-        NConcurrency::TDelayedExecutor::CancelAndClear(it->second->ProbationCookie);
-        Map_.erase(it);
-        OnRemoved(key);
+        Erase(it);
         SizeCounter_.Update(Map_.size());
     }
 }
@@ -309,9 +303,7 @@ void TAsyncExpiringCache<TKey, TValue>::InvalidateValue(const TKey& key, const T
     if (auto it = Map_.find(key); it != Map_.end() && it->second->Promise.IsSet()) {
         auto valueOrError = it->second->Promise.Get();
         if (valueOrError.IsOK() && valueOrError.Value() == value) {
-            NConcurrency::TDelayedExecutor::CancelAndClear(it->second->ProbationCookie);
-            Map_.erase(it);
-            OnRemoved(key);
+            Erase(it);
             SizeCounter_.Update(Map_.size());
         }
     }
@@ -343,6 +335,26 @@ void TAsyncExpiringCache<TKey, TValue>::ForceRefresh(const TKey& key, const T& v
 }
 
 template <class TKey, class TValue>
+void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
+{
+    auto now = NProfiling::GetCpuInstant();
+    auto guard = ReaderGuard(SpinLock_);
+
+    if (auto it = Map_.find(key); it != Map_.end() && it->second->Promise.IsSet()) {
+        const auto& entry = it->second;
+        if (!entry->Promise.Get().IsOK()) {
+            return;
+        }
+
+        entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(Config()->ExpireAfterAccessTime);
+        entry->UpdateDeadline = now + NProfiling::DurationToCpuDuration(Config()->ExpireAfterSuccessfulUpdateTime);
+        if (!Config()->BatchUpdate) {
+            ScheduleEntryRefresh(entry, key, Config_->RefreshTime);
+        }
+    }
+}
+
+template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> valueOrError)
 {
     auto isValueOK = valueOrError.IsOK();
@@ -365,8 +377,7 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
             promise = entry->Promise;
         }
         if (expirationTime == TDuration::Zero()) {
-            Map_.erase(it);
-            OnRemoved(key);
+            Erase(it);
         } else {
             entry->AccessDeadline = accessDeadline;
             entry->UpdateDeadline = updateDeadline;
@@ -376,7 +387,7 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         entry->UpdateDeadline = updateDeadline;
         entry->Promise = MakePromise(std::move(valueOrError));
         entry->Future = entry->Promise.ToFuture();
-        YT_VERIFY(Map_.emplace(key, std::move(entry)).second);
+        YT_VERIFY(Map_.emplace(key, entry).second);
         OnAdded(key);
 
         if (isValueOK && !Config()->BatchUpdate) {
@@ -407,7 +418,7 @@ void TAsyncExpiringCache<TKey, TValue>::ScheduleEntryRefresh(
             BIND_NO_PROPAGATE(
                 &TAsyncExpiringCache::InvokeGet,
                 MakeWeak(this),
-                entry,
+                MakeWeak(entry),
                 key),
             *refreshTime);
     }
@@ -497,9 +508,7 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
     }
 
     if (entry->IsExpired(now) || (entryUpdated && expirationTime == TDuration::Zero())) {
-        Map_.erase(it);
-        OnRemoved(key);
-        SizeCounter_.Update(Map_.size());
+        Erase(it);
         return;
     }
 
@@ -510,20 +519,33 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
 
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::InvokeGet(
-    const TEntryPtr& entry,
+    TWeakPtr<TEntry> weakEntry,
     const TKey& key)
 {
-    if (TryEraseExpired(entry, key)) {
+    auto entry = weakEntry.Lock();
+    if (!entry || TryEraseExpired(entry, key)) {
         return;
     }
 
-    YT_VERIFY(entry->Future.IsSet());
-    const auto& oldValue = entry->Future.Get();
+    TFuture<TValue> future;
+    {
+        auto readerGuard = ReaderGuard(SpinLock_);
+        future = entry->Future;
+    }
+
+    YT_VERIFY(future.IsSet());
+    const auto& oldValue = future.Get();
 
     DoGet(key, &oldValue, EUpdateReason::PeriodicUpdate)
-        .Subscribe(BIND([=, weakEntry = MakeWeak(entry), this, this_ = MakeStrong(this)] (const TErrorOr<TValue>& valueOrError) {
-            SetResult(weakEntry, key, valueOrError, true);
-        }));
+        .Subscribe(BIND(
+            [
+                weakEntry = std::move(weakEntry),
+                key,
+                this,
+                this_ = MakeStrong(this)
+            ] (const TErrorOr<TValue>& valueOrError) {
+                SetResult(weakEntry, key, valueOrError, true);
+            }));
 }
 
 template <class TKey, class TValue>
@@ -544,8 +566,7 @@ bool TAsyncExpiringCache<TKey, TValue>::TryEraseExpired(const TEntryPtr& entry, 
         auto writerGuard = WriterGuard(SpinLock_);
 
         if (auto it = Map_.find(key); it != Map_.end() && entry == it->second && now > it->second->AccessDeadline) {
-            Map_.erase(it);
-            OnRemoved(key);
+            Erase(it);
             SizeCounter_.Update(Map_.size());
         }
         return true;
@@ -554,8 +575,16 @@ bool TAsyncExpiringCache<TKey, TValue>::TryEraseExpired(const TEntryPtr& entry, 
 }
 
 template <class TKey, class TValue>
+void TAsyncExpiringCache<TKey, TValue>::Erase(THashMap<TKey, TEntryPtr>::iterator it)
+{
+    NConcurrency::TDelayedExecutor::CancelAndClear(it->second->ProbationCookie);
+    OnRemoved(it->first);
+    Map_.erase(it);
+}
+
+template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::InvokeGetMany(
-    const std::vector<TWeakPtr<TEntry>>& entries,
+    const std::vector<TWeakPtr<TEntry>>& weakEntries,
     const std::vector<TKey>& keys,
     std::optional<TDuration> periodicRefreshTime)
 {
@@ -565,7 +594,7 @@ void TAsyncExpiringCache<TKey, TValue>::InvokeGetMany(
         .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<std::vector<TErrorOr<TValue>>>& valuesOrError) {
             for (size_t index = 0; index < keys.size(); ++index) {
                 SetResult(
-                    entries[index],
+                    weakEntries[index],
                     keys[index],
                     valuesOrError.IsOK() ? valuesOrError.Value()[index] : TErrorOr<TValue>(TError(valuesOrError)),
                     isPeriodicUpdate);
@@ -646,8 +675,7 @@ void TAsyncExpiringCache<TKey, TValue>::UpdateAll()
                 const auto& [_, entry] = *it;
                 if (entry->Promise.IsSet()) {
                     if (now > entry->AccessDeadline) {
-                        Map_.erase(it);
-                        OnRemoved(key);
+                        Erase(it);
                         SizeCounter_.Update(Map_.size());
                     } else if (entry->Future.Get().IsOK()) {
                         keys.push_back(key);
@@ -681,7 +709,7 @@ void TAsyncExpiringCache<TKey, TValue>::Reconfigure(TAsyncExpiringCacheConfigPtr
 template <class TKey, class TValue>
 const TAsyncExpiringCacheConfigPtr& TAsyncExpiringCache<TKey, TValue>::Config() const
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
     return Config_;
 }

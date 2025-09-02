@@ -1,13 +1,14 @@
 #pragma once
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <functional>
 
@@ -21,7 +22,24 @@ struct TPathVersion {
     TPathId PathId = TPathId();
     ui64 Version = Max<ui64>();
 };
-using TApplyIf = TVector<TPathVersion>;
+
+struct TApplyIfUnit : TPathVersion {
+    std::vector<NKikimrSchemeOp::EPathType> PathTypes;
+
+    TApplyIfUnit() {}
+
+    TApplyIfUnit(const TPathVersion& pathVersion) {
+        PathId = pathVersion.PathId;
+        Version = pathVersion.Version;
+    }
+
+    TApplyIfUnit(TPathVersion&& pathVersion) {
+        PathId = std::move(pathVersion.PathId);
+        Version = std::move(pathVersion.Version);
+    }
+};
+
+using TApplyIf = TVector<TApplyIfUnit>;
 
 using TUserAttrs = TVector<std::pair<TString, TString>>;
 
@@ -46,6 +64,7 @@ namespace NLs {
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0);
+    TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected);
 
     TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState);
 
@@ -72,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
+    TCheckFunc ExtractChildren(TVector<TString>* children);
 
     void NotFinished(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void Finished(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -94,11 +114,17 @@ namespace NLs {
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
-    TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
-                            NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+    void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
+    TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
+    // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.
+    template <typename T>
+    TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -127,17 +153,25 @@ namespace NLs {
     TCheckFunc HasColumnTableTtlSettingsVersion(ui64 ttlSettingsVersion);
     TCheckFunc HasColumnTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
     TCheckFunc HasColumnTableTtlSettingsDisabled();
-    TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tierName);
+    TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName);
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
     TCheckFunc IndexesCount(ui32 count);
+    TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
+
+    TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+                                     Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                     ui32 vectorDimension,
+                                     ui32 clusters,
+                                     ui32 levels
+                                  );
 
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
@@ -152,17 +186,23 @@ namespace NLs {
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
+    TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
+    TCheckFunc ConsumerExist(const TString& name);
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);
 
+    TCheckFunc HasGroup(const TString& group, const TSet<TString> members);
+    TCheckFunc HasNoGroup(const TString& group);
     TCheckFunc HasOwner(const TString& owner);
+    TCheckFunc HasRight(const TString& right);
+    TCheckFunc HasNoRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
-    TCheckFunc HasNotEffectiveRight(const TString& right);
+    TCheckFunc HasNoEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);

@@ -3,10 +3,12 @@
 #include "blob.h"
 #include "header.h"
 #include "partition_id.h"
+#include "utils.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -16,6 +18,7 @@ struct TUserInfo;
 struct TReadAnswer {
     ui64 Size = 0;
     THolder<IEventBase> Event;
+    bool IsInternal = false;
 };
 
 struct TReadInfo {
@@ -42,6 +45,10 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
+    bool IsInternal = false;
+
+    TBlobKeyTokens BlobKeyTokens;
+    size_t CompactedBlobsCount = 0;
 
     TReadInfo() = delete;
     TReadInfo(
@@ -56,7 +63,8 @@ struct TReadInfo {
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
         const bool isExternalRead,
-        const TActorId& pipeClient
+        const TActorId& pipeClient,
+        bool isInternal
     )
         : User(user)
         , ClientDC(clientDC)
@@ -73,33 +81,60 @@ struct TReadInfo {
         , CachedOffset(0)
         , PipeClient(pipeClient)
         , LastOffset(lastOffset)
+        , IsInternal(isInternal)
     {}
 
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
-        const ui64 endOffset,
-        const TPartitionId& partition,
-        TUserInfo* ui,
-        const ui64 dst, 
-        const ui64 sizeLag,
-        const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
-    );
-
-    TReadAnswer FormAnswer(
-        const TActorContext& ctx,
+        const ui64 startOffset,
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
         const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive,
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
+    );
+
+    TReadAnswer FormAnswer(
+        const TActorContext& ctx,
+        const TEvPQ::TEvBlobResponse* response,
+        const ui64 startOffset,
+        const ui64 endOffset,
+        const TPartitionId& partition,
+        TUserInfo* ui,
+        const ui64 dst,
+        const ui64 sizeLag,
+        const TActorId& tablet,
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive,
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
     ) {
-        TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);
+        static TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
+        if (!response) {
+            response = &fakeBlobResponse;
+        }
+        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor);
     }
+
+    bool UpdateUsage(const TClientBlob& blob,
+                     ui32& cnt, ui32& size, ui32& lastBlobSize) const;
+    TMaybe<TReadAnswer> AddBlobsFromBody(const TVector<NPQ::TRequestedBlob>& blobs,
+                                         const ui32 begin, const ui32 end,
+                                         TUserInfo* userInfo,
+                                         const ui64 startOffset,
+                                         const ui64 endOffset,
+                                         const ui64 sizeLag,
+                                         const TActorId& tablet,
+                                         ui64 realReadOffset,
+                                         NKikimrClient::TCmdReadResult* readResult,
+                                         THolder<TEvPQ::TEvProxyResponse>& answer,
+                                         bool& needStop,
+                                         ui32& cnt, ui32& size, ui32& lastBlobSize,
+                                         const TActorContext& ctx);
 };
 
 struct TOffsetCookie {

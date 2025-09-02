@@ -1,6 +1,5 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "backup_restore_common.h"
 #include "datashard.h"
 #include "export_common.h"
 #include "export_s3.h"
@@ -9,9 +8,14 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -30,6 +34,16 @@
 
 namespace NKikimr {
 namespace NDataShard {
+
+using namespace NBackup;
+using namespace NBackupRestoreTraits;
+
+struct TChangefeedExportDescriptions {
+    const Ydb::Table::ChangefeedDescription ChangefeedDescription;
+    const Ydb::Topic::DescribeTopicResult Topic;
+    TString Name;
+    TString Prefix;
+};
 
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
@@ -62,7 +76,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     TString GetResolveProxyUrl(const TS3ExternalStorageConfig& settings) const {
-        Y_ABORT_UNLESS(HttpResolverConfig);
+        Y_ENSURE(HttpResolverConfig);
 
         TStringBuilder url;
         switch (settings.GetConfig().scheme) {
@@ -79,7 +93,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void ApplyProxy(TS3ExternalStorageConfig& settings, const TString& proxyHost) const {
-        Y_ABORT_UNLESS(HttpResolverConfig);
+        Y_ENSURE(HttpResolverConfig);
 
         settings.ConfigRef().proxyScheme = settings.GetConfig().scheme;
         settings.ConfigRef().proxyHost = proxyHost;
@@ -143,7 +157,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void Restart() {
-        Y_ABORT_UNLESS(ProxyResolved);
+        Y_ENSURE(ProxyResolved);
 
         MultiPart = false;
         Last = false;
@@ -157,8 +171,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!MetadataUploaded) {
             UploadMetadata();
+        } else if (EnablePermissions && !PermissionsUploaded) {
+            UploadPermissions();
         } else if (!SchemeUploaded) {
             UploadScheme();
+        } else if (!ChangefeedsUploaded) {
+            UploadChangefeed();
         } else {
             this->Become(&TThis::StateUploadData);
 
@@ -170,34 +188,115 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         }
     }
 
+    template <typename T>
+    void PutData(TString&& data, const TString& key, T stateFunc) {
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(data)));
+        this->Become(stateFunc);
+    }
+
+    template <typename T>
+    void PutDataWithChecksum(TString&& data, const TString& key, TString& checksum, T stateFunc, TMaybe<TEncryptionIV> iv) {
+        if (EnableChecksums) {
+            checksum = ComputeChecksum(data);
+        }
+        if (iv) {
+            try {
+                TBuffer encryptedData = TEncryptedFileSerializer::EncryptFullFile(Settings.EncryptionSettings.EncryptionAlgorithm, *Settings.EncryptionSettings.Key, *iv, data);
+                data = TString(encryptedData.Data(), encryptedData.Size());
+            } catch (const std::exception& ex) {
+                Finish(false, TStringBuilder() << "Failed to encrypt " << key << ": " << ex.what());
+                return;
+            }
+        }
+        PutData(std::move(data), key, stateFunc);
+    }
+
+    template <typename T>
+    void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc, TMaybe<TEncryptionIV> iv) {
+        google::protobuf::TextFormat::PrintToString(message, &Buffer);
+        PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc, iv);
+    }
+
+    void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
+        PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
+    }
+
     void UploadScheme() {
-        Y_ABORT_UNLESS(!SchemeUploaded);
+        Y_ENSURE(!SchemeUploaded);
 
         if (!Scheme) {
             return Finish(false, "Cannot infer scheme");
         }
+        PutScheme(Scheme.GetRef());
+    }
 
-        google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
+    void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
+        PutMessage(permissions, Settings.GetPermissionsKey(), PermissionsChecksum, &TThis::StateUploadPermissions, Settings.EncryptionSettings.GetPermissionsIV());
+    }
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetSchemeKey())
-            .WithStorageClass(Settings.GetStorageClass());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+    void UploadPermissions() {
+        Y_ENSURE(EnablePermissions && !PermissionsUploaded);
 
-        this->Become(&TThis::StateUploadScheme);
+        if (!Permissions) {
+            return Finish(false, "Cannot infer permissions");
+        }
+        PutPermissions(Permissions.GetRef());
+    }
+
+    void PutChangefeedDescription(ui64 changefeedIndex) {
+        const auto& desc = Changefeeds[changefeedIndex];
+        PutMessage(
+            desc.ChangefeedDescription,
+            Settings.GetChangefeedKey(desc.Prefix),
+            ChangefeedChecksum,
+            &TThis::StateUploadChangefeed,
+            Settings.EncryptionSettings.GetChangefeedIV(static_cast<ui32>(changefeedIndex))
+        );
+    }
+
+    void UploadChangefeed() {
+        Y_ENSURE(!ChangefeedsUploaded);
+        if (IndexExportedChangefeed == Changefeeds.size()) {
+            ChangefeedsUploaded = true;
+            if (Scanner) {
+                this->Send(Scanner, new TEvExportScan::TEvFeed());
+            }
+            this->Become(&TThis::StateUploadData);
+            return;
+        }
+        PutChangefeedDescription(IndexExportedChangefeed);
+    }
+
+    void PutTopicDescription(ui64 changefeedIndex) {
+        const auto& desc = Changefeeds[changefeedIndex];
+        PutMessage(
+            desc.Topic,
+            Settings.GetTopicKey(desc.Prefix),
+            TopicChecksum,
+            &TThis::StateUploadTopic,
+            Settings.EncryptionSettings.GetChangefeedTopicIV(static_cast<ui32>(changefeedIndex))
+        );
+    }
+
+    void UploadTopic() {
+        PutTopicDescription(IndexExportedChangefeed);
     }
 
     void UploadMetadata() {
-        Y_ABORT_UNLESS(!MetadataUploaded);
+        Y_ENSURE(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
+        PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata, Settings.EncryptionSettings.GetMetadataIV());
+    }
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetMetadataKey())
-            .WithStorageClass(Settings.GetStorageClass());
-        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
-
-        this->Become(&TThis::StateUploadMetadata);
+    void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix,
+        std::function<void()> checksumUploadedCallback)
+    {
+        // make checksum verifiable using sha256sum CLI
+        checksum += ' ' + objectKeySuffix;
+        PutData(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
+        ChecksumUploadedCallback = checksumUploadedCallback;
     }
 
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -211,13 +310,88 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        SchemeUploaded = true;
+        auto nextStep = [this]() {
+            SchemeUploaded = true;
+            UploadChangefeed();
+        };
 
-        if (Scanner) {
-            this->Send(Scanner, new TEvExportScan::TEvFeed());
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
+            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
+            return;
         }
 
-        this->Become(&TThis::StateUploadData);
+        auto nextStep = [this]() {
+            PermissionsUploaded = true;
+            UploadScheme();
+        };
+
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetPermissionsKey());
+            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsKeySuffix(false), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (changefeed)"))) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            UploadTopic();
+        };
+        if (EnableChecksums) {
+            const auto& desc = Changefeeds[IndexExportedChangefeed];
+            TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(desc.Prefix));
+            UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(false), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (topic)"))) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            ++IndexExportedChangefeed;
+            UploadChangefeed();
+        };
+        if (EnableChecksums) {
+            const auto& desc = Changefeeds[IndexExportedChangefeed];
+            TString checksumKey = ChecksumKey(Settings.GetTopicKey(desc.Prefix));
+            UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(false), nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -231,9 +405,35 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        MetadataUploaded = true;
+        auto nextStep = [this]() {
+            MetadataUploaded = true;
+            if (EnablePermissions) {
+                UploadPermissions();
+            } else {
+                UploadScheme();
+            }
+        };
 
-        UploadScheme();
+        if (EnableChecksums) {
+            TString checksumKey = ChecksumKey(Settings.GetMetadataKey());
+            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataKeySuffix(false), nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleChecksum(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleChecksum TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (checksum)"))) {
+            return;
+        }
+
+        ChecksumUploadedCallback();
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
@@ -247,7 +447,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded) {
+        const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -269,6 +470,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Last = ev->Get()->Last;
         MultiPart = MultiPart || !Last;
         ev->Get()->Buffer.AsString(Buffer);
+        DataChecksum = std::move(ev->Get()->Checksum);
 
         UploadData();
     }
@@ -276,8 +478,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void UploadData() {
         if (!MultiPart) {
             auto request = Aws::S3::Model::PutObjectRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
-                .WithStorageClass(Settings.GetStorageClass());
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
@@ -304,7 +505,18 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        Finish();
+        auto nextStep = [this]() {
+            Finish();
+        };
+
+        if (EnableChecksums) {
+            // checksum is always calculated before compression
+            TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
+            TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None, false);
+            UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
@@ -316,8 +528,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!upload) {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
-                .WithStorageClass(Settings.GetStorageClass());
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
         } else {
             UploadId = upload->Id;
@@ -388,7 +599,18 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Parts.push_back(result.GetResult().GetETag().c_str());
 
         if (Last) {
-            return Finish();
+            auto nextStep = [this]() {
+                Finish();
+            };
+
+            if (EnableChecksums) {
+                // checksum is always calculated before compression
+                TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
+                TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None, false);
+                return UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
+            } else {
+                return nextStep();
+            }
         }
 
         this->Send(Scanner, new TEvExportScan::TEvFeed());
@@ -435,7 +657,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Y_ABORT_UNLESS(Error);
+            Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error.GetMessage();
             PassAway();
@@ -456,20 +678,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         return false;
     }
 
-    static bool ShouldRetry(const Aws::S3::S3Error& error) {
-        if (error.ShouldRetry()) {
-            return true;
-        }
-
-        if ("TooManyRequests" == error.GetExceptionName()) {
-            return true;
-        }
-
-        return false;
-    }
-
     bool CanRetry(const Aws::S3::S3Error& error) const {
-        return Attempt < Retries && ShouldRetry(error);
+        return Attempt < Retries && NWrappers::ShouldRetry(error);
     }
 
     void Retry() {
@@ -512,6 +722,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
+            Become(&TThis::StateUploadData);
         }
     }
 
@@ -542,21 +753,30 @@ public:
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TVector<TChangefeedExportDescriptions> changefeeds,
+            TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
         : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
         , Settings(TS3Settings::FromBackupTask(task))
-        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
-        , CompressionCodec(NBackupRestoreTraits::CodecFromTask(task))
+        , DataFormat(EDataFormat::Csv)
+        , CompressionCodec(CodecFromTask(task))
+        , ShardNum(task.GetShardNum())
         , HttpResolverConfig(GetHttpResolverConfig(*GetS3StorageConfig()))
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , Changefeeds(std::move(changefeeds))
         , Metadata(std::move(metadata))
+        , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
-        , SchemeUploaded(task.GetShardNum() == 0 ? false : true)
-        , MetadataUploaded(task.GetShardNum() == 0 ? false : true)
+        , SchemeUploaded(ShardNum == 0 ? false : true)
+        , ChangefeedsUploaded(ShardNum == 0 ? false : true)
+        , MetadataUploaded(ShardNum == 0 ? false : true)
+        , PermissionsUploaded(ShardNum == 0 ? false : true)
+        , EnableChecksums(task.GetEnableChecksums())
+        , EnablePermissions(task.GetEnablePermissions())
     {
     }
 
@@ -598,9 +818,41 @@ public:
         }
     }
 
+    STATEFN(StateUploadPermissions) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadChangefeed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadTopic) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
+        default:
+            return StateBase(ev);
+        }
+    }
+
     STATEFN(StateUploadMetadata) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateUploadChecksum) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChecksum);
         default:
             return StateBase(ev);
         }
@@ -624,8 +876,9 @@ public:
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TS3Settings Settings;
-    const NBackupRestoreTraits::EDataFormat DataFormat;
-    const NBackupRestoreTraits::ECompressionCodec CompressionCodec;
+    const EDataFormat DataFormat;
+    const ECompressionCodec CompressionCodec;
+    const ui32 ShardNum;
     bool ProxyResolved;
 
     TMaybe<THttpResolverConfig> HttpResolverConfig;
@@ -634,17 +887,22 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
+    const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
     const ui32 Retries;
     ui32 Attempt;
+    ui64 IndexExportedChangefeed = 0;
 
     TDuration Delay;
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TActorId Client;
     bool SchemeUploaded;
+    bool ChangefeedsUploaded;
     bool MetadataUploaded;
+    bool PermissionsUploaded;
     bool MultiPart;
     bool Last;
 
@@ -655,6 +913,17 @@ private:
     TVector<TString> Parts;
     TMaybe<TString> Error;
 
+    bool EnableChecksums;
+    bool EnablePermissions;
+
+    TString DataChecksum;
+    TString MetadataChecksum;
+    TString ChangefeedChecksum;
+    TString TopicChecksum;
+    TString SchemeChecksum;
+    TString PermissionsChecksum;
+    std::function<void()> ChecksumUploadedCallback;
+
 }; // TS3Uploader
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
@@ -662,17 +931,66 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    NBackupRestore::TMetadata metadata;
+    const bool encrypted = Task.HasEncryptionSettings();
 
-    NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
-        .SnapshotVts = NBackupRestore::TVirtualTimestamp(
+    TMetadata metadata;
+    metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
+    metadata.SetEnablePermissions(Task.GetEnablePermissions());
+
+    TVector<TChangefeedExportDescriptions> changefeeds;
+    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+        const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
+        const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+        Y_ASSERT(persQueues.size() == cdcStreams.size());
+
+        const int changefeedsCount = cdcStreams.size();
+        changefeeds.reserve(changefeedsCount);
+
+        for (int i = 0; i < changefeedsCount; ++i) {
+            Ydb::Table::ChangefeedDescription changefeed;
+            const auto& cdcStream = cdcStreams.at(i);
+            FillChangefeedDescription(changefeed, cdcStream);
+
+            Ydb::Topic::DescribeTopicResult topic;
+            const auto& pq = persQueues.at(i);
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
+            // Unnecessary fields
+            topic.clear_self();
+            topic.clear_topic_stats();
+
+            auto& descr = changefeeds.emplace_back(changefeed, topic);
+            descr.Name = descr.ChangefeedDescription.name();
+            if (encrypted) {
+                // Anonymize changefeed name in export
+                std::stringstream prefix;
+                prefix << std::setfill('0') << std::setw(3) << std::right << (i + 1);
+                descr.Prefix = prefix.str();
+            } else {
+                descr.Prefix = descr.Name;
+            }
+
+            metadata.AddChangefeed(TChangefeedMetadata{
+                .ExportPrefix = descr.Prefix,
+                .Name = descr.Name,
+            });
+        }
+    }
+
+    auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
+        ? GenYdbPermissions(Task.GetTable())
+        : Nothing();
+
+    TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
+        .SnapshotVts = TVirtualTimestamp(
             Task.GetSnapshotStep(),
             Task.GetSnapshotTxId())
     };
     metadata.AddFullBackup(backup);
 
     return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), metadata.Serialize());
+        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

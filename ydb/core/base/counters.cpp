@@ -7,9 +7,13 @@ LWTRACE_DEFINE_PROVIDER(MONITORING_PROVIDER)
 namespace NKikimr {
 
 static const THashSet<TString> DATABASE_SERVICES
-    = {{ TString("compile"),
+    = {{
+         TString("blob_depot_agent"),
+         TString("compile"),
+         TString("config"),
          TString("coordinator"),
          TString("dsproxy"),
+         TString("dsproxy_mon"),
          TString("dsproxynode"),
          TString("dsproxy_overview"),
          TString("dsproxy_percentile"),
@@ -39,6 +43,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|readSession"),
          TString("pqproxy|schemecache"),
          TString("pqproxy|mirrorWriteTimeLag"),
+         TString("pqproxy|userAgents"),
          TString("datastreams"),
     }};
 

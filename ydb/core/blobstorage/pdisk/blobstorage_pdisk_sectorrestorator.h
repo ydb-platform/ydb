@@ -18,16 +18,14 @@ struct TSectorRestorator {
     ui32 GoodSectorCount;
     ui32 RestoredSectorFlags;
     const TDiskFormat &Format;
-    TActorSystem *ActorSystem;
-    const TActorId PDiskActorId;
-    ui32 PDiskId;
+    const TPDiskCtx *PCtx;
     bool IsErasureEncode;
     TPDiskMon *Mon;
     TBufferPool *BufferPool;
 
     TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
             const bool isErasureEncode, const TDiskFormat &format,
-            TActorSystem *actorSystem, const TActorId pDiskActorId, ui32 pDiskId, TPDiskMon *mon,
+            const TPDiskCtx *pCtx, TPDiskMon *mon,
             TBufferPool *bufferPool);
 
     TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,

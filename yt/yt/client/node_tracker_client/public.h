@@ -45,16 +45,20 @@ YT_DEFINE_STRONG_TYPEDEF(TNodeId, ui32);
 constexpr TNodeId InvalidNodeId = TNodeId(0);
 constexpr TNodeId MaxNodeId = TNodeId((1 << 24) - 1); // TNodeId must fit into 24 bits (see TChunkReplica)
 
+YT_DEFINE_STRONG_TYPEDEF(TChunkLocationIndex, ui32);
+constexpr TChunkLocationIndex InvalidChunkLocationIndex = TChunkLocationIndex(0);
+constexpr TChunkLocationIndex MaxChunkLocationIndex = TChunkLocationIndex(std::numeric_limits<ui32>::max());
+
 using THostId = NObjectClient::TObjectId;
 using TRackId = NObjectClient::TObjectId;
 using TDataCenterId = NObjectClient::TObjectId;
 
 // Only domain names, without port number.
-using TNetworkAddressList = std::vector<std::pair<TString, TString>>;
-using TNetworkPreferenceList = std::vector<TString>;
+using TNetworkAddressList = std::vector<std::pair<std::string, std::string>>;
+using TNetworkPreferenceList = std::vector<std::string>;
 
 // Network -> host:port.
-using TAddressMap = THashMap<TString, TString>;
+using TAddressMap = THashMap<std::string, std::string>;
 
 // Address type (e.g. RPC, HTTP) -> network -> host:port.
 using TNodeAddressMap = THashMap<EAddressType, TAddressMap>;
@@ -62,7 +66,7 @@ using TNodeAddressMap = THashMap<EAddressType, TAddressMap>;
 DECLARE_REFCOUNTED_CLASS(TNodeDirectory)
 class TNodeDescriptor;
 
-extern const TString DefaultNetworkName;
+extern const std::string DefaultNetworkName;
 extern const TNetworkPreferenceList DefaultNetworkPreferences;
 
 ////////////////////////////////////////////////////////////////////////////////

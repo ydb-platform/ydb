@@ -1,0 +1,13 @@
+--- contrib/python/psutil/py3/psutil/arch/osx/cpu.c	(index)
++++ contrib/python/psutil/py3/psutil/arch/osx/cpu.c	(working tree)
+@@ -31,6 +31,10 @@ For reference, here's the git history with original implementations:
+ #include <IOKit/IOKitLib.h>
+ #endif
+ 
++#if (defined __MAC_OS_X_VERSION_MIN_REQUIRED) && (__MAC_OS_X_VERSION_MIN_REQUIRED < 120000)
++#define kIOMainPortDefault kIOMasterPortDefault
++#endif
++
+ #include "../../_psutil_common.h"
+ #include "../../_psutil_posix.h"
+ 

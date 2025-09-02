@@ -12,6 +12,7 @@ private:
     using TBase = TSharedBlobsCollectionActor<TGarbageCollectionActor>;
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCTask> GCTask;
+
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);
     void CheckFinished();
 
@@ -41,7 +42,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
-            AFL_VERIFY(request);
+            AFL_VERIFY(request); // Cannot fail on the first time
             SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);

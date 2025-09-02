@@ -89,6 +89,9 @@ std::declval<str>()))>::type>::type
     >>> builder.ListType(builder.NamedType('int'))
     pythonic::types::list<typename std::remove_reference<int>::type>
 
+    >>> builder.NDArrayType(builder.NamedType('int'), 1)
+    pythonic::types::ndarray<int, pythonic::types::pshape<long>>
+
     >>> builder.SetType(builder.NamedType('int'))
     pythonic::types::set<int>
 
@@ -117,7 +120,7 @@ std::declval<bool>()))
             """
             A generic type object to be sub-classed
 
-            The keyword arguments are used to built the internal representation
+            The keyword arguments are used to build the internal representation
             one attribute per key with the associated value
             """
 
@@ -172,14 +175,11 @@ std::declval<bool>()))
             """
 
             prefix = "__ptype{0}"
-            count = 0
 
-            def __init__(self, fun, ptype):
+            def __init__(self, fun, ptype, index):
                 super(PType, self).__init__(fun=fun,
                                             type=ptype,
-                                            name=PType.prefix.format(
-                                                PType.count))
-                PType.count += 1
+                                            name=PType.prefix.format(index))
 
             def generate(self, ctx):
                 return ctx(self.type)
@@ -202,7 +202,9 @@ std::declval<bool>()))
                     return ctx(self.orig)
                 else:
                     self.isrec = True
-                    return ctx(self.final_type)
+                    res = ctx(self.final_type)
+                    self.isrec = False
+                    return res
 
         class InstantiatedType(Type):
             """
@@ -472,6 +474,20 @@ std::declval<bool>()))
             def generate(self, ctx):
                 return 'pythonic::types::dict<{},{}>'.format(ctx(self.of_key),
                                                              ctx(self.of_val))
+
+        class NDArrayType(DependentType):
+            '''
+            Type holding a numpy array without view
+            '''
+            def __init__(self, dtype, nbdims):
+                super(DependentType, self).__init__(of=dtype, nbdims=nbdims)
+
+            def generate(self, ctx):
+                return 'pythonic::types::ndarray<{}, pythonic::types::pshape<{}>>'.format(
+                        ctx(self.of),
+                        ", ".join((['long'] * self.nbdims))
+                        )
+
 
         class ContainerType(DependentType):
             '''

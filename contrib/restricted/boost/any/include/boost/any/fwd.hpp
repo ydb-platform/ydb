@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2021-2024.
+// Copyright Antony Polukhin, 2021-2025.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -8,10 +8,16 @@
 #ifndef BOOST_ANY_ANYS_FWD_HPP
 #define BOOST_ANY_ANYS_FWD_HPP
 
+#include <boost/any/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
+
+#ifndef BOOST_ANY_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
+#endif  // #ifndef BOOST_ANY_INTERFACE_UNIT
 
 /// \file boost/any/fwd.hpp
 /// \brief Forward declarations of Boost.Any library types.
@@ -19,14 +25,22 @@
 /// @cond
 namespace boost {
 
+BOOST_ANY_BEGIN_MODULE_EXPORT
+
 class any;
 
+BOOST_ANY_END_MODULE_EXPORT
+
 namespace anys {
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
 class unique_any;
 
 template<std::size_t OptimizeForSize = sizeof(void*), std::size_t OptimizeForAlignment = alignof(void*)>
 class basic_any;
+
+BOOST_ANY_END_MODULE_EXPORT
 
 namespace detail {
 
@@ -51,5 +65,7 @@ namespace detail {
 
 } // namespace boost
 /// @endcond
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
 
 #endif  // #ifndef BOOST_ANY_ANYS_FWD_HPP

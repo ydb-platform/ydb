@@ -1,8 +1,6 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
-
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -390,7 +388,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                    { NLs::Finished,
-                                    NLs::PathVersionEqual(5),
+                                    NLs::PathVersionEqual(6),
                                     NLs::ChildrenCount(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    { NLs::Finished,
@@ -464,7 +462,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                    {NLs::Finished,
-                                    NLs::PathVersionEqual(7),
+                                    NLs::PathVersionEqual(9),
                                     NLs::ChildrenCount(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    {NLs::PathNotExist});
@@ -475,6 +473,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -508,7 +507,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
+                                                  NLs::PathVersionEqual(6),
                                                   NLs::ChildrenCount(1)});
             }
 
@@ -527,6 +526,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
             {
@@ -568,6 +568,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -601,7 +602,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
+                                                  NLs::PathVersionEqual(6),
                                                   NLs::ChildrenCount(1)});
             }
 
@@ -617,7 +618,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::PathVersionOneOf({8, 9}),
+                                    NLs::PathVersionOneOf({10, 11}),
                                     NLs::ChildrenCount(1)});
             }
         });

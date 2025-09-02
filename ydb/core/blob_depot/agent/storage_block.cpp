@@ -4,7 +4,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvBlock>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvBlock>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TBlockQuery : public TBlobStorageQuery<TEvBlobStorage::TEvBlock> {
             struct TBlockContext : TRequestContext {
                 TMonotonic Timestamp;
@@ -63,7 +64,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TBlockQuery(*this, std::move(ev));
+        return new TBlockQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

@@ -2,17 +2,36 @@
 
 #include "fwd.h"
 #include "common.h"
-#include "node.h"
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yson/node/node.h>
+
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+} // namespace NLogLevel
+
+////////////////////////////////////////////////////////////////////////////////
+
+extern const TString DefaultHosts;
+extern const TString DefaultRemoteTempTablesDirectory;
+extern const TString DefaultRemoteTempFilesDirectory;
+
+////////////////////////////////////////////////////////////////////////////////
 
 enum EEncoding : int
 {
@@ -78,6 +97,37 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
+    THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
+
+    /// @brief Path to the structured log file for recording telemetry data in JSON format.
+    /// This allows later retrieval and analysis of these metrics.
+    TString StructuredLog;
+
+    /// @brief Represents the role involved in HTTP proxy configuration.
+    ///
+    /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.
+    TString HttpProxyRole;
+
+    /// @brief Represents the role involved in RPC proxy configuration.
+    TString RpcProxyRole;
+
+    /// @brief Proxy url aliasing rules to be used for connection.
+    ///
+    /// You can pass here "foo" => "fqdn:port" and afterwards use "foo" as handy alias,
+    /// while all connections will be made to "fqdn:port" address.
+    THashMap<TString, TString> ProxyUrlAliasingRules;
+
+    ///
+    /// For historical reasons mapreduce client uses its own logging system.
+    ///
+    /// Currently library uses yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger, library switches back to logger provided by user
+    /// (except for messages from yt/yt/core).
+    ///
+    /// TODO: This is a temporary option for emergency fallback.
+    /// Should be removed after eliminating all NYT::SetLogger references.
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -103,7 +153,6 @@ struct TConfig
     TDuration PingTimeout;
     TDuration PingInterval;
 
-    bool UseAsyncTxPinger;
     int AsyncHttpClientThreads;
     int AsyncTxPingerPoolThreads;
 
@@ -125,6 +174,9 @@ struct TConfig
 
     TString RemoteTempFilesDirectory;
     TString RemoteTempTablesDirectory;
+    // @brief Keep temp tables produced by TTempTable (despite their name). Should not be used in user programs,
+    // but may be useful for setting via environment variable for debugging purposes.
+    bool KeepTempTables = false;
 
     //
     // Infer schemas for nonexstent tables from typed rows (e.g. protobuf)
@@ -201,6 +253,9 @@ struct TConfig
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;
 
+    /// Append job and operation IDs as shell command options.
+    bool AppendDebugOptions = true;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);
@@ -219,6 +274,7 @@ struct TConfig
     void LoadToken();
     void LoadSpec();
     void LoadTimings();
+    void LoadProxyUrlAliasingRules();
 
     void Reset();
 
@@ -233,16 +289,13 @@ struct TProcessState
 {
     TString FqdnHostName;
     TString UserName;
-    TVector<TString> CommandLine;
 
-    // Command line with everything that looks like tokens censored.
-    TVector<TString> CensoredCommandLine;
     int Pid;
     TString ClientVersion;
+    TString BinaryPath;
+    TString BinaryName;
 
     TProcessState();
-
-    void SetCommandLine(int argc, const char* argv[]);
 
     static TProcessState* Get();
 };

@@ -34,6 +34,7 @@ message TAuthConfig {
     optional string UserAccountDomain = 43 [default = "passport"];
     optional string ServiceDomain = 44 [default = "service"];
     optional bool DomainLoginOnly = 45 [default = true];
+    optional string LoginTokenExpireTime = 46 [default = "12h"];
     optional string RefreshPeriod = 50 [default = "1s"]; // how often we check for tickets freshness/expiration
     optional string RefreshTime = 51 [default = "1h"]; // we will try to refresh valid ticket within RefreshTime/2 and RefreshTime randomly
     optional string LifeTime = 52 [default = "1h"]; // for how long ticket will remain in the cache after last access
@@ -53,6 +54,12 @@ message TAuthConfig {
     optional bool UseBuiltinDomain = 78 [default = true];
     optional string AccessServiceType = 79 [default = "Yandex_v2"]; // For now the following values are supported: "Yandex_v2", "Nebius_v1"
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
+    optional bool EnableLoginAuthentication = 81 [default = true];
+    optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
+    optional TPasswordComplexity PasswordComplexity = 83;
+    optional TAccountLockout AccountLockout = 84;
+    optional string AccessServiceTokenName = 85;
+    optional TTokenManager TokenManager = 86;
 }
 
 message TUserRegistryConfig {
@@ -102,6 +109,10 @@ message TLdapAuthentication {
         optional TCertRequire CertRequire = 3 [default = DEMAND];
     }
 
+    message TExtendedSettings {
+        optional bool EnableNestedGroupsSearch = 1 [default = false];
+    }
+
     optional string Host = 1; // DEPRECATED: Use Hosts instead it
     optional uint32 Port = 2;
     optional string BaseDn = 3;
@@ -113,4 +124,59 @@ message TLdapAuthentication {
     optional string RequestedGroupAttribute = 9;
     repeated string Hosts = 10;
     optional string Scheme = 11 [default = "ldap"];
+    optional TExtendedSettings ExtendedSettings = 12;
+}
+
+message TPasswordComplexity {
+    optional uint32 MinLength = 1;
+    optional uint32 MinLowerCaseCount = 2;
+    optional uint32 MinUpperCaseCount = 3;
+    optional uint32 MinNumbersCount = 4;
+    optional uint32 MinSpecialCharsCount = 5;
+    optional string SpecialChars = 6;
+    optional bool CanContainUsername = 7;
+}
+
+message TAccountLockout {
+    optional uint32 AttemptThreshold = 1 [default = 4];
+    optional string AttemptResetDuration = 2 [default = "1h"];
+}
+
+message TTokenManager {
+    message TTokenProviderSettings {
+        optional string SuccessRefreshPeriod = 1 [default = "1h"];
+        optional string MinErrorRefreshPeriod = 2 [default = "1s"];
+        optional string MaxErrorRefreshPeriod = 3 [default = "1m"];
+        optional string RequestTimeout = 4 [default = "1m"];
+    }
+
+    message TVmMetadataProvider {
+        message TVmMetadataInfo {
+            optional string Id = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TVmMetadataInfo ProvidersInfo = 1;
+        optional TTokenProviderSettings Settings = 2;
+    }
+
+    message TTokenAgentProvider {
+        message TTokenAgentInfo {
+            optional string Id = 1;
+            optional string Tag = 2;
+        }
+
+        message TSettings {
+            optional TTokenProviderSettings CommonSettings = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TTokenAgentInfo ProvidersInfo = 1;
+        optional TSettings Settings = 2;
+    }
+
+    optional bool Enable = 1 [default = false];
+    optional string RefreshCheckPeriod = 2 [default = "1s"];
+    optional TVmMetadataProvider VmMetadataProvider = 3;
+    optional TTokenAgentProvider TokenAgentProvider = 4;
 }

@@ -37,13 +37,17 @@ int main(int argc, char *argv[])
 
 	fd = open(filename, O_RDONLY | O_DIRECT, 0644);
 	if (fd < 0) {
+		if (errno == EINVAL) {
+			unlink(filename);
+			return T_EXIT_SKIP;
+		}
 		perror("open");
 		goto err_unlink;
 	}
 
-	to_free = buffer = aligned_alloc(4096, 128 * 4096);
+	to_free = buffer = t_aligned_alloc(4096, 128 * 4096);
 	if (!buffer) {
-		perror("aligned_alloc");
+		perror("t_aligned_alloc");
 		goto err_unlink;
 	}
 

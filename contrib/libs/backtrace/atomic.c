@@ -1,5 +1,5 @@
 /* atomic.c -- Support for atomic functions if not present.
-   Copyright (C) 2013-2021 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -103,7 +103,7 @@ backtrace_atomic_store_size_t (size_t *p, size_t v)
 void
 backtrace_atomic_store_int (int *p, int v)
 {
-  size_t old;
+  int old;
 
   old = *p;
   while (!__sync_bool_compare_and_swap (p, old, v))

@@ -68,12 +68,13 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
     Y_UNIT_TEST(Minimal) {
         auto samples = Decode(
                 "minimal_metric 1.234\n"
+                "big_num 1.04671344e+10\n"
                 "another_metric -3e3 103948\n"
                 "# Even that:\n"
                 "no_labels{} 3\n"
                 "# HELP line for non-existing metric will be ignored.\n");
 
-        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 3);
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 4);
         {
             auto& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
@@ -84,12 +85,19 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         {
             auto& s = samples.GetSamples(1);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+            UNIT_ASSERT_EQUAL(1, s.LabelsSize());
+            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "big_num");
+            ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 1.04671344e+10);
+        }
+        {
+            auto& s = samples.GetSamples(2);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
             UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
             ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "another_metric");
             ASSERT_DOUBLE_POINT(s, TInstant::MilliSeconds(103948), -3000.0);
         }
         {
-            auto& s = samples.GetSamples(2);
+            auto& s = samples.GetSamples(3);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
             UNIT_ASSERT_EQUAL(1, s.LabelsSize());
             ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "no_labels");

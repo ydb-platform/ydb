@@ -1,11 +1,8 @@
-import uuid
-
-from datetime import datetime, timedelta
-
-from moto.core import get_account_id, BaseBackend, BaseModel
+from datetime import timedelta
+from typing import Any, Dict, Iterable, List, Tuple, Optional
+from moto.core import BaseBackend, BackendDict, BaseModel
 from moto.core import CloudFormationModel
-from moto.core.utils import unix_time_millis, BackendDict
-from moto.utilities.paginator import paginate
+from moto.core.utils import unix_time_millis, utcnow
 from moto.logs.metric_filters import MetricFilters
 from moto.logs.exceptions import (
     ResourceNotFoundException,
@@ -13,24 +10,88 @@ from moto.logs.exceptions import (
     InvalidParameterException,
     LimitExceededException,
 )
-from moto.s3.models import s3_backend
-from .utils import PAGINATION_MODEL
+from moto.logs.logs_query import execute_query
+from moto.moto_api._internal import mock_random
+from moto.s3.models import s3_backends
+from moto.utilities.paginator import paginate
+from moto.utilities.tagging_service import TaggingService
+from .utils import PAGINATION_MODEL, EventMessageFilter
 
 MAX_RESOURCE_POLICIES_PER_REGION = 10
 
 
+class Destination(BaseModel):
+    def __init__(
+        self,
+        account_id: str,
+        region: str,
+        destination_name: str,
+        role_arn: str,
+        target_arn: str,
+        access_policy: Optional[str] = None,
+    ):
+        self.access_policy = access_policy
+        self.arn = f"arn:aws:logs:{region}:{account_id}:destination:{destination_name}"
+        self.creation_time = int(unix_time_millis())
+        self.destination_name = destination_name
+        self.role_arn = role_arn
+        self.target_arn = target_arn
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "accessPolicy": self.access_policy,
+            "arn": self.arn,
+            "creationTime": self.creation_time,
+            "destinationName": self.destination_name,
+            "roleArn": self.role_arn,
+            "targetArn": self.target_arn,
+        }
+
+
 class LogQuery(BaseModel):
-    def __init__(self, query_id, start_time, end_time, query):
+    def __init__(
+        self,
+        query_id: str,
+        start_time: int,
+        end_time: int,
+        query: str,
+        log_groups: List["LogGroup"],
+    ):
         self.query_id = query_id
         self.start_time = start_time
         self.end_time = end_time
         self.query = query
+        self.log_group_names = [lg.name for lg in log_groups]
+        self.create_time = unix_time_millis()
+        self.status = "Running"
+        self.results = execute_query(
+            log_groups=log_groups, query=query, start_time=start_time, end_time=end_time
+        )
+        self.status = "Complete"
+
+    def to_json(self, log_group_name: str) -> Dict[str, Any]:
+        return {
+            "queryId": self.query_id,
+            "queryString": self.query,
+            "status": self.status,
+            "createTime": self.create_time,
+            "logGroupName": log_group_name,
+        }
+
+    def to_result_json(self) -> Dict[str, Any]:
+        return {
+            "results": [
+                [{"field": key, "value": val} for key, val in result.items()]
+                for result in self.results
+            ],
+            "status": self.status,
+        }
 
 
 class LogEvent(BaseModel):
     _event_id = 0
 
-    def __init__(self, ingestion_time, log_event):
+    def __init__(self, ingestion_time: int, log_event: Dict[str, Any]):
         self.ingestion_time = ingestion_time
         self.timestamp = log_event["timestamp"]
         self.message = log_event["message"]
@@ -38,7 +99,7 @@ class LogEvent(BaseModel):
         self.__class__._event_id += 1
         ""
 
-    def to_filter_dict(self):
+    def to_filter_dict(self) -> Dict[str, Any]:
         return {
             "eventId": str(self.event_id),
             "ingestionTime": self.ingestion_time,
@@ -47,7 +108,7 @@ class LogEvent(BaseModel):
             "timestamp": self.timestamp,
         }
 
-    def to_response_dict(self):
+    def to_response_dict(self) -> Dict[str, Any]:
         return {
             "ingestionTime": self.ingestion_time,
             "message": self.message,
@@ -58,25 +119,24 @@ class LogEvent(BaseModel):
 class LogStream(BaseModel):
     _log_ids = 0
 
-    def __init__(self, region, log_group, name):
-        self.region = region
-        self.arn = f"arn:aws:logs:{region}:{get_account_id()}:log-group:{log_group}:log-stream:{name}"
+    def __init__(self, log_group: "LogGroup", name: str):
+        self.account_id = log_group.account_id
+        self.region = log_group.region
+        self.log_group = log_group
+        self.arn = f"arn:aws:logs:{self.region}:{self.account_id}:log-group:{log_group.name}:log-stream:{name}"
         self.creation_time = int(unix_time_millis())
         self.first_event_timestamp = None
         self.last_event_timestamp = None
-        self.last_ingestion_time = None
+        self.last_ingestion_time: Optional[int] = None
         self.log_stream_name = name
         self.stored_bytes = 0
-        self.upload_sequence_token = (
-            0  # I'm  guessing this is token needed for sequenceToken by put_events
-        )
-        self.events = []
-        self.destination_arn = None
-        self.filter_name = None
+        # I'm  guessing this is token needed for sequenceToken by put_events
+        self.upload_sequence_token = 0
+        self.events: List[LogEvent] = []
 
         self.__class__._log_ids += 1
 
-    def _update(self):
+    def _update(self) -> None:
         # events can be empty when stream is described soon after creation
         self.first_event_timestamp = (
             min([x.timestamp for x in self.events]) if self.events else None
@@ -85,7 +145,7 @@ class LogStream(BaseModel):
             max([x.timestamp for x in self.events]) if self.events else None
         )
 
-    def to_describe_dict(self):
+    def to_describe_dict(self) -> Dict[str, Any]:
         # Compute start and end times
         self._update()
 
@@ -105,7 +165,7 @@ class LogStream(BaseModel):
             res.update(rest)
         return res
 
-    def put_log_events(self, log_group_name, log_stream_name, log_events):
+    def put_log_events(self, log_events: List[Dict[str, Any]]) -> str:
         # TODO: ensure sequence_token
         # TODO: to be thread safe this would need a lock
         self.last_ingestion_time = int(unix_time_millis())
@@ -119,9 +179,9 @@ class LogStream(BaseModel):
         self.events += events
         self.upload_sequence_token += 1
 
-        service = None
-        if self.destination_arn:
-            service = self.destination_arn.split(":")[2]
+        for subscription_filter in self.log_group.subscription_filters.values():
+
+            service = subscription_filter.destination_arn.split(":")[2]
             formatted_log_events = [
                 {
                     "id": event.event_id,
@@ -130,44 +190,66 @@ class LogStream(BaseModel):
                 }
                 for event in events
             ]
+            self._send_log_events(
+                service=service,
+                destination_arn=subscription_filter.destination_arn,
+                filter_name=subscription_filter.name,
+                log_events=formatted_log_events,
+            )
+        return f"{self.upload_sequence_token:056d}"
+
+    def _send_log_events(
+        self,
+        service: str,
+        destination_arn: str,
+        filter_name: str,
+        log_events: List[Dict[str, Any]],
+    ) -> None:
 
         if service == "lambda":
             from moto.awslambda import lambda_backends  # due to circular dependency
 
-            lambda_backends[self.region].send_log_event(
-                self.destination_arn,
-                self.filter_name,
-                log_group_name,
-                log_stream_name,
-                formatted_log_events,
+            lambda_backends[self.account_id][self.region].send_log_event(
+                destination_arn,
+                filter_name,
+                self.log_group.name,
+                self.log_stream_name,
+                log_events,
             )
         elif service == "firehose":
-            from moto.firehose import (  # pylint: disable=import-outside-toplevel
-                firehose_backends,
-            )
+            from moto.firehose import firehose_backends
 
-            firehose_backends[self.region].send_log_event(
-                self.destination_arn,
-                self.filter_name,
-                log_group_name,
-                log_stream_name,
-                formatted_log_events,
+            firehose_backends[self.account_id][self.region].send_log_event(
+                destination_arn,
+                filter_name,
+                self.log_group.name,
+                self.log_stream_name,
+                log_events,
             )
+        elif service == "kinesis":
+            from moto.kinesis import kinesis_backends
 
-        return "{:056d}".format(self.upload_sequence_token)
+            kinesis = kinesis_backends[self.account_id][self.region]
+            kinesis.send_log_event(
+                destination_arn,
+                filter_name,
+                self.log_group.name,
+                self.log_stream_name,
+                log_events,
+            )
 
     def get_log_events(
         self,
-        start_time,
-        end_time,
-        limit,
-        next_token,
-        start_from_head,
-    ):
+        start_time: str,
+        end_time: str,
+        limit: int,
+        next_token: Optional[str],
+        start_from_head: str,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str], Optional[str]]:
         if limit is None:
             limit = 10000
 
-        def filter_func(event):
+        def filter_func(event: LogEvent) -> bool:
             if start_time and event.timestamp < start_time:
                 return False
 
@@ -176,7 +258,9 @@ class LogStream(BaseModel):
 
             return True
 
-        def get_index_and_direction_from_token(token):
+        def get_index_and_direction_from_token(
+            token: Optional[str],
+        ) -> Tuple[Optional[str], int]:
             if token is not None:
                 try:
                     return token[0], int(token[2:])
@@ -213,41 +297,35 @@ class LogStream(BaseModel):
         if start_index < 0:
             start_index = 0
         elif start_index > final_index:
-            return (
-                [],
-                "b/{:056d}".format(final_index),
-                "f/{:056d}".format(final_index),
-            )
+            return ([], f"b/{final_index:056d}", f"f/{final_index:056d}")
 
         if end_index > final_index:
             end_index = final_index
         elif end_index < 0:
-            return ([], "b/{:056d}".format(0), "f/{:056d}".format(0))
+            return ([], f"b/{0:056d}", f"f/{0:056d}")
 
         events_page = [
             event.to_response_dict() for event in events[start_index : end_index + 1]
         ]
 
-        return (
-            events_page,
-            "b/{:056d}".format(start_index),
-            "f/{:056d}".format(end_index),
-        )
+        return (events_page, f"b/{start_index:056d}", f"f/{end_index:056d}")
 
-    def filter_log_events(self, start_time, end_time, filter_pattern):
-        if filter_pattern:
-            raise NotImplementedError("filter_pattern is not yet implemented")
-
-        def filter_func(event):
+    def filter_log_events(
+        self, start_time: int, end_time: int, filter_pattern: str
+    ) -> List[Dict[str, Any]]:
+        def filter_func(event: LogEvent) -> bool:
             if start_time and event.timestamp < start_time:
                 return False
 
             if end_time and event.timestamp > end_time:
                 return False
 
+            if not EventMessageFilter(filter_pattern).matches(event.message):
+                return False
+
             return True
 
-        events = []
+        events: List[Dict[str, Any]] = []
         for event in sorted(
             filter(filter_func, self.events), key=lambda x: x.timestamp
         ):
@@ -257,18 +335,56 @@ class LogStream(BaseModel):
         return events
 
 
-class LogGroup(CloudFormationModel):
-    def __init__(self, region, name, tags, **kwargs):
+class SubscriptionFilter(BaseModel):
+    def __init__(
+        self,
+        name: str,
+        log_group_name: str,
+        filter_pattern: str,
+        destination_arn: str,
+        role_arn: str,
+    ):
         self.name = name
-        self.region = region
-        self.arn = f"arn:aws:logs:{region}:{get_account_id()}:log-group:{name}"
+        self.log_group_name = log_group_name
+        self.filter_pattern = filter_pattern
+        self.destination_arn = destination_arn
+        self.role_arn = role_arn
         self.creation_time = int(unix_time_millis())
-        self.tags = tags
-        self.streams = dict()  # {name: LogStream}
-        self.retention_in_days = kwargs.get(
-            "RetentionInDays"
-        )  # AWS defaults to Never Expire for log group retention
-        self.subscription_filters = []
+
+    def update(self, filter_pattern: str, destination_arn: str, role_arn: str) -> None:
+        self.filter_pattern = filter_pattern
+        self.destination_arn = destination_arn
+        self.role_arn = role_arn
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "filterName": self.name,
+            "logGroupName": self.log_group_name,
+            "filterPattern": self.filter_pattern,
+            "destinationArn": self.destination_arn,
+            "roleArn": self.role_arn,
+            "distribution": "ByLogStream",
+            "creationTime": self.creation_time,
+        }
+
+
+class LogGroup(CloudFormationModel):
+    def __init__(
+        self,
+        account_id: str,
+        region: str,
+        name: str,
+        **kwargs: Any,
+    ):
+        self.name = name
+        self.account_id = account_id
+        self.region = region
+        self.arn = f"arn:aws:logs:{region}:{account_id}:log-group:{name}"
+        self.creation_time = int(unix_time_millis())
+        self.streams: Dict[str, LogStream] = dict()  # {name: LogStream}
+        # AWS defaults to Never Expire for log group retention
+        self.retention_in_days = kwargs.get("RetentionInDays")
+        self.subscription_filters: Dict[str, SubscriptionFilter] = {}
 
         # The Amazon Resource Name (ARN) of the CMK to use when encrypting log data. It is optional.
         # Docs:
@@ -276,49 +392,67 @@ class LogGroup(CloudFormationModel):
         self.kms_key_id = kwargs.get("kmsKeyId")
 
     @staticmethod
-    def cloudformation_name_type():
+    def cloudformation_name_type() -> str:
         return "LogGroupName"
 
     @staticmethod
-    def cloudformation_type():
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-loggroup.html
         return "AWS::Logs::LogGroup"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any,
+    ) -> "LogGroup":
         properties = cloudformation_json["Properties"]
         tags = properties.get("Tags", {})
-        return logs_backends[region_name].create_log_group(
+        return logs_backends[account_id][region_name].create_log_group(
             resource_name, tags, **properties
         )
 
-    def create_log_stream(self, log_stream_name):
+    @classmethod
+    def has_cfn_attr(cls, attr: str) -> bool:
+        return attr in [
+            "Arn",
+        ]
+
+    def get_cfn_attribute(self, attribute_name: str) -> str:
+        from moto.cloudformation.exceptions import UnformattedGetAttTemplateException
+
+        if attribute_name == "Arn":
+            return self.arn
+        raise UnformattedGetAttTemplateException()
+
+    @property
+    def physical_resource_id(self) -> str:
+        return self.name
+
+    def create_log_stream(self, log_stream_name: str) -> None:
         if log_stream_name in self.streams:
             raise ResourceAlreadyExistsException()
-        stream = LogStream(self.region, self.name, log_stream_name)
-        filters = self.describe_subscription_filters()
+        stream = LogStream(log_group=self, name=log_stream_name)
 
-        if filters:
-            stream.destination_arn = filters[0]["destinationArn"]
-            stream.filter_name = filters[0]["filterName"]
         self.streams[log_stream_name] = stream
 
-    def delete_log_stream(self, log_stream_name):
+    def delete_log_stream(self, log_stream_name: str) -> None:
         if log_stream_name not in self.streams:
             raise ResourceNotFoundException()
         del self.streams[log_stream_name]
 
     def describe_log_streams(
         self,
-        descending,
-        log_group_name,
-        log_stream_name_prefix,
-        order_by,
-        next_token=None,
-        limit=None,
-    ):
+        descending: bool,
+        log_group_name: str,
+        log_stream_name_prefix: str,
+        order_by: str,
+        limit: int,
+        next_token: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         # responses only log_stream_name, creation_time, arn, stored_bytes when no events are stored.
 
         log_streams = [
@@ -327,7 +461,7 @@ class LogGroup(CloudFormationModel):
             if name.startswith(log_stream_name_prefix)
         ]
 
-        def sorter(item):
+        def sorter(item: Any) -> Any:
             return (
                 item[0]
                 if order_by == "LogStreamName"
@@ -359,27 +493,29 @@ class LogGroup(CloudFormationModel):
         log_streams_page = [x[1] for x in log_streams[first_index:last_index]]
         new_token = None
         if log_streams_page and last_index < len(log_streams):
-            new_token = "{}@{}".format(
-                log_group_name, log_streams_page[-1]["logStreamName"]
-            )
+            new_token = f"{log_group_name}@{log_streams_page[-1]['logStreamName']}"
 
         return log_streams_page, new_token
 
-    def put_log_events(self, log_group_name, log_stream_name, log_events):
+    def put_log_events(
+        self,
+        log_stream_name: str,
+        log_events: List[Dict[str, Any]],
+    ) -> str:
         if log_stream_name not in self.streams:
             raise ResourceNotFoundException("The specified log stream does not exist.")
         stream = self.streams[log_stream_name]
-        return stream.put_log_events(log_group_name, log_stream_name, log_events)
+        return stream.put_log_events(log_events)
 
     def get_log_events(
         self,
-        log_stream_name,
-        start_time,
-        end_time,
-        limit,
-        next_token,
-        start_from_head,
-    ):
+        log_stream_name: str,
+        start_time: str,
+        end_time: str,
+        limit: int,
+        next_token: Optional[str],
+        start_from_head: str,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str], Optional[str]]:
         if log_stream_name not in self.streams:
             raise ResourceNotFoundException()
         stream = self.streams[log_stream_name]
@@ -393,15 +529,15 @@ class LogGroup(CloudFormationModel):
 
     def filter_log_events(
         self,
-        log_group_name,
-        log_stream_names,
-        start_time,
-        end_time,
-        limit,
-        next_token,
-        filter_pattern,
-        interleaved,
-    ):
+        log_group_name: str,
+        log_stream_names: List[str],
+        start_time: int,
+        end_time: int,
+        limit: Optional[int],
+        next_token: Optional[str],
+        filter_pattern: str,
+        interleaved: bool,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str], List[Dict[str, Any]]]:
         if not limit:
             limit = 10000
         streams = [
@@ -420,14 +556,15 @@ class LogGroup(CloudFormationModel):
         first_index = 0
         if next_token:
             try:
-                group, stream, event_id = next_token.split("@")
+                group, stream_name, event_id = next_token.split("@")
                 if group != log_group_name:
                     raise ValueError()
                 first_index = (
                     next(
                         index
                         for (index, e) in enumerate(events)
-                        if e["logStreamName"] == stream and e["eventId"] == event_id
+                        if e["logStreamName"] == stream_name
+                        and e["eventId"] == event_id
                     )
                     + 1
                 )
@@ -443,9 +580,7 @@ class LogGroup(CloudFormationModel):
         next_token = None
         if events_page and last_index < len(events):
             last_event = events_page[-1]
-            next_token = "{}@{}@{}".format(
-                log_group_name, last_event["logStreamName"], last_event["eventId"]
-            )
+            next_token = f"{log_group_name}@{last_event['logStreamName']}@{last_event['eventId']}"
 
         searched_streams = [
             {"logStreamName": stream.log_stream_name, "searchedCompletely": True}
@@ -453,7 +588,7 @@ class LogGroup(CloudFormationModel):
         ]
         return events_page, next_token, searched_streams
 
-    def to_describe_dict(self):
+    def to_describe_dict(self) -> Dict[str, Any]:
         log_group = {
             "arn": self.arn,
             "creationTime": self.creation_time,
@@ -468,78 +603,54 @@ class LogGroup(CloudFormationModel):
             log_group["kmsKeyId"] = self.kms_key_id
         return log_group
 
-    def set_retention_policy(self, retention_in_days):
+    def set_retention_policy(self, retention_in_days: Optional[str]) -> None:
         self.retention_in_days = retention_in_days
 
-    def list_tags(self):
-        return self.tags if self.tags else {}
-
-    def tag(self, tags):
-        if self.tags:
-            self.tags.update(tags)
-        else:
-            self.tags = tags
-
-    def untag(self, tags_to_remove):
-        if self.tags:
-            self.tags = {
-                k: v for (k, v) in self.tags.items() if k not in tags_to_remove
-            }
-
-    def describe_subscription_filters(self):
-        return self.subscription_filters
+    def describe_subscription_filters(self) -> Iterable[SubscriptionFilter]:
+        return self.subscription_filters.values()
 
     def put_subscription_filter(
-        self, filter_name, filter_pattern, destination_arn, role_arn
-    ):
-        creation_time = int(unix_time_millis())
+        self, filter_name: str, filter_pattern: str, destination_arn: str, role_arn: str
+    ) -> None:
+        # only two subscription filters can be associated with a log group
+        if len(self.subscription_filters) == 2:
+            raise LimitExceededException()
 
-        # only one subscription filter can be associated with a log group
-        if self.subscription_filters:
-            if self.subscription_filters[0]["filterName"] == filter_name:
-                creation_time = self.subscription_filters[0]["creationTime"]
-            else:
-                raise LimitExceededException()
+        # Update existing filter
+        if filter_name in self.subscription_filters:
+            self.subscription_filters[filter_name].update(
+                filter_pattern, destination_arn, role_arn
+            )
+            return
 
-        for stream in self.streams.values():
-            stream.destination_arn = destination_arn
-            stream.filter_name = filter_name
+        self.subscription_filters[filter_name] = SubscriptionFilter(
+            name=filter_name,
+            log_group_name=self.name,
+            filter_pattern=filter_pattern,
+            destination_arn=destination_arn,
+            role_arn=role_arn,
+        )
 
-        self.subscription_filters = [
-            {
-                "filterName": filter_name,
-                "logGroupName": self.name,
-                "filterPattern": filter_pattern,
-                "destinationArn": destination_arn,
-                "roleArn": role_arn,
-                "distribution": "ByLogStream",
-                "creationTime": creation_time,
-            }
-        ]
-
-    def delete_subscription_filter(self, filter_name):
-        if (
-            not self.subscription_filters
-            or self.subscription_filters[0]["filterName"] != filter_name
-        ):
+    def delete_subscription_filter(self, filter_name: str) -> None:
+        if filter_name not in self.subscription_filters:
             raise ResourceNotFoundException(
                 "The specified subscription filter does not exist."
             )
 
-        self.subscription_filters = []
+        self.subscription_filters.pop(filter_name)
 
 
 class LogResourcePolicy(CloudFormationModel):
-    def __init__(self, policy_name, policy_document):
+    def __init__(self, policy_name: str, policy_document: str):
         self.policy_name = policy_name
         self.policy_document = policy_document
         self.last_updated_time = int(unix_time_millis())
 
-    def update(self, policy_document):
+    def update(self, policy_document: str) -> None:
         self.policy_document = policy_document
         self.last_updated_time = int(unix_time_millis())
 
-    def describe(self):
+    def describe(self) -> Dict[str, Any]:
         return {
             "policyName": self.policy_name,
             "policyDocument": self.policy_document,
@@ -547,70 +658,87 @@ class LogResourcePolicy(CloudFormationModel):
         }
 
     @property
-    def physical_resource_id(self):
+    def physical_resource_id(self) -> str:
         return self.policy_name
 
     @staticmethod
-    def cloudformation_name_type():
+    def cloudformation_name_type() -> str:
         return "PolicyName"
 
     @staticmethod
-    def cloudformation_type():
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-resourcepolicy.html
         return "AWS::Logs::ResourcePolicy"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any,
+    ) -> "LogResourcePolicy":
         properties = cloudformation_json["Properties"]
         policy_name = properties["PolicyName"]
         policy_document = properties["PolicyDocument"]
-        return logs_backends[region_name].put_resource_policy(
+        return logs_backends[account_id][region_name].put_resource_policy(
             policy_name, policy_document
         )
 
     @classmethod
-    def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
-    ):
+    def update_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        original_resource: Any,
+        new_resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> "LogResourcePolicy":
         properties = cloudformation_json["Properties"]
         policy_name = properties["PolicyName"]
         policy_document = properties["PolicyDocument"]
 
-        updated = logs_backends[region_name].put_resource_policy(
-            policy_name, policy_document
-        )
+        backend = logs_backends[account_id][region_name]
+        updated = backend.put_resource_policy(policy_name, policy_document)
         # TODO: move `update by replacement logic` to cloudformation. this is required for implementing rollbacks
         if original_resource.policy_name != policy_name:
-            logs_backends[region_name].delete_resource_policy(
-                original_resource.policy_name
-            )
+            backend.delete_resource_policy(original_resource.policy_name)
         return updated
 
     @classmethod
-    def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
-    ):
-        return logs_backends[region_name].delete_resource_policy(resource_name)
+    def delete_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> None:
+        logs_backends[account_id][region_name].delete_resource_policy(resource_name)
 
 
 class LogsBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.groups = dict()  # { logGroupName: LogGroup}
+        self.groups: Dict[str, LogGroup] = dict()
         self.filters = MetricFilters()
-        self.queries = dict()
-        self.resource_policies = dict()
+        self.queries: Dict[str, LogQuery] = dict()
+        self.resource_policies: Dict[str, LogResourcePolicy] = dict()
+        self.destinations: Dict[str, Destination] = dict()
+        self.tagger = TaggingService()
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(
+        service_region: str, zones: List[str]
+    ) -> List[Dict[str, str]]:
         """Default VPC endpoint service."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "logs"
         )
 
-    def create_log_group(self, log_group_name, tags, **kwargs):
+    def create_log_group(
+        self, log_group_name: str, tags: Dict[str, str], **kwargs: Any
+    ) -> LogGroup:
         if log_group_name in self.groups:
             raise ResourceAlreadyExistsException()
         if len(log_group_name) > 512:
@@ -620,55 +748,127 @@ class LogsBackend(BaseBackend):
                 value=log_group_name,
             )
         self.groups[log_group_name] = LogGroup(
-            self.region_name, log_group_name, tags, **kwargs
+            self.account_id, self.region_name, log_group_name, **kwargs
         )
+        self.tag_resource(self.groups[log_group_name].arn, tags)
         return self.groups[log_group_name]
 
-    def ensure_log_group(self, log_group_name, tags):
+    def ensure_log_group(self, log_group_name: str) -> None:
         if log_group_name in self.groups:
             return
-        self.groups[log_group_name] = LogGroup(self.region_name, log_group_name, tags)
+        self.groups[log_group_name] = LogGroup(
+            self.account_id,
+            self.region_name,
+            log_group_name,
+        )
 
-    def delete_log_group(self, log_group_name):
+    def delete_log_group(self, log_group_name: str) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         del self.groups[log_group_name]
 
-    @paginate(pagination_model=PAGINATION_MODEL)
-    def describe_log_groups(self, log_group_name_prefix=None):
-        if log_group_name_prefix is None:
-            log_group_name_prefix = ""
-
+    @paginate(pagination_model=PAGINATION_MODEL)  # type: ignore[misc]
+    def describe_log_groups(
+        self, log_group_name_prefix: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         groups = [
             group.to_describe_dict()
             for name, group in self.groups.items()
-            if name.startswith(log_group_name_prefix)
+            if name.startswith(log_group_name_prefix or "")
         ]
         groups = sorted(groups, key=lambda x: x["logGroupName"])
 
         return groups
 
-    def create_log_stream(self, log_group_name, log_stream_name):
-        if log_group_name not in self.groups:
-            raise ResourceNotFoundException()
-        log_group = self.groups[log_group_name]
-        return log_group.create_log_stream(log_stream_name)
+    def get_destination(self, destination_name: str) -> Destination:
+        for destination in self.destinations:
+            if self.destinations[destination].destination_name == destination_name:
+                return self.destinations[destination]
+        raise ResourceNotFoundException()
 
-    def delete_log_stream(self, log_group_name, log_stream_name):
+    def put_destination(
+        self,
+        destination_name: str,
+        role_arn: str,
+        target_arn: str,
+        tags: Dict[str, str],
+    ) -> Destination:
+        for _, destination in self.destinations.items():
+            if destination.destination_name == destination_name:
+                if role_arn:
+                    destination.role_arn = role_arn
+                if target_arn:
+                    destination.target_arn = target_arn
+                return destination
+        destination = Destination(
+            self.account_id, self.region_name, destination_name, role_arn, target_arn
+        )
+        self.destinations[destination.arn] = destination
+        self.tag_resource(destination.arn, tags)
+        return destination
+
+    def delete_destination(self, destination_name: str) -> None:
+        destination = self.get_destination(destination_name)
+        self.destinations.pop(destination.arn)
+        return
+
+    def describe_destinations(
+        self, destination_name_prefix: str, limit: int, next_token: Optional[int] = None
+    ) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+        if limit > 50:
+            raise InvalidParameterException(
+                constraint="Member must have value less than or equal to 50",
+                parameter="limit",
+                value=limit,
+            )
+
+        result = []
+        for destination in self.destinations:
+            result.append(self.destinations[destination].to_dict())
+        if next_token:
+            result = result[: int(next_token)]
+        result = [
+            destination
+            for destination in result
+            if destination["destinationName"].startswith(destination_name_prefix)
+        ]
+        return result, next_token
+
+    def put_destination_policy(self, destination_name: str, access_policy: str) -> None:
+        destination = self.get_destination(destination_name)
+        destination.access_policy = access_policy
+        return
+
+    def create_log_stream(self, log_group_name: str, log_stream_name: str) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         log_group = self.groups[log_group_name]
-        return log_group.delete_log_stream(log_stream_name)
+        log_group.create_log_stream(log_stream_name)
+
+    def ensure_log_stream(self, log_group_name: str, log_stream_name: str) -> None:
+        if log_group_name not in self.groups:
+            raise ResourceNotFoundException()
+
+        if log_stream_name in self.groups[log_group_name].streams:
+            return
+
+        self.create_log_stream(log_group_name, log_stream_name)
+
+    def delete_log_stream(self, log_group_name: str, log_stream_name: str) -> None:
+        if log_group_name not in self.groups:
+            raise ResourceNotFoundException()
+        log_group = self.groups[log_group_name]
+        log_group.delete_log_stream(log_stream_name)
 
     def describe_log_streams(
         self,
-        descending,
-        limit,
-        log_group_name,
-        log_stream_name_prefix,
-        next_token,
-        order_by,
-    ):
+        descending: bool,
+        limit: int,
+        log_group_name: str,
+        log_stream_name_prefix: str,
+        next_token: Optional[str],
+        order_by: str,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         if limit > 50:
@@ -697,7 +897,12 @@ class LogsBackend(BaseBackend):
             order_by=order_by,
         )
 
-    def put_log_events(self, log_group_name, log_stream_name, log_events):
+    def put_log_events(
+        self,
+        log_group_name: str,
+        log_stream_name: str,
+        log_events: List[Dict[str, Any]],
+    ) -> Tuple[str, Dict[str, Any]]:
         """
         The SequenceToken-parameter is not yet implemented
         """
@@ -709,8 +914,8 @@ class LogsBackend(BaseBackend):
         rejected_info = {}
         allowed_events = []
         last_timestamp = None
-        oldest = int(unix_time_millis(datetime.utcnow() - timedelta(days=14)))
-        newest = int(unix_time_millis(datetime.utcnow() + timedelta(hours=2)))
+        oldest = int(unix_time_millis(utcnow() - timedelta(days=14)))
+        newest = int(unix_time_millis(utcnow() + timedelta(hours=2)))
         for idx, event in enumerate(log_events):
             if last_timestamp and last_timestamp > event["timestamp"]:
                 raise InvalidParameterException(
@@ -724,24 +929,22 @@ class LogsBackend(BaseBackend):
                 allowed_events.append(event)
             last_timestamp = event["timestamp"]
 
-        token = log_group.put_log_events(
-            log_group_name, log_stream_name, allowed_events
-        )
+        token = log_group.put_log_events(log_stream_name, allowed_events)
         return token, rejected_info
 
     def get_log_events(
         self,
-        log_group_name,
-        log_stream_name,
-        start_time,
-        end_time,
-        limit,
-        next_token,
-        start_from_head,
-    ):
+        log_group_name: str,
+        log_stream_name: str,
+        start_time: str,
+        end_time: str,
+        limit: int,
+        next_token: Optional[str],
+        start_from_head: str,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str], Optional[str]]:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
-        if limit and limit > 1000:
+        if limit and limit > 10000:
             raise InvalidParameterException(
                 constraint="Member must have value less than or equal to 10000",
                 parameter="limit",
@@ -754,18 +957,22 @@ class LogsBackend(BaseBackend):
 
     def filter_log_events(
         self,
-        log_group_name,
-        log_stream_names,
-        start_time,
-        end_time,
-        limit,
-        next_token,
-        filter_pattern,
-        interleaved,
-    ):
+        log_group_name: str,
+        log_stream_names: List[str],
+        start_time: int,
+        end_time: int,
+        limit: Optional[int],
+        next_token: Optional[str],
+        filter_pattern: str,
+        interleaved: bool,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str], List[Dict[str, Any]]]:
+        """
+        The following filter patterns are currently supported: Single Terms, Multiple Terms, Exact Phrases.
+        If the pattern is not supported, all events are returned.
+        """
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
-        if limit and limit > 1000:
+        if limit and limit > 10000:
             raise InvalidParameterException(
                 constraint="Member must have value less than or equal to 10000",
                 parameter="limit",
@@ -783,33 +990,33 @@ class LogsBackend(BaseBackend):
             interleaved,
         )
 
-    def put_retention_policy(self, log_group_name, retention_in_days):
+    def put_retention_policy(self, log_group_name: str, retention_in_days: str) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
-        log_group = self.groups[log_group_name]
-        return log_group.set_retention_policy(retention_in_days)
+        self.groups[log_group_name].set_retention_policy(retention_in_days)
 
-    def delete_retention_policy(self, log_group_name):
+    def delete_retention_policy(self, log_group_name: str) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
-        log_group = self.groups[log_group_name]
-        return log_group.set_retention_policy(None)
+        self.groups[log_group_name].set_retention_policy(None)
 
-    def describe_resource_policies(
-        self, next_token, limit
-    ):  # pylint: disable=unused-argument
-        """Return list of resource policies.
+    def describe_resource_policies(self) -> List[LogResourcePolicy]:
+        """
+        Return list of resource policies.
 
         The next_token and limit arguments are ignored.  The maximum
         number of resource policies per region is a small number (less
         than 50), so pagination isn't needed.
         """
-        limit = limit or MAX_RESOURCE_POLICIES_PER_REGION
 
         return list(self.resource_policies.values())
 
-    def put_resource_policy(self, policy_name, policy_doc):
-        """Creates/updates resource policy and return policy object"""
+    def put_resource_policy(
+        self, policy_name: str, policy_doc: str
+    ) -> LogResourcePolicy:
+        """
+        Creates/updates resource policy and return policy object
+        """
         if policy_name in self.resource_policies:
             policy = self.resource_policies[policy_name]
             policy.update(policy_doc)
@@ -820,52 +1027,65 @@ class LogsBackend(BaseBackend):
         self.resource_policies[policy_name] = policy
         return policy
 
-    def delete_resource_policy(self, policy_name):
-        """Remove resource policy with a policy name matching given name."""
+    def delete_resource_policy(self, policy_name: str) -> None:
+        """
+        Remove resource policy with a policy name matching given name.
+        """
         if policy_name not in self.resource_policies:
             raise ResourceNotFoundException(
                 msg=f"Policy with name [{policy_name}] does not exist"
             )
         del self.resource_policies[policy_name]
-        return ""
 
-    def list_tags_log_group(self, log_group_name):
+    def list_tags_log_group(self, log_group_name: str) -> Dict[str, str]:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         log_group = self.groups[log_group_name]
-        return log_group.list_tags()
+        return self.list_tags_for_resource(log_group.arn)
 
-    def tag_log_group(self, log_group_name, tags):
+    def tag_log_group(self, log_group_name: str, tags: Dict[str, str]) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         log_group = self.groups[log_group_name]
-        log_group.tag(tags)
+        self.tag_resource(log_group.arn, tags)
 
-    def untag_log_group(self, log_group_name, tags):
+    def untag_log_group(self, log_group_name: str, tags: List[str]) -> None:
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
         log_group = self.groups[log_group_name]
-        log_group.untag(tags)
+        self.untag_resource(log_group.arn, tags)
 
     def put_metric_filter(
-        self, filter_name, filter_pattern, log_group_name, metric_transformations
-    ):
+        self,
+        filter_name: str,
+        filter_pattern: str,
+        log_group_name: str,
+        metric_transformations: str,
+    ) -> None:
         self.filters.add_filter(
             filter_name, filter_pattern, log_group_name, metric_transformations
         )
 
     def describe_metric_filters(
-        self, prefix=None, log_group_name=None, metric_name=None, metric_namespace=None
-    ):
+        self,
+        prefix: Optional[str] = None,
+        log_group_name: Optional[str] = None,
+        metric_name: Optional[str] = None,
+        metric_namespace: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         filters = self.filters.get_matching_filters(
             prefix, log_group_name, metric_name, metric_namespace
         )
         return filters
 
-    def delete_metric_filter(self, filter_name=None, log_group_name=None):
+    def delete_metric_filter(
+        self, filter_name: Optional[str] = None, log_group_name: Optional[str] = None
+    ) -> None:
         self.filters.delete_filter(filter_name, log_group_name)
 
-    def describe_subscription_filters(self, log_group_name):
+    def describe_subscription_filters(
+        self, log_group_name: str
+    ) -> Iterable[SubscriptionFilter]:
         log_group = self.groups.get(log_group_name)
 
         if not log_group:
@@ -874,8 +1094,13 @@ class LogsBackend(BaseBackend):
         return log_group.describe_subscription_filters()
 
     def put_subscription_filter(
-        self, log_group_name, filter_name, filter_pattern, destination_arn, role_arn
-    ):
+        self,
+        log_group_name: str,
+        filter_name: str,
+        filter_pattern: str,
+        destination_arn: str,
+        role_arn: str,
+    ) -> None:
         log_group = self.groups.get(log_group_name)
 
         if not log_group:
@@ -883,12 +1108,12 @@ class LogsBackend(BaseBackend):
 
         service = destination_arn.split(":")[2]
         if service == "lambda":
-            from moto.awslambda import (  # pylint: disable=import-outside-toplevel
-                lambda_backends,
-            )
+            from moto.awslambda import lambda_backends
 
             try:
-                lambda_backends[self.region_name].get_function(destination_arn)
+                lambda_backends[self.account_id][self.region_name].get_function(
+                    destination_arn
+                )
             # no specific permission check implemented
             except Exception:
                 raise InvalidParameterException(
@@ -897,18 +1122,26 @@ class LogsBackend(BaseBackend):
                     "function."
                 )
         elif service == "firehose":
-            from moto.firehose import (  # pylint: disable=import-outside-toplevel
-                firehose_backends,
-            )
+            from moto.firehose import firehose_backends
 
-            firehose = firehose_backends[self.region_name].lookup_name_from_arn(
-                destination_arn
-            )
+            firehose = firehose_backends[self.account_id][
+                self.region_name
+            ].lookup_name_from_arn(destination_arn)
             if not firehose:
                 raise InvalidParameterException(
                     "Could not deliver test message to specified Firehose "
                     "stream. Check if the given Firehose stream is in ACTIVE "
                     "state."
+                )
+        elif service == "kinesis":
+            from moto.kinesis import kinesis_backends
+
+            kinesis = kinesis_backends[self.account_id][self.region_name]
+            try:
+                kinesis.describe_stream(stream_arn=destination_arn, stream_name=None)
+            except Exception:
+                raise InvalidParameterException(
+                    "Could not deliver test message to specified Kinesis stream. Verify the stream exists "
                 )
         else:
             # TODO: support Kinesis stream destinations
@@ -921,7 +1154,7 @@ class LogsBackend(BaseBackend):
             filter_name, filter_pattern, destination_arn, role_arn
         )
 
-    def delete_subscription_filter(self, log_group_name, filter_name):
+    def delete_subscription_filter(self, log_group_name: str, filter_name: str) -> None:
         log_group = self.groups.get(log_group_name)
 
         if not log_group:
@@ -929,22 +1162,61 @@ class LogsBackend(BaseBackend):
 
         log_group.delete_subscription_filter(filter_name)
 
-    def start_query(self, log_group_names, start_time, end_time, query_string):
+    def start_query(
+        self,
+        log_group_names: List[str],
+        start_time: int,
+        end_time: int,
+        query_string: str,
+    ) -> str:
 
         for log_group_name in log_group_names:
             if log_group_name not in self.groups:
                 raise ResourceNotFoundException()
+        log_groups = [self.groups[name] for name in log_group_names]
 
-        query_id = uuid.uuid1()
-        self.queries[query_id] = LogQuery(query_id, start_time, end_time, query_string)
+        query_id = str(mock_random.uuid1())
+        self.queries[query_id] = LogQuery(
+            query_id, start_time, end_time, query_string, log_groups
+        )
         return query_id
 
-    def create_export_task(self, log_group_name, destination):
-        s3_backend.get_bucket(destination)
+    def describe_queries(
+        self, log_stream_name: str, status: Optional[str]
+    ) -> List[LogQuery]:
+        """
+        Pagination is not yet implemented
+        """
+        queries: List[LogQuery] = []
+        for query in self.queries.values():
+            if log_stream_name in query.log_group_names and (
+                not status or status == query.status
+            ):
+                queries.append(query)
+        return queries
+
+    def get_query_results(self, query_id: str) -> LogQuery:
+        """
+        Not all query commands are implemented yet. Please raise an issue if you encounter unexpected results.
+        """
+        return self.queries[query_id]
+
+    def create_export_task(
+        self, log_group_name: str, destination: Dict[str, Any]
+    ) -> str:
+        s3_backends[self.account_id]["global"].get_bucket(destination)
         if log_group_name not in self.groups:
             raise ResourceNotFoundException()
-        task_id = uuid.uuid4()
-        return task_id
+        return str(mock_random.uuid4())
+
+    def list_tags_for_resource(self, resource_arn: str) -> Dict[str, str]:
+        return self.tagger.get_tag_dict_for_resource(resource_arn)
+
+    def tag_resource(self, arn: str, tags: Dict[str, str]) -> None:
+        self.tagger.tag_resource(arn, TaggingService.convert_dict_to_tags_input(tags))
+
+    def untag_resource(self, arn: str, tag_keys: List[str]) -> None:
+        self.tagger.untag_resource_using_names(arn, tag_keys)
 
 
 logs_backends = BackendDict(LogsBackend, "logs")

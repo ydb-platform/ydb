@@ -1,0 +1,93 @@
+{#- Macroses must be in parent *.jinja for place of it usage -#}
+{#- Include macroses.jinja then include use_macroses.jinja not work! -#}
+{#- That is why all common macroses here -#}
+
+{%- macro PatchRoots(arg, depend = false, output = false, tail = "") -%}
+{#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $arcadia_root in Gradle -#}
+{%-     if depend -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to $arcadia_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
+"{{ arg|replace(export_root, "$output_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}{{ tail }}"
+{%-     elif output -%}
+{%-         if arg[0] != '/' -%}
+{#-             Relative outputs in buildDir, make relative from baseBuildDir -#}
+{%-             set bindir = curdir + "/" + arg -%}
+{%-         elif arg|replace(export_root + "/", "") != arg -%}
+{%-             set bindir = arg|replace(export_root + "/", "") -%}
+{%-         else -%}
+{%-             set bindir = false -%}
+{%-         endif -%}
+{%-         if bindir and current_target -%}
+{%-             set all_sets = [] -%}
+{%-             if current_target.source_sets|length -%}
+{%-                 set all_sets = all_sets + current_target.source_sets -%}
+{%-             endif -%}
+{%-             if current_target.resource_sets|length -%}
+{%-                 set all_sets = all_sets + current_target.resource_sets -%}
+{%-             endif -%}
+{#-             Output is relative in export_root -#}
+{%-             set out_set = all_sets|selectattr('realdir', 'startsWith', export_root)|rejectattr('dir', 'startsWith', export_root)|selectattr('realdir', 'in', export_root + "/" + bindir) -%}
+{%-             if out_set|length -%}
+{%-                 set out_set = out_set|first -%}
+{%-                 set out_dir = out_set.dir -%}
+{%-                 if current_target.test_reldir -%}
+{%-                     set out_dir = current_target.test_reldir + "/" + out_set.dir -%}
+{%-                 endif -%}
+{%-                 set out_tail = (export_root + "/" + bindir)|replace(out_set.realdir + "/", "")|replace(out_set.realdir, "") -%}
+{%-                 if out_tail -%}
+{%-                     set out_dir = out_dir + "/" + out_tail -%}
+{%-                 endif -%}
+"$arcadia_root/{{ curdir }}/{{ out_dir }}{{ tail }}"
+{%-             else -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
+{%-             endif -%}
+{%-         else -%}
+"{{ arg|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
+{%-         endif -%}
+{%-     else -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root")|replace(output_root, "$output_root") }}{{ tail }}"
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- if proto_template -%}
+{%-     macro PatchGeneratedProto(arg, relative = false) -%}
+{%-         if relative -%}
+"{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "")|replace(output_root + "/", "") }}"
+{%-         else -%}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{%-         endif -%}
+{%-     endmacro -%}
+{%- endif -%}
+
+{%- include "[generator]/common_dir.jinja" -%}
+
+{%- if proto_template -%}
+{%-     include "[generator]/proto_vars.jinja" -%}
+{%-     include "[generator]/import.jinja" -%}
+{%-     include "[generator]/proto_import.jinja" -%}
+{%-     include "[generator]/proto_builddir.jinja" -%}
+{%-     include "[generator]/proto_plugins.jinja" -%}
+{%-     include "[generator]/configuration.jinja" -%}
+{%-     include "[generator]/protobuf.jinja" -%}
+{%-     include "[generator]/proto_prepare.jinja" -%}
+{%-     include "[generator]/build.gradle.kts.common.jinja" -%}
+{%-     include "[generator]/proto_dependencies.jinja" -%}
+{%- else -%}
+{%-     include "[generator]/vars.jinja" -%}
+{%-     include "[generator]/import.jinja" -%}
+{%-     include "[generator]/builddir.jinja" -%}
+{%-     include "[generator]/plugins.jinja" -%}
+{%-     include "[generator]/kotlin_plugins.jinja" -%}
+{%-     include "[generator]/preview.jinja" -%}
+{%-     include "[generator]/configuration.jinja" -%}
+{%-     include "[generator]/test.jinja" -%}
+{%-     include "[generator]/build.gradle.kts.common.jinja" -%}
+{%-     include "[generator]/dependencies.jinja" -%}
+{%-     include "extra-tests.gradle.kts" ignore missing -%}
+{%-     if publish -%}
+{%-         include 'publish.gradle.kts' ignore missing -%}
+{%-     endif -%}
+{%- endif -%}
+
+{%- include "[generator]/debug.jinja" ignore missing -%}

@@ -32,26 +32,26 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsDistributedEraseTx());
+        Y_ENSURE(op->IsDistributedEraseTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         const auto& eraseTx = tx->GetDistributedEraseTx();
         const auto& request = eraseTx->GetRequest();
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
+        auto mvccVersion = DataShard.GetMvccVersion(op.Get());
 
         if (eraseTx->HasDependents()) {
             NMiniKQL::TEngineHostCounters engineHostCounters;
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), mvccVersion, op->GetGlobalTxId(),
                     &userDb, &groupProvider, changeCollector.Get()))
             {
                 return EExecutionStatus::Restart;
@@ -61,7 +61,7 @@ public:
                 for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                     op->AddVolatileDependency(txId);
                     bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
-                    Y_VERIFY_S(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
+                    Y_ENSURE(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
                 }
 
                 if (txc.DB.HasChanges()) {
@@ -83,18 +83,18 @@ public:
         } else if (eraseTx->HasDependencies()) {
             THashMap<ui64, TDynBitMap> presentRows;
             for (const auto& dependency : eraseTx->GetDependencies()) {
-                Y_ABORT_UNLESS(!presentRows.contains(dependency.GetShardId()));
+                Y_ENSURE(!presentRows.contains(dependency.GetShardId()));
                 presentRows.emplace(dependency.GetShardId(), DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows()));
             }
 
             for (const auto& [_, readSets] : op->InReadSets()) {
                 for (const auto& rs : readSets) {
                     NKikimrTxDataShard::TDistributedEraseRS body;
-                    Y_ABORT_UNLESS(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
-                    Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
+                    Y_ENSURE(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
+                    Y_ENSURE(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, mvccVersion, op->GetGlobalTxId())) {
                         return EExecutionStatus::Restart;
                     }
                 }
@@ -107,7 +107,7 @@ public:
                 return EExecutionStatus::Continue;
             }
         } else {
-            Y_FAIL_S("Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
+            Y_ENSURE(false, "Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -119,7 +119,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
+            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& mvccVersion,
             ui64 globalTxId,
             TDataShardUserDb* userDb = nullptr,
             TDataShardChangeGroupProvider* groupProvider = nullptr,
@@ -128,7 +128,7 @@ public:
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
 
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
         const bool breakWriteConflicts = DataShard.SysLocksTable().HasWriteLocks(fullTableId);
@@ -148,14 +148,14 @@ public:
 
             const auto& serializedKey = request.GetKeyColumns(row++);
             TSerializedCellVec keyCells;
-            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(serializedKey, keyCells));
-            Y_ABORT_UNLESS(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
+            Y_ENSURE(TSerializedCellVec::TryParse(serializedKey, keyCells));
+            Y_ENSURE(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
 
             TVector<TRawTypeValue> key;
             for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-                const auto& kt = tableInfo.KeyColumnTypes[ki];
+                const NScheme::TTypeId vtype = tableInfo.KeyColumnTypes[ki].GetTypeId();
                 const TCell& cell = keyCells.GetCells()[ki];
-                key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
+                key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
             if (breakWriteConflicts || checkVolatileDependencies) {
@@ -176,7 +176,7 @@ public:
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion)) {
                         pageFault = true;
                     }
                 }
@@ -193,11 +193,11 @@ public:
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
-                    userDb->AddCommitTxId(fullTableId, globalTxId, writeVersion);
+                    userDb->AddCommitTxId(fullTableId, globalTxId);
                     commitAdded = true;
                 }
             } else {
-                txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+                txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion);
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
             }
         }
@@ -209,13 +209,14 @@ public:
         if (!volatileDependencies.empty() || volatileOrdered) {
             DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                 globalTxId,
-                writeVersion,
+                mvccVersion,
                 /* commitTxIds */ { globalTxId },
                 volatileDependencies,
                 /* participants */ { },
                 groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
                 volatileOrdered,
                 /* arbiter */ false,
+                /* disable expectations */ false,
                 txc);
             // Note: transaction is already committed, no additional waiting needed
         }

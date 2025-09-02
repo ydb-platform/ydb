@@ -27,7 +27,7 @@ public:
 
 private:
     static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) {
-        Y_ABORT_UNLESS(!largeGlobIds.empty());
+        Y_ENSURE(!largeGlobIds.empty());
         return largeGlobIds[0].Lead;
     }
 
@@ -46,7 +46,7 @@ protected:
     { }
 
 public:
-    using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+    using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
     TPartStore(const TLogoBlobID &label, TPart::TParams egg, TStat stat)
         : TPart(label, egg, stat)
@@ -54,12 +54,12 @@ public:
 
     }
 
-    const TLogoBlobID& BundleId() const override
+    const TLogoBlobID& BundleId() const noexcept override
     {
         return PageCollections[0]->PageCollection->Label();
     }
 
-    ui64 BackingSize() const override
+    ui64 BackingSize() const noexcept override
     {
         ui64 size = 0;
         for (const auto &cache : PageCollections) {
@@ -68,33 +68,40 @@ public:
         return size;
     }
 
-    ui64 DataSize() const override
+    ui64 DataSize() const noexcept override
     {
         return BackingSize() - IndexesRawSize;
     }
 
     ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->GetPageSize(pageId);
+    }
+
+    ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
+    {
+        auto* cache = Locate(lob, ref);
+
+        return cache->PageCollection->Page(ref).Size;
     }
 
     NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->Id.Channel();
     }
 
     ui8 GetPageChannel(ELargeObj lob, ui64 ref) const override
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+            Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
         if (lob == ELargeObj::Extern) {
@@ -118,18 +125,18 @@ public:
         return dynamic_cast<const NPageCollection::TPageCollection*>(pageCollection);
     }
 
-    TCache* Locate(ELargeObj lob, ui64 ref) const noexcept
+    TPageCollection* Locate(ELargeObj lob, ui64 ref) const
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+            Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const noexcept
+    TVector<TPageId> GetPages(ui32 room) const
     {
-        Y_ABORT_UNLESS(room < PageCollections.size());
+        Y_ENSURE(room < PageCollections.size());
 
         auto total = PageCollections[room]->PageCollection->Total();
 
@@ -138,34 +145,31 @@ public:
             pages[i] = i;
         }
 
-        return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
+        return pages;
     }
 
-    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept
+    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
     {
-        TVector<TIntrusivePtr<TCache>> caches;
+        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
 
         for (auto &one: components) {
-            caches.emplace_back(new TCache(std::move(one.Packet)));
-
-            for (auto &page: one.Sticky)
-                caches.back()->Fill(page, true);
+            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
         }
 
-        return caches;
+        return pageCollections;
     }
 
-    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView) noexcept
+    static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)
     {
         auto *part = partView.As<TPartStore>();
 
-        Y_ABORT_UNLESS(!partView || part, "Got an unexpected type of TPart part");
+        Y_ENSURE(!partView || part, "Got an unexpected type of TPart part");
 
-        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
+        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TPageCollection>> { };
     }
 
-    TVector<TIntrusivePtr<TCache>> PageCollections;
-    TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */
+    TVector<TIntrusivePtr<TPageCollection>> PageCollections;
+    TIntrusivePtr<TPageCollection> Pseudo;    /* Cache for NPage::TBlobs */
 };
 
 class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {
@@ -175,15 +179,15 @@ public:
         , DataId(dataId)
     { }
 
-    const NPageCollection::TLargeGlobId& GetDataId() const {
+    const NPageCollection::TLargeGlobId& GetDataId() const noexcept {
         return DataId;
     }
 
-    const TLogoBlobID& BundleId() const override {
+    const TLogoBlobID& BundleId() const noexcept override {
         return DataId.Lead;
     }
 
-    ui64 BackingSize() const override {
+    ui64 BackingSize() const noexcept override {
         return DataId.Bytes;
     }
 

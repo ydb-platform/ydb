@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/audit/audit_log_service.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -15,6 +16,7 @@ namespace NActors {
         ~TTestBasicRuntime();
 
         void Initialize(TEgg) override;
+
         void AddICStuff();
     };
 }

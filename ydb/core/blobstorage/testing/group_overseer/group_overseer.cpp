@@ -19,6 +19,7 @@ namespace NKikimr::NTesting {
             switch (ev.GetTypeRewrite()) { // all of these events may alter storage state
 #define QUERY(EV) case TEvBlobStorage::EV: return ExamineResultEvent<TEvBlobStorage::T##EV>(nodeId, ev);
                 QUERY(EvBlockResult)
+                QUERY(EvGetBlockResult)
                 QUERY(EvPutResult)
                 QUERY(EvPatchResult)
                 QUERY(EvInplacePatchResult)
@@ -34,6 +35,7 @@ namespace NKikimr::NTesting {
             switch (ev.GetTypeRewrite()) { // all of these events may alter storage state
 #define RESULT(EV) case TEvBlobStorage::EV: return ExamineQueryEvent<TEvBlobStorage::T##EV>(nodeId, ev, TEvBlobStorage::EV##Result);
                 RESULT(EvBlock)
+                RESULT(EvGetBlock)
                 RESULT(EvPut)
                 RESULT(EvPatch)
                 RESULT(EvInplacePatch)
@@ -101,7 +103,8 @@ namespace NKikimr::NTesting {
             else if constexpr (T::EventType != TEvBlobStorage::EvBlockResult &&
                     T::EventType != TEvBlobStorage::EvInplacePatchResult &&
                     T::EventType != TEvBlobStorage::EvCollectGarbageResult &&
-                    T::EventType != TEvBlobStorage::EvDiscoverResult) {
+                    T::EventType != TEvBlobStorage::EvDiscoverResult &&
+                    T::EventType != TEvBlobStorage::EvGetBlockResult) {
                 Y_ABORT_UNLESS(groupId == msg.GroupId.GetRawId());
             }
 

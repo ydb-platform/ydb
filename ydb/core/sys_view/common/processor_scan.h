@@ -1,10 +1,10 @@
-#include "common.h"
-#include "events.h"
-#include "keys.h"
-#include "schema.h"
-#include "scan_actor_base_impl.h"
+#pragma once
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/sys_view/common/common.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/keys.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -25,14 +25,11 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TProcessorScan(
-        const NActors::TActorId& ownerId,
-        ui32 scanId,
-        const TTableId& tableId,
-        const TTableRange& tableRange,
-        const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TProcessorScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         NKikimrSysView::EStatsType type)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
     {
         ConvertKeyRange<TRequest, T...>(Request, this->TableRange);
         Request.SetType(type);
@@ -74,9 +71,7 @@ private:
         auto req = MakeHolder<TEvRequest>();
         req->Record.CopyFrom(Request);
 
-        TBase::Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(req.Release(), this->SysViewProcessorId, true),
-            IEventHandle::FlagTrackDelivery);
+        this->SendThroughPipeCache(req.Release(), this->SysViewProcessorId);
 
         this->BatchRequestInFlight = true;
     }
@@ -110,7 +105,6 @@ private:
     }
 
     void PassAway() override {
-        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 

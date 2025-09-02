@@ -55,6 +55,7 @@ struct TBillRecord {
     BILL_RECORD_FIELD_DEFAULT(TString, SourceId, "sless-docapi-ydb-ss");
     BILL_RECORD_FIELD(TInstant, SourceWt);
     BILL_RECORD_FIELD_DEFAULT(NJson::TJsonMap, Tags, {});
+    BILL_RECORD_FIELD_DEFAULT(NJson::TJsonMap, Labels, {});
     BILL_RECORD_FIELD(TUsage, Usage);
 
     NJson::TJsonMap ToJson() const;

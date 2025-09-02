@@ -1,0 +1,33 @@
+{#- empty string #}
+dependencies {
+{%- for library in target.consumer -%}
+{%-     if (library.prebuilt and library.jar and (library.type != "contrib" or build_contribs)) or (library.type == "ejlibrary") %}
+    implementation(files("$output_root/{{ library.jar }}"))
+{%-     elif library.classpath -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif %}
+{%-         include "[generator]/patch_classpath.jinja" -%}
+{%-         if library.type != "contrib" %}
+    implementation
+{%-         else %}
+    api
+{%-         endif -%}({{ classpath }})
+{%-         if library.excludes.consumer is defined %} {
+{%              for exclude in library.excludes.consumer -%}
+{%                  set classpath = exclude.classpath|replace('"','') -%}
+{%                  set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%              endfor -%}
+    }
+{%-         endif -%}
+{%-     endif -%}
+{%- endfor -%}
+
+{%- if target.proto_namespace %}
+    protobuf(files(File(mainProtosDir, "{{ target.proto_namespace }}")))
+{%- else %}
+    protobuf(files(mainProtosDir))
+{%- endif %}
+}

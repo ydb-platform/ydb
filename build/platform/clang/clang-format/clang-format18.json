@@ -1,0 +1,19 @@
+{
+    "by_platform": {
+        "darwin-arm64": {
+            "uri": "sbr:9289718923"
+        },
+        "darwin-x86_64": {
+            "uri": "sbr:9289786887"
+        },
+        "linux-aarch64": {
+            "uri": "sbr:9289523562"
+        },
+        "linux-x86_64": {
+            "uri": "sbr:9289662794"
+        },
+        "win32-x86_64": {
+            "uri": "sbr:9289781640"
+        }
+    }
+}

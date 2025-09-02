@@ -2,8 +2,12 @@
 
 #include "appdata.h"
 #include "runtime.h"
+
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
@@ -17,12 +21,8 @@ namespace NFake {
         ui64 SectorSize = 0;
         ui64 ChunkSize = 0;
         ui64 DiskSize = 0;
-    };
-
-    struct TCaches {
-        ui64 Shared = 32 * (ui64(1) << 20); // Shared cache limit, bytes
-        ui64 ScanQueue = 512 * (ui64(1) << 20); // Scan queue in flight limit, bytes
-        ui64 AsyncQueue = 512 * (ui64(1) << 20); // Async queue in flight limit, bytes
+        bool FormatDisk = true;
+        TString DiskPath;
     };
 
     struct INode {
@@ -31,21 +31,28 @@ namespace NFake {
 }
 
     const TBlobStorageGroupType::EErasureSpecies BootGroupErasure = TBlobStorageGroupType::ErasureNone;
+    using TStateStorageSetupper = std::function<void(TTestActorRuntime&, ui32)>;
 
     TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
     TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
+    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
+        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
     NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize); 
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1);
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
+                                                           const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
+    TStateStorageSetupper CreateDefaultStateStorageSetupper();
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);
-    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
+    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& sharedCacheConfig);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -58,7 +65,8 @@ namespace NFake {
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
-                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
+                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
+                            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 
     ///
     class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {
@@ -74,5 +82,7 @@ namespace NFake {
         virtual ~TStrandedPDiskServiceFactory()
         {}
     };
+
+    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);
 
 }

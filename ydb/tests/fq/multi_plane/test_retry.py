@@ -104,28 +104,3 @@ class TestRetry(TestYdsBase):
             {"query_id": query_id, "sensor": "RetryCount"}
         )
         assert retry_count >= 1, "Incorrect RetryCount"
-
-    @pytest.mark.parametrize("kikimr", [Param(retry_limit=3, task_lease_ttl=1, ping_period=0.5)], indirect=["kikimr"])
-    def test_high_rate(self, kikimr):
-        topic_name = "high_rate"
-        connection = "high_rate"
-        self.init_topics(topic_name)
-        sql = R'''SELECT * FROM {connection}.`{input_topic}`;'''.format(
-            input_topic=self.input_topic, connection=connection
-        )
-        client = FederatedQueryClient("my_folder", streaming_over_kikimr=kikimr)
-        client.create_yds_connection(connection, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        for _ in range(10):
-            deadline = time.time() + 1
-            kikimr.compute_plane.stop()
-            kikimr.compute_plane.start()
-            kikimr.compute_plane.wait_bootstrap()
-            if client.describe_query(query_id).result.query.meta.status == fq.QueryMeta.ABORTED_BY_SYSTEM:
-                break
-            delta = deadline - time.time()
-            if delta > 0:
-                time.sleep(delta)
-        else:
-            assert False, "Query was NOT aborted"

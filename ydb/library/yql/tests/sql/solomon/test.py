@@ -5,7 +5,7 @@ import codecs
 import yatest.common
 
 from google.protobuf import text_format
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 from yqlrun import YQLRun
 
 from yql_utils import (
@@ -16,11 +16,12 @@ from yql_utils import (
     normalize_source_code_path,
     yql_binary_path)
 
-from utils import (
+from test_utils import (
     get_config,
-    pytest_generate_tests_for_run)
+    pytest_generate_tests_for_run,
+    get_case_file)
 
-ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
 
@@ -46,7 +47,12 @@ def compose_gateways_config(solomon_endpoint):
     config_message = gateways_config_pb2.TGatewaysConfig()
     solomon_cluster = config_message.Solomon.ClusterMapping.add()
     solomon_cluster.Name = "local_solomon"
-    solomon_cluster.Cluster = solomon_endpoint
+    solomon_cluster.Cluster = os.environ.get("SOLOMON_HTTP_ENDPOINT")
+    solomon_cluster.UseSsl = False
+
+    grpc_endpoint_setting = solomon_cluster.Settings.add()
+    grpc_endpoint_setting.Name = "grpc_location"
+    grpc_endpoint_setting.Value = os.environ.get("SOLOMON_GRPC_ENDPOINT")
 
     return text_format.MessageToString(config_message)
 
@@ -65,7 +71,7 @@ def test(suite, case, cfg, solomon):
     log('===' + case + '-' + cfg)
 
     xfail = is_xfail(config)
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = get_case_file(DATA_PATH, suite, case)
     sql_query = codecs.open(program_sql, encoding='utf-8').read()
 
     files = get_files(suite, config, DATA_PATH)
@@ -83,6 +89,9 @@ def test(suite, case, cfg, solomon):
     if xfail:
         assert yqlrun_res.execution_result.exit_code != 0
         return [normalize_source_code_path(sanitize_issues(yqlrun_res.std_err))]
+
+    with open(yqlrun_res.opt_file, 'w') as f:
+        f.write(re.sub(r"""("?_logical_id"?) '\d+""", r"""\1 '0""", yqlrun_res.opt).encode('utf-8'))
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
             yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),

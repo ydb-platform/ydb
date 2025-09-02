@@ -1,6 +1,6 @@
 #include "garbage_collector.h"
 
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "log.h"
 #include "events.h"
 #include "executor.h"
@@ -8,6 +8,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -567,7 +568,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(page, "sqsgc", "SQS Garbage Collector", false,
-                                   TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                                   TActivationContext::ActorSystem(), SelfId());
         }
     }
 

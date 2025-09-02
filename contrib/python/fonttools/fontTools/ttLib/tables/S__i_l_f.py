@@ -343,7 +343,10 @@ class _Object:
 
 
 class table_S__i_l_f(DefaultTable.DefaultTable):
-    """Silf table support"""
+    """Graphite Rules table
+
+    See also https://graphite.sil.org/graphite_techAbout#graphite-font-tables
+    """
 
     def __init__(self, tag=None):
         DefaultTable.DefaultTable.__init__(self, tag)
@@ -945,7 +948,7 @@ class Pass(object):
         writer.newline()
         writer.begintag("rules")
         writer.newline()
-        for i in range(len(self.actions)):
+        for i, action in enumerate(self.actions):
             writer.begintag(
                 "rule",
                 index=i,
@@ -955,7 +958,7 @@ class Pass(object):
             writer.newline()
             if len(self.ruleConstraints[i]):
                 writecode("constraint", writer, self.ruleConstraints[i])
-            writecode("action", writer, self.actions[i])
+            writecode("action", writer, action)
             writer.endtag("rule")
             writer.newline()
         writer.endtag("rules")

@@ -2,6 +2,8 @@ LIBRARY()
 
 PROVIDES(python)
 
+VERSION(Service-proxy-version)
+
 LICENSE(Python-2.0)
 
 PEERDIR(

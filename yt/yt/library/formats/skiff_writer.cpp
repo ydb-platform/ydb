@@ -377,11 +377,55 @@ TUnversionedValueToSkiffConverter CreatePrimitiveValueConverter(EWireType wireTy
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<TSkiffSchema>& skiffSchema, bool required)
+{
+    // A valid skiff schema is expected.
+    auto wireType = skiffSchema->GetWireType();
+    switch (wireType) {
+        case EWireType::String32:
+            return required
+                ? ConvertSimpleValueImpl<EWireType::String32, false>
+                : ConvertSimpleValueImpl<EWireType::String32, true>;
+
+        case EWireType::Tuple: {
+            const auto& children = skiffSchema->GetChildren();
+            YT_VERIFY(children.size() == 2);
+            const auto innerWireType = children[0]->GetWireType();
+            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+            switch (innerWireType) {
+        #define CASE(x) \
+                case ((x)): \
+                    return CreatePrimitiveValueConverter<EValueType::String>(required, TTzSkiffWriter<(x)>());
+                CASE(EWireType::Int32);
+                CASE(EWireType::Int64);
+                CASE(EWireType::Uint16);
+                CASE(EWireType::Uint32);
+                CASE(EWireType::Uint64);
+        #undef CASE
+                default:
+                    break;
+            }
+            YT_ABORT();
+        }
+        case EWireType::Yson32:
+            return CreatePrimitiveValueConverter(wireType, required);
+        default:
+            YT_ABORT();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
-    EWireType wireType,
+    const TFieldDescription& skiffField,
     bool required,
     ESimpleLogicalValueType logicalType)
 {
+    const auto& skiffSchema = DeoptionalizeSchema(skiffField.Schema()).first;
+    auto wireType = skiffField.ValidatedGetDeoptionalizeType(/*simplify*/ false);
+
     switch (logicalType) {
         case ESimpleLogicalValueType::Int8:
         case ESimpleLogicalValueType::Int16:
@@ -407,6 +451,15 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
         case ESimpleLogicalValueType::Timestamp:
             CheckWireType(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
             return CreatePrimitiveValueConverter(wireType, required);
+
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+            CheckTzType(skiffSchema, logicalType);
+            return CreateTzValueConverter(skiffSchema, required);
 
         case ESimpleLogicalValueType::Float:
         case ESimpleLogicalValueType::Double:
@@ -473,7 +526,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
             input.Reset(value.Data.String, value.Length);
         } else if (value.Type == EValueType::Null) {
             static const TStringBuf empty = "#";
-            input.Reset(empty.Data(), empty.Size());
+            input.Reset(empty.data(), empty.size());
         } else {
             THROW_ERROR_EXCEPTION("Internal error; unexpected value type: expected %Qlv or %Qlv, actual %Qlv",
                 EValueType::Composite,
@@ -492,7 +545,7 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
 {
     bool isRequired = field.IsRequired();
     int precision = logicalType.GetPrecision();
-    auto wireType = field.ValidatedSimplify();
+    auto wireType = field.ValidatedGetDeoptionalizeType(/*simplify*/ true);
     switch (wireType) {
         case EWireType::Int32:
             return CreatePrimitiveValueConverter<EValueType::String>(
@@ -506,6 +559,10 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
             return CreatePrimitiveValueConverter<EValueType::String>(
                 isRequired,
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveValueConverter<EValueType::String>(
+                isRequired,
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveValueConverter(wireType, isRequired);
         default:
@@ -606,6 +663,7 @@ struct TSkiffWriterTableDescription
     int KeySwitchFieldIndex = -1;
     int RangeIndexFieldIndex = -1;
     int RowIndexFieldIndex = -1;
+    int RemainingRowBytesFieldIndex = -1;
     ERowRangeIndexMode RangeIndexMode = ERowRangeIndexMode::Incremental;
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;
     bool HasSparseColumns = false;
@@ -665,6 +723,8 @@ public:
             writerTableDescription.RangeIndexFieldIndex = MissingSystemColumn;
             writerTableDescription.RangeIndexMode = commonTableDescription.RangeIndexMode;
 
+            writerTableDescription.RemainingRowBytesFieldIndex = commonTableDescription.RemainingRowBytesFieldIndex.value_or(MissingSystemColumn);
+
             auto& knownFields = writerTableDescription.KnownFields;
 
             const auto& denseFieldDescriptionList = commonTableDescription.DenseFieldDescriptionList;
@@ -674,7 +734,7 @@ public:
             auto createComplexValueConverter = [&] (const TFieldDescription& skiffField, bool isSparse) -> TUnversionedValueToSkiffConverter {
                 auto columnSchema = indexedSchemas.GetColumnSchema(tableIndex, skiffField.Name());
 
-                // NB: we don't create complex value converter for simple types
+                // NB: We don't create complex value converter for simple types
                 // (column is missing in schema or has simple type).
                 //   1. Complex value converter expects unversioned values of type ANY
                 //      and simple types have other types.
@@ -682,7 +742,7 @@ public:
                 //      e.g we allow column to be optional in table schema and be required in Skiff schema
                 //      (runtime check is used in such cases).
                 if (!columnSchema) {
-                    if (!skiffField.Simplify() && !skiffField.IsRequired()) {
+                    if (!skiffField.GetDeoptionalizeType(/*simplify*/ true) && !skiffField.IsRequired()) {
                         // NB. Special case, column is described in Skiff schema as non required complex field
                         // but is missing in schema.
                         // We expect it to be missing in whole table and return corresponding converter.
@@ -699,7 +759,7 @@ public:
                     switch (denullifiedLogicalType->GetMetatype()) {
                         case ELogicalMetatype::Simple:
                             return CreateSimpleValueConverter(
-                                skiffField.ValidatedSimplify(),
+                                skiffField,
                                 skiffField.IsRequired(),
                                 denullifiedLogicalType->AsSimpleTypeRef().GetElement());
                         case ELogicalMetatype::Decimal:
@@ -886,17 +946,22 @@ private:
             const auto keySwitchFieldIndex = TableDescriptionList_[tableIndex].KeySwitchFieldIndex;
             const auto rowIndexFieldIndex = TableDescriptionList_[tableIndex].RowIndexFieldIndex;
             const auto rangeIndexFieldIndex = TableDescriptionList_[tableIndex].RangeIndexFieldIndex;
+            const auto remainingRowBytesFieldIndex = TableDescriptionList_[tableIndex].RemainingRowBytesFieldIndex;
 
             const bool isLastRowInBatch = rowIndexInBatch + 1 == rowCount;
 
             constexpr ui16 missingColumnPlaceholder = -1;
             constexpr ui16 keySwitchColumnPlaceholder = -2;
+            constexpr ui16 remainigRowBytesColumnPlaceholder = -3;
             DenseIndexes_.assign(denseFields.size(), missingColumnPlaceholder);
             SparseFields_.clear();
             OtherValueIndexes_.clear();
 
             if (keySwitchFieldIndex != MissingSystemColumn) {
                 DenseIndexes_[keySwitchFieldIndex] = keySwitchColumnPlaceholder;
+            }
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                DenseIndexes_[remainingRowBytesFieldIndex] = remainigRowBytesColumnPlaceholder;
             }
 
             ui16 rowIndexValueId = missingColumnPlaceholder;
@@ -961,7 +1026,8 @@ private:
             }
 
             SkiffWriter_->WriteVariant16Tag(tableIndex);
-            for (size_t idx = 0; idx < denseFields.size(); ++idx) {
+
+            for (int idx = 0; idx < std::ssize(denseFields); ++idx) {
                 const auto& fieldInfo = denseFields[idx];
                 const auto valueIndex = DenseIndexes_[idx];
 
@@ -974,6 +1040,9 @@ private:
                         break;
                     case keySwitchColumnPlaceholder:
                         SkiffWriter_->WriteBoolean(CheckKeySwitch(row, isLastRowInBatch));
+                        break;
+                    case remainigRowBytesColumnPlaceholder:
+                        SkiffWriter_->StartBlob();
                         break;
                     default: {
                         const auto& value = row[valueIndex];
@@ -1013,6 +1082,11 @@ private:
                 writer.OnEndMap();
                 SkiffWriter_->WriteYson32(TStringBuf(YsonBuffer_.Data(), YsonBuffer_.Size()));
             }
+
+            if (remainingRowBytesFieldIndex != MissingSystemColumn) {
+                SkiffWriter_->FinishBlob();
+            }
+
             SkiffWriter_->Flush();
             TryFlushBuffer(false);
         }
@@ -1092,7 +1166,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
     }
 }
 

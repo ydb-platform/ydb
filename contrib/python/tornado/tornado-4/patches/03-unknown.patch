@@ -1,0 +1,12 @@
+--- contrib/python/tornado/tornado-4/tornado/gen.py	(index)
++++ contrib/python/tornado/tornado-4/tornado/gen.py	(working tree)
+@@ -914,7 +914,8 @@ def with_timeout(timeout, future, io_loop=None, quiet_exceptions=()):
+                               future, exc_info=True)
+ 
+     def timeout_callback():
+-        result.set_exception(TimeoutError("Timeout"))
++        if not result.done():
++            result.set_exception(TimeoutError("Timeout"))
+         # In case the wrapped future goes on to fail, log it.
+         future.add_done_callback(error_callback)
+     timeout_handle = io_loop.add_timeout(

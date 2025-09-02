@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -13,9 +14,10 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
-                                                        bool enableInfer);
+                                                        bool enableInfer,
+                                                        bool allowLocalFiles);
 
-NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit);
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location);
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 

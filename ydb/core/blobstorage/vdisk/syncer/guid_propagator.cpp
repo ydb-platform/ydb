@@ -54,9 +54,10 @@ namespace NKikimr {
             ActiveActors.Erase(ev->Sender);
             WriterId = TActorId();
             auto *msg = ev->Get();
-            Y_ABORT_UNLESS(msg->State == State &&
+            Y_VERIFY_S(msg->State == State &&
                      msg->Guid == Guid &&
-                     TVDiskIdShort(msg->VDiskId) == TVDiskIdShort(TargetVDiskId));
+                     TVDiskIdShort(msg->VDiskId) == TVDiskIdShort(TargetVDiskId),
+                     VCtx->VDiskLogPrefix);
             // wait for WaitPeriod
             Wait(ctx);
         }

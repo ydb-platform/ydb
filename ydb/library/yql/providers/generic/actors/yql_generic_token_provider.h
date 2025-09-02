@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYql::NDq {
     // When accessing external data sources using authentication via tokens,
@@ -12,14 +13,16 @@ namespace NYql::NDq {
     class TGenericTokenProvider {
     public:
         using TPtr = std::unique_ptr<TGenericTokenProvider>;
-        TGenericTokenProvider() = default; //No auth required
+        TGenericTokenProvider() = default; // No auth required
         TGenericTokenProvider(const TString& staticIamToken);
         TGenericTokenProvider(
             const TString& serviceAccountId,
             const TString& ServiceAccountIdSignature,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
-        void MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
+        // MaybeFillToken sets IAM-token within DataSourceInstance.
+        // Returns string containing error, if it happened.
+        TString MaybeFillToken(NYql::TGenericDataSourceInstance& dsi) const;
 
     private:
         TString StaticIAMToken_;
@@ -29,6 +32,7 @@ namespace NYql::NDq {
     TGenericTokenProvider::TPtr
     CreateGenericTokenProvider(
         const TString& staticIamToken,
-        const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
+        const TString& serviceAccountId, 
+        const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
-} //namespace NYql::NDq
+} // namespace NYql::NDq

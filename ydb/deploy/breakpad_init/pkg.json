@@ -1,0 +1,35 @@
+{
+    "meta": {
+      "name": "breakpad_init",
+      "maintainer": "ydb <info@ydb.tech>",
+      "description": "Package with breakpad dynamic library",
+      "version": "{branch}.{revision}"
+    },
+    "build": {},
+    "params": {
+      "docker_build_network": "host",
+      "docker_registry": "cr.yandex",
+      "docker_repository": "crp2lrlsrs36odlvd8dv",
+      "docker_target": "breakpad-release"
+    },
+    "data": [
+      {
+        "source": {
+          "type": "RELATIVE",
+          "path": "Dockerfile"
+        },
+        "destination": {
+          "path": "/Dockerfile"
+        }
+      },
+      {
+        "source": {
+          "type": "RELATIVE",
+          "path": "breakpad_init.cc"
+        },
+        "destination": {
+          "path": "/breakpad_init.cc"
+        }
+      }
+    ]
+  }

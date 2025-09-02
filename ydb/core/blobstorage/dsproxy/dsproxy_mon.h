@@ -26,6 +26,12 @@ enum class ERequestType {
     Discover,
     Range,
     Patch,
+    CollectGarbage,
+    Status,
+    Assimilate,
+    Block,
+    GetBlock,
+    CheckIntegrity,
 };
 
 struct TRequestMonGroup {
@@ -47,50 +53,50 @@ struct TRequestMonGroup {
         VMovedPatchBlobsIssued = group->GetCounter("VMovedPatchBlobsIssued", true);
     }
 
-    void CountEvent(const TEvBlobStorage::TEvVPut& /*ev*/) {
-        VPutBlobsIssued->Inc();
-    }
+    void CountEvent(IEventBase *ev, ui32 type) {
+        switch (type) {
+            case TEvBlobStorage::EvPut:
+                VPutBlobsIssued->Inc();
+                break;
 
-    void CountEvent(const TEvBlobStorage::TEvVMultiPut& ev) {
-        *VPutBlobsIssued += ev.Record.ItemsSize();
-    }
+            case TEvBlobStorage::EvVMultiPut:
+                *VPutBlobsIssued += static_cast<TEvBlobStorage::TEvVMultiPut&>(*ev).Record.ItemsSize();
+                break;
 
-    void CountEvent(const TEvBlobStorage::TEvVMovedPatch& /*ev*/) {
-        VPutBlobsIssued->Inc();
-    }
+            case TEvBlobStorage::EvVMovedPatch:
+                VMovedPatchBlobsIssued->Inc();
+                break;
 
-    void CountEvent(const TEvBlobStorage::TEvVPatchStart& /*ev*/) {
-    }
+            case TEvBlobStorage::EvVGet: {
+                const auto& record = static_cast<TEvBlobStorage::TEvVGet&>(*ev).Record;
+                *VGetBlobsIssued += record.ExtremeQueriesSize();
+                *VGetRangesIssued += record.HasRangeQuery();
+                break;
+            }
 
-    void CountEvent(const TEvBlobStorage::TEvVPatchDiff& /*ev*/) {
-    }
+            case TEvBlobStorage::EvVGetResult: {
+                const auto& record = static_cast<TEvBlobStorage::TEvVGetResult&>(*ev).Record;
+                if (record.GetStatus() != NKikimrProto::OK) {
+                    *VGetBlobsReturnedWithErrors += record.ResultSize();
+                } else {
+                    for (const NKikimrBlobStorage::TQueryResult& result : record.GetResult()) {
+                        switch (result.GetStatus()) {
+                            case NKikimrProto::OK:
+                                ++*VGetBlobsReturnedWithData;
+                                break;
 
-    void CountEvent(const TEvBlobStorage::TEvVGet &ev) {
-        *VGetBlobsIssued += ev.Record.ExtremeQueriesSize();
-        if (ev.Record.HasRangeQuery()) {
-            VGetRangesIssued->Inc();
-        }
-    }
+                            case NKikimrProto::NODATA:
+                            case NKikimrProto::NOT_YET:
+                                ++*VGetBlobsReturnedWithNoData;
+                                break;
 
-    void CountEvent(const TEvBlobStorage::TEvVGetResult &ev) {
-        if (ev.Record.GetStatus() != NKikimrProto::OK) {
-            *VGetBlobsReturnedWithErrors += ev.Record.ResultSize();
-        } else {
-            for (const NKikimrBlobStorage::TQueryResult &result : ev.Record.GetResult()) {
-                switch (result.GetStatus()) {
-                    case NKikimrProto::OK:
-                        ++*VGetBlobsReturnedWithData;
-                        break;
-
-                    case NKikimrProto::NODATA:
-                    case NKikimrProto::NOT_YET:
-                        ++*VGetBlobsReturnedWithNoData;
-                        break;
-
-                    default:
-                        ++*VGetBlobsReturnedWithErrors;
-                        break;
+                            default:
+                                ++*VGetBlobsReturnedWithErrors;
+                                break;
+                        }
+                    }
                 }
+                break;
             }
         }
     }
@@ -188,6 +194,12 @@ protected:
     TRequestMonGroup DiscoverGroup;
     TRequestMonGroup RangeGroup;
     TRequestMonGroup PatchGroup;
+    TRequestMonGroup CollectGarbageGroup;
+    TRequestMonGroup StatusGroup;
+    TRequestMonGroup AssimilateGroup;
+    TRequestMonGroup BlockGroup;
+    TRequestMonGroup GetBlockGroup;
+    TRequestMonGroup CheckIntegrityGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -202,6 +214,7 @@ public:
     // event counters
     ::NMonitoring::TDynamicCounters::TCounterPtr EventGet;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventBlock;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventDiscover;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventRange;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage;
@@ -213,6 +226,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrity;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
@@ -222,6 +236,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;
@@ -233,9 +248,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrity;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
+    std::optional<TResponseStatusGroup> RespStatGetBlock;
     std::optional<TResponseStatusGroup> RespStatBlock;
     std::optional<TResponseStatusGroup> RespStatDiscover;
     std::optional<TResponseStatusGroup> RespStatRange;
@@ -243,6 +260,7 @@ public:
     std::optional<TResponseStatusGroup> RespStatStatus;
     std::optional<TResponseStatusGroup> RespStatPatch;
     std::optional<TResponseStatusGroup> RespStatAssimilate;
+    std::optional<TResponseStatusGroup> RespStatCheckIntegrity;
 
     // special patch counters
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
@@ -256,15 +274,19 @@ public:
             case ERequestType::Discover: return DiscoverGroup;
             case ERequestType::Range: return RangeGroup;
             case ERequestType::Patch: return PatchGroup;
+            case ERequestType::CollectGarbage: return CollectGarbageGroup;
+            case ERequestType::Status: return StatusGroup;
+            case ERequestType::Assimilate: return AssimilateGroup;
+            case ERequestType::Block: return BlockGroup;
+            case ERequestType::GetBlock: return GetBlockGroup;
+            case ERequestType::CheckIntegrity: return CheckIntegrityGroup;
         }
         Y_ABORT();
     }
 
-    template<typename T>
-    void CountEvent(ERequestType request, const T &ev) {
-        GetRequestMonGroup(request).CountEvent(ev);
+    void CountEvent(ERequestType request, IEventBase *ev, ui32 type) {
+        GetRequestMonGroup(request).CountEvent(ev, type);
     }
-
 
     TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& percentileCounters,
@@ -364,4 +386,3 @@ public:
 };
 
 } // NKikimr
-

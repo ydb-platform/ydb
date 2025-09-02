@@ -1,0 +1,222 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              597dc579281e71ba9d4dd39bf2d15a12
+BELONGS ya.make
+    License text:
+        //  Copyright 2008 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/xpressive/basic_regex.hpp [6:8]
+        include/boost/xpressive/detail/core/access.hpp [4:6]
+        include/boost/xpressive/detail/core/action.hpp [4:6]
+        include/boost/xpressive/detail/core/adaptor.hpp [4:6]
+        include/boost/xpressive/detail/core/finder.hpp [3:5]
+        include/boost/xpressive/detail/core/flow_control.hpp [4:6]
+        include/boost/xpressive/detail/core/icase.hpp [4:6]
+        include/boost/xpressive/detail/core/linker.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/alternate_end_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/alternate_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/any_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_bol_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_bos_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_eol_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_eos_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_line_base.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/assert_word_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/attr_begin_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/attr_end_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/charset_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/end_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/epsilon_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/keeper_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/literal_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/logical_newline_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/lookahead_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/lookbehind_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/mark_begin_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/mark_end_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/mark_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/optional_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/posix_charset_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/predicate_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/range_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/regex_byref_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/regex_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/repeat_begin_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/repeat_end_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/set_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/simple_repeat_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/string_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matcher/true_matcher.hpp [4:6]
+        include/boost/xpressive/detail/core/matchers.hpp [4:6]
+        include/boost/xpressive/detail/core/optimize.hpp [4:6]
+        include/boost/xpressive/detail/core/peeker.hpp [4:6]
+        include/boost/xpressive/detail/core/quant_style.hpp [4:6]
+        include/boost/xpressive/detail/core/regex_impl.hpp [4:6]
+        include/boost/xpressive/detail/core/results_cache.hpp [4:6]
+        include/boost/xpressive/detail/core/state.hpp [4:6]
+        include/boost/xpressive/detail/core/sub_match_impl.hpp [4:6]
+        include/boost/xpressive/detail/core/sub_match_vector.hpp [4:6]
+        include/boost/xpressive/detail/detail_fwd.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/dynamic.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/matchable.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/parse_charset.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/parser.hpp [6:8]
+        include/boost/xpressive/detail/dynamic/parser_enum.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/parser_traits.hpp [4:6]
+        include/boost/xpressive/detail/dynamic/sequence.hpp [4:6]
+        include/boost/xpressive/detail/static/compile.hpp [4:6]
+        include/boost/xpressive/detail/static/grammar.hpp [4:6]
+        include/boost/xpressive/detail/static/is_pure.hpp [4:6]
+        include/boost/xpressive/detail/static/modifier.hpp [4:6]
+        include/boost/xpressive/detail/static/placeholders.hpp [4:6]
+        include/boost/xpressive/detail/static/static.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_alternate.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_independent.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_inverse.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_marker.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_matcher.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_modifier.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_quantifier.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_sequence.hpp [4:6]
+        include/boost/xpressive/detail/static/transforms/as_set.hpp [4:6]
+        include/boost/xpressive/detail/static/transmogrify.hpp [4:6]
+        include/boost/xpressive/detail/static/type_traits.hpp [4:6]
+        include/boost/xpressive/detail/static/visitor.hpp [4:6]
+        include/boost/xpressive/detail/static/width_of.hpp [4:6]
+        include/boost/xpressive/detail/utility/algorithm.hpp [4:6]
+        include/boost/xpressive/detail/utility/any.hpp [4:6]
+        include/boost/xpressive/detail/utility/boyer_moore.hpp [7:9]
+        include/boost/xpressive/detail/utility/chset/chset.hpp [4:6]
+        include/boost/xpressive/detail/utility/cons.hpp [4:6]
+        include/boost/xpressive/detail/utility/dont_care.hpp [4:6]
+        include/boost/xpressive/detail/utility/hash_peek_bitset.hpp [4:6]
+        include/boost/xpressive/detail/utility/ignore_unused.hpp [4:6]
+        include/boost/xpressive/detail/utility/literals.hpp [4:6]
+        include/boost/xpressive/detail/utility/never_true.hpp [4:6]
+        include/boost/xpressive/detail/utility/save_restore.hpp [4:6]
+        include/boost/xpressive/detail/utility/sequence_stack.hpp [4:6]
+        include/boost/xpressive/detail/utility/tracking_ptr.hpp [4:6]
+        include/boost/xpressive/detail/utility/traits_utils.hpp [4:6]
+        include/boost/xpressive/detail/utility/width.hpp [4:6]
+        include/boost/xpressive/match_results.hpp [7:9]
+        include/boost/xpressive/regex_actions.hpp [5:7]
+        include/boost/xpressive/regex_algorithms.hpp [5:7]
+        include/boost/xpressive/regex_compiler.hpp [6:8]
+        include/boost/xpressive/regex_constants.hpp [6:8]
+        include/boost/xpressive/regex_error.hpp [5:7]
+        include/boost/xpressive/regex_iterator.hpp [6:8]
+        include/boost/xpressive/regex_primitives.hpp [5:7]
+        include/boost/xpressive/regex_token_iterator.hpp [6:8]
+        include/boost/xpressive/regex_traits.hpp [6:8]
+        include/boost/xpressive/sub_match.hpp [6:8]
+        include/boost/xpressive/traits/c_regex_traits.hpp [7:9]
+        include/boost/xpressive/traits/cpp_regex_traits.hpp [7:9]
+        include/boost/xpressive/traits/detail/c_ctype.hpp [4:6]
+        include/boost/xpressive/traits/null_regex_traits.hpp [7:9]
+        include/boost/xpressive/xpressive.hpp [6:8]
+        include/boost/xpressive/xpressive_dynamic.hpp [5:7]
+        include/boost/xpressive/xpressive_fwd.hpp [5:7]
+        include/boost/xpressive/xpressive_static.hpp [6:8]
+        include/boost/xpressive/xpressive_typeof.hpp [5:7]
+
+KEEP     BSL-1.0              64cda77ac5c375c937ec6f7ef224550d
+BELONGS ya.make
+    License text:
+            Use, modification and distribution is subject to the Boost Software
+            License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+            http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.88
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/xpressive/detail/utility/chset/basic_chset.hpp [6:8]
+        include/boost/xpressive/detail/utility/chset/basic_chset.ipp [6:8]
+        include/boost/xpressive/detail/utility/chset/range_run.hpp [5:7]
+        include/boost/xpressive/detail/utility/chset/range_run.ipp [5:7]
+
+KEEP     BSL-1.0              8abbac2c705b0911702566954b0ebe9b
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/xpressive/detail/core/matcher/action_matcher.hpp [7:9]
+        include/boost/xpressive/detail/core/matcher/attr_matcher.hpp [7:9]
+        include/boost/xpressive/detail/static/transforms/as_action.hpp [7:9]
+        include/boost/xpressive/detail/utility/symbols.hpp [12:14]
+
+KEEP     BSL-1.0              a4b06853a77321815bca2cbd7654b649
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. (See accompany-
+        // ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.30
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/xpressive/detail/utility/counted_base.hpp [3:4]
+
+KEEP     BSL-1.0              c845c94a100efcde577d412c3aa41ae0
+BELONGS ya.make
+    License text:
+        //  Copyright 2009 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/xpressive/detail/core/list.hpp [7:9]
+        include/boost/xpressive/detail/core/regex_domain.hpp [5:7]

@@ -261,7 +261,7 @@ namespace types
             std::random_access_iterator_tag>::value)
       _data->reserve(std::distance(start, stop));
     else
-      _data->reserve(DEFAULT_LIST_CAPACITY);
+      _data->reserve(DEFAULT_CAPACITY);
     std::copy(start, stop, std::back_inserter(*_data));
   }
   template <class T>
@@ -270,10 +270,6 @@ namespace types
   }
   template <class T>
   list<T>::list(size_type sz) : _data(sz)
-  {
-  }
-  template <class T>
-  list<T>::list(T const &value, single_value, size_type sz) : _data(sz, value)
   {
   }
   template <class T>
@@ -642,7 +638,9 @@ namespace types
   list<T> list<T>::operator*(long n) const
   {
     if (size() == 1) {
-      return list<T>(fast(0), single_value{}, n);
+      list<T> r(size() * n);
+      std::fill(r.begin(), r.end(), fast(0));
+      return r;
     } else {
       list<T> r(size() * n);
       auto start = r.begin();

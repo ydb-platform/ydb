@@ -1,63 +1,79 @@
 from collections import defaultdict
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from moto.core import get_account_id, BaseModel
+from moto.core import BaseModel
 from ..exceptions import (
     SWFUnknownResourceFault,
     SWFWorkflowExecutionAlreadyStartedFault,
 )
 
+if TYPE_CHECKING:
+    from .activity_task import ActivityTask
+    from .decision_task import DecisionTask
+    from .generic_type import GenericType, TGenericType
+    from .workflow_execution import WorkflowExecution
+
 
 class Domain(BaseModel):
-    def __init__(self, name, retention, region_name, description=None):
+    def __init__(
+        self,
+        name: str,
+        retention: int,
+        account_id: str,
+        region_name: str,
+        description: Optional[str] = None,
+    ):
         self.name = name
         self.retention = retention
+        self.account_id = account_id
         self.region_name = region_name
         self.description = description
         self.status = "REGISTERED"
-        self.types = {"activity": defaultdict(dict), "workflow": defaultdict(dict)}
+        self.types: Dict[str, Dict[str, Dict[str, GenericType]]] = {
+            "activity": defaultdict(dict),
+            "workflow": defaultdict(dict),
+        }
         # Workflow executions have an id, which unicity is guaranteed
         # at domain level (not super clear in the docs, but I checked
         # that against SWF API) ; hence the storage method as a dict
         # of "workflow_id (client determined)" => WorkflowExecution()
         # here.
-        self.workflow_executions = []
-        self.activity_task_lists = {}
-        self.decision_task_lists = {}
+        self.workflow_executions: List["WorkflowExecution"] = []
+        self.activity_task_lists: Dict[List[str], List["ActivityTask"]] = {}
+        self.decision_task_lists: Dict[str, List["DecisionTask"]] = {}
 
-    def __repr__(self):
-        return "Domain(name: %(name)s, status: %(status)s)" % self.__dict__
+    def __repr__(self) -> str:
+        return f"Domain(name: {self.name}, status: {self.status})"
 
-    def to_short_dict(self):
+    def to_short_dict(self) -> Dict[str, str]:
         hsh = {"name": self.name, "status": self.status}
         if self.description:
             hsh["description"] = self.description
-        hsh["arn"] = "arn:aws:swf:{0}:{1}:/domain/{2}".format(
-            self.region_name, get_account_id(), self.name
-        )
+        hsh[
+            "arn"
+        ] = f"arn:aws:swf:{self.region_name}:{self.account_id}:/domain/{self.name}"
         return hsh
 
-    def to_full_dict(self):
+    def to_full_dict(self) -> Dict[str, Any]:
         return {
             "domainInfo": self.to_short_dict(),
             "configuration": {"workflowExecutionRetentionPeriodInDays": self.retention},
         }
 
-    def get_type(self, kind, name, version, ignore_empty=False):
+    def get_type(self, kind: str, name: str, version: str, ignore_empty: bool = False) -> "GenericType":  # type: ignore
         try:
             return self.types[kind][name][version]
         except KeyError:
             if not ignore_empty:
                 raise SWFUnknownResourceFault(
                     "type",
-                    "{0}Type=[name={1}, version={2}]".format(
-                        kind.capitalize(), name, version
-                    ),
+                    f"{kind.capitalize()}Type=[name={name}, version={version}]",
                 )
 
-    def add_type(self, _type):
+    def add_type(self, _type: "TGenericType") -> None:
         self.types[_type.kind][_type.name][_type.version] = _type
 
-    def find_types(self, kind, status):
+    def find_types(self, kind: str, status: str) -> List["GenericType"]:
         _all = []
         for family in self.types[kind].values():
             for _type in family.values():
@@ -65,15 +81,19 @@ class Domain(BaseModel):
                     _all.append(_type)
         return _all
 
-    def add_workflow_execution(self, workflow_execution):
+    def add_workflow_execution(self, workflow_execution: "WorkflowExecution") -> None:
         _id = workflow_execution.workflow_id
         if self.get_workflow_execution(_id, raise_if_none=False):
             raise SWFWorkflowExecutionAlreadyStartedFault()
         self.workflow_executions.append(workflow_execution)
 
     def get_workflow_execution(
-        self, workflow_id, run_id=None, raise_if_none=True, raise_if_closed=False
-    ):
+        self,
+        workflow_id: str,
+        run_id: Optional[str] = None,
+        raise_if_none: bool = True,
+        raise_if_closed: bool = False,
+    ) -> Optional["WorkflowExecution"]:
         # query
         if run_id:
             _all = [
@@ -96,36 +116,36 @@ class Domain(BaseModel):
             if run_id:
                 args = [
                     "execution",
-                    "WorkflowExecution=[workflowId={0}, runId={1}]".format(
-                        workflow_id, run_id
-                    ),
+                    f"WorkflowExecution=[workflowId={workflow_id}, runId={run_id}]",
                 ]
             else:
-                args = ["execution, workflowId = {0}".format(workflow_id)]
+                args = [f"execution, workflowId = {workflow_id}"]
             raise SWFUnknownResourceFault(*args)
         # at last return workflow execution
         return wfe
 
-    def add_to_activity_task_list(self, task_list, obj):
+    def add_to_activity_task_list(
+        self, task_list: List[str], obj: "ActivityTask"
+    ) -> None:
         if task_list not in self.activity_task_lists:
             self.activity_task_lists[task_list] = []
         self.activity_task_lists[task_list].append(obj)
 
     @property
-    def activity_tasks(self):
-        _all = []
+    def activity_tasks(self) -> List["ActivityTask"]:
+        _all: List["ActivityTask"] = []
         for tasks in self.activity_task_lists.values():
             _all += tasks
         return _all
 
-    def add_to_decision_task_list(self, task_list, obj):
+    def add_to_decision_task_list(self, task_list: str, obj: "DecisionTask") -> None:
         if task_list not in self.decision_task_lists:
             self.decision_task_lists[task_list] = []
         self.decision_task_lists[task_list].append(obj)
 
     @property
-    def decision_tasks(self):
-        _all = []
+    def decision_tasks(self) -> List["DecisionTask"]:
+        _all: List["DecisionTask"] = []
         for tasks in self.decision_task_lists.values():
             _all += tasks
         return _all

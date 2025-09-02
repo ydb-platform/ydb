@@ -11,6 +11,16 @@
 
 #include <errno.h>
 
+/* For "special files", the OS often lies about size.
+ * For example, on Amazon Linux 2:
+ * /proc/cpuinfo: size is 0, but contents are several KB of data.
+ * /sys/devices/virtual/dmi/id/product_name: size is 4096, but contents are "c5.2xlarge"
+ *
+ * Therefore, we may need to grow the buffer as we read until EOF.
+ * This is the min/max step size for growth. */
+#define MIN_BUFFER_GROWTH_READING_FILES 32
+#define MAX_BUFFER_GROWTH_READING_FILES 4096
+
 FILE *aws_fopen(const char *file_path, const char *mode) {
     if (!file_path || strlen(file_path) == 0) {
         AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to open file. path is empty");
@@ -34,57 +44,132 @@ FILE *aws_fopen(const char *file_path, const char *mode) {
     return file;
 }
 
-int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocator *alloc, const char *filename) {
+/* Helper function used by aws_byte_buf_init_from_file() and aws_byte_buf_init_from_file_with_size_hint() */
+static int s_byte_buf_init_from_file_impl(
+    struct aws_byte_buf *out_buf,
+    struct aws_allocator *alloc,
+    const char *filename,
+    bool use_file_size_as_hint,
+    size_t size_hint) {
 
     AWS_ZERO_STRUCT(*out_buf);
     FILE *fp = aws_fopen(filename, "rb");
-
-    if (fp) {
-        if (fseek(fp, 0L, SEEK_END)) {
-            int errno_value = errno; /* Always cache errno before potential side-effect */
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno_value);
-            fclose(fp);
-            return aws_translate_and_raise_io_error(errno_value);
-        }
-
-        size_t allocation_size = (size_t)ftell(fp) + 1;
-        /* Tell the user that we allocate here and if success they're responsible for the free. */
-        if (aws_byte_buf_init(out_buf, alloc, allocation_size)) {
-            fclose(fp);
-            return AWS_OP_ERR;
-        }
-
-        /* Ensure compatibility with null-terminated APIs, but don't consider
-         * the null terminator part of the length of the payload */
-        out_buf->len = out_buf->capacity - 1;
-        out_buf->buffer[out_buf->len] = 0;
-
-        if (fseek(fp, 0L, SEEK_SET)) {
-            int errno_value = errno; /* Always cache errno before potential side-effect */
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to seek file %s with errno %d", filename, errno_value);
-            aws_byte_buf_clean_up(out_buf);
-            fclose(fp);
-            return aws_translate_and_raise_io_error(errno_value);
-        }
-
-        size_t read = fread(out_buf->buffer, 1, out_buf->len, fp);
-        int errno_cpy = errno; /* Always cache errno before potential side-effect */
-        fclose(fp);
-        if (read < out_buf->len) {
-            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to read file %s with errno %d", filename, errno_cpy);
-            aws_secure_zero(out_buf->buffer, out_buf->len);
-            aws_byte_buf_clean_up(out_buf);
-            return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
-        }
-
-        return AWS_OP_SUCCESS;
+    if (fp == NULL) {
+        goto error;
     }
 
+    if (use_file_size_as_hint) {
+        int64_t len64 = 0;
+        if (aws_file_get_length(fp, &len64)) {
+            AWS_LOGF_ERROR(
+                AWS_LS_COMMON_IO,
+                "static: Failed to get file length. file:'%s' error:%s",
+                filename,
+                aws_error_name(aws_last_error()));
+            goto error;
+        }
+
+        if (len64 >= SIZE_MAX) {
+            aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
+            AWS_LOGF_ERROR(
+                AWS_LS_COMMON_IO,
+                "static: File too large to read into memory. file:'%s' error:%s",
+                filename,
+                aws_error_name(aws_last_error()));
+            goto error;
+        }
+
+        /* Leave space for null terminator at end of buffer */
+        size_hint = (size_t)len64 + 1;
+    }
+
+    aws_byte_buf_init(out_buf, alloc, size_hint);
+
+    /* Read in a loop until we hit EOF */
+    while (true) {
+        /* Expand buffer if necessary (at a reasonable rate) */
+        if (out_buf->len == out_buf->capacity) {
+            size_t additional_capacity = out_buf->capacity;
+            additional_capacity = aws_max_size(MIN_BUFFER_GROWTH_READING_FILES, additional_capacity);
+            additional_capacity = aws_min_size(MAX_BUFFER_GROWTH_READING_FILES, additional_capacity);
+            if (aws_byte_buf_reserve_relative(out_buf, additional_capacity)) {
+                AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to grow buffer for file:'%s'", filename);
+                goto error;
+            }
+        }
+
+        size_t space_available = out_buf->capacity - out_buf->len;
+        size_t bytes_read = fread(out_buf->buffer + out_buf->len, 1, space_available, fp);
+        out_buf->len += bytes_read;
+
+        /* If EOF, we're done! */
+        if (feof(fp)) {
+            break;
+        }
+
+        /* If no EOF but we read 0 bytes, there's been an error or at least we need
+         * to treat it like one because we can't just infinitely loop. */
+        if (bytes_read == 0) {
+            int errno_value = ferror(fp) ? errno : 0; /* Always cache errno before potential side-effect */
+            aws_translate_and_raise_io_error_or(errno_value, AWS_ERROR_FILE_READ_FAILURE);
+            AWS_LOGF_ERROR(
+                AWS_LS_COMMON_IO,
+                "static: Failed reading file:'%s' errno:%d aws-error:%s",
+                filename,
+                errno_value,
+                aws_error_name(aws_last_error()));
+            goto error;
+        }
+    }
+
+    /* A null terminator is appended, but is not included as part of the length field. */
+    if (out_buf->len == out_buf->capacity) {
+        if (aws_byte_buf_reserve_relative(out_buf, 1)) {
+            AWS_LOGF_ERROR(AWS_LS_COMMON_IO, "static: Failed to grow buffer for file:'%s'", filename);
+            goto error;
+        }
+    }
+    out_buf->buffer[out_buf->len] = 0;
+
+    fclose(fp);
+    return AWS_OP_SUCCESS;
+
+error:
+    if (fp) {
+        fclose(fp);
+    }
+    aws_byte_buf_clean_up_secure(out_buf);
     return AWS_OP_ERR;
+}
+
+int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocator *alloc, const char *filename) {
+    return s_byte_buf_init_from_file_impl(out_buf, alloc, filename, true /*use_file_size_as_hint*/, 0 /*size_hint*/);
+}
+
+int aws_byte_buf_init_from_file_with_size_hint(
+    struct aws_byte_buf *out_buf,
+    struct aws_allocator *alloc,
+    const char *filename,
+    size_t size_hint) {
+
+    return s_byte_buf_init_from_file_impl(out_buf, alloc, filename, false /*use_file_size_as_hint*/, size_hint);
 }
 
 bool aws_is_any_directory_separator(char value) {
     return value == '\\' || value == '/';
+}
+
+void aws_normalize_directory_separator(struct aws_byte_buf *path) {
+    AWS_PRECONDITION(aws_byte_buf_is_valid(path));
+
+    const char local_platform_separator = aws_get_platform_directory_separator();
+    for (size_t i = 0; i < path->len; ++i) {
+        if (aws_is_any_directory_separator((char)path->buffer[i])) {
+            path->buffer[i] = local_platform_separator;
+        }
+    }
+
+    AWS_POSTCONDITION(aws_byte_buf_is_valid(path));
 }
 
 struct aws_directory_iterator {

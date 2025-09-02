@@ -67,7 +67,7 @@ generally do their best to write you a useful test.  You can also use
     Legal questions?  While the ghostwriter fragments and logic is under the
     MPL-2.0 license like the rest of Hypothesis, the *output* from the ghostwriter
     is made available under the `Creative Commons Zero (CC0)
-    <https://creativecommons.org/share-your-work/public-domain/cc0/>`__
+    <https://creativecommons.org/public-domain/cc0/>`__
     public domain dedication, so you can use it without any restrictions.
 """
 
@@ -82,6 +82,7 @@ import sys
 import types
 import warnings
 from collections import OrderedDict, defaultdict
+from collections.abc import Iterable, Mapping
 from itertools import permutations, zip_longest
 from keyword import iskeyword as _iskeyword
 from string import ascii_lowercase
@@ -91,16 +92,9 @@ from typing import (
     Any,
     Callable,
     DefaultDict,
-    Dict,
     ForwardRef,
-    Iterable,
-    List,
-    Mapping,
     NamedTuple,
     Optional,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
     Union,
     get_args,
@@ -156,8 +150,8 @@ except {exceptions}:
     reject()
 """.strip()
 
-Except = Union[Type[Exception], Tuple[Type[Exception], ...]]
-ImportSet = Set[Union[str, Tuple[str, str]]]
+Except = Union[type[Exception], tuple[type[Exception], ...]]
+ImportSet = set[Union[str, tuple[str, str]]]
 _quietly_settings = settings(
     database=None,
     deadline=None,
@@ -166,7 +160,7 @@ _quietly_settings = settings(
 )
 
 
-def _dedupe_exceptions(exc: Tuple[Type[Exception], ...]) -> Tuple[Type[Exception], ...]:
+def _dedupe_exceptions(exc: tuple[type[Exception], ...]) -> tuple[type[Exception], ...]:
     # This is reminiscent of de-duplication logic I wrote for flake8-bugbear,
     # but with access to the actual objects we can just check for subclasses.
     # This lets us print e.g. `Exception` instead of `(Exception, OSError)`.
@@ -177,7 +171,7 @@ def _dedupe_exceptions(exc: Tuple[Type[Exception], ...]) -> Tuple[Type[Exception
     return tuple(sorted(uniques, key=lambda e: e.__name__))
 
 
-def _check_except(except_: Except) -> Tuple[Type[Exception], ...]:
+def _check_except(except_: Except) -> tuple[type[Exception], ...]:
     if isinstance(except_, tuple):
         for i, e in enumerate(except_):
             if not isinstance(e, type) or not issubclass(e, Exception):
@@ -194,7 +188,7 @@ def _check_except(except_: Except) -> Tuple[Type[Exception], ...]:
     return (except_,)
 
 
-def _exception_string(except_: Tuple[Type[Exception], ...]) -> Tuple[ImportSet, str]:
+def _exception_string(except_: tuple[type[Exception], ...]) -> tuple[ImportSet, str]:
     if not except_:
         return set(), ""
     exceptions = []
@@ -215,7 +209,7 @@ def _check_style(style: str) -> None:
         raise InvalidArgument(f"Valid styles are 'pytest' or 'unittest', got {style!r}")
 
 
-def _exceptions_from_docstring(doc: str) -> Tuple[Type[Exception], ...]:
+def _exceptions_from_docstring(doc: str) -> tuple[type[Exception], ...]:
     """Return a tuple of exceptions that the docstring says may be raised.
 
     Note that we ignore non-builtin exception types for simplicity, as this is
@@ -250,7 +244,7 @@ def _type_from_doc_fragment(token: str) -> Optional[type]:
         if elems is None and elem_token.endswith("s"):
             elems = _type_from_doc_fragment(elem_token[:-1])
         if elems is not None and coll_token in ("list", "sequence", "collection"):
-            return List[elems]  # type: ignore
+            return list[elems]  # type: ignore
         # This might be e.g. "array-like of float"; arrays is better than nothing
         # even if we can't conveniently pass a generic type around.
         return _type_from_doc_fragment(coll_token)
@@ -290,9 +284,8 @@ def _strategy_for(param: inspect.Parameter, docstring: str) -> st.SearchStrategy
         types = []
         for token in re.split(r",? +or +| *, *", doc_type):
             for prefix in ("default ", "python "):
-                # `str or None, default "auto"`; `python int or numpy.int64`
-                if token.startswith(prefix):
-                    token = token[len(prefix) :]
+                # e.g. `str or None, default "auto"` or `python int or numpy.int64`
+                token = token.removeprefix(prefix)
             if not token:
                 continue
             try:
@@ -452,7 +445,7 @@ def _guess_strategy_by_argname(name: str) -> st.SearchStrategy:
     return st.nothing()
 
 
-def _get_params_builtin_fn(func: Callable) -> List[inspect.Parameter]:
+def _get_params_builtin_fn(func: Callable) -> list[inspect.Parameter]:
     if (
         isinstance(func, (types.BuiltinFunctionType, types.BuiltinMethodType))
         and hasattr(func, "__doc__")
@@ -484,7 +477,7 @@ def _get_params_builtin_fn(func: Callable) -> List[inspect.Parameter]:
     return []
 
 
-def _get_params_ufunc(func: Callable) -> List[inspect.Parameter]:
+def _get_params_ufunc(func: Callable) -> list[inspect.Parameter]:
     if _is_probably_ufunc(func):
         # `inspect.signature` results vary for ufunc objects, but we can work out
         # what the required parameters would look like if it was reliable.
@@ -499,7 +492,7 @@ def _get_params_ufunc(func: Callable) -> List[inspect.Parameter]:
     return []
 
 
-def _get_params(func: Callable) -> Dict[str, inspect.Parameter]:
+def _get_params(func: Callable) -> dict[str, inspect.Parameter]:
     """Get non-vararg parameters of `func` as an ordered dict."""
     try:
         params = list(get_signature(func).parameters.values())
@@ -523,7 +516,7 @@ def _get_params(func: Callable) -> Dict[str, inspect.Parameter]:
 
 def _params_to_dict(
     params: Iterable[inspect.Parameter],
-) -> Dict[str, inspect.Parameter]:
+) -> dict[str, inspect.Parameter]:
     var_param_kinds = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
     return OrderedDict((p.name, p) for p in params if p.kind not in var_param_kinds)
 
@@ -549,7 +542,7 @@ def _with_any_registered():
 
 def _get_strategies(
     *funcs: Callable, pass_result_to_next_func: bool = False
-) -> Dict[str, st.SearchStrategy]:
+) -> dict[str, st.SearchStrategy]:
     """Return a dict of strategies for the union of arguments to `funcs`.
 
     If `pass_result_to_next_func` is True, assume that the result of each function
@@ -559,7 +552,7 @@ def _get_strategies(
     This dict is used to construct our call to the `@given(...)` decorator.
     """
     assert funcs, "Must pass at least one function"
-    given_strategies: Dict[str, st.SearchStrategy] = {}
+    given_strategies: dict[str, st.SearchStrategy] = {}
     for i, f in enumerate(funcs):
         params = _get_params(f)
         if pass_result_to_next_func and i >= 1:
@@ -603,10 +596,14 @@ def _assert_eq(style: str, a: str, b: str) -> str:
 
 def _imports_for_object(obj):
     """Return the imports for `obj`, which may be empty for e.g. lambdas"""
+    if type(obj) is getattr(types, "UnionType", object()):
+        return {mod for mod, _ in set().union(*map(_imports_for_object, obj.__args__))}
     if isinstance(obj, (re.Pattern, re.Match)):
         return {"re"}
     if isinstance(obj, st.SearchStrategy):
         return _imports_for_strategy(obj)
+    if isinstance(obj, getattr(sys.modules.get("numpy"), "dtype", ())):
+        return {("numpy", "dtype")}
     try:
         if is_generic_type(obj):
             if isinstance(obj, TypeVar):
@@ -632,8 +629,6 @@ def _imports_for_strategy(strategy):
             for imp in _imports_for_object(_strip_typevars(arg))
         }
         if re.match(r"from_(type|regex)\(", repr(strategy)):
-            if repr(strategy).startswith("from_type("):
-                return {module for module, _ in imports}
             return imports
         elif _get_module(strategy.function).startswith("hypothesis.extra."):
             module = _get_module(strategy.function).replace("._array_helpers", ".numpy")
@@ -653,7 +648,7 @@ def _imports_for_strategy(strategy):
         for f in strategy.flat_conditions:
             imports |= _imports_for_object(f)
     if isinstance(strategy, FlatMapStrategy):
-        imports |= _imports_for_strategy(strategy.flatmapped_strategy)
+        imports |= _imports_for_strategy(strategy.base)
         imports |= _imports_for_object(strategy.expand)
 
     # recurse through one_of to handle e.g. from_type(Optional[Foo])
@@ -734,7 +729,7 @@ def _valid_syntax_repr(strategy):
 
 # When we ghostwrite for a module, we want to treat that as the __module__ for
 # each function, rather than whichever internal file it was actually defined in.
-KNOWN_FUNCTION_LOCATIONS: Dict[object, str] = {}
+KNOWN_FUNCTION_LOCATIONS: dict[object, str] = {}
 
 
 def _get_module_helper(obj):
@@ -772,7 +767,7 @@ def _get_module(obj):
     raise RuntimeError(f"Could not find module for ufunc {obj.__name__} ({obj!r}")
 
 
-def _get_qualname(obj, *, include_module=False):
+def _get_qualname(obj: Any, *, include_module: bool = False) -> str:
     # Replacing angle-brackets for objects defined in `.<locals>.`
     qname = getattr(obj, "__qualname__", obj.__name__)
     qname = qname.replace("<", "_").replace(">", "_").replace(" ", "")
@@ -831,13 +826,13 @@ def _make_test_body(
     *funcs: Callable,
     ghost: str,
     test_body: str,
-    except_: Tuple[Type[Exception], ...],
+    except_: tuple[type[Exception], ...],
     assertions: str = "",
     style: str,
     given_strategies: Optional[Mapping[str, Union[str, st.SearchStrategy]]] = None,
     imports: Optional[ImportSet] = None,
     annotate: bool,
-) -> Tuple[ImportSet, str]:
+) -> tuple[ImportSet, str]:
     # A set of modules to import - we might add to this later.  The import code
     # is written later, so we can have one import section for multiple magic()
     # test functions.
@@ -898,7 +893,7 @@ def _make_test_body(
 def _annotate_args(
     argnames: Iterable[str], funcs: Iterable[Callable], imports: ImportSet
 ) -> Iterable[str]:
-    arg_parameters: DefaultDict[str, Set[Any]] = defaultdict(set)
+    arg_parameters: DefaultDict[str, set[Any]] = defaultdict(set)
     for func in funcs:
         try:
             params = tuple(get_signature(func, eval_str=True).parameters.values())
@@ -921,7 +916,7 @@ def _annotate_args(
 
 class _AnnotationData(NamedTuple):
     type_name: str
-    imports: Set[str]
+    imports: set[str]
 
 
 def _parameters_to_annotation_name(
@@ -948,7 +943,7 @@ def _parameters_to_annotation_name(
 
 
 def _join_generics(
-    origin_type_data: Optional[Tuple[str, Set[str]]],
+    origin_type_data: Optional[tuple[str, set[str]]],
     annotations: Iterable[Optional[_AnnotationData]],
 ) -> Optional[_AnnotationData]:
     if origin_type_data is None:
@@ -975,9 +970,9 @@ def _join_generics(
 
 def _join_argument_annotations(
     annotations: Iterable[Optional[_AnnotationData]],
-) -> Optional[Tuple[List[str], Set[str]]]:
-    imports: Set[str] = set()
-    arg_types: List[str] = []
+) -> Optional[tuple[list[str], set[str]]]:
+    imports: set[str] = set()
+    arg_types: list[str] = []
 
     for annotation in annotations:
         if annotation is None:
@@ -1133,6 +1128,60 @@ ROUNDTRIP_PAIRS = (
 )
 
 
+def _get_testable_functions(thing: object) -> dict[str, Callable]:
+    by_name = {}
+    if callable(thing):
+        funcs: list[Optional[Any]] = [thing]
+    elif isinstance(thing, types.ModuleType):
+        if hasattr(thing, "__all__"):
+            funcs = [getattr(thing, name, None) for name in thing.__all__]
+        elif hasattr(thing, "__package__"):
+            pkg = thing.__package__
+            funcs = [
+                v
+                for k, v in vars(thing).items()
+                if callable(v)
+                and not is_mock(v)
+                and ((not pkg) or getattr(v, "__module__", pkg).startswith(pkg))
+                and not k.startswith("_")
+            ]
+            if pkg and any(getattr(f, "__module__", pkg) == pkg for f in funcs):
+                funcs = [f for f in funcs if getattr(f, "__module__", pkg) == pkg]
+    else:
+        raise InvalidArgument(f"Can't test non-module non-callable {thing!r}")
+
+    for f in list(funcs):
+        if inspect.isclass(f):
+            funcs += [
+                v.__get__(f)
+                for k, v in vars(f).items()
+                if hasattr(v, "__func__") and not is_mock(v) and not k.startswith("_")
+            ]
+    for f in funcs:
+        try:
+            if (
+                (not is_mock(f))
+                and callable(f)
+                and _get_params(f)
+                and not isinstance(f, enum.EnumMeta)
+            ):
+                if getattr(thing, "__name__", None):
+                    if inspect.isclass(thing):
+                        KNOWN_FUNCTION_LOCATIONS[f] = _get_module_helper(thing)
+                    elif isinstance(thing, types.ModuleType):
+                        KNOWN_FUNCTION_LOCATIONS[f] = thing.__name__
+                try:
+                    _get_params(f)
+                    by_name[_get_qualname(f, include_module=True)] = f
+                except Exception:
+                    # usually inspect.signature on C code such as socket.inet_aton,
+                    # or Pandas 'CallableDynamicDoc' object has no attr. '__name__'
+                    pass
+        except (TypeError, ValueError):
+            pass
+    return by_name
+
+
 def magic(
     *modules_or_functions: Union[Callable, types.ModuleType],
     except_: Except = (),
@@ -1157,84 +1206,41 @@ def magic(
     _check_style(style)
     if not modules_or_functions:
         raise InvalidArgument("Must pass at least one function or module to test.")
-    functions = set()
-    for thing in modules_or_functions:
-        if callable(thing):
-            functions.add(thing)
-            # class need to be added for exploration
-            if inspect.isclass(thing):
-                funcs: List[Optional[Any]] = [thing]
-            else:
-                funcs = []
-        elif isinstance(thing, types.ModuleType):
-            if hasattr(thing, "__all__"):
-                funcs = [getattr(thing, name, None) for name in thing.__all__]
-            elif hasattr(thing, "__package__"):
-                pkg = thing.__package__
-                funcs = [
-                    v
-                    for k, v in vars(thing).items()
-                    if callable(v)
-                    and not is_mock(v)
-                    and ((not pkg) or getattr(v, "__module__", pkg).startswith(pkg))
-                    and not k.startswith("_")
-                ]
-                if pkg and any(getattr(f, "__module__", pkg) == pkg for f in funcs):
-                    funcs = [f for f in funcs if getattr(f, "__module__", pkg) == pkg]
-        else:
-            raise InvalidArgument(f"Can't test non-module non-callable {thing!r}")
 
-        for f in list(funcs):
-            if inspect.isclass(f):
-                funcs += [
-                    v.__get__(f)
-                    for k, v in vars(f).items()
-                    if hasattr(v, "__func__")
-                    and not is_mock(v)
-                    and not k.startswith("_")
-                ]
-        for f in funcs:
-            try:
+    parts = []
+    by_name = {}
+    imports = set()
+
+    for thing in modules_or_functions:
+        by_name.update(found := _get_testable_functions(thing))
+        if (not found) and isinstance(thing, types.ModuleType):
+            msg = f"# Found no testable functions in {thing.__name__} (from {thing.__file__!r})"
+            mods: list = []
+            for k in sorted(sys.modules, key=len):
                 if (
-                    (not is_mock(f))
-                    and callable(f)
-                    and _get_params(f)
-                    and not isinstance(f, enum.EnumMeta)
+                    k.startswith(f"{thing.__name__}.")
+                    and "._" not in k.removeprefix(thing.__name__)
+                    and not k.startswith(tuple(f"{m}." for m in mods))
+                    and _get_testable_functions(sys.modules[k])
                 ):
-                    functions.add(f)
-                    if getattr(thing, "__name__", None):
-                        if inspect.isclass(thing):
-                            KNOWN_FUNCTION_LOCATIONS[f] = _get_module_helper(thing)
-                        else:
-                            KNOWN_FUNCTION_LOCATIONS[f] = thing.__name__
-            except (TypeError, ValueError):
-                pass
+                    mods.append(k)
+            if mods:
+                msg += (
+                    f"\n# Try writing tests for submodules, e.g. by using:\n"
+                    f"#     hypothesis write {' '.join(sorted(mods))}"
+                )
+            parts.append(msg)
+
+    if not by_name:
+        return "\n\n".join(parts)
 
     if annotate is None:
-        annotate = _are_annotations_used(*functions)
-
-    imports = set()
-    parts = []
+        annotate = _are_annotations_used(*by_name.values())
 
     def make_(how, *args, **kwargs):
         imp, body = how(*args, **kwargs, except_=except_, style=style)
         imports.update(imp)
         parts.append(body)
-
-    by_name = {}
-    for f in functions:
-        try:
-            _get_params(f)
-            by_name[_get_qualname(f, include_module=True)] = f
-        except Exception:
-            # usually inspect.signature on C code such as socket.inet_aton, sometimes
-            # e.g. Pandas 'CallableDynamicDoc' object has no attribute '__name__'
-            pass
-    if not by_name:
-        return (
-            f"# Found no testable functions in\n"
-            f"# {functions!r} from {modules_or_functions}\n"
-        )
 
     # Look for pairs of functions that roundtrip, based on known naming patterns.
     for writename, readname in ROUNDTRIP_PAIRS:
@@ -1720,10 +1726,10 @@ def _make_binop_body(
     commutative: bool = True,
     identity: Union[X, EllipsisType, None] = ...,
     distributes_over: Optional[Callable[[X, X], X]] = None,
-    except_: Tuple[Type[Exception], ...],
+    except_: tuple[type[Exception], ...],
     style: str,
     annotate: bool,
-) -> Tuple[ImportSet, str]:
+) -> tuple[ImportSet, str]:
     strategies = _get_strategies(func)
     operands, b = (strategies.pop(p) for p in list(_get_params(func))[:2])
     if repr(operands) != repr(b):

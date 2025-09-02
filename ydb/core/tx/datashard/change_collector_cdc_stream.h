@@ -8,9 +8,9 @@ namespace NDataShard {
 
 class TCdcStreamChangeCollector: public TBaseChangeCollector {
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const NTable::TTag> valueTags, NTable::TSelectStats& stats, const TMaybe<TRowVersion>& readVersion = {});
+        TArrayRef<const NTable::TTag> valueTags, NTable::TSelectStats& stats, const TMaybe<TRowVersion>& snapshot = {});
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const NTable::TTag> valueTags, const TMaybe<TRowVersion>& readVersion = {});
+        TArrayRef<const NTable::TTag> valueTags, const TMaybe<TRowVersion>& snapshot = {});
     static NTable::TRowState PatchState(const NTable::TRowState& oldState, NTable::ERowOp rop,
         const THashMap<NTable::TTag, NTable::TPos>& tagToPos, const THashMap<NTable::TTag, NTable::TUpdateOp>& updates);
 

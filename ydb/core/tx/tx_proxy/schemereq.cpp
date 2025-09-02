@@ -1,12 +1,20 @@
 #include "proxy.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+
+#include <ydb/library/login/login.h>
+#include <ydb/library/login/protos/login.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -17,6 +25,10 @@
 
 namespace NKikimr {
 namespace NTxProxy {
+
+TString GetUserSID(const std::optional<NACLib::TUserToken>& userToken) {
+    return (userToken ? userToken->GetUserSID() : "<empty>");
+}
 
 template<typename TDerived>
 struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
@@ -35,16 +47,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     TActorId PipeClient;
 
     struct TPathToResolve {
-        NKikimrSchemeOp::EOperationType OperationRelated;
+        const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
+        ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
 
+        // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
-        bool RequiredRedirect = true;
-        ui32 RequiredAccess = NACLib::EAccessRights::NoAccess;
+        bool RequireRedirect = true;
 
-        std::optional<NKikimrSchemeOp::TModifyACL> RequiredGrandAccess;
-
-        TPathToResolve(NKikimrSchemeOp::EOperationType opType)
-            : OperationRelated(opType)
+        TPathToResolve(const NKikimrSchemeOp::TModifyScheme& modifyScheme)
+            : ModifyScheme(modifyScheme)
         {
         }
     };
@@ -52,6 +63,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     TVector<TPathToResolve> ResolveForACL;
 
     std::optional<NACLib::TUserToken> UserToken;
+    bool CheckAdministrator = false;
+    bool CheckDatabaseAdministrator = false;
+    bool IsClusterAdministrator = false;
+    bool IsDatabaseAdministrator = false;
+    NACLib::TSID DatabaseOwner;
+    NLoginProto::TSecurityState DatabaseSecurityState;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
@@ -143,11 +160,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -212,9 +232,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
+            Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
+
+        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
+            Y_ABORT("no implementation for ESchemeOpDropColumnBuild");
+
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
-            Y_ABORT("no implementation for ESchemeOpCreateIndexBuild/ESchemeOpCreateColumnBuild");
+            Y_ABORT("no implementation for ESchemeOpCreateIndexBuild");
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
             Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexMainTable");
@@ -303,6 +331,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
             return *modifyScheme.MutableDropCdcStream()->MutableTableName();
 
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+            Y_ABORT("no implementation for ESchemeOpRotateCdcStreamImpl");
+
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
+            return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
+
         case NKikimrSchemeOp::ESchemeOpMoveTable:
             Y_ABORT("no implementation for ESchemeOpMoveTable");
 
@@ -312,12 +349,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveIndex:
             Y_ABORT("no implementation for ESchemeOpMoveIndex");
 
+        case NKikimrSchemeOp::ESchemeOpMoveSequence:
+            Y_ABORT("no implementation for ESchemeOpMoveSequence");
+
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
             return *modifyScheme.MutableSequence()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
             return *modifyScheme.MutableReplication()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
@@ -356,7 +398,50 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
             return *modifyScheme.MutableCreateResourcePool()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        // TODO verify all logic based on this, it may be irrelevant
+            return *modifyScheme.MutableRestoreMultipleIncrementalBackups()->MutableSrcTablePaths(0);
+
+        case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+            return *modifyScheme.MutableCreateBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+            return *modifyScheme.MutableAlterBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
+            return *modifyScheme.MutableDropBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+            return *modifyScheme.MutableBackupBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+            return *modifyScheme.MutableCreateSysView()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpChangePathState:
+            return *modifyScheme.MutableChangePathState()->MutablePath();
+
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
+            return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
         }
+        Y_UNREACHABLE();
+    }
+
+    static void SetPathNameForScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name) {
+        GetPathNameForScheme(modifyScheme) = name;
     }
 
     static bool IsCreateRequest(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -379,6 +464,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
             return true;
         default:
             return false;
@@ -389,8 +476,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return IsCreateRequest(modifyScheme);
     }
 
+    static TVector<TString> GetFullPath(NKikimrSchemeOp::TModifyScheme& scheme) {
+        switch (scheme.GetOperationType()) {
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+            return SplitPath(GetPathNameForScheme(scheme));
+        default:
+            return Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        }
+    }
+
     static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
-        auto parts = Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
+        auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
         }
@@ -464,9 +561,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     break;
             }
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " SEND to# " << Source.ToString() << " Source " << result->ToString());
-
         if (result->Record.GetSchemeShardReason()) {
             auto issueStatus = NKikimrIssues::TIssuesIds::DEFAULT_ERROR;
             if (result->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist) {
@@ -475,6 +569,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto issue = MakeIssue(std::move(issueStatus), result->Record.GetSchemeShardReason());
             NYql::IssueToMessage(issue, result->Record.AddIssues());
         }
+        if (result->Record.IssuesSize() > 0) {
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << ", issues: " << result->Record.GetIssues());
+        }
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " SEND to# " << Source.ToString() << " Source " << result->ToString());
         ctx.Send(Source, result);
     }
 
@@ -483,8 +583,45 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         ReportStatus(status, nullptr, nullptr, ctx);
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap(const TActorContext& ctx) {
         ExtractUserToken();
+
+        CheckAdministrator = AppData()->FeatureFlags.GetEnableStrictUserManagement();
+        CheckDatabaseAdministrator = CheckAdministrator && AppData()->FeatureFlags.GetEnableDatabaseAdmin();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " Bootstrap,"
+            << " UserSID: " << GetUserSID(UserToken)
+            << " CheckAdministrator: " << CheckAdministrator
+            << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
+        );
+
+        // Resolve database to get its owner and be able to detect if user is the database admin
+        if (UserToken) {
+            IsClusterAdministrator = NKikimr::IsAdministrator(AppData(), &UserToken.value());
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << " Bootstrap,"
+                << " UserSID: " << GetUserSID(UserToken)
+                << " IsClusterAdministrator: " << IsClusterAdministrator
+            );
+
+            // Cluster admin trumps database admin, database owner check is needed only for database admin.
+            if (!IsClusterAdministrator && CheckDatabaseAdministrator) {
+                auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                request->DatabaseName = CanonizePath(GetRequestProto().GetDatabaseName());
+
+                auto& entry = request->ResultSet.emplace_back();
+                entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+                entry.Path = NKikimr::SplitPath(request->DatabaseName);
+
+                ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+
+                static_cast<TDerived*>(this)->Become(&TDerived::StateWaitResolveDatabase);
+                return;
+            }
+        }
+
+        static_cast<TDerived*>(this)->Start(ctx);
     }
 
     void Die(const TActorContext &ctx) override {
@@ -507,7 +644,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             const auto &partition = desc.GetPartitionConfig();
             if (partition.HasPartitioningPolicy() && partition.GetPartitioningPolicy().GetSizeToSplit() > 0) {
                 if (PartitionConfigHasExternalBlobsEnabled(partition)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor#" << ctx.SelfID.ToString() << " txid# " << TxId << " must not use auto-split and external blobs simultaneously, path# " << path);
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor#" << ctx.SelfID.ToString() << " txid# " << TxId
+                        << " must not use auto-split and external blobs simultaneously, path# " << path
+                    );
                     return false;
                 }
             }
@@ -556,29 +695,29 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterSubDomain:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomain:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDatabase | NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDatabase | NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateSubDomain:
         case NKikimrSchemeOp::ESchemeOpCreateExtSubDomain:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDatabase | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDatabase | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterUserAttributes:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::WriteUserAttributes | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::WriteUserAttributes | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -586,9 +725,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto& path = pbModifyScheme.GetSplitMergeTablePartitions().GetTablePath();
             TString baseDir = ToString(ExtractParent(path)); // why baseDir?
 
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = SplitPath(baseDir);
-            toResolve.RequiredAccess = NACLib::EAccessRights::NoAccess; // why not?
+            toResolve.RequireAccess = NACLib::EAccessRights::NoAccess; // why not?
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -597,6 +736,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
         case NKikimrSchemeOp::ESchemeOpDropCdcStream:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
@@ -615,10 +755,46 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
+        case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+
+            std::vector<TString> pathForChecking;
+            if (target.HasDstPath()) {
+                pathForChecking.push_back(target.GetDstPath());
+            }
+            if (target.HasDirectoryPath()) {
+                pathForChecking.push_back(target.GetDirectoryPath());
+            }
+
+            for (const auto& path : pathForChecking) {
+                auto toWriteTable = TPathToResolve(pbModifyScheme);
+                toWriteTable.Path = SplitPath(path);
+                toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteTable);
+            }
+
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = SplitPath(GetPathNameForScheme(pbModifyScheme));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -634,54 +810,56 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
+        case NKikimrSchemeOp::ESchemeOpDropTransfer:
+        case NKikimrSchemeOp::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpDropSubDomain:
         case NKikimrSchemeOp::ESchemeOpForceDropSubDomain:
         case NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain: {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::DropDatabase;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::DropDatabase;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpForceDropUnsafe: {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::DropDatabase | NACLib::EAccessRights::RemoveSchema;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::DropDatabase | NACLib::EAccessRights::RemoveSchema;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpModifyACL: {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::GrantAccessRights | accessToUserAttrs;
-            toResolve.RequiredGrandAccess = pbModifyScheme.GetModifyACL();
+            toResolve.RequireAccess = NACLib::EAccessRights::GrantAccessRights | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTable: {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
 
             if (pbModifyScheme.GetCreateTable().HasCopyFromTable()) {
-                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                auto toResolve = TPathToResolve(pbModifyScheme);
                 toResolve.Path = SplitPath(pbModifyScheme.GetCreateTable().GetCopyFromTable());
-                toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow;
+                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -701,44 +879,114 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+
+            auto toWriteTable = TPathToResolve(pbModifyScheme);
+            toWriteTable.Path = SplitPath(target.GetDstPath());
+            toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+            ResolveForACL.push_back(toWriteTable);
+
+            if (target.HasDirectoryPath()) {
+                auto toWriteDir = TPathToResolve(pbModifyScheme);
+                toWriteDir.Path = SplitPath(target.GetDirectoryPath());
+                toWriteDir.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteDir);
+            }
+
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables: {
             for (auto& item: pbModifyScheme.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
                 {
-                    auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                    auto toResolve = TPathToResolve(pbModifyScheme);
                     toResolve.Path = SplitPath(item.GetSrcPath());
-                    toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow;
+                    toResolve.RequireAccess = NACLib::EAccessRights::SelectRow;
                     ResolveForACL.push_back(toResolve);
                 }
                 {
-                    auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                    auto toResolve = TPathToResolve(pbModifyScheme);
                     auto dstDir = ToString(ExtractParent(item.GetDstPath()));
                     toResolve.Path = SplitPath(dstDir);
-                    toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable;
+                    toResolve.RequireAccess = NACLib::EAccessRights::CreateTable;
                     ResolveForACL.push_back(toResolve);
                 }
             }
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
+            std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpMoveTable: {
             auto& descr = pbModifyScheme.GetMoveTable();
             {
-                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                auto toResolve = TPathToResolve(pbModifyScheme);
                 toResolve.Path = SplitPath(descr.GetSrcPath());
-                toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::RemoveSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::RemoveSchema;
                 ResolveForACL.push_back(toResolve);
             }
             {
-                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                auto toResolve = TPathToResolve(pbModifyScheme);
                 auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
                 toResolve.Path = SplitPath(dstDir);
-                toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable;
+                toResolve.RequireAccess = NACLib::EAccessRights::CreateTable;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -746,34 +994,63 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveIndex: {
             auto& descr = pbModifyScheme.GetMoveIndex();
             {
-                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                auto toResolve = TPathToResolve(pbModifyScheme);
                 toResolve.Path = SplitPath(descr.GetTablePath());
-                toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema;
                 ResolveForACL.push_back(toResolve);
             }
             break;
         }
         case NKikimrSchemeOp::ESchemeOpMkDir:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDirectory | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDirectory | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateQueue | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateQueue | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterLogin:
         {
-            auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+            auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpMoveSequence: {
+            auto& descr = pbModifyScheme.GetMoveSequence();
+            {
+                auto toResolve = TPathToResolve(pbModifyScheme);
+                toResolve.Path = SplitPath(descr.GetSrcPath());
+                toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
+                ResolveForACL.push_back(toResolve);
+            }
+            {
+                auto toResolve = TPathToResolve(pbModifyScheme);
+                auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
+                toResolve.Path = SplitPath(dstDir);
+                toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+                ResolveForACL.push_back(toResolve);
+            }
+            break;
+        }
+        // TODO(n00bcracker): add processing after support on client side
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
+            return false;
+        case NKikimrSchemeOp::ESchemeOpChangePathState: {
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -781,6 +1058,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
+        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpCreateLock:
@@ -799,9 +1077,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl:
+        case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
+        case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return false;
         }
         return true;
@@ -825,7 +1107,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.Path = toReq.Path;
-            entry.RedirectRequired = toReq.RequiredRedirect;
+            entry.RedirectRequired = toReq.RequireRedirect;
             entry.SyncVersion = true;
             entry.ShowPrivatePath = true;
 
@@ -840,9 +1122,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return resolveResult.DomainInfo->DomainKey.OwnerId;
         }
 
-        if (resolveTask.OperationRelated == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
+        if (resolveTask.ModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
             // ESchemeOpAlterUserAttributes applies on GSS when path is DB
-            // but on GSS in other cases
+            // but on TSS in other cases
             if (IsDB(resolveResult)) {
                 return resolveResult.DomainInfo->DomainKey.OwnerId;
             } else {
@@ -857,6 +1139,23 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, const TString& part) {
+        const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken)
+            << " on path " << CanonizePath(JoinPath(path))
+        ;
+        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << msg << ", " << part
+        );
+        return msg;
+    }
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TString& part) {
+        const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken);
+        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << msg << ", " << part
+        );
+        return msg;
+    }
+
     void InterpretResolveError(const NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext &ctx) {
         for (const auto& entry: navigate->ResultSet) {
             switch (entry.Status) {
@@ -865,13 +1164,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
                 const ui32 access = NACLib::EAccessRights::DescribeSchema;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                            "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to path " << JoinPath(entry.Path) << " because the base path");
-                const TString errString = TStringBuilder()
-                    << "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
-                    << " to path " << JoinPath(entry.Path);
+                const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                    << "with access " << NACLib::AccessRightsToString(access) << ": base path is inaccessible"
+                );
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 break;
@@ -885,12 +1180,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 TxProxyMon->ResolveKeySetWrongRequest->Inc();
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
                 break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 TxProxyMon->ResolveKeySetFail->Inc();
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 TxProxyMon->ResolveKeySetFail->Inc();
@@ -919,76 +1214,184 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    bool CheckACL(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext &ctx) {
+    bool CheckAccess(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext &ctx) {
+        const bool checkAdmin = (CheckAdministrator || CheckDatabaseAdministrator);
+        const bool isAdmin = (IsClusterAdministrator || IsDatabaseAdministrator);
+
         auto resolveIt = resolveSet.begin();
         auto requestIt = ResolveForACL.begin();
 
         while (resolveIt != resolveSet.end() && requestIt != ResolveForACL.end()) {
             const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = *resolveIt;
             const TPathToResolve& request = *requestIt;
+            const auto& modifyScheme = request.ModifyScheme;
 
-            ui32 access = requestIt->RequiredAccess;
+            bool allowACLBypass = false;
+
+            // Check admin restrictions and special cases
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
+                // EnableStrictUserManagement == false:
+                //   - any user can manage users|groups, but require AlterSchema right
+                //
+                // EnableStrictUserManagement == true:
+                //   - user can change password for himself, and does not require AlterSchema right
+                //   - only admins can manage users|groups, and does not require AlterSchema right
+                //   - database admin can't change other database admins
+                //   - database admin can't change database admin group
+                //   - database admin can't change database owner
+                //
+                const auto& alterLogin = modifyScheme.GetAlterLogin();
+
+                // User changes password for himself (and only password)
+                bool isUserChangesOwnPassword = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
+                        if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
+                            return (subjectSid == targetUser.GetUser());
+                        }
+                    }
+                    return false;
+                }(alterLogin, UserToken->GetUserSID());
+
+                bool allowManageUser = !checkAdmin || isAdmin || isUserChangesOwnPassword;
+
+                if (!allowManageUser) {
+                    const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
+
+                allowACLBypass = (checkAdmin && isAdmin) || isUserChangesOwnPassword;
+
+                // Database admin is not allowed to manage group of database admins or change other database admins
+                // (its the privilege of cluster admins).
+                if (checkAdmin && IsDatabaseAdministrator) {
+                    TString group;
+                    switch (alterLogin.GetAlterCase()) {
+                        case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
+                            group = alterLogin.GetAddGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
+                            group = alterLogin.GetRemoveGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
+                            group = alterLogin.GetRemoveGroup().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
+                            group = alterLogin.GetRenameGroup().GetGroup();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (!group.empty() && group == DatabaseOwner) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to administer database admin group by the database admin"
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+                    // Database admin still can change its own password
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && !isUserChangesOwnPassword) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
+                        const auto targetUserToken = NKikimr::BuildLocalUserToken(DatabaseSecurityState, targetUser.GetUser());
+                        if (NKikimr::IsDatabaseAdministrator(&targetUserToken, DatabaseOwner)) {
+                            const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                                << "attempt to change other database admin by the database admin"
+                            );
+                            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                            return false;
+                        }
+                    }
+                }
+
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
+                // Only the owner of the schema object (path) can transfer their ownership away.
+                // Or admins (if configured so).
+                const auto& newOwner = modifyScheme.GetModifyACL().GetNewOwner();
+                if (!newOwner.empty()) {
+                    // This modifyACL is changing the owner
+                    auto isObjectOwner = [](const auto& userToken, const NACLib::TSID& owner) {
+                        return userToken->IsExist(owner);
+                    };
+                    const auto& owner = entry.Self->Info.GetOwner();
+                    const bool allow = (isAdmin || isObjectOwner(UserToken, owner));
+                    if (!allow) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to change ownership"
+                            << " from " << owner
+                            << " to " << newOwner
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+
+                    // Database admin is not allowed to change ownership of its own database
+                    if (IsDatabaseAdministrator && IsDB(entry)) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to change database ownership by the database admin"
+                            << " from " << owner
+                            << " to " << newOwner
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+                }
+
+                // Admins can always change ACLs
+                allowACLBypass = isAdmin;
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
+                if (IsDB(entry) && !IsClusterAdministrator) {
+                    const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                        << "only cluster admins can alter databases"
+                    );
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
+            }
+
+            ui32 access = requestIt->RequireAccess;
 
             // request more rights if dst path is DB
-            if (request.OperationRelated == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
                 if (IsDB(entry)) {
                     access |= NACLib::EAccessRights::GenericManage;
                 }
             }
 
-            if (access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {
+            if (allowACLBypass || access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {
                 ++resolveIt;
                 ++requestIt;
                 continue;
             }
 
             if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                            "Access denied for " << UserToken->GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to path " << JoinPath(entry.Path));
-
-                const TString errString = TStringBuilder()
-                    << "Access denied for " << UserToken->GetUserSID()
-                    << " to path " << JoinPath(entry.Path);
+                const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                    << "with access " << NACLib::AccessRightsToString(access)
+                );
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 return false;
             }
 
-            if (request.OperationRelated == NKikimrSchemeOp::ESchemeOpModifyACL) {
-                const auto& modifyACL = *request.RequiredGrandAccess;
-                if (UserToken->IsExist(entry.SecurityObject->GetOwnerSID())) {
-                    ++resolveIt;
-                    ++requestIt;
-                    continue;
-                }
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
+                const auto& modifyACL = modifyScheme.GetModifyACL();
 
-                if (!modifyACL.GetNewOwner().empty()) {
-                    const TString errString = TStringBuilder()
-                        << "Access denied for " << UserToken->GetUserSID()
-                        << " to change ownership of " << JoinPath(entry.Path)
-                        << " to " << modifyACL.GetNewOwner();
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, errString);
-
-                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                    return false;
-                }
-
-                NACLib::TDiffACL diffACL(modifyACL.GetDiffACL());
-                if (!entry.SecurityObject->CheckGrantAccess(diffACL, *UserToken)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                                "Access denied for " << UserToken->GetUserSID()
-                                << " with diff ACL access " << NACLib::AccessRightsToString(NACLib::EAccessRights::GrantAccessRights)
-                                << " to path " << JoinPath(entry.Path));
-
-                    const TString errString = TStringBuilder()
-                        << "Access denied for " << UserToken->GetUserSID()
-                        << " to path " << JoinPath(entry.Path);
-                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                    return false;
+                if (!modifyACL.GetDiffACL().empty()) {
+                    NACLib::TDiffACL diffACL(modifyACL.GetDiffACL());
+                    if (!entry.SecurityObject->CheckGrantAccess(diffACL, *UserToken)) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "with diff ACL access " << NACLib::AccessRightsToString(NACLib::EAccessRights::GrantAccessRights)
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
                 }
             }
 
@@ -1073,6 +1476,53 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return Die(ctx);
     }
 
+    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " HandleResolveDatabase,"
+            << " ResultSet size: " << request.ResultSet.size()
+            << " ResultSet error count: " << request.ErrorCount
+        );
+
+        if (request.ResultSet.empty()) {
+            const TString msg = TStringBuilder() << "Error resolving database " << request.DatabaseName << ": no response";
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                << ", " << msg
+            );
+
+            TxProxyMon->ResolveKeySetWrongRequest->Inc();
+
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, msg);
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx);
+            return Die(ctx);
+        }
+
+        if (request.ErrorCount > 0) {
+            InterpretResolveError(&request, ctx);
+            return Die(ctx);
+        }
+
+        const auto& entry = request.ResultSet.front();
+
+        DatabaseOwner = entry.Self->Info.GetOwner();
+        DatabaseSecurityState = entry.DomainDescription->Description.GetSecurityState();
+
+        IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), entry.Self->Info.GetOwner());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " HandleResolveDatabase,"
+            << " UserSID: " << GetUserSID(UserToken)
+            << " CheckAdministrator: " << CheckAdministrator
+            << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
+            << " IsClusterAdministrator: " << IsClusterAdministrator
+            << " IsDatabaseAdministrator: " << IsDatabaseAdministrator
+            << " DatabaseOwner: " << DatabaseOwner
+        );
+
+        static_cast<TDerived*>(this)->Start(ctx);
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         NSchemeCache::TSchemeCacheNavigate *navigate = ev->Get()->Request.Get();
 
@@ -1094,21 +1544,25 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
         Y_ABORT_UNLESS(navigate->ResultSet.size() == ResolveForACL.size());
 
-        ui64 shardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
-
-        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, shardToRequest);
+        // Check user access level, permissions on scheme objects and other restrictions/permissions
         if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-
-            if (!CheckACL(navigate->ResultSet, ctx)) {
+            if (!CheckAccess(navigate->ResultSet, ctx)) {
                 return Die(ctx);
             }
         }
 
+        // Check doc-api restrictions on operations
         if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
             if (!CheckDocApi(navigate->ResultSet, ctx)) {
-                    return Die(ctx);
+                return Die(ctx);
             }
+        }
+
+        ui64 shardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
+        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, shardToRequest);
+
+        if (UserToken) {
+            request->Record.SetOwner(UserToken->GetUserSID());
         }
 
         request->Record.SetPeerName(GetRequestProto().GetPeerName());
@@ -1141,6 +1595,7 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
     using TBase = TBaseSchemeReq<TFlatSchemeReq>;
 
     void Bootstrap(const TActorContext &ctx);
+    void Start(const TActorContext &ctx);
     void ProcessRequest(const TActorContext &ctx);
 
     void HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
@@ -1155,6 +1610,12 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
 
     void Die(const TActorContext &ctx) override {
         TBase::Die(ctx);
+    }
+
+    STFUNC(StateWaitResolveDatabase) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
+        }
     }
 
     STFUNC(StateWaitResolveWorkingDir) {
@@ -1190,7 +1651,12 @@ void TFlatSchemeReq::Bootstrap(const TActorContext &ctx) {
     WallClockStarted = ctx.Now();
 
     TBase::Bootstrap(ctx);
+}
 
+void TFlatSchemeReq::Start(const TActorContext &ctx) {
+    //NOTE: split-merge operations here bypass access checks:
+    // - internal requests should not follow general rules
+    // - external requests are checked for admin rights elsewhere
     if (IsSplitMergeFromSchemeShard(GetModifyScheme())) {
         SendSplitMergePropose(ctx);
         Become(&TThis::StateWaitPrepare);
@@ -1249,21 +1715,38 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
     const TVector<TString>* workingDir = nullptr;
+    bool lookupError = false;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;
+        } else if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+            lookupError = true;
         }
     }
 
-    auto parts = Merge(SplitPath(GetModifyScheme().GetWorkingDir()), SplitPath(GetPathNameForScheme(GetModifyScheme())));
+    auto parts = GetFullPath(GetModifyScheme());
+    if (!workingDir && lookupError) {
+        const auto errText = TStringBuilder()
+            << "Cannot resolve working dir, lookup error"
+            << " path# " << JoinPath(parts);
+        LOG_INFO_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << errText
+        );
+        TxProxyMon->ResolveKeySetFail->Inc();
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, nullptr, &issue, ctx);
+        return Die(ctx);
+    }
 
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()
             << "Cannot resolve working dir"
-            << " workingDir# " << (workingDir ? JoinPath(*workingDir) : "null")
+            << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
             << " path# " << JoinPath(parts);
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, errText);
+        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << errText
+        );
 
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText);
@@ -1272,7 +1755,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     }
 
     GetModifyScheme().SetWorkingDir(CombinePath(workingDir->begin(), workingDir->end()));
-    GetPathNameForScheme(GetModifyScheme()) = CombinePath(parts.begin() + workingDir->size(), parts.end(), false);
+    SetPathNameForScheme(GetModifyScheme(), CombinePath(parts.begin() + workingDir->size(), parts.end(), false));
 
     ProcessRequest(ctx);
 }
@@ -1285,6 +1768,7 @@ struct TSchemeTransactionalReq : public TBaseSchemeReq<TSchemeTransactionalReq> 
     using TBase = TBaseSchemeReq<TSchemeTransactionalReq>;
 
     void Bootstrap(const TActorContext &ctx);
+    void Start(const TActorContext &ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_PROXY_SCHEMEREQ;
@@ -1296,6 +1780,12 @@ struct TSchemeTransactionalReq : public TBaseSchemeReq<TSchemeTransactionalReq> 
 
     void Die(const TActorContext &ctx) override {
         TBase::Die(ctx);
+    }
+
+    STFUNC(StateWaitResolveDatabase) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
+        }
     }
 
     STFUNC(StateWaitResolve) {
@@ -1325,7 +1815,9 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
     WallClockStarted = ctx.Now();
 
     TBase::Bootstrap(ctx);
+}
 
+void TSchemeTransactionalReq::Start(const TActorContext &ctx) {
     for(auto& scheme: GetModifications()) {
         if (!ExamineTables(scheme, ctx)) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::NotImplemented, ctx);
@@ -1351,6 +1843,7 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " TEvNavigateKeySet requested from SchemeCache");
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest));
+
     Become(&TThis::StateWaitResolve);
     return;
 }

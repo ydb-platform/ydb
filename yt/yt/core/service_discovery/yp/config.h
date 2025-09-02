@@ -10,12 +10,13 @@ namespace NYT::NServiceDiscovery::NYP {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServiceDiscoveryConfig
+struct TServiceDiscoveryConfig
     : public NRpc::TRetryingChannelConfig
     , public TAsyncExpiringCacheConfig
 {
-public:
     bool Enable;
+
+    bool EnableMetrics;
 
     //! Provider endpoint.
     TString Fqdn;

@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include "counters.h"
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
@@ -28,6 +28,10 @@ private:
     const TTaskContext Context;
     const ui64 Priority;
 public:
+    ui64 GetMemory() const {
+        return Memory;
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "(mem=" << Memory << ";cpu=" << Cpu << ";)";
     }

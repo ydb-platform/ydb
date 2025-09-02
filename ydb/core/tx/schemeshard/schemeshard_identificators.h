@@ -2,10 +2,15 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/util/ui64id.h>
+
 #include <ydb/library/conclusion/result.h>
 
 #include <util/generic/utility.h>
 #include <util/stream/output.h>
+
+namespace NKikimrSchemeOp {
+class TShardIdx;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {

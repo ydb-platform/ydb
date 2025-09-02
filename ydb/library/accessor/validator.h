@@ -9,4 +9,9 @@ public:
         AFL_VERIFY(!!object);
         return object;
     }
+    template <class T>
+    static T&& CheckNotNull(T&& object) {
+        AFL_VERIFY(!!object);
+        return std::forward<T>(object);
+    }
 };

@@ -91,6 +91,11 @@ YT_DEFINE_ERROR_ENUM(
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
     ((BundleIsBanned)                         (1739))
+    ((TabletServantIsNotActive)               (1740))
+    ((UniqueIndexConflict)                    (1741))
+    ((TabletReplicationEraMismatch)           (1742))
+    ((OrderedDynamicStoreRotateEpochMismatch) (1743))
+    ((TabletIsInIntermediateState)            (1744))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -139,10 +144,10 @@ DEFINE_BIT_ENUM(EReplicationLogDataFlags,
 
 struct TReplicationLogTable
 {
-    static const TString ChangeTypeColumnName;
-    static const TString KeyColumnNamePrefix;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string KeyColumnNamePrefix;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_BIT_ENUM(EUnversionedUpdateDataFlags,
@@ -157,9 +162,9 @@ constexpr EUnversionedUpdateDataFlags MaxValidUnversionedUpdateDataFlags =
 
 struct TUnversionedUpdateSchema
 {
-    static const TString ChangeTypeColumnName;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_ENUM(ETabletCellHealth,
@@ -218,27 +223,41 @@ DEFINE_ENUM(ETabletServiceFeatures,
     ((SharedWriteLocks)         (1))
 );
 
-DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)                 (0))
-    ((Unfolding)                (1))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
+    ((New)                  (2))
 );
 
-extern const TString CustomRuntimeDataWatermarkKey;
+extern const std::string CustomRuntimeDataWatermarkKey;
 struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
+DEFINE_ENUM(ESecondaryIndexKind,
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
+    ((Unique)                   (2))
+);
+
+struct TIndexInfo;
+
+DEFINE_ENUM(ETableToIndexCorrespondence,
+    ((Invalid)                  (0))
+    ((Injective)                (1))
+    ((Bijective)                (2))
+    ((Unknown)                  (3))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicatedTableOptions)
+DECLARE_REFCOUNTED_STRUCT(TReplicationCollocationOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)

@@ -1,0 +1,15 @@
+{%- if with_errorprone or with_test_errorprone -%}
+import net.ltgt.gradle.errorprone.CheckSeverity
+import net.ltgt.gradle.errorprone.errorprone
+
+{%  endif -%}
+
+{%- if with_kotlin -%}
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+{%-     if with_kapt or with_test_kapt %}
+import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
+{%-     endif -%}
+{%-     if with_lombok_plugin %}
+import io.freefair.gradle.plugins.lombok.tasks.Delombok
+{%-     endif %}
+{%  endif -%}

@@ -1,0 +1,108 @@
+#include "yql_yt_table_data_service_writer.h"
+#include <library/cpp/threading/future/wait/wait.h>
+#include <util/string/join.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+
+namespace NYql::NFmr {
+
+TFmrTableDataServiceWriter::TFmrTableDataServiceWriter(
+    const TString& tableId,
+    const TString& partId,
+    ITableDataService::TPtr tableDataService,
+    const TString& columnGroupSpec,
+    const TFmrWriterSettings& settings
+)
+    : TableId_(tableId),
+    PartId_(partId),
+    TableDataService_(tableDataService),
+    ChunkSize_(settings.ChunkSize),
+    MaxInflightChunks_(settings.MaxInflightChunks),
+    MaxRowWeight_(settings.MaxRowWeight),
+    ColumnGroupSpec_(GetColumnGroupsFromSpec(columnGroupSpec))
+{
+    YQL_ENSURE(MaxRowWeight_ >= ChunkSize_);
+}
+
+void TFmrTableDataServiceWriter::DoWrite(const void* buf, size_t len) {
+    TableContent_.Append(static_cast<const char*>(buf), len);
+}
+
+void TFmrTableDataServiceWriter::NotifyRowEnd()  {
+    ++CurrentChunkRows_;
+    if (TableContent_.size() >= MaxRowWeight_) {
+        ythrow yexception() << "Current row size: " << TableContent_.size() << " is larger than max row weight: " << MaxRowWeight_;
+    }
+    if (TableContent_.size() >= ChunkSize_) {
+        PutRows();
+    }
+}
+
+void TFmrTableDataServiceWriter::DoFlush() {
+    PutRows();
+    with_lock(State_->Mutex) {
+        if (State_->Exception) {
+            std::rethrow_exception(State_->Exception);
+        }
+        State_->CondVar.Wait(State_->Mutex, [this] {
+            return State_->CurInflightChunks == 0;
+        });
+    }
+}
+
+void TFmrTableDataServiceWriter::PutRows() {
+
+    auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
+    std::unordered_map<TString, TString> splittedYsonByColumnGroups;
+
+    if (!ColumnGroupSpec_.IsEmpty()) {;
+        // Split current yson buffer by column groups
+        splittedYsonByColumnGroups = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    } else {
+        // Create single column group with empty name in case spec is not set
+        splittedYsonByColumnGroups = {{TString(), currentYsonContent}};
+    }
+
+    with_lock(State_->Mutex) {
+        State_->CondVar.Wait(State_->Mutex, [&] {
+            return State_->CurInflightChunks < MaxInflightChunks_;
+        });
+        State_->CurInflightChunks += splittedYsonByColumnGroups.size(); // Adding number of keys which we want to put to TableDataService to inflight
+    }
+
+    for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
+        auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
+        auto tableDataServiceChunkId = GetTableDataServiceChunkId(ChunkCount_, groupName);
+        TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId,columnGroupYsonContent).Subscribe(
+            [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
+                std::shared_ptr<TFmrWriterState> state = weakState.lock();
+                if (state) {
+                    with_lock(state->Mutex) {
+                        --state->CurInflightChunks;
+                        try {
+                            putFuture.GetValue();
+                        } catch (...) {
+                            if (!state->Exception) {
+                                state->Exception = std::current_exception();
+                            }
+                        }
+                        state->CondVar.Signal();
+                    }
+                }
+            }
+        );
+    }
+    DataWeight_ += TableContent_.Size();
+    PartIdChunkStats_.emplace_back(TChunkStats{.Rows = CurrentChunkRows_, .DataWeight = TableContent_.Size()});
+    CurrentChunkRows_ = 0;
+    ++ChunkCount_;
+    TableContent_.Clear();
+}
+
+TTableChunkStats TFmrTableDataServiceWriter::GetStats() {
+    YQL_CLOG(DEBUG, FastMapReduce) << " Finished writing to table data service for table Id: " << TableId_ << " and part Id " << PartId_;
+    return TTableChunkStats{.PartId = PartId_, .PartIdChunkStats = PartIdChunkStats_};
+}
+
+} // namespace NYql::NFmr

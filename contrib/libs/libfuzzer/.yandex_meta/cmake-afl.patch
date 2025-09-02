@@ -1,0 +1,8 @@
+--- a/lib/fuzzer/CMakeLists.txt
++++ b/lib/fuzzer/CMakeLists.txt
+@@ -143,3 +143,5 @@ endif()
+ if(COMPILER_RT_INCLUDE_TESTS)
+   add_subdirectory(tests)
+ endif()
++
++add_library(fuzzer-afl afl/afl_driver.cpp)

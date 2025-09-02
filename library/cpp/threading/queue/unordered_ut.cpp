@@ -17,7 +17,7 @@ private:
 
 public:
     void Push1M_Pop1M_Unordered() {
-        constexpr int REPEAT = 1000000;
+        constexpr int REPEAT = 1000;
         TQueueType queue;
         TLink msg[REPEAT];
 

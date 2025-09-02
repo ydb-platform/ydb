@@ -3,8 +3,7 @@
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/query_uploader.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 using namespace NBackup;
 using namespace NTable;
@@ -46,23 +45,23 @@ public:
         Begin();
     }
 
-    bool Fits(const TString& line) const override {
+    EStatus Check(const NPrivate::TLine& line) const override {
         if (RowsPerRequest > 0 && (Rows + 1) > RowsPerRequest) {
-            return Rows == 0;
+            return Rows == 0 ? OK : FULL;
         }
 
         if (BytesPerRequest > 0 && (Bytes + RecordSize(line)) > BytesPerRequest) {
-            return Bytes == 0;
+            return Bytes == 0 ? OK : FULL;
         }
 
         if (RequestUnitsPerRequest > 0 && CalcRequestUnits(RequestUnitsX2 + RecordRequestUnitsX2(line)) > RequestUnitsPerRequest) {
-            return RequestUnitsX2 == 0;
+            return RequestUnitsX2 == 0 ? OK : FULL;
         }
 
-        return true;
+        return OK;
     }
 
-    void Feed(TString&& line) override {
+    void Feed(NPrivate::TLine&& line) override {
         AddLine(line);
 
         ++Rows;
@@ -90,12 +89,15 @@ public:
         return false;
     }
 
-    TString GetData(bool) override {
+    NPrivate::TBatch GetData(bool) override {
         Rows = 0;
         Bytes = 0;
         RequestUnitsX2 = 0;
 
-        return {}; // Writer gets data directly from accumulator
+        // Writer gets data directly from accumulator
+        NPrivate::TBatch batch;
+        batch.SetOriginAccumulator(this);
+        return batch; 
     }
 
 private:
@@ -115,35 +117,37 @@ public:
     explicit TDataWriter(
             const TString& path,
             TTableClient& tableClient,
-            NPrivate::IDataAccumulator* accumulator,
+            const NPrivate::IDataAccumulator* accumulator,
             const TRestoreSettings& settings)
         : Path(path)
         , TableClient(tableClient)
-        , Accumulator(dynamic_cast<TDataAccumulator*>(accumulator))
         , UseBulkUpsert(settings.Mode_ == TRestoreSettings::EMode::BulkUpsert)
-    {
-        Y_ENSURE(Accumulator);
+    {   
+        const auto* dataAccumulator = dynamic_cast<const TDataAccumulator*>(accumulator);
+        Y_ENSURE(dataAccumulator);
 
         TUploader::TOptions opts;
-        opts.InFly = settings.InFly_;
+        opts.InFly = settings.MaxInFlight_;
         opts.Rate = settings.RateLimiterSettings_.Rate_;
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
 
-        Uploader = MakeHolder<TUploader>(opts, TableClient, Accumulator->GetQueryString());
+        Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
     }
 
-    bool Push(TString&&) override {
-        bool ok;
+    bool Push(NPrivate::TBatch&& batch) override {
+        auto* accumulator = dynamic_cast<TDataAccumulator*>(batch.GetOriginAccumulator());
+        Y_ENSURE(accumulator);
 
+        bool ok;
         if (UseBulkUpsert) {
-            ok = Uploader->Push(Path, Accumulator->EndAndGetResultingValue());
+            ok = Uploader->Push(Path, accumulator->EndAndGetResultingValue());
         } else {
-            ok = Uploader->Push(Accumulator->EndAndGetResultingParams());
+            ok = Uploader->Push(accumulator->EndAndGetResultingParams());
         }
 
         if (ok) {
-            Accumulator->Begin();
+            accumulator->Begin();
         }
 
         return ok;
@@ -156,7 +160,6 @@ public:
 private:
     const TString Path;
     TTableClient& TableClient;
-    TDataAccumulator* Accumulator;
     const bool UseBulkUpsert;
     THolder<TUploader> Uploader;
 
@@ -174,10 +177,9 @@ NPrivate::IDataAccumulator* CreateCompatAccumulator(
 NPrivate::IDataWriter* CreateCompatWriter(
         const TString& path,
         TTableClient& tableClient,
-        NPrivate::IDataAccumulator* accumulator,
+        const NPrivate::IDataAccumulator* accumulator,
         const TRestoreSettings& settings) {
     return new TDataWriter(path, tableClient, accumulator, settings);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

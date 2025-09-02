@@ -24,11 +24,21 @@ message TProtoHashTable {
     repeated TProtoHashBucket Buckets = 2;
 }
 
+enum ESubjectType {
+    SUBJECT_TYPE_UNSPECIFIED = 0;
+    SUBJECT_TYPE_USER = 1;
+    SUBJECT_TYPE_SERVICE = 2;
+    SUBJECT_TYPE_ANONYMOUS = 3;
+    SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER = 4;
+}
+
 message TUserToken {
     optional string UserSID = 1;
     optional TProtoHashTable GroupSIDs = 2;
     optional string OriginalUserToken = 3;
     optional string AuthType = 4;
+    optional string SanitizedToken = 5; // Sanitized token that can be added to audit logs, but can not be used as token to access YDB or any other service.
+    optional ESubjectType SubjectType = 6;
 }
 
 message TSecurityObject {

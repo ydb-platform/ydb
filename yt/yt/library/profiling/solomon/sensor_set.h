@@ -26,20 +26,17 @@ struct TCounterState final
     TCounterState(
         TWeakPtr<TRefCounted> owner,
         std::function<i64()> reader,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<i64()> Reader;
-    i64 LastValue = 0;
+    TTagIdSet TagSet;
 
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    i64 LastValue = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(TCounterState)
@@ -51,19 +48,16 @@ DECLARE_REFCOUNTED_STRUCT(TTimeCounterState)
 struct TTimeCounterState final
 {
     TTimeCounterState(
-        TWeakPtr<ITimeCounterImpl> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TWeakPtr<ITimeCounter> owner,
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
-    const TWeakPtr<ITimeCounterImpl> Owner;
-    TDuration LastValue = TDuration::Zero();
+    const TWeakPtr<ITimeCounter> Owner;
+    TTagIdSet TagSet;
 
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TDuration LastValue = TDuration::Zero();
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimeCounterState)
@@ -77,19 +71,15 @@ struct TGaugeState final
     TGaugeState(
         TWeakPtr<TRefCounted> owner,
         std::function<double()> reader,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<double()> Reader;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TGaugeState)
@@ -101,18 +91,14 @@ DECLARE_REFCOUNTED_STRUCT(TSummaryState)
 struct TSummaryState final
 {
     TSummaryState(
-        TWeakPtr<ISummaryImpl> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TWeakPtr<ISummary> owner,
+        TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
-    const TWeakPtr<ISummaryImpl> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    const TWeakPtr<ISummary> Owner;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSummaryState)
@@ -124,18 +110,14 @@ DECLARE_REFCOUNTED_STRUCT(TTimerSummaryState)
 struct TTimerSummaryState final
 {
     TTimerSummaryState(
-        TWeakPtr<ITimerImpl> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TWeakPtr<ITimer> owner,
+        TTagIdSet tagSet)
         : Owner(owner)
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
-    const TWeakPtr<ITimerImpl> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    const TWeakPtr<ITimer> Owner;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimerSummaryState)
@@ -149,17 +131,13 @@ struct THistogramState final
 {
     THistogramState(
         TWeakPtr<THistogram> owner,
-        const TTagIdList& tagIds,
-        const TProjectionSet& projections)
+        TTagIdSet tagSet)
         : Owner(owner)
-        , TagIds(tagIds)
-        , Projections(projections)
+        , TagSet(std::move(tagSet))
     { }
 
     const TWeakPtr<THistogram> Owner;
-
-    TTagIdList TagIds;
-    const TProjectionSet Projections;
+    TTagIdSet TagSet;
 };
 
 DEFINE_REFCOUNTED_TYPE(THistogramState)
@@ -190,7 +168,7 @@ public:
 
     bool IsEmpty() const;
 
-    void Profile(const TProfiler& profiler);
+    void Profile(const TWeakProfiler& profiler);
     void ValidateOptions(const TSensorOptions& options);
 
     void AddCounter(TCounterStatePtr counter);
@@ -207,7 +185,7 @@ public:
     int Collect();
 
     void ReadSensors(
-        const TString& name,
+        const std::string& name,
         TReadOptions readOptions,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
@@ -219,7 +197,7 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
 
     int GetGridFactor() const;
     int GetObjectCount() const;

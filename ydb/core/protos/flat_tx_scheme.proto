@@ -53,7 +53,7 @@ message TEvModifySchemeTransaction {
     optional uint64 TxId = 2;
     optional uint64 TabletId = 3;
     optional string Owner = 5;
-    optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
+    optional bool FailOnExist = 6; // deprecated, TModifyScheme.FailOnExist is recomended
     optional string UserToken = 7 [(Ydb.sensitive) = true]; // serialized NACLib::TUserToken
     optional string PeerName = 8;
 }
@@ -144,13 +144,36 @@ message TEvUpdateConfigResult {
 
 message TEvLogin {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional string ExternalAuth = 3;
+    optional uint64 ExpiresAfterMs = 4;
+    optional string PeerName = 5;  // IP address actually, same as TEvModifySchemeTransaction.PeerName
 }
 
 message TEvLoginResult {
     optional string Error = 1;
-    optional string Token = 2;
+    optional string Token = 2;  // signed jwt token
+    optional string SanitizedToken = 3;  // sanitized token without signature
+    optional bool IsAdmin = 4;
+}
+
+message TEvListUsers {
+
+}
+
+message TEvListUsersResult {
+    message TUser {
+        optional string Name = 1;
+        optional bool IsEnabled = 2;
+        optional bool IsLockedOut = 3;
+        optional uint64 CreatedAt = 4;
+        optional uint64 LastSuccessfulAttemptAt = 5;
+        optional uint64 LastFailedAttemptAt = 6;
+        optional uint32 FailedAttemptCount = 7;
+        optional string PasswordHash = 8; // JSON with type, salt and password hash
+    }
+
+    repeated TUser Users = 1;
 }
 
 // Sending actor registers itself to be notified when tx completes
@@ -164,30 +187,6 @@ message TEvNotifyTxCompletionRegistered {
 
 message TEvNotifyTxCompletionResult {
     optional uint64 TxId = 1;
-}
-
-message TSchemeLimits {
-    optional uint64 MaxDepth = 1;
-    optional uint64 MaxPaths = 2;
-    optional uint64 MaxChildrenInDir = 3;
-    optional uint64 MaxAclBytesSize = 4;
-
-    optional uint64 MaxTableColumns = 5;
-    optional uint64 MaxTableColumnNameLength = 6;
-    optional uint64 MaxTableKeyColumns = 7;
-    optional uint64 MaxTableIndices = 8;
-    optional uint64 MaxShards = 9;
-    optional uint64 MaxShardsInPath = 10;
-    optional uint64 MaxConsistentCopyTargets = 11;
-
-    optional uint64 MaxPathElementLength = 12;
-    optional string ExtraPathSymbolsAllowed = 13;
-
-    optional uint64 MaxPQPartitions = 14;
-    optional uint64 MaxTableCdcStreams = 15;
-
-    optional uint64 MaxExports = 16;
-    optional uint64 MaxImports = 17;
 }
 
 message TEvInitTenantSchemeShard {
@@ -205,7 +204,7 @@ message TEvInitTenantSchemeShard {
     repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 9;
     optional uint64 UserAttributesVersion = 10;
 
-    optional TSchemeLimits SchemeLimits = 11;
+    optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 11;
 
     optional bool InitiateMigration = 12;
 
@@ -389,6 +388,7 @@ message TEvUpdateTenantSchemeShard {
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
+    optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 20;
 
     optional string UpdateTenantRootACL = 13;
 
@@ -415,4 +415,38 @@ message TEvFindTabletSubDomainPathIdResult {
 }
 
 message TEvOwnerActorAck {
+}
+
+message TEvTenantShredRequest {
+    optional uint64 Generation = 1;
+}
+
+message TEvTenantShredResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS = 2;
+    }
+
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 Generation = 2;
+    optional EStatus Status = 3;
+}
+
+message TEvShredInfoRequest {
+}
+
+message TEvShredInfoResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS_TENANT = 2;
+        IN_PROGRESS_BSC = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 Generation = 2;
+}
+
+message TEvShredManualStartupRequest {
 }

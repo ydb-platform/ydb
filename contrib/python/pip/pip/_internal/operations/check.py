@@ -1,15 +1,25 @@
-"""Validation of dependencies of packages
-"""
+"""Validation of dependencies of packages"""
+
+from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
+from collections.abc import Generator, Iterable
+from contextlib import suppress
+from email.parser import Parser
+from functools import reduce
+from typing import (
+    Callable,
+    NamedTuple,
+)
 
 from pip._vendor.packaging.requirements import Requirement
+from pip._vendor.packaging.tags import Tag, parse_tag
 from pip._vendor.packaging.utils import NormalizedName, canonicalize_name
 from pip._vendor.packaging.version import Version
 
 from pip._internal.distributions import make_distribution_for_install_requirement
 from pip._internal.metadata import get_default_environment
+from pip._internal.metadata.base import BaseDistribution
 from pip._internal.req.req_install import InstallRequirement
 
 logger = logging.getLogger(__name__)
@@ -17,21 +27,21 @@ logger = logging.getLogger(__name__)
 
 class PackageDetails(NamedTuple):
     version: Version
-    dependencies: List[Requirement]
+    dependencies: list[Requirement]
 
 
 # Shorthands
-PackageSet = Dict[NormalizedName, PackageDetails]
-Missing = Tuple[NormalizedName, Requirement]
-Conflicting = Tuple[NormalizedName, Version, Requirement]
+PackageSet = dict[NormalizedName, PackageDetails]
+Missing = tuple[NormalizedName, Requirement]
+Conflicting = tuple[NormalizedName, Version, Requirement]
 
-MissingDict = Dict[NormalizedName, List[Missing]]
-ConflictingDict = Dict[NormalizedName, List[Conflicting]]
-CheckResult = Tuple[MissingDict, ConflictingDict]
-ConflictDetails = Tuple[PackageSet, CheckResult]
+MissingDict = dict[NormalizedName, list[Missing]]
+ConflictingDict = dict[NormalizedName, list[Conflicting]]
+CheckResult = tuple[MissingDict, ConflictingDict]
+ConflictDetails = tuple[PackageSet, CheckResult]
 
 
-def create_package_set_from_installed() -> Tuple[PackageSet, bool]:
+def create_package_set_from_installed() -> tuple[PackageSet, bool]:
     """Converts a list of distributions into a PackageSet."""
     package_set = {}
     problems = False
@@ -49,7 +59,7 @@ def create_package_set_from_installed() -> Tuple[PackageSet, bool]:
 
 
 def check_package_set(
-    package_set: PackageSet, should_ignore: Optional[Callable[[str], bool]] = None
+    package_set: PackageSet, should_ignore: Callable[[str], bool] | None = None
 ) -> CheckResult:
     """Check if a package set is consistent
 
@@ -62,8 +72,8 @@ def check_package_set(
 
     for package_name, package_detail in package_set.items():
         # Info about dependencies of package_name
-        missing_deps: Set[Missing] = set()
-        conflicting_deps: Set[Conflicting] = set()
+        missing_deps: set[Missing] = set()
+        conflicting_deps: set[Conflicting] = set()
 
         if should_ignore and should_ignore(package_name):
             continue
@@ -93,7 +103,7 @@ def check_package_set(
     return missing, conflicting
 
 
-def check_install_conflicts(to_install: List[InstallRequirement]) -> ConflictDetails:
+def check_install_conflicts(to_install: list[InstallRequirement]) -> ConflictDetails:
     """For checking if the dependency graph would be consistent after \
     installing given requirements
     """
@@ -113,9 +123,25 @@ def check_install_conflicts(to_install: List[InstallRequirement]) -> ConflictDet
     )
 
 
+def check_unsupported(
+    packages: Iterable[BaseDistribution],
+    supported_tags: Iterable[Tag],
+) -> Generator[BaseDistribution, None, None]:
+    for p in packages:
+        with suppress(FileNotFoundError):
+            wheel_file = p.read_text("WHEEL")
+            wheel_tags: frozenset[Tag] = reduce(
+                frozenset.union,
+                map(parse_tag, Parser().parsestr(wheel_file).get_all("Tag", [])),
+                frozenset(),
+            )
+            if wheel_tags.isdisjoint(supported_tags):
+                yield p
+
+
 def _simulate_installation_of(
-    to_install: List[InstallRequirement], package_set: PackageSet
-) -> Set[NormalizedName]:
+    to_install: list[InstallRequirement], package_set: PackageSet
+) -> set[NormalizedName]:
     """Computes the version of packages after installing to_install."""
     # Keep track of packages that were installed
     installed = set()
@@ -133,8 +159,8 @@ def _simulate_installation_of(
 
 
 def _create_whitelist(
-    would_be_installed: Set[NormalizedName], package_set: PackageSet
-) -> Set[NormalizedName]:
+    would_be_installed: set[NormalizedName], package_set: PackageSet
+) -> set[NormalizedName]:
     packages_affected = set(would_be_installed)
 
     for package_name in package_set:

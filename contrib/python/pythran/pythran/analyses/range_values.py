@@ -6,6 +6,7 @@ from collections import defaultdict
 from functools import reduce
 
 from pythran.analyses import Aliases, CFG
+from pythran.analyses.use_omp import UseOMP
 from pythran.intrinsic import Intrinsic
 from pythran.passmanager import ModuleAnalysis
 from pythran.interval import Interval, IntervalTuple, UNKNOWN_RANGE
@@ -205,15 +206,14 @@ def bound_range(mapping, aliases, node, modified=None):
             left = right
 
 
-class RangeValuesBase(ModuleAnalysis):
+class RangeValuesBase(ModuleAnalysis[Aliases, CFG, UseOMP]):
 
     ResultHolder = object()
+    ResultType = lambda: defaultdict(lambda: UNKNOWN_RANGE)
 
     def __init__(self):
         """Initialize instance variable and gather globals name information."""
-        self.result = defaultdict(lambda: UNKNOWN_RANGE)
-        from pythran.analyses import UseOMP
-        super(RangeValuesBase, self).__init__(Aliases, CFG, UseOMP)
+        super().__init__()
         self.parent = self
 
     def add(self, variable, range_):
@@ -579,13 +579,18 @@ class RangeValuesSimple(RangeValuesBase):
         >>> res['b']
         Interval(low=2, high=2)
         """
+        if not node.value:
+            return
         assigned_range = self.visit(node.value)
-        for target in node.targets:
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for target in targets:
             if isinstance(target, ast.Name):
                 # Make sure all Interval doesn't alias for multiple variables.
                 self.add(target.id, assigned_range)
             else:
                 self.visit(target)
+
+    visit_AnnAssign = visit_Assign
 
     def visit_AugAssign(self, node):
         """ Update range value for augassigned variables.

@@ -95,6 +95,8 @@ class MimeTypes:
         list of standard types, else to the list of non-standard
         types.
         """
+        if not type:
+            return
         self.types_map[strict][ext] = type
         exts = self.types_map_inv[strict].setdefault(type, [])
         if ext not in exts:
@@ -551,6 +553,8 @@ def _default_mime_types():
         '.csv'    : 'text/csv',
         '.html'   : 'text/html',
         '.htm'    : 'text/html',
+        '.md'     : 'text/markdown',
+        '.markdown': 'text/markdown',
         '.n3'     : 'text/n3',
         '.txt'    : 'text/plain',
         '.bat'    : 'text/plain',
@@ -563,6 +567,7 @@ def _default_mime_types():
         '.tsv'    : 'text/tab-separated-values',
         '.vtt'    : 'text/vtt',
         '.py'     : 'text/x-python',
+        '.rst'    : 'text/x-rst',
         '.etx'    : 'text/x-setext',
         '.sgm'    : 'text/x-sgml',
         '.sgml'   : 'text/x-sgml',

@@ -9,9 +9,7 @@ from pythran.passmanager import NodeAnalysis
 
 class HasReturn(NodeAnalysis):
 
-    def __init__(self):
-        self.result = False
-        super(HasReturn, self).__init__()
+    ResultType = bool
 
     def visit_Return(self, _):
         self.result = True
@@ -22,9 +20,7 @@ class HasReturn(NodeAnalysis):
 
 class HasBreak(NodeAnalysis):
 
-    def __init__(self):
-        self.result = False
-        super(HasBreak, self).__init__()
+    ResultType = bool
 
     def visit_For(self, _):
         return
@@ -37,9 +33,7 @@ class HasBreak(NodeAnalysis):
 
 class HasContinue(NodeAnalysis):
 
-    def __init__(self):
-        self.result = False
-        super(HasContinue, self).__init__()
+    ResultType = bool
 
     def visit_For(self, _):
         return

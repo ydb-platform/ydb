@@ -160,7 +160,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const TNodeId nodeId = Record.GetNodeId();
 
-        State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
         State->CheckConsistency();
 
         auto updateIsSuccessful = true;
@@ -293,6 +293,9 @@ public:
             }
         }
 
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
+
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
@@ -308,6 +311,15 @@ public:
             }
 
             Self->ReadPDisk(it->first, *pdisk, Response.get(), entityStatus);
+
+            const TPDiskId pdiskId(it->first);
+            if (auto& shred = Self->ShredState; shred.ShouldShred(pdiskId, *pdisk)) {
+                const auto& generation = shred.GetCurrentGeneration();
+                Y_ABORT_UNLESS(generation);
+                auto *m = Response->Record.MutableShredRequest();
+                m->SetShredGeneration(*generation);
+                m->AddPDiskIds(pdiskId.PDiskId);
+            }
         }
 
         Response->Record.SetInstanceId(Self->InstanceId);
@@ -324,6 +336,66 @@ public:
             Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
         }
 
+        for (const auto& status : record.GetShredStatus()) {
+            const TPDiskId pdiskId(nodeId, status.GetPDiskId());
+
+            switch (status.GetShredStateCase()) {
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredGenerationFinished:
+                    Self->ShredState.OnRegisterNode(pdiskId, status.GetShredGenerationFinished(), false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
+                        (ErrorReason, status.GetShredAborted()));
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
+                    break;
+
+                case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredInProgress:
+                    Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, true, txc);
+                    break;
+            }
+        }
+
+        if (Self->YamlConfig) {
+            const ui64 configVersion = GetVersion(*Self->YamlConfig);
+            auto *yamlConfig = Response->Record.MutableYamlConfig();
+            yamlConfig->SetMainConfigVersion(configVersion);
+
+            if (record.GetMainConfigVersion() < configVersion) {
+                yamlConfig->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
+            } else if (configVersion < record.GetMainConfigVersion()) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "main config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
+            } else if (record.GetMainConfigHash() != Self->YamlConfigHash) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node main config hash mismatch",
+                    (NodeId, record.GetNodeID()));
+            }
+        } else if (record.HasMainConfigVersion()) {
+            // TODO(alexvru): report?
+        }
+
+        if (Self->StorageYamlConfig) {
+            const ui64 configVersion = Self->StorageYamlConfigVersion;
+            auto *yamlConfig = Response->Record.MutableYamlConfig();
+            yamlConfig->SetStorageConfigVersion(Self->StorageYamlConfigVersion);
+            Y_DEBUG_ABORT_UNLESS(yamlConfig->HasMainConfigVersion()); // no storage config without main one
+
+            if (!record.HasStorageConfigVersion() || record.GetStorageConfigVersion() < configVersion) {
+                yamlConfig->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
+            } else if (configVersion < record.GetStorageConfigVersion()) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN10, "storage config version on node is greater than one known to BSC",
+                    (NodeId, record.GetNodeID()),
+                    (NodeVersion, record.GetMainConfigVersion()),
+                    (StoredVersion, configVersion));
+            } else if (record.GetStorageConfigHash() != Self->StorageYamlConfigHash) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN12, "node storage config hash mismatch",
+                    (NodeId, record.GetNodeID()));
+            }
+        }
+
         return true;
     }
 
@@ -332,6 +404,7 @@ public:
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
+        Self->ShredState.OnNodeReportTxComplete();
     }
 };
 
@@ -414,11 +487,19 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
         }
+        if (pdisk.InferPDiskSlotCountFromUnitSize) {
+            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+        }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);
     pDisk->SetSpaceColorBorder(PDiskSpaceColorBorder);
     pDisk->SetEntityStatus(entityStatus);
+    if (pdisk.Mood == TPDiskMood::ReadOnly) {
+        pDisk->SetReadOnly(true);
+    } else if (pdisk.Mood == TPDiskMood::Stop) {
+        pDisk->SetStop(true);
+    }
 }
 
 void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result) {
@@ -441,6 +522,7 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
     if (TGroupInfo *group = FindGroup(vslot.GroupId)) {
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
+        vDisk->SetGroupSizeInUnits(group->GroupSizeInUnits);
 
         const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {
@@ -472,6 +554,7 @@ void TBlobStorageController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
         if (auto&& nodeId = it->second) {
             OnWardenDisconnected(*nodeId, it->first);
         }
+        ConfigLock.erase(it->first);
         PipeServerToNode.erase(it);
     } else {
         Y_DEBUG_ABORT_UNLESS(false);
@@ -512,6 +595,9 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
+
+    ShredState.OnWardenConnected(nodeId);
 }
 
 void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serverId) {
@@ -542,12 +628,12 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
-            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false);
+            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false, this);
             timingQ.emplace_back(*it->second);
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
                 .IsReady = it->second->IsReady,
-                .VDiskStatus = it->second->Status,
+                .VDiskStatus = it->second->GetStatus(),
             });
             ScrubState.UpdateVDiskState(&*it->second);
             SysViewChangedVSlots.insert(it->second->VSlotId);
@@ -576,6 +662,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 
@@ -585,7 +672,7 @@ void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo)
 
 void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie) {
     Y_ABORT_UNLESS(nodeId);
-    if (auto *node = FindNode(nodeId); node && node->ConnectedServerId) {
+    if (TNodeInfo* node = FindNode(nodeId); node && node->ConnectedServerId) {
         auto h = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
         if (node->InterconnectSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, node->InterconnectSessionId);

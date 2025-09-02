@@ -59,7 +59,8 @@
                 {"Index": 4, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "Compression", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "LimitHint", "Type": "TExprBase", "Optional": true},
-                {"Index": 7, "Name": "Settings", "Type": "TExprList", "Optional": true}
+                {"Index": 7, "Name": "Settings", "Type": "TExprList", "Optional": true},
+                {"Index": 8, "Name": "Watermark", "Type": "TCoLambda", "Optional": true}
             ]
         },
         {
@@ -67,11 +68,30 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DqPqTopicSource"},
             "Children": [
-                {"Index": 0, "Name": "Topic", "Type": "TPqTopic"},
-                {"Index": 1, "Name": "Columns", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 3, "Name": "Token", "Type": "TCoSecureParam"}
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Topic", "Type": "TPqTopic"},
+                {"Index": 2, "Name": "Columns", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 7, "Name": "Watermark", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TDqPqFederatedCluster",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "DqPqFederatedCluster"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Endpoint", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Database", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "PartitionsCount", "Type": "TCoAtom", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TDqPqFederatedClusterList",
+            "ListBase": "TDqPqFederatedCluster"
         },
         {
             "Name": "TDqPqTopicSink",
@@ -103,6 +123,17 @@
                 {"Index": 3, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Mode", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TPqInsert",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PqInsert"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TPqDataSink"},
+                {"Index": 2, "Name": "Topic", "Type": "TPqTopic"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {

@@ -191,6 +191,7 @@ struct TEvResourceBroker {
     struct TEvConfigure : public TEventPB<TEvConfigure,
                                           NKikimrResourceBroker::TResourceBrokerConfig,
                                           EvConfigure> {
+        bool Merge = false;
     };
 
     struct TEvConfigureResult : public TEventPB<TEvConfigureResult,
@@ -200,9 +201,12 @@ struct TEvResourceBroker {
 
     struct TEvConfigRequest : public TEventLocal<TEvConfigRequest, EvConfigRequest> {
         TString Queue;
+        const bool Subscribe = false;
 
-        TEvConfigRequest(const TString& queue)
-            : Queue(queue) {}
+        TEvConfigRequest(const TString& queue, bool subscribe = false)
+            : Queue(queue)
+            , Subscribe(subscribe)
+        {}
     };
 
     struct TEvConfigResponse : public TEventLocal<TEvConfigResponse, EvConfigResponse> {

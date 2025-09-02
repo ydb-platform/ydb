@@ -1,13 +1,13 @@
 import pytest
 
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.harness.kikimr_http_client import HiveClient
+from ydb.tests.library.clients.kikimr_http_client import HiveClient
 
 # XXX: setting of pytest_plugins should work if specified directly in test modules
 # but somehow it does not
 #
 # for ydb_{cluster, database, ...} fixture family
-pytest_plugins = 'ydb.tests.library.harness.ydb_fixtures'
+pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
 
 @pytest.fixture(scope='module')

@@ -1,8 +1,13 @@
 PY3TEST()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+
+DEPENDS(
+)
+
 PEERDIR(
     ydb/tests/library
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
 )
 
 TEST_SRCS(

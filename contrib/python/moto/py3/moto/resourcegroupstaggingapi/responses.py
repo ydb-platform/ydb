@@ -1,21 +1,17 @@
 from moto.core.responses import BaseResponse
-from .models import resourcegroupstaggingapi_backends
+from .models import resourcegroupstaggingapi_backends, ResourceGroupsTaggingAPIBackend
 import json
 
 
 class ResourceGroupsTaggingAPIResponse(BaseResponse):
-    SERVICE_NAME = "resourcegroupstaggingapi"
+    def __init__(self) -> None:
+        super().__init__(service_name="resourcegroupstaggingapi")
 
     @property
-    def backend(self):
-        """
-        Backend
-        :returns: Resource tagging api backend
-        :rtype: moto.resourcegroupstaggingapi.models.ResourceGroupsTaggingAPIBackend
-        """
-        return resourcegroupstaggingapi_backends[self.region]
+    def backend(self) -> ResourceGroupsTaggingAPIBackend:
+        return resourcegroupstaggingapi_backends[self.current_account][self.region]
 
-    def get_resources(self):
+    def get_resources(self) -> str:
         pagination_token = self._get_param("PaginationToken")
         tag_filters = self._get_param("TagFilters", [])
         resources_per_page = self._get_int_param("ResourcesPerPage", 50)
@@ -37,7 +33,7 @@ class ResourceGroupsTaggingAPIResponse(BaseResponse):
 
         return json.dumps(response)
 
-    def get_tag_keys(self):
+    def get_tag_keys(self) -> str:
         pagination_token = self._get_param("PaginationToken")
         pagination_token, tag_keys = self.backend.get_tag_keys(
             pagination_token=pagination_token
@@ -49,7 +45,7 @@ class ResourceGroupsTaggingAPIResponse(BaseResponse):
 
         return json.dumps(response)
 
-    def get_tag_values(self):
+    def get_tag_values(self) -> str:
         pagination_token = self._get_param("PaginationToken")
         key = self._get_param("Key")
         pagination_token, tag_values = self.backend.get_tag_values(
@@ -62,21 +58,15 @@ class ResourceGroupsTaggingAPIResponse(BaseResponse):
 
         return json.dumps(response)
 
-    # These methods are all thats left to be implemented
-    # the response is already set up, all thats needed is
-    # the respective model function to be implemented.
-    #
-    # def tag_resources(self):
-    #     resource_arn_list = self._get_list_prefix("ResourceARNList.member")
-    #     tags = self._get_param("Tags")
-    #     failed_resources_map = self.backend.tag_resources(
-    #         resource_arn_list=resource_arn_list,
-    #         tags=tags,
-    #     )
-    #
-    #     # failed_resources_map should be {'resource': {'ErrorCode': str, 'ErrorMessage': str, 'StatusCode': int}}
-    #     return json.dumps({'FailedResourcesMap': failed_resources_map})
-    #
+    def tag_resources(self) -> str:
+        resource_arns = self._get_param("ResourceARNList")
+        tags = self._get_param("Tags")
+        failed_resources = self.backend.tag_resources(
+            resource_arns=resource_arns, tags=tags
+        )
+
+        return json.dumps({"FailedResourcesMap": failed_resources})
+
     # def untag_resources(self):
     #     resource_arn_list = self._get_list_prefix("ResourceARNList.member")
     #     tag_keys = self._get_list_prefix("TagKeys.member")

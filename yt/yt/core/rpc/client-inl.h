@@ -37,6 +37,14 @@ void IClientRequest::RequireServerFeature(E featureId)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class... TArgs>
+void TClientRequest::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
+{
+    SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TRequestMessage, class TResponse>
 TTypedClientRequest<TRequestMessage, TResponse>::TTypedClientRequest(
     IChannelPtr channel,
@@ -149,6 +157,7 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetAcknowledgementTimeout(DefaultAcknowledgementTimeout_);
     request->SetRequestCodec(DefaultRequestCodec_);
     request->SetResponseCodec(DefaultResponseCodec_);
+    request->SetMemoryUsageTracker(DefaultMemoryUsageTracker_);
     request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
 

@@ -1,7 +1,7 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
 
 
 namespace NKikimr::NSchemeShard {
@@ -11,7 +11,7 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxGet: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvGetRequest, TEvIndexBuilder::TEvGetResponse> {
 public:
     explicit TTxGet(TSelf* self, TEvIndexBuilder::TEvGetRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_GET_INDEX_BUILD, false)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetIndexBuildId()), ev, TXTYPE_GET_INDEX_BUILD, false)
     {}
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
@@ -28,20 +28,18 @@ public:
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
 
-        TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
-
-        if (!Self->IndexBuilds.contains(indexBuildId)) {
+        const auto* indexBuildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        if (!indexBuildInfoPtr) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found"
             );
         }
-
-        TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainPathId) {
+        const auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found in database <" << record.GetDatabaseName() << ">"
             );
         }
 

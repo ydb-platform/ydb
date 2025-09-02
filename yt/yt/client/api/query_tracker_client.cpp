@@ -22,9 +22,19 @@ void TQueryFile::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TQuerySecret::Register(TRegistrar registrar)
+{
+    registrar.Parameter("id", &TThis::Id).NonEmpty();
+    registrar.Parameter("category", &TThis::Category).Optional(true);
+    registrar.Parameter("subcategory", &TThis::Subcategory).Optional(true);
+    registrar.Parameter("ypath", &TThis::YPath).NonEmpty();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
 {
-    static_assert(pfr::tuple_size<TQuery>::value == 16);
+    static_assert(pfr::tuple_size<TQuery>::value == 17);
     BuildYsonFluently(consumer)
         .BeginMap()
             .OptionalItem("id", query.Id)
@@ -42,6 +52,7 @@ void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
             .OptionalItem("progress", query.Progress)
             .OptionalItem("annotations", query.Annotations)
             .OptionalItem("error", query.Error)
+            .OptionalItem("secrets", query.Secrets)
             .DoIf(static_cast<bool>(query.OtherAttributes), [&] (TFluentMap fluent) {
                 for (const auto& [key, value] : query.OtherAttributes->ListPairs()) {
                     fluent.Item(key).Value(value);
@@ -54,7 +65,7 @@ void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer)
 {
-    static_assert(pfr::tuple_size<TQueryResult>::value == 6);
+    static_assert(pfr::tuple_size<TQueryResult>::value == 7);
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("id").Value(queryResult.Id)
@@ -65,6 +76,7 @@ void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer)
             })
             .OptionalItem("schema", queryResult.Schema)
             .Item("is_truncated").Value(queryResult.IsTruncated)
+            .OptionalItem("full_result", queryResult.FullResult)
             .Item("data_statistics").Value(queryResult.DataStatistics)
         .EndMap();
 }

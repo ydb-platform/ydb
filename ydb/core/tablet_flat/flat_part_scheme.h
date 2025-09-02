@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util_basics.h"
+#include "util_fmt_abort.h"
 #include "flat_page_iface.h"
 #include "flat_row_eggs.h"
 #include "flat_row_column.h"
@@ -103,9 +104,9 @@ namespace NTable {
             }
         }
 
-        const TGroupInfo& GetLayout(NPage::TGroupId groupId) const noexcept
+        const TGroupInfo& GetLayout(NPage::TGroupId groupId) const
         {
-            Y_ABORT_UNLESS(groupId.Index < Groups.size(), "Group is out of range");
+            Y_ENSURE(groupId.Index < Groups.size(), "Group is out of range");
 
             if (groupId.Index == 0) {
                 return groupId.Historic ? HistoryGroup : Groups[0];

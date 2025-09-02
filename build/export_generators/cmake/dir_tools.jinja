@@ -1,4 +1,4 @@
-{%- if tools is defined -%}
+{%- if tools|length -%}
 {%-     for tool in tools -%}
 {%-         set path_and_name = rsplit(tool, "/", 2) -%}
 {%-         set toolPath = path_and_name[0] -%}

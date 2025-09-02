@@ -3,7 +3,7 @@
 // unique tag to fix pragma once gcc glueing: ./library/actors/util/defs.h
 
 #include <util/system/defaults.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

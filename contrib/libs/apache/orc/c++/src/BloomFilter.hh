@@ -90,7 +90,7 @@ namespace orc {
     bool operator==(const BitSet& other) const;
 
    private:
-    std::vector<uint64_t> mData;
+    std::vector<uint64_t> data_;
   };
 
   /**
@@ -174,9 +174,9 @@ namespace orc {
 
    private:
     static constexpr double DEFAULT_FPP = 0.05;
-    uint64_t mNumBits;
-    int32_t mNumHashFunctions;
-    std::unique_ptr<BitSet> mBitSet;
+    uint64_t numBits_;
+    int32_t numHashFunctions_;
+    std::unique_ptr<BitSet> bitSet_;
   };
 
   struct BloomFilterUTF8Utils {
@@ -194,6 +194,7 @@ namespace orc {
   // Thomas Wang's integer hash function
   // http://web.archive.org/web/20071223173210/http://www.concentric.net/~Ttwang/tech/inthash.htm
   // Put this in header file so tests can use it as well.
+  NO_SANITIZE_ATTR
   inline int64_t getLongHash(int64_t key) {
     key = (~key) + (key << 21);  // key = (key << 21) - key - 1;
     key = key ^ (key >> 24);

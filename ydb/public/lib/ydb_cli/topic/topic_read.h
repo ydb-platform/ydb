@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb::NConsoleClient {
 #define GETTER(TYPE, NAME) \
@@ -16,10 +16,13 @@ namespace NYdb::NConsoleClient {
 
     class TTopicReaderSettings {
     public:
+        using TPartitionReadOffsetMap = std::unordered_map<ui64, ui64>;
+
         TTopicReaderSettings(
             TMaybe<i64> limit,
             bool commit,
             bool wait,
+            TPartitionReadOffsetMap partitionReadOffset,
             EMessagingFormat format,
             TVector<ETopicMetadataField> metadataFields,
             ETransformBody transform,
@@ -33,6 +36,7 @@ namespace NYdb::NConsoleClient {
         GETTER(bool, Commit);
         GETTER(TMaybe<i64>, Limit);
         GETTER(bool, Wait);
+        GETTER(TPartitionReadOffsetMap, PartitionReadOffset);
         GETTER(EMessagingFormat, MessagingFormat);
         GETTER(ETransformBody, Transform);
         GETTER(TDuration, IdleTimeout);
@@ -48,6 +52,7 @@ namespace NYdb::NConsoleClient {
         EMessagingFormat MessagingFormat_ = EMessagingFormat::SingleMessage;
         ETransformBody Transform_ = ETransformBody::None;
         TMaybe<i64> Limit_ = Nothing();
+        TPartitionReadOffsetMap PartitionReadOffset_;
         bool Commit_ = false;
         bool Wait_ = false;
     };
@@ -71,6 +76,7 @@ namespace NYdb::NConsoleClient {
         int HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent*);
         int HandleStopPartitionSessionEvent(NTopic::TReadSessionEvent::TStopPartitionSessionEvent*);
         int HandlePartitionSessionClosedEvent(NTopic::TReadSessionEvent::TPartitionSessionClosedEvent*);
+        int HandleEndPartitionSessionEvent(NTopic::TReadSessionEvent::TEndPartitionSessionEvent*);
         int HandleDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent*, IOutputStream&);
         int HandleCommitOffsetAcknowledgementEvent(NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent*);
         int HandleEvent(NTopic::TReadSessionEvent::TEvent&, IOutputStream&);
@@ -86,6 +92,7 @@ namespace NYdb::NConsoleClient {
         };
 
         bool HasSession(ui64 sessionId) const;
+        std::optional<uint64_t> GetNextReadOffset(ui64 partitionId) const;
 
     private:
         std::shared_ptr<NTopic::IReadSession> ReadSession_;
@@ -103,5 +110,6 @@ namespace NYdb::NConsoleClient {
         friend class TTopicReaderTests;
 
         THashMap<ui64, std::pair<NTopic::TPartitionSession::TPtr, EReadingStatus>> ActivePartitionSessions_;
+        TTopicReaderSettings::TPartitionReadOffsetMap PartitionReadOffset_;
     };
 } // namespace NYdb::NConsoleClient

@@ -30,6 +30,9 @@ struct uri_parser {
     enum parser_state state;
 };
 
+/* strlen of UINT32_MAX "4294967295" is 10, plus 1 for '\0' */
+#define PORT_BUFFER_SIZE 11
+
 typedef void(parse_fn)(struct uri_parser *parser, struct aws_byte_cursor *str);
 
 static void s_parse_scheme(struct uri_parser *parser, struct aws_byte_cursor *str);
@@ -101,8 +104,7 @@ int aws_uri_init_from_builder_options(
     buffer_size += options->host_name.len;
 
     if (options->port) {
-        /* max strlen of a 16 bit integer is 5 */
-        buffer_size += 6;
+        buffer_size += PORT_BUFFER_SIZE;
     }
 
     buffer_size += options->path.len;
@@ -114,7 +116,8 @@ int aws_uri_init_from_builder_options(
             buffer_size += 1;
             for (size_t i = 0; i < query_len; ++i) {
                 struct aws_uri_param *uri_param_ptr = NULL;
-                aws_array_list_get_at_ptr(options->query_params, (void **)&uri_param_ptr, i);
+                int result = aws_array_list_get_at_ptr(options->query_params, (void **)&uri_param_ptr, i);
+                AWS_FATAL_ASSERT(result == AWS_OP_SUCCESS);
                 /* 2 == 1 for '&' and 1 for '='. who cares if we over-allocate a little?  */
                 buffer_size += uri_param_ptr->key.len + uri_param_ptr->value.len + 2;
             }
@@ -141,8 +144,8 @@ int aws_uri_init_from_builder_options(
     struct aws_byte_cursor port_app = aws_byte_cursor_from_c_str(":");
     if (options->port) {
         aws_byte_buf_append(&uri->uri_str, &port_app);
-        char port_arr[6] = {0};
-        snprintf(port_arr, sizeof(port_arr), "%" PRIu16, options->port);
+        char port_arr[PORT_BUFFER_SIZE] = {0};
+        snprintf(port_arr, sizeof(port_arr), "%" PRIu32, options->port);
         struct aws_byte_cursor port_csr = aws_byte_cursor_from_c_str(port_arr);
         aws_byte_buf_append(&uri->uri_str, &port_csr);
     }
@@ -207,11 +210,11 @@ const struct aws_byte_cursor *aws_uri_host_name(const struct aws_uri *uri) {
     return &uri->host_name;
 }
 
-uint16_t aws_uri_port(const struct aws_uri *uri) {
+uint32_t aws_uri_port(const struct aws_uri *uri) {
     return uri->port;
 }
 
-bool aws_uri_query_string_next_param(const struct aws_uri *uri, struct aws_uri_param *param) {
+bool aws_query_string_next_param(struct aws_byte_cursor query_string, struct aws_uri_param *param) {
     /* If param is zeroed, then this is the first run. */
     bool first_run = param->value.ptr == NULL;
 
@@ -229,7 +232,7 @@ bool aws_uri_query_string_next_param(const struct aws_uri *uri, struct aws_uri_p
 
     /* The do-while is to skip over any empty substrings */
     do {
-        if (!aws_byte_cursor_next_split(&uri->query_string, '&', &substr)) {
+        if (!aws_byte_cursor_next_split(&query_string, '&', &substr)) {
             /* no more splits, done iterating */
             return false;
         }
@@ -251,16 +254,24 @@ bool aws_uri_query_string_next_param(const struct aws_uri *uri, struct aws_uri_p
     return true;
 }
 
-int aws_uri_query_string_params(const struct aws_uri *uri, struct aws_array_list *out_params) {
+int aws_query_string_params(struct aws_byte_cursor query_string_cursor, struct aws_array_list *out_params) {
     struct aws_uri_param param;
     AWS_ZERO_STRUCT(param);
-    while (aws_uri_query_string_next_param(uri, &param)) {
+    while (aws_query_string_next_param(query_string_cursor, &param)) {
         if (aws_array_list_push_back(out_params, &param)) {
             return AWS_OP_ERR;
         }
     }
 
     return AWS_OP_SUCCESS;
+}
+
+bool aws_uri_query_string_next_param(const struct aws_uri *uri, struct aws_uri_param *param) {
+    return aws_query_string_next_param(uri->query_string, param);
+}
+
+int aws_uri_query_string_params(const struct aws_uri *uri, struct aws_array_list *out_params) {
+    return aws_query_string_params(uri->query_string, out_params);
 }
 
 static void s_parse_scheme(struct uri_parser *parser, struct aws_byte_cursor *str) {
@@ -271,8 +282,9 @@ static void s_parse_scheme(struct uri_parser *parser, struct aws_byte_cursor *st
         return;
     }
 
-    /* make sure we didn't just pick up the port by mistake */
-    if ((size_t)(location_of_colon - str->ptr) < str->len && *(location_of_colon + 1) != '/') {
+    /* Ensure location_of_colon is not the last character before checking *(location_of_colon + 1) */
+    if ((size_t)(location_of_colon - str->ptr) + 1 >= str->len || *(location_of_colon + 1) != '/') {
+        /* make sure we didn't just pick up the port by mistake */
         parser->state = ON_AUTHORITY;
         return;
     }
@@ -353,7 +365,9 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
          * IPv6 literals and only search for port delimiter after closing bracket.*/
         const uint8_t *port_search_start = authority_parse_csr.ptr;
         size_t port_search_len = authority_parse_csr.len;
+        bool is_IPv6_literal = false;
         if (authority_parse_csr.len > 0 && authority_parse_csr.ptr[0] == '[') {
+            is_IPv6_literal = true;
             port_search_start = memchr(authority_parse_csr.ptr, ']', authority_parse_csr.len);
             if (!port_search_start) {
                 parser->state = ERROR;
@@ -364,43 +378,42 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
         }
 
         const uint8_t *port_delim = memchr(port_search_start, ':', port_search_len);
-
+        /*
+         * RFC-3986 section 3.2.2: A host identified by an IPv6 literal address is represented inside square
+         * brackets.
+         * Ignore the square brackets.
+         */
+        parser->uri->host_name = authority_parse_csr;
+        if (is_IPv6_literal) {
+            aws_byte_cursor_advance(&parser->uri->host_name, 1);
+            parser->uri->host_name.len--;
+        }
         if (!port_delim) {
             parser->uri->port = 0;
-            parser->uri->host_name = authority_parse_csr;
             return;
         }
 
-        parser->uri->host_name.ptr = authority_parse_csr.ptr;
-        parser->uri->host_name.len = port_delim - authority_parse_csr.ptr;
-
-        size_t port_len = authority_parse_csr.len - parser->uri->host_name.len - 1;
+        size_t host_name_length_correction = is_IPv6_literal ? 2 : 0;
+        parser->uri->host_name.len = port_delim - authority_parse_csr.ptr - host_name_length_correction;
+        size_t port_len = authority_parse_csr.len - parser->uri->host_name.len - 1 - host_name_length_correction;
         port_delim += 1;
-        for (size_t i = 0; i < port_len; ++i) {
-            if (!aws_isdigit(port_delim[i])) {
+
+        uint64_t port_u64 = 0;
+        if (port_len > 0) {
+            struct aws_byte_cursor port_cursor = aws_byte_cursor_from_array(port_delim, port_len);
+            if (aws_byte_cursor_utf8_parse_u64(port_cursor, &port_u64)) {
+                parser->state = ERROR;
+                aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
+                return;
+            }
+            if (port_u64 > UINT32_MAX) {
                 parser->state = ERROR;
                 aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
                 return;
             }
         }
 
-        if (port_len > 5) {
-            parser->state = ERROR;
-            aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
-            return;
-        }
-
-        /* why 6? because the port is a 16-bit unsigned integer*/
-        char atoi_buf[6] = {0};
-        memcpy(atoi_buf, port_delim, port_len);
-        int port_int = atoi(atoi_buf);
-        if (port_int > UINT16_MAX) {
-            parser->state = ERROR;
-            aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
-            return;
-        }
-
-        parser->uri->port = (uint16_t)port_int;
+        parser->uri->port = (uint32_t)port_u64;
     }
 }
 

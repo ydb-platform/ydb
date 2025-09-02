@@ -221,7 +221,7 @@ TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf e
 bool CheckDbPath(const TString &path, const TString &domain, TString &error) {
     auto parts = SplitPath(path);
 
-    if (parts.empty()) {
+    if (parts.size() < 2) {
         error = "Database path cannot be empty or root";
         return false;
     }

@@ -1,0 +1,1260 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09ca8f5ea99b8a6ff33ed89df33c25be
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/lambda_spec.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1545e811e1799589fc4bdfed4fdc284f
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/O1_size.hpp [5:5]
+        include/boost/mpl/O1_size_fwd.hpp [5:5]
+        include/boost/mpl/advance.hpp [5:5]
+        include/boost/mpl/advance_fwd.hpp [5:5]
+        include/boost/mpl/alias.hpp [5:5]
+        include/boost/mpl/and.hpp [5:5]
+        include/boost/mpl/apply.hpp [9:9]
+        include/boost/mpl/apply_fwd.hpp [9:9]
+        include/boost/mpl/arithmetic.hpp [5:5]
+        include/boost/mpl/at.hpp [5:5]
+        include/boost/mpl/at_fwd.hpp [5:5]
+        include/boost/mpl/aux_/O1_size_impl.hpp [5:5]
+        include/boost/mpl/aux_/advance_backward.hpp [9:9]
+        include/boost/mpl/aux_/advance_forward.hpp [9:9]
+        include/boost/mpl/aux_/arithmetic_op.hpp [4:4]
+        include/boost/mpl/aux_/at_impl.hpp [5:5]
+        include/boost/mpl/aux_/back_impl.hpp [5:5]
+        include/boost/mpl/aux_/begin_end_impl.hpp [5:5]
+        include/boost/mpl/aux_/clear_impl.hpp [5:5]
+        include/boost/mpl/aux_/comparison_op.hpp [4:4]
+        include/boost/mpl/aux_/config/ctps.hpp [5:5]
+        include/boost/mpl/aux_/config/msvc_typename.hpp [5:5]
+        include/boost/mpl/aux_/config/preprocessor.hpp [5:5]
+        include/boost/mpl/aux_/config/static_constant.hpp [5:5]
+        include/boost/mpl/aux_/config/ttp.hpp [5:5]
+        include/boost/mpl/aux_/config/use_preprocessed.hpp [5:5]
+        include/boost/mpl/aux_/count_args.hpp [4:4]
+        include/boost/mpl/aux_/count_impl.hpp [5:5]
+        include/boost/mpl/aux_/empty_impl.hpp [5:5]
+        include/boost/mpl/aux_/erase_impl.hpp [5:5]
+        include/boost/mpl/aux_/erase_key_impl.hpp [5:5]
+        include/boost/mpl/aux_/filter_iter.hpp [5:5]
+        include/boost/mpl/aux_/find_if_pred.hpp [5:6]
+        include/boost/mpl/aux_/fold_impl.hpp [5:5]
+        include/boost/mpl/aux_/fold_impl_body.hpp [6:6]
+        include/boost/mpl/aux_/front_impl.hpp [5:5]
+        include/boost/mpl/aux_/insert_impl.hpp [5:5]
+        include/boost/mpl/aux_/insert_range_impl.hpp [5:5]
+        include/boost/mpl/aux_/iter_fold_impl.hpp [5:5]
+        include/boost/mpl/aux_/joint_iter.hpp [5:5]
+        include/boost/mpl/aux_/lambda_no_ctps.hpp [9:9]
+        include/boost/mpl/aux_/largest_int.hpp [5:5]
+        include/boost/mpl/aux_/logical_op.hpp [2:2]
+        include/boost/mpl/aux_/msvc_dtw.hpp [2:2]
+        include/boost/mpl/aux_/msvc_never_true.hpp [5:5]
+        include/boost/mpl/aux_/nested_type_wknd.hpp [5:5]
+        include/boost/mpl/aux_/numeric_op.hpp [8:8]
+        include/boost/mpl/aux_/pop_back_impl.hpp [5:5]
+        include/boost/mpl/aux_/pop_front_impl.hpp [5:5]
+        include/boost/mpl/aux_/preprocessed/gcc/advance_backward.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/advance_forward.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/and.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/apply.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/apply_fwd.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/apply_wrap.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/bind_fwd.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/bitand.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bitor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bitxor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/deque.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/divides.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/equal_to.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/greater.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/greater_equal.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/iter_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/lambda_no_ctps.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/less.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/less_equal.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/list.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/list_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/map.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/minus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/modulus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/not_equal_to.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/or.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/plus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/quote.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/reverse_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/reverse_iter_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/set.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/set_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/shift_left.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/shift_right.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/times.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/vector.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/vector_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/advance_backward.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/advance_forward.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/and.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/apply.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/apply_fwd.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/apply_wrap.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/bind_fwd.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/bitand.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bitor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bitxor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/deque.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/divides.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/equal_to.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/greater.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/greater_equal.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/iter_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/lambda_no_ctps.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/less.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/less_equal.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/list.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/list_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/map.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/minus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/modulus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/not_equal_to.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/or.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/plus.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/quote.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/reverse_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/reverse_iter_fold_impl.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/set.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/set_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/shift_left.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/shift_right.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/times.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/vector.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/vector_c.hpp [2:2]
+        include/boost/mpl/aux_/preprocessor/def_params_tail.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/enum.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/ext_params.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/filter_params.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/params.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/partial_spec_params.hpp [5:5]
+        include/boost/mpl/aux_/range_c/O1_size.hpp [5:5]
+        include/boost/mpl/aux_/range_c/back.hpp [5:5]
+        include/boost/mpl/aux_/range_c/empty.hpp [5:5]
+        include/boost/mpl/aux_/range_c/front.hpp [5:5]
+        include/boost/mpl/aux_/range_c/iterator.hpp [5:5]
+        include/boost/mpl/aux_/range_c/size.hpp [5:5]
+        include/boost/mpl/aux_/range_c/tag.hpp [5:5]
+        include/boost/mpl/aux_/reverse_fold_impl.hpp [5:5]
+        include/boost/mpl/aux_/reverse_fold_impl_body.hpp [6:6]
+        include/boost/mpl/aux_/reverse_iter_fold_impl.hpp [5:5]
+        include/boost/mpl/aux_/shift_op.hpp [4:4]
+        include/boost/mpl/aux_/single_element_iter.hpp [5:5]
+        include/boost/mpl/aux_/size_impl.hpp [5:5]
+        include/boost/mpl/aux_/transform_iter.hpp [5:5]
+        include/boost/mpl/aux_/type_wrapper.hpp [5:6]
+        include/boost/mpl/aux_/value_wknd.hpp [5:5]
+        include/boost/mpl/aux_/yes_no.hpp [5:5]
+        include/boost/mpl/back.hpp [5:5]
+        include/boost/mpl/back_fwd.hpp [5:5]
+        include/boost/mpl/base.hpp [5:5]
+        include/boost/mpl/begin_end.hpp [5:5]
+        include/boost/mpl/begin_end_fwd.hpp [5:5]
+        include/boost/mpl/bind_fwd.hpp [9:9]
+        include/boost/mpl/bitxor.hpp [5:6]
+        include/boost/mpl/bool.hpp [5:5]
+        include/boost/mpl/bool_fwd.hpp [5:5]
+        include/boost/mpl/clear.hpp [5:5]
+        include/boost/mpl/clear_fwd.hpp [5:5]
+        include/boost/mpl/comparison.hpp [5:5]
+        include/boost/mpl/copy.hpp [5:6]
+        include/boost/mpl/copy_if.hpp [5:6]
+        include/boost/mpl/count.hpp [5:5]
+        include/boost/mpl/count_fwd.hpp [5:5]
+        include/boost/mpl/deque.hpp [5:5]
+        include/boost/mpl/distance.hpp [5:5]
+        include/boost/mpl/distance_fwd.hpp [5:5]
+        include/boost/mpl/divides.hpp [5:5]
+        include/boost/mpl/empty.hpp [5:5]
+        include/boost/mpl/empty_fwd.hpp [5:5]
+        include/boost/mpl/equal.hpp [5:5]
+        include/boost/mpl/equal_to.hpp [5:5]
+        include/boost/mpl/erase.hpp [5:5]
+        include/boost/mpl/erase_fwd.hpp [5:5]
+        include/boost/mpl/erase_key.hpp [5:5]
+        include/boost/mpl/erase_key_fwd.hpp [5:5]
+        include/boost/mpl/eval_if.hpp [5:5]
+        include/boost/mpl/filter_view.hpp [5:5]
+        include/boost/mpl/find_if.hpp [5:5]
+        include/boost/mpl/front.hpp [5:5]
+        include/boost/mpl/front_fwd.hpp [5:5]
+        include/boost/mpl/greater.hpp [5:5]
+        include/boost/mpl/greater_equal.hpp [5:5]
+        include/boost/mpl/identity.hpp [5:5]
+        include/boost/mpl/if.hpp [5:5]
+        include/boost/mpl/insert.hpp [5:5]
+        include/boost/mpl/insert_fwd.hpp [5:5]
+        include/boost/mpl/insert_range.hpp [5:5]
+        include/boost/mpl/insert_range_fwd.hpp [5:5]
+        include/boost/mpl/int.hpp [5:5]
+        include/boost/mpl/int_fwd.hpp [5:5]
+        include/boost/mpl/iterator_category.hpp [5:5]
+        include/boost/mpl/iterator_tags.hpp [5:5]
+        include/boost/mpl/joint_view.hpp [5:5]
+        include/boost/mpl/less.hpp [5:5]
+        include/boost/mpl/less_equal.hpp [5:5]
+        include/boost/mpl/limits/arity.hpp [5:5]
+        include/boost/mpl/limits/list.hpp [5:5]
+        include/boost/mpl/limits/map.hpp [5:5]
+        include/boost/mpl/limits/set.hpp [5:5]
+        include/boost/mpl/limits/unrolling.hpp [5:5]
+        include/boost/mpl/limits/vector.hpp [5:5]
+        include/boost/mpl/list.hpp [5:5]
+        include/boost/mpl/list/aux_/O1_size.hpp [5:5]
+        include/boost/mpl/list/aux_/begin_end.hpp [5:5]
+        include/boost/mpl/list/aux_/clear.hpp [5:5]
+        include/boost/mpl/list/aux_/empty.hpp [5:5]
+        include/boost/mpl/list/aux_/front.hpp [5:5]
+        include/boost/mpl/list/aux_/item.hpp [5:5]
+        include/boost/mpl/list/aux_/iterator.hpp [5:5]
+        include/boost/mpl/list/aux_/numbered.hpp [4:5]
+        include/boost/mpl/list/aux_/numbered_c.hpp [4:4]
+        include/boost/mpl/list/aux_/pop_front.hpp [5:5]
+        include/boost/mpl/list/aux_/preprocessed/plain/list10.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list10_c.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list20.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list20_c.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list30.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list30_c.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list40.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list40_c.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list50.hpp [2:2]
+        include/boost/mpl/list/aux_/preprocessed/plain/list50_c.hpp [2:2]
+        include/boost/mpl/list/aux_/push_back.hpp [5:5]
+        include/boost/mpl/list/aux_/push_front.hpp [5:5]
+        include/boost/mpl/list/aux_/size.hpp [5:5]
+        include/boost/mpl/list/aux_/tag.hpp [5:5]
+        include/boost/mpl/list/list0.hpp [5:5]
+        include/boost/mpl/list/list0_c.hpp [5:5]
+        include/boost/mpl/list/list10.hpp [5:5]
+        include/boost/mpl/list/list10_c.hpp [5:5]
+        include/boost/mpl/list/list20.hpp [5:5]
+        include/boost/mpl/list/list20_c.hpp [5:5]
+        include/boost/mpl/list/list30.hpp [5:5]
+        include/boost/mpl/list/list30_c.hpp [5:5]
+        include/boost/mpl/list/list40.hpp [5:5]
+        include/boost/mpl/list/list40_c.hpp [5:5]
+        include/boost/mpl/list/list50.hpp [5:5]
+        include/boost/mpl/list/list50_c.hpp [5:5]
+        include/boost/mpl/list_c.hpp [5:5]
+        include/boost/mpl/logical.hpp [5:5]
+        include/boost/mpl/long.hpp [5:5]
+        include/boost/mpl/long_fwd.hpp [5:5]
+        include/boost/mpl/map.hpp [5:5]
+        include/boost/mpl/map/aux_/numbered.hpp [6:6]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map10.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map20.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map30.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map40.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map50.hpp [2:3]
+        include/boost/mpl/map/map10.hpp [5:6]
+        include/boost/mpl/map/map20.hpp [5:6]
+        include/boost/mpl/map/map30.hpp [5:6]
+        include/boost/mpl/map/map40.hpp [5:6]
+        include/boost/mpl/map/map50.hpp [5:6]
+        include/boost/mpl/math/fixed_c.hpp [5:5]
+        include/boost/mpl/math/is_even.hpp [5:5]
+        include/boost/mpl/math/rational_c.hpp [5:5]
+        include/boost/mpl/max_element.hpp [5:5]
+        include/boost/mpl/minus.hpp [5:5]
+        include/boost/mpl/modulus.hpp [5:5]
+        include/boost/mpl/multiplies.hpp [5:5]
+        include/boost/mpl/negate.hpp [5:5]
+        include/boost/mpl/next_prior.hpp [5:5]
+        include/boost/mpl/not.hpp [5:5]
+        include/boost/mpl/not_equal_to.hpp [5:5]
+        include/boost/mpl/or.hpp [5:5]
+        include/boost/mpl/plus.hpp [5:5]
+        include/boost/mpl/pop_back.hpp [5:5]
+        include/boost/mpl/pop_back_fwd.hpp [5:5]
+        include/boost/mpl/pop_front.hpp [5:5]
+        include/boost/mpl/pop_front_fwd.hpp [5:5]
+        include/boost/mpl/push_back.hpp [5:5]
+        include/boost/mpl/push_back_fwd.hpp [5:5]
+        include/boost/mpl/push_front.hpp [5:5]
+        include/boost/mpl/push_front_fwd.hpp [5:5]
+        include/boost/mpl/range_c.hpp [5:5]
+        include/boost/mpl/remove.hpp [5:6]
+        include/boost/mpl/remove_if.hpp [5:6]
+        include/boost/mpl/replace.hpp [5:7]
+        include/boost/mpl/replace_if.hpp [5:7]
+        include/boost/mpl/reverse.hpp [5:5]
+        include/boost/mpl/same_as.hpp [5:5]
+        include/boost/mpl/sequence_tag.hpp [5:5]
+        include/boost/mpl/sequence_tag_fwd.hpp [5:5]
+        include/boost/mpl/set.hpp [5:5]
+        include/boost/mpl/set/aux_/numbered.hpp [6:6]
+        include/boost/mpl/set/aux_/numbered_c.hpp [6:6]
+        include/boost/mpl/set/aux_/preprocessed/plain/set10.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set10_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set20.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set20_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set30.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set30_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set40.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set40_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set50.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set50_c.hpp [2:3]
+        include/boost/mpl/set/set10.hpp [5:6]
+        include/boost/mpl/set/set10_c.hpp [5:6]
+        include/boost/mpl/set/set20.hpp [5:6]
+        include/boost/mpl/set/set20_c.hpp [5:6]
+        include/boost/mpl/set/set30.hpp [5:6]
+        include/boost/mpl/set/set30_c.hpp [5:6]
+        include/boost/mpl/set/set40.hpp [5:6]
+        include/boost/mpl/set/set40_c.hpp [5:6]
+        include/boost/mpl/set/set50.hpp [5:6]
+        include/boost/mpl/set/set50_c.hpp [5:6]
+        include/boost/mpl/set_c.hpp [5:5]
+        include/boost/mpl/shift_left.hpp [5:6]
+        include/boost/mpl/shift_right.hpp [5:6]
+        include/boost/mpl/single_view.hpp [5:5]
+        include/boost/mpl/size.hpp [5:5]
+        include/boost/mpl/size_fwd.hpp [5:5]
+        include/boost/mpl/size_t.hpp [5:5]
+        include/boost/mpl/size_t_fwd.hpp [5:5]
+        include/boost/mpl/times.hpp [5:5]
+        include/boost/mpl/transform.hpp [5:6]
+        include/boost/mpl/transform_view.hpp [5:5]
+        include/boost/mpl/unique.hpp [5:6]
+        include/boost/mpl/vector.hpp [5:5]
+        include/boost/mpl/vector/aux_/O1_size.hpp [5:5]
+        include/boost/mpl/vector/aux_/at.hpp [5:5]
+        include/boost/mpl/vector/aux_/back.hpp [5:5]
+        include/boost/mpl/vector/aux_/begin_end.hpp [5:5]
+        include/boost/mpl/vector/aux_/clear.hpp [5:5]
+        include/boost/mpl/vector/aux_/empty.hpp [5:5]
+        include/boost/mpl/vector/aux_/item.hpp [5:5]
+        include/boost/mpl/vector/aux_/iterator.hpp [5:5]
+        include/boost/mpl/vector/aux_/numbered.hpp [6:6]
+        include/boost/mpl/vector/aux_/numbered_c.hpp [6:6]
+        include/boost/mpl/vector/aux_/pop_back.hpp [5:5]
+        include/boost/mpl/vector/aux_/pop_front.hpp [5:5]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10_c.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector20.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector20_c.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector30.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector30_c.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector40.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector40_c.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector50.hpp [2:2]
+        include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector50_c.hpp [2:2]
+        include/boost/mpl/vector/aux_/push_back.hpp [5:5]
+        include/boost/mpl/vector/aux_/push_front.hpp [5:5]
+        include/boost/mpl/vector/aux_/size.hpp [5:5]
+        include/boost/mpl/vector/aux_/tag.hpp [5:5]
+        include/boost/mpl/vector/aux_/vector0.hpp [5:5]
+        include/boost/mpl/vector/vector0.hpp [5:5]
+        include/boost/mpl/vector/vector0_c.hpp [5:5]
+        include/boost/mpl/vector/vector10.hpp [5:5]
+        include/boost/mpl/vector/vector10_c.hpp [5:5]
+        include/boost/mpl/vector/vector20.hpp [5:5]
+        include/boost/mpl/vector/vector20_c.hpp [5:5]
+        include/boost/mpl/vector/vector30.hpp [5:5]
+        include/boost/mpl/vector/vector30_c.hpp [5:5]
+        include/boost/mpl/vector/vector40.hpp [5:5]
+        include/boost/mpl/vector/vector40_c.hpp [5:5]
+        include/boost/mpl/vector/vector50.hpp [5:5]
+        include/boost/mpl/vector/vector50_c.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 189d46e9447d77111b28e7945880691c
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2004
+        // Copyright Alexander Nasonov 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/empty_sequence.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18bad9344d7cba762fbd435259d6301b
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2002
+        // Copyright Aleksey Gurtovoy 2002-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/bind.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c1008010a34f57eb6e59b47766f5371
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2002-2006
+        // Copyright David Abrahams 2002-2003
+        // Copyright Daniel Walker 2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/has_xxx.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23b27274909dd16fa48c4bb48b55b3aa
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov 2001-2002
+        // Copyright Aleksey Gurtovoy 2001-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/arg.hpp [9:10]
+        include/boost/mpl/arg_fwd.hpp [5:6]
+        include/boost/mpl/aux_/preprocessed/gcc/arg.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/arg.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c0cd8d92968f6ef02fc040acbde35eb
+BELONGS ya.make
+    License text:
+        // Copyright Eric Friedman 2002-2003
+        // Copyright Aleksey Gurtovoy 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/sort_impl.hpp [5:5]
+        include/boost/mpl/partition.hpp [5:6]
+        include/boost/mpl/sort.hpp [5:6]
+        include/boost/mpl/stable_partition.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2cc8d0bd746b1af01391a996cc0b013e
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2002-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/as_sequence.hpp [5:5]
+        include/boost/mpl/aux_/adl_barrier.hpp [5:5]
+        include/boost/mpl/aux_/apply_1st.hpp [5:5]
+        include/boost/mpl/aux_/common_name_wknd.hpp [5:5]
+        include/boost/mpl/aux_/config/adl.hpp [5:5]
+        include/boost/mpl/aux_/config/bind.hpp [5:6]
+        include/boost/mpl/aux_/config/dependent_nttp.hpp [5:5]
+        include/boost/mpl/aux_/config/has_xxx.hpp [5:6]
+        include/boost/mpl/aux_/config/lambda.hpp [5:5]
+        include/boost/mpl/aux_/config/msvc.hpp [5:5]
+        include/boost/mpl/aux_/config/overload_resolution.hpp [5:5]
+        include/boost/mpl/aux_/config/workaround.hpp [5:5]
+        include/boost/mpl/aux_/has_begin.hpp [5:5]
+        include/boost/mpl/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/aux_/has_rebind.hpp [5:5]
+        include/boost/mpl/aux_/has_size.hpp [5:5]
+        include/boost/mpl/aux_/has_tag.hpp [5:5]
+        include/boost/mpl/aux_/has_type.hpp [5:5]
+        include/boost/mpl/aux_/iter_apply.hpp [5:5]
+        include/boost/mpl/aux_/iter_push_front.hpp [5:5]
+        include/boost/mpl/aux_/msvc_is_class.hpp [5:5]
+        include/boost/mpl/aux_/preprocessed/gcc/unpack_args.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/unpack_args.hpp [2:2]
+        include/boost/mpl/aux_/preprocessor/add.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/default_params.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/range.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/repeat.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/sub.hpp [5:5]
+        include/boost/mpl/aux_/preprocessor/tuple.hpp [5:5]
+        include/boost/mpl/aux_/test.hpp [5:5]
+        include/boost/mpl/aux_/test/assert.hpp [5:5]
+        include/boost/mpl/aux_/test/data.hpp [5:5]
+        include/boost/mpl/aux_/test/test_case.hpp [5:5]
+        include/boost/mpl/deref.hpp [5:5]
+        include/boost/mpl/is_sequence.hpp [5:5]
+        include/boost/mpl/protect.hpp [5:6]
+        include/boost/mpl/unpack_args.hpp [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2f932f342242efbf0d94bca33da3478f
+BELONGS ya.make
+    License text:
+        // Copyright Eric Friedman 2002
+        // Copyright Aleksey Gurtovoy 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/contains_impl.hpp [5:6]
+        include/boost/mpl/aux_/find_if_pred.hpp [5:6]
+        include/boost/mpl/contains.hpp [5:6]
+        include/boost/mpl/contains_fwd.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2fac28b8e5c989f4eceb6a9bfa180fc3
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2006
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/assert.hpp [5:5]
+        include/boost/mpl/aux_/include_preprocessed.hpp [4:4]
+        include/boost/mpl/aux_/integral_wrapper.hpp [2:2]
+        include/boost/mpl/integral_c.hpp [5:5]
+        include/boost/mpl/integral_c_fwd.hpp [5:5]
+        include/boost/mpl/vector/aux_/include_preprocessed.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4796f0d991d5859a560e32560b6e3163
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov and Multi Media Ltd 2001, 2002
+        // Copyright David Abrahams 2001
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/unwrap.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5147c6d809b341ff744da9921c8c3edd
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2009
+        // Copyright Jaap Suter 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/preprocessed/gcc/bitand.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bitor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bitxor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/shift_left.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/shift_right.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bitand.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bitor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bitxor.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/shift_left.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/shift_right.hpp [2:3]
+        include/boost/mpl/bitand.hpp [5:6]
+        include/boost/mpl/bitor.hpp [5:6]
+        include/boost/mpl/bitwise.hpp [5:6]
+        include/boost/mpl/bitxor.hpp [5:6]
+        include/boost/mpl/shift_left.hpp [5:6]
+        include/boost/mpl/shift_right.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 595319185a88d46351ddfb060dbf8fde
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2003-2004
+        // Copyright David Abrahams 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/inserter_algorithm.hpp [5:6]
+        include/boost/mpl/aux_/order_impl.hpp [5:6]
+        include/boost/mpl/back_inserter.hpp [5:6]
+        include/boost/mpl/copy.hpp [5:6]
+        include/boost/mpl/copy_if.hpp [5:6]
+        include/boost/mpl/front_inserter.hpp [5:6]
+        include/boost/mpl/has_key.hpp [5:6]
+        include/boost/mpl/has_key_fwd.hpp [5:6]
+        include/boost/mpl/inserter.hpp [5:6]
+        include/boost/mpl/key_type.hpp [5:6]
+        include/boost/mpl/key_type_fwd.hpp [5:6]
+        include/boost/mpl/map/aux_/at_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/begin_end_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/clear_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/erase_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/erase_key_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/insert_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/item.hpp [5:6]
+        include/boost/mpl/map/aux_/iterator.hpp [5:6]
+        include/boost/mpl/map/aux_/key_type_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/map0.hpp [5:6]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map10.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map20.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map30.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map40.hpp [2:3]
+        include/boost/mpl/map/aux_/preprocessed/typeof_based/map50.hpp [2:3]
+        include/boost/mpl/map/aux_/tag.hpp [5:6]
+        include/boost/mpl/map/aux_/value_type_impl.hpp [5:6]
+        include/boost/mpl/map/map0.hpp [5:6]
+        include/boost/mpl/map/map10.hpp [5:6]
+        include/boost/mpl/map/map20.hpp [5:6]
+        include/boost/mpl/map/map30.hpp [5:6]
+        include/boost/mpl/map/map40.hpp [5:6]
+        include/boost/mpl/map/map50.hpp [5:6]
+        include/boost/mpl/order.hpp [5:6]
+        include/boost/mpl/order_fwd.hpp [5:6]
+        include/boost/mpl/pair_view.hpp [5:6]
+        include/boost/mpl/remove.hpp [5:6]
+        include/boost/mpl/remove_if.hpp [5:6]
+        include/boost/mpl/replace.hpp [5:7]
+        include/boost/mpl/replace_if.hpp [5:7]
+        include/boost/mpl/set/aux_/begin_end_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/clear_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/erase_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/erase_key_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/insert_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/item.hpp [5:6]
+        include/boost/mpl/set/aux_/iterator.hpp [5:6]
+        include/boost/mpl/set/aux_/key_type_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/preprocessed/plain/set10.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set10_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set20.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set20_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set30.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set30_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set40.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set40_c.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set50.hpp [2:3]
+        include/boost/mpl/set/aux_/preprocessed/plain/set50_c.hpp [2:3]
+        include/boost/mpl/set/aux_/set0.hpp [5:6]
+        include/boost/mpl/set/aux_/tag.hpp [5:6]
+        include/boost/mpl/set/aux_/value_type_impl.hpp [5:6]
+        include/boost/mpl/set/set0.hpp [5:6]
+        include/boost/mpl/set/set0_c.hpp [5:6]
+        include/boost/mpl/set/set10.hpp [5:6]
+        include/boost/mpl/set/set10_c.hpp [5:6]
+        include/boost/mpl/set/set20.hpp [5:6]
+        include/boost/mpl/set/set20_c.hpp [5:6]
+        include/boost/mpl/set/set30.hpp [5:6]
+        include/boost/mpl/set/set30_c.hpp [5:6]
+        include/boost/mpl/set/set40.hpp [5:6]
+        include/boost/mpl/set/set40_c.hpp [5:6]
+        include/boost/mpl/set/set50.hpp [5:6]
+        include/boost/mpl/set/set50_c.hpp [5:6]
+        include/boost/mpl/transform.hpp [5:6]
+        include/boost/mpl/value_type.hpp [5:6]
+        include/boost/mpl/value_type_fwd.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 667567db549e2384dc40b95c3243b949
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2002-2006
+        // Copyright David Abrahams 2002-2003
+        // Copyright Daniel Walker 2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/has_xxx.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c09a0db5e085f0080699290089398e9
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/sizeof.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6cebab0728f1dcaff40c8a96c7f12d0f
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2004
+        // Copyright David Abrahams 2001-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/accumulate.hpp [5:6]
+        include/boost/mpl/always.hpp [5:5]
+        include/boost/mpl/arg.hpp [9:10]
+        include/boost/mpl/arg_fwd.hpp [5:6]
+        include/boost/mpl/aux_/arg_typedef.hpp [5:5]
+        include/boost/mpl/aux_/arity.hpp [5:5]
+        include/boost/mpl/aux_/arity_spec.hpp [5:5]
+        include/boost/mpl/aux_/basic_bind.hpp [5:6]
+        include/boost/mpl/aux_/config/dtp.hpp [5:5]
+        include/boost/mpl/aux_/config/eti.hpp [5:5]
+        include/boost/mpl/aux_/config/nttp.hpp [5:5]
+        include/boost/mpl/aux_/fold_op.hpp [5:5]
+        include/boost/mpl/aux_/fold_pred.hpp [5:5]
+        include/boost/mpl/aux_/full_lambda.hpp [9:9]
+        include/boost/mpl/aux_/is_msvc_eti_arg.hpp [5:5]
+        include/boost/mpl/aux_/iter_fold_if_impl.hpp [5:6]
+        include/boost/mpl/aux_/lambda_arity_param.hpp [5:5]
+        include/boost/mpl/aux_/lambda_support.hpp [5:5]
+        include/boost/mpl/aux_/msvc_eti_base.hpp [5:5]
+        include/boost/mpl/aux_/msvc_type.hpp [5:5]
+        include/boost/mpl/aux_/na.hpp [5:5]
+        include/boost/mpl/aux_/na_assert.hpp [5:5]
+        include/boost/mpl/aux_/na_fwd.hpp [5:5]
+        include/boost/mpl/aux_/na_spec.hpp [5:5]
+        include/boost/mpl/aux_/nttp_decl.hpp [5:5]
+        include/boost/mpl/aux_/preprocessed/gcc/arg.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/basic_bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/full_lambda.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/inherit.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/gcc/iter_fold_if_impl.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/placeholders.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/template_arity.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/arg.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/basic_bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/full_lambda.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/inherit.hpp [2:2]
+        include/boost/mpl/aux_/preprocessed/plain/iter_fold_if_impl.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/placeholders.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/template_arity.hpp [2:2]
+        include/boost/mpl/aux_/static_cast.hpp [5:5]
+        include/boost/mpl/aux_/template_arity.hpp [9:9]
+        include/boost/mpl/aux_/template_arity_fwd.hpp [5:5]
+        include/boost/mpl/bind.hpp [9:10]
+        include/boost/mpl/empty_base.hpp [5:5]
+        include/boost/mpl/fold.hpp [5:6]
+        include/boost/mpl/inherit.hpp [9:9]
+        include/boost/mpl/inherit_linearly.hpp [5:5]
+        include/boost/mpl/is_placeholder.hpp [5:5]
+        include/boost/mpl/iter_fold.hpp [5:6]
+        include/boost/mpl/iterator_range.hpp [5:5]
+        include/boost/mpl/lambda.hpp [5:5]
+        include/boost/mpl/lambda_fwd.hpp [5:5]
+        include/boost/mpl/lower_bound.hpp [5:5]
+        include/boost/mpl/map/aux_/include_preprocessed.hpp [2:2]
+        include/boost/mpl/pair.hpp [5:5]
+        include/boost/mpl/placeholders.hpp [9:10]
+        include/boost/mpl/reverse_fold.hpp [5:6]
+        include/boost/mpl/reverse_iter_fold.hpp [5:6]
+        include/boost/mpl/upper_bound.hpp [5:5]
+        include/boost/mpl/void.hpp [5:5]
+        include/boost/mpl/void_fwd.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70a94800ba84db85ec3ff20c6d23755e
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/min_element.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7457b5550b1e9bda918d7c58dc2f723f
+BELONGS ya.make
+    License text:
+        // Copyright Eric Friedman 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/partition_op.hpp [5:6]
+        include/boost/mpl/index_if.hpp [5:5]
+        include/boost/mpl/index_of.hpp [5:6]
+        include/boost/mpl/iter_fold_if.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 774a1ad0f39541627409ed7b8900a512
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2004
+        // Copyright Peter Dimov 2001-2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/preprocessed/gcc/placeholders.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/placeholders.hpp [2:3]
+        include/boost/mpl/placeholders.hpp [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78ae7fd7f341987282f7c6997978b659
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov 2000-2002
+        // Copyright Aleksey Gurtovoy 2000-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/list/aux_/numbered.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a82760a876a7d2d125ec5b9c133a6b5
+BELONGS ya.make
+    License text:
+        // Copyright Eric Niebler 2009
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/limits/string.hpp [5:5]
+        include/boost/mpl/string.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b2b40d8095f20892198b9af1ef7f149
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov and Multi Media Ltd 2001, 2002
+        // Copyright David Abrahams 2001
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/unwrap.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c79be4cd24c7aa3714068d19cb9fc44
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/bcc.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7fef5129931cbf5ef18b4b28e7fb3a62
+BELONGS ya.make
+    License text:
+        // Copyright Eric Niebler 2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/gpu.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8401d15b86c3161a24915207008a129a
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2010
+        // Copyright David Abrahams 2000-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/zip_view.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 886ccc018a03d6afb9c858314c9c5e72
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/dmc_ambiguous_ctps.hpp [5:5]
+        include/boost/mpl/aux_/config/forwarding.hpp [5:5]
+        include/boost/mpl/aux_/config/gcc.hpp [5:5]
+        include/boost/mpl/aux_/config/has_apply.hpp [5:5]
+        include/boost/mpl/aux_/config/integral.hpp [5:5]
+        include/boost/mpl/aux_/config/intel.hpp [5:5]
+        include/boost/mpl/aux_/contains_impl.hpp [5:6]
+        include/boost/mpl/aux_/has_apply.hpp [5:5]
+        include/boost/mpl/aux_/overload_names.hpp [5:5]
+        include/boost/mpl/aux_/partition_op.hpp [5:6]
+        include/boost/mpl/begin.hpp [5:5]
+        include/boost/mpl/contains.hpp [5:6]
+        include/boost/mpl/contains_fwd.hpp [5:6]
+        include/boost/mpl/empty_sequence.hpp [5:6]
+        include/boost/mpl/end.hpp [5:5]
+        include/boost/mpl/integral_c_tag.hpp [5:5]
+        include/boost/mpl/max.hpp [5:5]
+        include/boost/mpl/min.hpp [5:5]
+        include/boost/mpl/next.hpp [5:5]
+        include/boost/mpl/pair_view.hpp [5:6]
+        include/boost/mpl/partition.hpp [5:6]
+        include/boost/mpl/print.hpp [5:6]
+        include/boost/mpl/prior.hpp [5:5]
+        include/boost/mpl/sort.hpp [5:6]
+        include/boost/mpl/stable_partition.hpp [5:6]
+        include/boost/mpl/tag.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9165a7ca8021311c1ef749cd3bd3c7b4
+BELONGS ya.make
+    License text:
+        // Copyright Bruno Dutra 2015
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/map/aux_/insert_range_impl.hpp [5:5]
+        include/boost/mpl/set/aux_/insert_range_impl.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 99d56be2b42ec28cbfbc4305e55852a9
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2006
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/pp_counter.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c202b68cb8cb773e5f594c9cb634928
+BELONGS ya.make
+    License text:
+        // Copyright Eric Niebler 2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/char.hpp [5:5]
+        include/boost/mpl/char_fwd.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c5be5a59c66b2bcbb6b46ce3adf1175
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/compiler.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ccbeffbf66f48cc1052a24852fc9ca2
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2004
+        // Copyright Peter Dimov 2000-2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/type_wrapper.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6d2481bfa41c78d4c8e8538ea484d02
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2004
+        // Copyright Dave Abrahams 2001-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/reverse_iter_fold.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7890834ac7e904f210a19fb2b0ad11d
+BELONGS ya.make
+    License text:
+        // Copyright Peter Dimov 2001
+        // Copyright Aleksey Gurtovoy 2001-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/basic_bind.hpp [5:6]
+        include/boost/mpl/aux_/preprocessed/gcc/basic_bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/gcc/bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/basic_bind.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/bind.hpp [2:3]
+        include/boost/mpl/bind.hpp [9:10]
+        include/boost/mpl/protect.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b05e8d821dedb1c4725a22b027a22663
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2009
+        // Copyright Jaap Suter 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/bitand.hpp [5:6]
+        include/boost/mpl/bitor.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2df7e5a7a957bf86ae4c6503becd8c4
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2004
+        // Copyright David Abrahams 2001-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/accumulate.hpp [5:6]
+        include/boost/mpl/aux_/iter_fold_if_impl.hpp [5:6]
+        include/boost/mpl/aux_/preprocessed/gcc/iter_fold_if_impl.hpp [2:3]
+        include/boost/mpl/aux_/preprocessed/plain/iter_fold_if_impl.hpp [2:3]
+        include/boost/mpl/fold.hpp [5:6]
+        include/boost/mpl/iter_fold.hpp [5:6]
+        include/boost/mpl/reverse_fold.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd8a570f75918ca6f3caece0eb324bb0
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2001-2006
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/list/aux_/include_preprocessed.hpp [2:2]
+        include/boost/mpl/set/aux_/include_preprocessed.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd8edc8af825e6157a14facda49b7e5c
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/count_if.hpp [5:5]
+        include/boost/mpl/find.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d029d22004bd9ecc9a0c8c630af36231
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2003-2004
+        // Copyright David Abrahams 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/arrays.hpp [5:5]
+        include/boost/mpl/aux_/config/operators.hpp [5:5]
+        include/boost/mpl/aux_/config/typeof.hpp [5:5]
+        include/boost/mpl/aux_/inserter_algorithm.hpp [5:6]
+        include/boost/mpl/aux_/numeric_cast_utils.hpp [5:5]
+        include/boost/mpl/aux_/order_impl.hpp [5:6]
+        include/boost/mpl/aux_/preprocessor/is_seq.hpp [5:6]
+        include/boost/mpl/aux_/preprocessor/token_equal.hpp [5:6]
+        include/boost/mpl/aux_/ptr_to_ref.hpp [5:5]
+        include/boost/mpl/back_inserter.hpp [5:6]
+        include/boost/mpl/bitwise.hpp [5:6]
+        include/boost/mpl/front_inserter.hpp [5:6]
+        include/boost/mpl/has_key.hpp [5:6]
+        include/boost/mpl/has_key_fwd.hpp [5:6]
+        include/boost/mpl/index_of.hpp [5:6]
+        include/boost/mpl/inserter.hpp [5:6]
+        include/boost/mpl/iter_fold_if.hpp [5:6]
+        include/boost/mpl/key_type.hpp [5:6]
+        include/boost/mpl/key_type_fwd.hpp [5:6]
+        include/boost/mpl/map/aux_/at_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/begin_end_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/clear_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/contains_impl.hpp [5:5]
+        include/boost/mpl/map/aux_/empty_impl.hpp [5:5]
+        include/boost/mpl/map/aux_/erase_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/erase_key_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/insert_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/item.hpp [5:6]
+        include/boost/mpl/map/aux_/iterator.hpp [5:6]
+        include/boost/mpl/map/aux_/key_type_impl.hpp [5:6]
+        include/boost/mpl/map/aux_/map0.hpp [5:6]
+        include/boost/mpl/map/aux_/size_impl.hpp [5:5]
+        include/boost/mpl/map/aux_/tag.hpp [5:6]
+        include/boost/mpl/map/aux_/value_type_impl.hpp [5:6]
+        include/boost/mpl/map/map0.hpp [5:6]
+        include/boost/mpl/multiset/aux_/count_impl.hpp [5:5]
+        include/boost/mpl/multiset/aux_/insert_impl.hpp [5:5]
+        include/boost/mpl/multiset/aux_/item.hpp [5:5]
+        include/boost/mpl/multiset/aux_/multiset0.hpp [5:5]
+        include/boost/mpl/multiset/aux_/tag.hpp [5:5]
+        include/boost/mpl/multiset/multiset0.hpp [5:5]
+        include/boost/mpl/numeric_cast.hpp [5:5]
+        include/boost/mpl/order.hpp [5:6]
+        include/boost/mpl/order_fwd.hpp [5:6]
+        include/boost/mpl/set/aux_/at_impl.hpp [5:5]
+        include/boost/mpl/set/aux_/clear_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/empty_impl.hpp [5:5]
+        include/boost/mpl/set/aux_/erase_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/key_type_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/set0.hpp [5:6]
+        include/boost/mpl/set/aux_/size_impl.hpp [5:5]
+        include/boost/mpl/set/aux_/tag.hpp [5:6]
+        include/boost/mpl/set/aux_/value_type_impl.hpp [5:6]
+        include/boost/mpl/set/set0.hpp [5:6]
+        include/boost/mpl/set/set0_c.hpp [5:6]
+        include/boost/mpl/switch.hpp [5:5]
+        include/boost/mpl/value_type.hpp [5:6]
+        include/boost/mpl/value_type_fwd.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e238b7f2d3a3ead245b8ba50c408e028
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2010
+        // Copyright David Abrahams 2000-2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/zip_view.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed1a89a5137856dcab08de627f32141d
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2002-2006
+        // Copyright David Abrahams 2002-2003
+        // Copyright Daniel Walker 2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/config/has_xxx.hpp [5:6]
+        include/boost/mpl/has_xxx.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ede994e659efc353e0f29d6360b48dda
+BELONGS ya.make
+    License text:
+        // Copyright Paul Mensonides 2003
+        // Copyright Aleksey Gurtovoy 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/preprocessor/is_seq.hpp [5:6]
+        include/boost/mpl/aux_/preprocessor/token_equal.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6e6097f7091e8af239964ccde4737f4
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2004
+        // Copyright John R. Bandela 2000-2002
+        // Copyright David Abrahams 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/replace.hpp [5:7]
+        include/boost/mpl/replace_if.hpp [5:7]
+        include/boost/mpl/unique.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2003
+        // Copyright Aleksey Gurtovoy 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/aux_/has_key_impl.hpp [5:6]
+        include/boost/mpl/print.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd55be335299a3413c6cfe0983242e0e
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2000-2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/apply_wrap.hpp [9:9]
+        include/boost/mpl/aux_/push_back_impl.hpp [5:5]
+        include/boost/mpl/aux_/push_front_impl.hpp [5:5]
+        include/boost/mpl/aux_/sequence_wrapper.hpp [8:8]
+        include/boost/mpl/aux_/traits_lambda_spec.hpp [5:5]
+        include/boost/mpl/for_each.hpp [5:5]
+        include/boost/mpl/min_max.hpp [5:5]
+        include/boost/mpl/quote.hpp [9:9]
+        include/boost/mpl/vector/aux_/front.hpp [5:5]
+        include/boost/mpl/vector_c.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdaa6e15501e6c6b69d62a55e2cc2e3c
+BELONGS ya.make
+    License text:
+        // Copyright Aleksey Gurtovoy 2003-2007
+        // Copyright David Abrahams 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/set/aux_/begin_end_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/erase_key_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/insert_impl.hpp [5:6]
+        include/boost/mpl/set/aux_/item.hpp [5:6]
+        include/boost/mpl/set/aux_/iterator.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff357b8617179cd55397e194bbf9afa9
+BELONGS ya.make
+    License text:
+        // Copyright Sergey Krivonos 2017
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mpl/get_tag.hpp [5:5]

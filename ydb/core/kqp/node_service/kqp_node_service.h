@@ -11,7 +11,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -78,7 +78,7 @@ struct TNodeServiceState : public NKikimr::NKqp::NComputeActor::IKqpNodeState {
     static constexpr ui64 BucketsCount = 64;
 
 public:
-    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) {
+    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) override {
         auto& bucket = GetStateBucketByTx(txId);
         bucket.RemoveTask(txId, taskId, success);
     }

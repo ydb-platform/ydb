@@ -59,7 +59,7 @@ struct IServiceContext
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
 
     //! Returns the description of the connected endpoint.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
     //! Returns the instant when the current retry of request was issued by the client, if known.
     virtual std::optional<TInstant> GetStartTime() const = 0;
@@ -82,6 +82,10 @@ struct IServiceContext
     //! Returns time between request execution start and the moment of reply or cancellation (if it already happened).
     virtual std::optional<TDuration> GetExecutionDuration() const = 0;
 
+    //! This duration will be subtracted from the request execution time.
+    //! Can be called multiple times; these durations are added up.
+    virtual void RecordThrottling(TDuration throttleDuration) = 0;
+
     //! Returns trace context associated with request.
     virtual NTracing::TTraceContextPtr GetTraceContext() const = 0;
 
@@ -96,12 +100,10 @@ struct IServiceContext
     virtual TMutationId GetMutationId() const = 0;
 
     //! Returns request service name.
-    // NB: Service name is supposed to be short, so SSO should work.
-    virtual std::string GetService() const = 0;
+    virtual const std::string& GetService() const = 0;
 
     //! Returns request method name.
-    // NB: Method name is supposed to be short, so SSO should work.
-    virtual std::string GetMethod() const = 0;
+    virtual const std::string& GetMethod() const = 0;
 
     //! Returns request realm id.
     virtual TRealmId GetRealmId() const = 0;
@@ -203,7 +205,7 @@ struct IServiceContext
      *  Passing empty \p info in incremental mode is no-op.
      *  Passing empty \p info in non-incremental mode flushes the logging message.
      */
-    virtual void SetRawRequestInfo(TString info, bool incremental) = 0;
+    virtual void SetRawRequestInfo(std::string info, bool incremental) = 0;
 
     //! After this call there is no obligation to set request info for this request.
     virtual void SuppressMissingRequestInfoCheck() = 0;
@@ -216,7 +218,7 @@ struct IServiceContext
      *  Passing empty \p info in incremental mode is no-op.
      *  Passing empty \p info in non-incremental mode clears the logging infos.
      */
-    virtual void SetRawResponseInfo(TString info, bool incremental) = 0;
+    virtual void SetRawResponseInfo(std::string info, bool incremental) = 0;
 
     //! Returns the memory usage tracker for request/response messages.
     virtual const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const = 0;
@@ -350,7 +352,7 @@ struct THash<NYT::NRpc::TServiceId>
     inline size_t operator()(const NYT::NRpc::TServiceId& id) const
     {
         return
-            THash<TString>()(id.ServiceName) * 497 +
+            THash<std::string>()(id.ServiceName) * 497 +
             THash<NYT::NRpc::TRealmId>()(id.RealmId);
     }
 };

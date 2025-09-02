@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_vector_index.h>
 #include "kqp_opt_phy_effects_impl.h"
 
 namespace NKikimr::NKqp::NOpt {
@@ -83,18 +84,17 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
 {
     TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> secondaryIndexes;
     secondaryIndexes.reserve(table.Metadata->Indexes.size());
-    YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->SecondaryGlobalIndexMetadata.size());
+    YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->ImplTables.size());
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
-        const auto& indexMeta = table.Metadata->Indexes[i];
-
-        if (!indexMeta.ItUsedForWrite()) {
+        const auto& index = table.Metadata->Indexes[i];
+        if (!index.ItUsedForWrite()) {
             continue;
         }
 
         // Add index if filter absent
         bool addIndex = filter ? false : true;
 
-        for (const auto& col : indexMeta.KeyColumns) {
+        for (const auto& col : index.KeyColumns) {
 
             if (filter) {
                 // Add index if filter and at least one column present in the filter
@@ -102,7 +102,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
             }
         }
 
-        for (const auto& col : indexMeta.DataColumns) {
+        for (const auto& col : index.DataColumns) {
 
             if (filter) {
                 // Add index if filter and at least one column present in the filter
@@ -110,9 +110,19 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
             }
         }
 
-        if (indexMeta.KeyColumns && addIndex) {
-            auto indexTable = tableBuilder(*table.Metadata->SecondaryGlobalIndexMetadata[i], pos, ctx).Ptr();
-            secondaryIndexes.emplace_back(std::make_pair(indexTable, &indexMeta));
+        if (index.KeyColumns && addIndex) {
+            auto& implTable = table.Metadata->ImplTables[i];
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(implTable->Next && !implTable->Next->Next);
+                auto postingTable = implTable->Next;
+                YQL_ENSURE(postingTable->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+                auto indexTable = tableBuilder(*postingTable, pos, ctx).Ptr();
+                secondaryIndexes.emplace_back(indexTable, &index);
+            } else {
+                YQL_ENSURE(!implTable->Next);
+                auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
+                secondaryIndexes.emplace_back(indexTable, &index);
+            }
         }
     }
     return secondaryIndexes;
@@ -238,7 +248,7 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& l
 }
 
 TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
+    const TVector<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
 {
     THashSet<TString> dictKeysSet(dictKeys.begin(), dictKeys.end());
     auto dictTupleArg = TCoArgument(ctx.NewArgument(pos, "dict_tuple"));
@@ -296,7 +306,7 @@ TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>&
 }
 
 TExprBase MakeRowsFromTupleDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
+    const TVector<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
 {
     THashSet<TString> dictKeysSet(dictKeys.begin(), dictKeys.end());
     auto dictTupleArg = TCoArgument(ctx.NewArgument(pos, "dict_tuple"));

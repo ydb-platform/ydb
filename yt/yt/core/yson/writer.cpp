@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/error/text_yson.h>
+
 #include <util/charset/utf8.h>
 
 #include <util/stream/buffer.h>
@@ -132,30 +134,6 @@ void WriteUtf8String(const char* str, size_t len, IOutputStream& output)
     }
 }
 
-size_t FloatToStringWithNanInf(double value, char* buf, size_t size)
-{
-    if (std::isfinite(value)) {
-        return FloatToString(value, buf, size);
-    }
-
-    static const TStringBuf nanLiteral = "%nan";
-    static const TStringBuf infLiteral = "%inf";
-    static const TStringBuf negativeInfLiteral = "%-inf";
-
-    TStringBuf str;
-    if (std::isnan(value)) {
-        str = nanLiteral;
-    } else if (std::isinf(value) && value > 0) {
-        str = infLiteral;
-    } else {
-        str = negativeInfLiteral;
-    }
-    YT_VERIFY(str.size() + 1 <= size);
-    ::memcpy(buf, str.data(), str.size() + 1);
-    return str.size();
-}
-
-
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -277,7 +255,7 @@ void TYsonWriter::OnDoubleScalar(double value)
         Stream_->Write(&value, sizeof(double));
     } else {
         char buf[256];
-        auto str = TStringBuf(buf, FloatToStringWithNanInf(value, buf, sizeof(buf)));
+        auto str = TStringBuf(buf, NYT::NDetail::FloatToStringWithNanInf(value, buf, sizeof(buf)));
         Stream_->Write(str);
         if (str.find('.') == TString::npos && str.find('e') == TString::npos && std::isfinite(value)) {
             Stream_->Write(".");

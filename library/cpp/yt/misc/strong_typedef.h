@@ -4,6 +4,8 @@
 
 #include <util/generic/string.h>
 
+#include <util/stream/fwd.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,6 +56,9 @@ public:
     constexpr const T& Underlying() const &;
     constexpr T&& Underlying() &&;
 
+    void Save(IOutputStream* out) const;
+    void Load(IInputStream* in);
+
 private:
     T Underlying_;
 };
@@ -62,6 +67,7 @@ private:
     struct T ## Tag \
     { }; \
     using T = ::NYT::TStrongTypedef<TUnderlying, T##Tag>; \
+    static_assert(true)
 
 template <class T>
 struct TStrongTypedefTraits;

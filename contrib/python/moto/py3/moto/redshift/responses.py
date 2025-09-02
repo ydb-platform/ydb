@@ -3,12 +3,14 @@ import json
 import xmltodict
 
 from jinja2 import Template
+from typing import Any, Dict, List
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
-from .models import redshift_backends
+from .models import redshift_backends, RedshiftBackend
 
 
-def convert_json_error_to_xml(json_error):
+def convert_json_error_to_xml(json_error: Any) -> str:
     error = json.loads(json_error)
     code = error["Error"]["Code"]
     message = error["Error"]["Message"]
@@ -26,7 +28,7 @@ def convert_json_error_to_xml(json_error):
     return template.render(code=code, message=message)
 
 
-def itemize(data):
+def itemize(data: Any) -> Dict[str, Any]:
     """
     The xmltodict.unparse requires we modify the shape of the input dictionary slightly. Instead of a dict of the form:
         {'key': ['value1', 'value2']}
@@ -45,11 +47,14 @@ def itemize(data):
 
 
 class RedshiftResponse(BaseResponse):
-    @property
-    def redshift_backend(self):
-        return redshift_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="redshift")
 
-    def get_response(self, response):
+    @property
+    def redshift_backend(self) -> RedshiftBackend:
+        return redshift_backends[self.current_account][self.region]
+
+    def get_response(self, response: Any) -> str:
         if self.request_json:
             return json.dumps(response)
         else:
@@ -58,34 +63,17 @@ class RedshiftResponse(BaseResponse):
                 xml = xml.decode("utf-8")
             return xml
 
-    def call_action(self):
+    def call_action(self) -> TYPE_RESPONSE:
         status, headers, body = super().call_action()
         if status >= 400 and not self.request_json:
             body = convert_json_error_to_xml(body)
         return status, headers, body
 
-    def unpack_complex_list_params(self, label, names):
-        unpacked_list = list()
-        count = 1
-        while self._get_param("{0}.{1}.{2}".format(label, count, names[0])):
-            param = dict()
-            for i in range(len(names)):
-                param[names[i]] = self._get_param(
-                    "{0}.{1}.{2}".format(label, count, names[i])
-                )
-            unpacked_list.append(param)
-            count += 1
-        return unpacked_list
+    def unpack_list_params(self, label: str, child_label: str) -> Any:
+        root = self._get_multi_param_dict(label) or {}
+        return root.get(child_label, [])
 
-    def unpack_list_params(self, label):
-        unpacked_list = list()
-        count = 1
-        while self._get_param("{0}.{1}".format(label, count)):
-            unpacked_list.append(self._get_param("{0}.{1}".format(label, count)))
-            count += 1
-        return unpacked_list
-
-    def _get_cluster_security_groups(self):
+    def _get_cluster_security_groups(self) -> List[str]:
         cluster_security_groups = self._get_multi_param("ClusterSecurityGroups.member")
         if not cluster_security_groups:
             cluster_security_groups = self._get_multi_param(
@@ -93,7 +81,7 @@ class RedshiftResponse(BaseResponse):
             )
         return cluster_security_groups
 
-    def _get_vpc_security_group_ids(self):
+    def _get_vpc_security_group_ids(self) -> List[str]:
         vpc_security_group_ids = self._get_multi_param("VpcSecurityGroupIds.member")
         if not vpc_security_group_ids:
             vpc_security_group_ids = self._get_multi_param(
@@ -101,19 +89,19 @@ class RedshiftResponse(BaseResponse):
             )
         return vpc_security_group_ids
 
-    def _get_iam_roles(self):
+    def _get_iam_roles(self) -> List[str]:
         iam_roles = self._get_multi_param("IamRoles.member")
         if not iam_roles:
             iam_roles = self._get_multi_param("IamRoles.IamRoleArn")
         return iam_roles
 
-    def _get_subnet_ids(self):
+    def _get_subnet_ids(self) -> List[str]:
         subnet_ids = self._get_multi_param("SubnetIds.member")
         if not subnet_ids:
             subnet_ids = self._get_multi_param("SubnetIds.SubnetIdentifier")
         return subnet_ids
 
-    def create_cluster(self):
+    def create_cluster(self) -> str:
         cluster_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier"),
             "node_type": self._get_param("NodeType"),
@@ -141,7 +129,7 @@ class RedshiftResponse(BaseResponse):
             "publicly_accessible": self._get_param("PubliclyAccessible"),
             "encrypted": self._get_param("Encrypted"),
             "region_name": self.region,
-            "tags": self.unpack_complex_list_params("Tags.Tag", ("Key", "Value")),
+            "tags": self.unpack_list_params("Tags", "Tag"),
             "iam_roles_arn": self._get_iam_roles(),
             "enhanced_vpc_routing": self._get_param("EnhancedVpcRouting"),
             "kms_key_id": self._get_param("KmsKeyId"),
@@ -159,7 +147,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def pause_cluster(self):
+    def pause_cluster(self) -> str:
         cluster_id = self._get_param("ClusterIdentifier")
         cluster = self.redshift_backend.pause_cluster(cluster_id).to_json()
         return self.get_response(
@@ -173,7 +161,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def resume_cluster(self):
+    def resume_cluster(self) -> str:
         cluster_id = self._get_param("ClusterIdentifier")
         cluster = self.redshift_backend.resume_cluster(cluster_id).to_json()
         return self.get_response(
@@ -187,7 +175,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def restore_from_cluster_snapshot(self):
+    def restore_from_cluster_snapshot(self) -> str:
         enhanced_vpc_routing = self._get_bool_param("EnhancedVpcRouting")
         node_type = self._get_param("NodeType")
         number_of_nodes = self._get_int_param("NumberOfNodes")
@@ -234,7 +222,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_clusters(self):
+    def describe_clusters(self) -> str:
         cluster_identifier = self._get_param("ClusterIdentifier")
         clusters = self.redshift_backend.describe_clusters(cluster_identifier)
 
@@ -251,7 +239,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def modify_cluster(self):
+    def modify_cluster(self) -> str:
         request_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier"),
             "new_cluster_identifier": self._get_param("NewClusterIdentifier"),
@@ -298,7 +286,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_cluster(self):
+    def delete_cluster(self) -> str:
         request_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier"),
             "final_cluster_snapshot_identifier": self._get_param(
@@ -320,11 +308,11 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_cluster_subnet_group(self):
+    def create_cluster_subnet_group(self) -> str:
         cluster_subnet_group_name = self._get_param("ClusterSubnetGroupName")
         description = self._get_param("Description")
         subnet_ids = self._get_subnet_ids()
-        tags = self.unpack_complex_list_params("Tags.Tag", ("Key", "Value"))
+        tags = self.unpack_list_params("Tags", "Tag")
 
         subnet_group = self.redshift_backend.create_cluster_subnet_group(
             cluster_subnet_group_name=cluster_subnet_group_name,
@@ -347,7 +335,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_cluster_subnet_groups(self):
+    def describe_cluster_subnet_groups(self) -> str:
         subnet_identifier = self._get_param("ClusterSubnetGroupName")
         subnet_groups = self.redshift_backend.describe_cluster_subnet_groups(
             subnet_identifier
@@ -368,7 +356,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_cluster_subnet_group(self):
+    def delete_cluster_subnet_group(self) -> str:
         subnet_identifier = self._get_param("ClusterSubnetGroupName")
         self.redshift_backend.delete_cluster_subnet_group(subnet_identifier)
 
@@ -382,15 +370,14 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_cluster_security_group(self):
+    def create_cluster_security_group(self) -> str:
         cluster_security_group_name = self._get_param("ClusterSecurityGroupName")
         description = self._get_param("Description")
-        tags = self.unpack_complex_list_params("Tags.Tag", ("Key", "Value"))
+        tags = self.unpack_list_params("Tags", "Tag")
 
         security_group = self.redshift_backend.create_cluster_security_group(
             cluster_security_group_name=cluster_security_group_name,
             description=description,
-            region_name=self.region,
             tags=tags,
         )
 
@@ -407,7 +394,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_cluster_security_groups(self):
+    def describe_cluster_security_groups(self) -> str:
         cluster_security_group_name = self._get_param("ClusterSecurityGroupName")
         security_groups = self.redshift_backend.describe_cluster_security_groups(
             cluster_security_group_name
@@ -429,7 +416,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_cluster_security_group(self):
+    def delete_cluster_security_group(self) -> str:
         security_group_identifier = self._get_param("ClusterSecurityGroupName")
         self.redshift_backend.delete_cluster_security_group(security_group_identifier)
 
@@ -443,7 +430,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def authorize_cluster_security_group_ingress(self):
+    def authorize_cluster_security_group_ingress(self) -> str:
         cluster_security_group_name = self._get_param("ClusterSecurityGroupName")
         cidr_ip = self._get_param("CIDRIP")
 
@@ -471,11 +458,11 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_cluster_parameter_group(self):
+    def create_cluster_parameter_group(self) -> str:
         cluster_parameter_group_name = self._get_param("ParameterGroupName")
         group_family = self._get_param("ParameterGroupFamily")
         description = self._get_param("Description")
-        tags = self.unpack_complex_list_params("Tags.Tag", ("Key", "Value"))
+        tags = self.unpack_list_params("Tags", "Tag")
 
         parameter_group = self.redshift_backend.create_cluster_parameter_group(
             cluster_parameter_group_name, group_family, description, self.region, tags
@@ -494,7 +481,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_cluster_parameter_groups(self):
+    def describe_cluster_parameter_groups(self) -> str:
         cluster_parameter_group_name = self._get_param("ParameterGroupName")
         parameter_groups = self.redshift_backend.describe_cluster_parameter_groups(
             cluster_parameter_group_name
@@ -516,7 +503,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_cluster_parameter_group(self):
+    def delete_cluster_parameter_group(self) -> str:
         cluster_parameter_group_name = self._get_param("ParameterGroupName")
         self.redshift_backend.delete_cluster_parameter_group(
             cluster_parameter_group_name
@@ -532,10 +519,10 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_cluster_snapshot(self):
+    def create_cluster_snapshot(self) -> str:
         cluster_identifier = self._get_param("ClusterIdentifier")
         snapshot_identifier = self._get_param("SnapshotIdentifier")
-        tags = self.unpack_complex_list_params("Tags.Tag", ("Key", "Value"))
+        tags = self.unpack_list_params("Tags", "Tag")
 
         snapshot = self.redshift_backend.create_cluster_snapshot(
             cluster_identifier, snapshot_identifier, self.region, tags
@@ -551,7 +538,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_cluster_snapshots(self):
+    def describe_cluster_snapshots(self) -> str:
         cluster_identifier = self._get_param("ClusterIdentifier")
         snapshot_identifier = self._get_param("SnapshotIdentifier")
         snapshot_type = self._get_param("SnapshotType")
@@ -571,7 +558,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_cluster_snapshot(self):
+    def delete_cluster_snapshot(self) -> str:
         snapshot_identifier = self._get_param("SnapshotIdentifier")
         snapshot = self.redshift_backend.delete_cluster_snapshot(snapshot_identifier)
 
@@ -586,7 +573,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_snapshot_copy_grant(self):
+    def create_snapshot_copy_grant(self) -> str:
         copy_grant_kwargs = {
             "snapshot_copy_grant_name": self._get_param("SnapshotCopyGrantName"),
             "kms_key_id": self._get_param("KmsKeyId"),
@@ -609,7 +596,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_snapshot_copy_grant(self):
+    def delete_snapshot_copy_grant(self) -> str:
         copy_grant_kwargs = {
             "snapshot_copy_grant_name": self._get_param("SnapshotCopyGrantName")
         }
@@ -624,7 +611,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_snapshot_copy_grants(self):
+    def describe_snapshot_copy_grants(self) -> str:
         copy_grant_kwargs = {
             "snapshot_copy_grant_name": self._get_param("SnapshotCopyGrantName")
         }
@@ -647,9 +634,9 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def create_tags(self):
+    def create_tags(self) -> str:
         resource_name = self._get_param("ResourceName")
-        tags = self.unpack_complex_list_params("Tags.Tag", ("Key", "Value"))
+        tags = self.unpack_list_params("Tags", "Tag")
 
         self.redshift_backend.create_tags(resource_name, tags)
 
@@ -663,7 +650,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def describe_tags(self):
+    def describe_tags(self) -> str:
         resource_name = self._get_param("ResourceName")
         resource_type = self._get_param("ResourceType")
 
@@ -681,9 +668,9 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def delete_tags(self):
+    def delete_tags(self) -> str:
         resource_name = self._get_param("ResourceName")
-        tag_keys = self.unpack_list_params("TagKeys.TagKey")
+        tag_keys = self.unpack_list_params("TagKeys", "TagKey")
 
         self.redshift_backend.delete_tags(resource_name, tag_keys)
 
@@ -697,7 +684,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def enable_snapshot_copy(self):
+    def enable_snapshot_copy(self) -> str:
         snapshot_copy_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier"),
             "destination_region": self._get_param("DestinationRegion"),
@@ -717,7 +704,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def disable_snapshot_copy(self):
+    def disable_snapshot_copy(self) -> str:
         snapshot_copy_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier")
         }
@@ -734,7 +721,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def modify_snapshot_copy_retention_period(self):
+    def modify_snapshot_copy_retention_period(self) -> str:
         snapshot_copy_kwargs = {
             "cluster_identifier": self._get_param("ClusterIdentifier"),
             "retention_period": self._get_param("RetentionPeriod"),
@@ -756,7 +743,7 @@ class RedshiftResponse(BaseResponse):
             }
         )
 
-    def get_cluster_credentials(self):
+    def get_cluster_credentials(self) -> str:
         cluster_identifier = self._get_param("ClusterIdentifier")
         db_user = self._get_param("DbUser")
         auto_create = self._get_bool_param("AutoCreate", False)

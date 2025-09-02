@@ -1,9 +1,11 @@
 #pragma once
 
 #include "common.h"
+#include "client_command_options.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -12,12 +14,20 @@
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 #include <util/string/type.h>
+#include <util/system/info.h>
 #include <string>
 
 namespace NYdb {
 namespace NConsoleClient {
 
+struct TCommandFlags {
+    bool Dangerous = false;
+    bool OnlyExplicitProfile = false;
+};
+
 class TClientCommand {
+protected:
+    TClientCommand() = default;
 public:
     static bool TIME_REQUESTS; // measure time of requests
     static bool PROGRESS_REQUESTS; // display progress of long requests
@@ -25,8 +35,12 @@ public:
     TVector<TString> Aliases;
     TString Description;
     bool Visible = true;
+    bool Hidden = false;
+    bool Dangerous = false;
+    bool Local = false;
+    bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
-    NLastGetopt::TOpts Opts;
+    TClientCommandOptions Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
@@ -75,38 +89,47 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
         int InitialArgC;
         char** InitialArgV;
-        NLastGetopt::TOpts* Opts;
-        const NLastGetopt::TOptsParseResult* ParseResult;
+        TClientCommandOptions* Opts = nullptr;
+        const TOptionsParseResult* ParseResult;
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
         THashSet<TString> ExecutableOptions;
         bool HasExecutableOptions = false;
         TString Path;
-        THolder<TArgSettings> ArgsSettings;
+        TArgSettings ArgsSettings;
         TString Address;
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
+        TString ClientCert;
+        TString ClientCertPrivateKey;
+        TString ClientCertPrivateKeyPassword;
+        TString ClientCertFile;
+        TString ClientCertPrivateKeyFile;
+        TString ClientCertPrivateKeyPasswordFile;
+
+        // Client cert initialization.
+        // Parses certificate from dirrefent formats.
+        // Can ask for password if private key is protected with password and it is not set in options.
+        void InitClientCert();
+
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
+        bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
+        bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
+        TString Oauth2KeyParams;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
@@ -122,6 +145,7 @@ public:
         TString YCToken;
         bool UseMetadataCredentials = false;
         TString SaKeyFile;
+        TString SaKeyParams;
         TString IamEndpoint;
         TString YScope;
         TString ChosenAuthMethod;
@@ -136,8 +160,16 @@ public:
         bool NeedToConnect = true;
         bool NeedToCheckForUpdate = true;
         bool ForceVersionCheck = false;
+        bool AllowEmptyDatabase = false;
+        bool AllowEmptyAddress = false;
+        bool OnlyExplicitProfile = false;
+        bool AssumeYes = false;
+        // Whether a command is local (need no connection to YDB) or not
+        bool LocalCommand = false;
+        std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
+        std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)
@@ -162,6 +194,8 @@ public:
             };
         }
 
+        std::shared_ptr<ICredentialsProviderFactory> GetSingletonCredentialsProviderFactory();
+
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
@@ -169,22 +203,22 @@ public:
         static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {
-            ArgsSettings->Min.Set(value);
+            ArgsSettings.Min.Set(value);
             Opts->SetFreeArgsMin(value);
         }
 
         void SetFreeArgsMax(size_t value) {
-            ArgsSettings->Max.Set(value);
+            ArgsSettings.Max.Set(value);
             Opts->SetFreeArgsMax(value);
         }
 
         void SetFreeArgsNum(size_t minValue, size_t maxValue) {
-            ArgsSettings->Min.Set(minValue);
-            ArgsSettings->Max.Set(maxValue);
+            ArgsSettings.Min.Set(minValue);
+            ArgsSettings.Max.Set(maxValue);
             Opts->SetFreeArgsNum(minValue, maxValue);
         }
 
@@ -197,28 +231,87 @@ public:
             if (HasHelpCommand() || HasExecutableOptions) {
                 return;
             }
-            bool minSet = ArgsSettings->Min.GetIsSet();
-            size_t minValue = ArgsSettings->Min.Get();
-            bool maxSet = ArgsSettings->Max.GetIsSet();
-            size_t maxValue = ArgsSettings->Max.Get();
+            bool minSet = ArgsSettings.Min.GetIsSet();
+            size_t minValue = ArgsSettings.Min.Get();
+            bool maxSet = ArgsSettings.Max.GetIsSet();
+            size_t maxValue = ArgsSettings.Max.Get();
             bool minFailed = minSet && count < minValue;
             bool maxFailed = maxSet && count > maxValue;
             if (minFailed || maxFailed) {
+                TStringBuilder errorMessage;
                 if (minSet && maxSet) {
                     if (minValue == maxValue) {
-                        throw TMisuseException() << "Command " << ArgV[0]
+                        errorMessage << "Command " << ArgV[0]
                             << " requires exactly " << minValue << " free arg(s).";
+                    } else {
+                        errorMessage << "Command " << ArgV[0]
+                            << " requires from " << minValue << " to " << maxValue << " free arg(s).";
                     }
-                    throw TMisuseException() << "Command " << ArgV[0]
-                        << " requires from " << minValue << " to " << maxValue << " free arg(s).";
-                }
-                if (minFailed) {
-                    throw TMisuseException() << "Command " << ArgV[0]
+                } else if (minFailed) {
+                    errorMessage << "Command " << ArgV[0]
                         << " requires at least " << minValue << " free arg(s).";
+                } else {
+                    errorMessage << "Command " << ArgV[0]
+                        << " requires at most " << maxValue << " free arg(s).";
                 }
-                throw TMisuseException() << "Command " << ArgV[0]
-                    << " requires at most " << maxValue << " free arg(s).";
+                if (count == 0) {
+                    Cerr << errorMessage << Endl;
+                    PrintHelpAndExit();
+                } else {
+                    throw TMisuseException() << errorMessage;
+                }
             }
+        }
+
+        void PrintHelpAndExit() {
+            NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
+            parser.PrintUsage(Cerr);
+            throw TNeedToExitWithCode(EXIT_FAILURE);
+        }
+
+        TDriverConfig CreateDriverConfig() {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(Address)
+                .SetDatabase(Database)
+                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+        
+            if (EnableSsl) {
+                driverConfig.UseSecureConnection(CaCerts);
+            }
+        
+            if (IsNetworkIntensive) {
+                size_t networkThreadNum = GetNetworkThreadNum();
+                driverConfig.SetNetworkThreadsNum(networkThreadNum);
+            }
+        
+            if (SkipDiscovery) {
+                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+            }
+        
+            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+        
+            return driverConfig;
+        }
+
+        size_t GetNetworkThreadNum() {
+            if (IsNetworkIntensive) {
+                size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+                if (cpuCount >= 64) {
+                    // doubtfully there is a reason to have more. Even this is too much.
+                    return 32;
+                } else if (cpuCount >= 32 && cpuCount < 64) {
+                    // leave the half of CPUs to the client's logic
+                    return cpuCount / 2;
+                } else if (cpuCount >= 16 && cpuCount < 32) {
+                    // Originally here we had a constant value 16.
+                    // To not break things this heuristic tries to use this constant as well.
+                    return 16;
+                } else {
+                    return std::min(size_t(2), cpuCount / 2);
+                }
+            }
+            return 1; // TODO: check default
         }
 
     private:
@@ -248,9 +341,9 @@ public:
                         while (*end != '\0' && *end != '\'' && *end != '\"') {
                             ++end;
                         }
-                        opt = Opts->FindLongOption(TString(pos + 1, end));
+                        opt = Opts->GetOpts().FindLongOption(TString(pos + 1, end));
                     } else {
-                        opt = Opts->FindCharOption(*pos);
+                        opt = Opts->GetOpts().FindCharOption(*pos);
                     }
                     if (opt && opt->GetHasArg() == NLastGetopt::NO_ARGUMENT) {
                         optionArgument = false;
@@ -283,7 +376,10 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TOptsParseOneLevelResult : public TOptionsParseResult {
+        TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv);
+        static std::pair<int, const char**> GetArgv(TConfig& config);
+
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };
@@ -292,7 +388,20 @@ public:
 
     virtual int Process(TConfig& config);
     virtual void Prepare(TConfig& config);
+    /*
+      This method will be called after all child
+      commands set their flags, so we can change
+      behavior of particular environment/cli params
+      handling, for example change requirements for
+      database, profile and endpoint params
+    */
+    virtual void ExtractParams(TConfig& config);
+    virtual bool Prompt(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
+    virtual void PropagateFlags(const TCommandFlags& flags) {
+        Dangerous |= flags.Dangerous;
+        OnlyExplicitProfile |= flags.OnlyExplicitProfile;
+    }
 
     enum RenderEntryType {
         BEGIN,
@@ -300,13 +409,19 @@ public:
         END
     };
 
-    void RenderOneCommandDescription(
+    virtual void RenderCommandDescription(
         TStringStream& stream,
+        bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
-        RenderEntryType type = BEGIN
+        RenderEntryType type = BEGIN,
+        TString prefix = {},
+        bool shortForm = false
     );
 
     void Hide();
+    void MarkDangerous();
+    void MarkLocal();
+    void UseOnlyExplicitProfile();
 
 protected:
     virtual void Config(TConfig& config);
@@ -319,7 +434,7 @@ protected:
     virtual void SetCustomUsage(TConfig& config);
 
 protected:
-    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
+    std::shared_ptr<TOptionsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);
@@ -327,7 +442,6 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
-    bool Hidden = false;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -335,11 +449,17 @@ public:
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
+    void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
+    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
-    void RenderCommandsDescription(
+    void RenderCommandDescription(
         TStringStream& stream,
-        const NColorizer::TColors& colors = NColorizer::TColors(false)
-    );
+        bool renderTree,
+        const NColorizer::TColors& colors = NColorizer::TColors(false),
+        RenderEntryType type = BEGIN,
+        TString prefix = {},
+        bool shortForm = false
+    ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 
@@ -348,10 +468,15 @@ protected:
     virtual void SaveParseResult(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+    virtual void PropagateFlags(const TCommandFlags& flags) override {
+        TClientCommand::PropagateFlags(flags);
+        for (auto& [_, cmd] : SubCommands) {
+            cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+        }
+    }
 
     TClientCommand* SelectedCommand;
 
-private:
     bool HasOptionsToShow();
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;

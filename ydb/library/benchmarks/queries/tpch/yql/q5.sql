@@ -4,7 +4,7 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$border = Date("1995-01-01");
+$border = Date("1994-01-01");
 
 $j1 = (
 select
@@ -17,7 +17,7 @@ join
 on
     n.n_regionkey = r.r_regionkey
 where
-    r_name = 'AFRICA'
+    r_name = 'ASIA'
 );
 
 $j2 = (

@@ -4,14 +4,20 @@ Provides the Command class, the base class for the command classes
 in the distutils.command package.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
 import sys
+from collections.abc import Callable
+from typing import Any, ClassVar, TypeVar, overload
 
 from . import _modified, archive_util, dir_util, file_util, util
 from ._log import log
 from .errors import DistutilsOptionError
+
+_CommandT = TypeVar("_CommandT", bound="Command")
 
 
 class Command:
@@ -44,7 +50,14 @@ class Command:
     # 'sub_commands' is usually defined at the *end* of a class, because
     # predicates can be unbound methods, so they must already have been
     # defined.  The canonical example is the "install" command.
-    sub_commands = []
+    sub_commands: ClassVar[  # Any to work around variance issues
+        list[tuple[str, Callable[[Any], bool] | None]]
+    ] = []
+
+    user_options: ClassVar[
+        # Specifying both because list is invariant. Avoids mypy override assignment issues
+        list[tuple[str, str, str]] | list[tuple[str, str | None, str]]
+    ] = []
 
     # -- Creation/initialization methods -------------------------------
 
@@ -87,13 +100,13 @@ class Command:
 
         # The 'help' flag is just used for command-line parsing, so
         # none of that complicated bureaucracy is needed.
-        self.help = 0
+        self.help = False
 
         # 'finalized' records whether or not 'finalize_options()' has been
         # called.  'finalize_options()' itself should not pay attention to
         # this flag: it is the business of 'ensure_finalized()', which
         # always calls 'finalize_options()', to respect/update it.
-        self.finalized = 0
+        self.finalized = False
 
     # XXX A more explicit way to customize dry_run would be better.
     def __getattr__(self, attr):
@@ -109,7 +122,7 @@ class Command:
     def ensure_finalized(self):
         if not self.finalized:
             self.finalize_options()
-        self.finalized = 1
+        self.finalized = True
 
     # Subclasses must define:
     #   initialize_options()
@@ -135,7 +148,7 @@ class Command:
         This method must be implemented by all command classes.
         """
         raise RuntimeError(
-            "abstract method -- subclass %s must override" % self.__class__
+            f"abstract method -- subclass {self.__class__} must override"
         )
 
     def finalize_options(self):
@@ -150,14 +163,14 @@ class Command:
         This method must be implemented by all command classes.
         """
         raise RuntimeError(
-            "abstract method -- subclass %s must override" % self.__class__
+            f"abstract method -- subclass {self.__class__} must override"
         )
 
     def dump_options(self, header=None, indent=""):
         from distutils.fancy_getopt import longopt_xlate
 
         if header is None:
-            header = "command options for '%s':" % self.get_command_name()
+            header = f"command options for '{self.get_command_name()}':"
         self.announce(indent + header, level=logging.INFO)
         indent = indent + "  "
         for option, _, _ in self.user_options:
@@ -178,7 +191,7 @@ class Command:
         This method must be implemented by all command classes.
         """
         raise RuntimeError(
-            "abstract method -- subclass %s must override" % self.__class__
+            f"abstract method -- subclass {self.__class__} must override"
         )
 
     def announce(self, msg, level=logging.DEBUG):
@@ -293,7 +306,7 @@ class Command:
             if getattr(self, dst_option) is None:
                 setattr(self, dst_option, getattr(src_cmd_obj, src_option))
 
-    def get_finalized_command(self, command, create=1):
+    def get_finalized_command(self, command, create=True):
         """Wrapper around Distribution's 'get_command_obj()' method: find
         (create if necessary and 'create' is true) the command object for
         'command', call its 'ensure_finalized()' method, and return the
@@ -305,7 +318,17 @@ class Command:
 
     # XXX rename to 'get_reinitialized_command()'? (should do the
     # same in dist.py, if so)
-    def reinitialize_command(self, command, reinit_subcommands=0):
+    @overload
+    def reinitialize_command(
+        self, command: str, reinit_subcommands: bool = False
+    ) -> Command: ...
+    @overload
+    def reinitialize_command(
+        self, command: _CommandT, reinit_subcommands: bool = False
+    ) -> _CommandT: ...
+    def reinitialize_command(
+        self, command: str | Command, reinit_subcommands=False
+    ) -> Command:
         return self.distribution.reinitialize_command(command, reinit_subcommands)
 
     def run_command(self, command):
@@ -340,7 +363,13 @@ class Command:
         dir_util.mkpath(name, mode, dry_run=self.dry_run)
 
     def copy_file(
-        self, infile, outfile, preserve_mode=1, preserve_times=1, link=None, level=1
+        self,
+        infile,
+        outfile,
+        preserve_mode=True,
+        preserve_times=True,
+        link=None,
+        level=1,
     ):
         """Copy a file respecting verbose, dry-run and force flags.  (The
         former two default to whatever is in the Distribution object, and
@@ -359,9 +388,9 @@ class Command:
         self,
         infile,
         outfile,
-        preserve_mode=1,
-        preserve_times=1,
-        preserve_symlinks=0,
+        preserve_mode=True,
+        preserve_times=True,
+        preserve_symlinks=False,
         level=1,
     ):
         """Copy an entire directory tree respecting verbose, dry-run,
@@ -381,7 +410,7 @@ class Command:
         """Move a file respecting dry-run flag."""
         return file_util.move_file(src, dst, dry_run=self.dry_run)
 
-    def spawn(self, cmd, search_path=1, level=1):
+    def spawn(self, cmd, search_path=True, level=1):
         """Spawn an external command respecting dry-run flag."""
         from distutils.spawn import spawn
 
@@ -412,7 +441,7 @@ class Command:
         timestamp checks.
         """
         if skip_msg is None:
-            skip_msg = "skipping %s (inputs unchanged)" % outfile
+            skip_msg = f"skipping {outfile} (inputs unchanged)"
 
         # Allow 'infiles' to be a single string
         if isinstance(infiles, str):

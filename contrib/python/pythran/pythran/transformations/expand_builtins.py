@@ -9,7 +9,7 @@ import builtins
 import gast as ast
 
 
-class ExpandBuiltins(Transformation):
+class ExpandBuiltins(Transformation[Locals, Globals]):
 
     """
     Expands all builtins into full paths.
@@ -24,15 +24,11 @@ class ExpandBuiltins(Transformation):
         return builtins.list()
     """
 
-    def __init__(self):
-        Transformation.__init__(self, Locals, Globals)
-
     def visit_Name(self, node):
         s = node.id
         if s in ('None', 'True', 'False'):
             self.update = True
             return ast.Constant(getattr(builtins, s), None)
-
         if(isinstance(node.ctx, ast.Load) and
            s not in self.locals[node] and
            s not in self.globals and

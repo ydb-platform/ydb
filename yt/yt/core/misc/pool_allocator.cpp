@@ -8,7 +8,7 @@ namespace NYT {
 
 void TPoolAllocator::AllocateChunk()
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     auto alignment = Max(
         alignof(TAllocatedBlockHeader),

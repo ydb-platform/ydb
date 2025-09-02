@@ -1,12 +1,17 @@
 import json
+from typing import Any, Dict, Optional, Union
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
 from moto.core.utils import camelcase_to_underscores
-from .models import dynamodb_backend, dynamo_json_dump
+from .models import dynamodb_backends, DynamoDBBackend, dynamo_json_dump
 
 
 class DynamoHandler(BaseResponse):
-    def get_endpoint_name(self, headers):
+    def __init__(self) -> None:
+        super().__init__(service_name="dynamodb")
+
+    def get_endpoint_name(self, headers: Dict[str, str]) -> Optional[str]:  # type: ignore[return]
         """Parses request headers and extracts part od the X-Amz-Target
         that corresponds to a method of DynamoHandler
 
@@ -17,10 +22,10 @@ class DynamoHandler(BaseResponse):
         if match:
             return match.split(".")[1]
 
-    def error(self, type_, status=400):
+    def error(self, type_: str, status: int = 400) -> TYPE_RESPONSE:
         return status, self.response_headers, dynamo_json_dump({"__type": type_})
 
-    def call_action(self):
+    def call_action(self) -> TYPE_RESPONSE:
         self.body = json.loads(self.body or "{}")
         endpoint = self.get_endpoint_name(self.headers)
         if endpoint:
@@ -36,25 +41,29 @@ class DynamoHandler(BaseResponse):
         else:
             return 404, self.response_headers, ""
 
-    def list_tables(self):
+    @property
+    def backend(self) -> DynamoDBBackend:
+        return dynamodb_backends[self.current_account]["global"]
+
+    def list_tables(self) -> str:
         body = self.body
         limit = body.get("Limit")
         if body.get("ExclusiveStartTableName"):
             last = body.get("ExclusiveStartTableName")
-            start = list(dynamodb_backend.tables.keys()).index(last) + 1
+            start = list(self.backend.tables.keys()).index(last) + 1
         else:
             start = 0
-        all_tables = list(dynamodb_backend.tables.keys())
+        all_tables = list(self.backend.tables.keys())
         if limit:
             tables = all_tables[start : start + limit]
         else:
             tables = all_tables[start:]
-        response = {"TableNames": tables}
+        response: Dict[str, Any] = {"TableNames": tables}
         if limit and len(all_tables) > start + limit:
             response["LastEvaluatedTableName"] = tables[-1]
         return dynamo_json_dump(response)
 
-    def create_table(self):
+    def create_table(self) -> str:
         body = self.body
         name = body["TableName"]
 
@@ -71,7 +80,7 @@ class DynamoHandler(BaseResponse):
         read_units = throughput["ReadCapacityUnits"]
         write_units = throughput["WriteCapacityUnits"]
 
-        table = dynamodb_backend.create_table(
+        table = self.backend.create_table(
             name,
             hash_key_attr=hash_key_attr,
             hash_key_type=hash_key_type,
@@ -82,38 +91,38 @@ class DynamoHandler(BaseResponse):
         )
         return dynamo_json_dump(table.describe)
 
-    def delete_table(self):
+    def delete_table(self) -> Union[str, TYPE_RESPONSE]:
         name = self.body["TableName"]
-        table = dynamodb_backend.delete_table(name)
+        table = self.backend.delete_table(name)
         if table:
             return dynamo_json_dump(table.describe)
         else:
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er)
 
-    def update_table(self):
+    def update_table(self) -> str:
         name = self.body["TableName"]
         throughput = self.body["ProvisionedThroughput"]
         new_read_units = throughput["ReadCapacityUnits"]
         new_write_units = throughput["WriteCapacityUnits"]
-        table = dynamodb_backend.update_table_throughput(
+        table = self.backend.update_table_throughput(
             name, new_read_units, new_write_units
         )
         return dynamo_json_dump(table.describe)
 
-    def describe_table(self):
+    def describe_table(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         try:
-            table = dynamodb_backend.tables[name]
+            table = self.backend.tables[name]
         except KeyError:
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er)
         return dynamo_json_dump(table.describe)
 
-    def put_item(self):
+    def put_item(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         item = self.body["Item"]
-        result = dynamodb_backend.put_item(name, item)
+        result = self.backend.put_item(name, item)
         if result:
             item_dict = result.to_json()
             item_dict["ConsumedCapacityUnits"] = 1
@@ -122,7 +131,7 @@ class DynamoHandler(BaseResponse):
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er)
 
-    def batch_write_item(self):
+    def batch_write_item(self) -> str:
         table_batches = self.body["RequestItems"]
 
         for table_name, table_requests in table_batches.items():
@@ -132,12 +141,12 @@ class DynamoHandler(BaseResponse):
 
                 if request_type == "PutRequest":
                     item = request["Item"]
-                    dynamodb_backend.put_item(table_name, item)
+                    self.backend.put_item(table_name, item)
                 elif request_type == "DeleteRequest":
                     key = request["Key"]
                     hash_key = key["HashKeyElement"]
                     range_key = key.get("RangeKeyElement")
-                    item = dynamodb_backend.delete_item(table_name, hash_key, range_key)
+                    self.backend.delete_item(table_name, hash_key, range_key)
 
         response = {
             "Responses": {
@@ -149,14 +158,14 @@ class DynamoHandler(BaseResponse):
 
         return dynamo_json_dump(response)
 
-    def get_item(self):
+    def get_item(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         key = self.body["Key"]
         hash_key = key["HashKeyElement"]
         range_key = key.get("RangeKeyElement")
         attrs_to_get = self.body.get("AttributesToGet")
         try:
-            item = dynamodb_backend.get_item(name, hash_key, range_key)
+            item = self.backend.get_item(name, hash_key, range_key)
         except ValueError:
             er = "com.amazon.coral.validate#ValidationException"
             return self.error(er, status=400)
@@ -169,10 +178,10 @@ class DynamoHandler(BaseResponse):
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er, status=404)
 
-    def batch_get_item(self):
+    def batch_get_item(self) -> str:
         table_batches = self.body["RequestItems"]
 
-        results = {"Responses": {"UnprocessedKeys": {}}}
+        results: Dict[str, Any] = {"Responses": {"UnprocessedKeys": {}}}
 
         for table_name, table_request in table_batches.items():
             items = []
@@ -181,7 +190,7 @@ class DynamoHandler(BaseResponse):
             for key in keys:
                 hash_key = key["HashKeyElement"]
                 range_key = key.get("RangeKeyElement")
-                item = dynamodb_backend.get_item(table_name, hash_key, range_key)
+                item = self.backend.get_item(table_name, hash_key, range_key)
                 if item:
                     item_describe = item.describe_attrs(attributes_to_get)
                     items.append(item_describe)
@@ -191,7 +200,7 @@ class DynamoHandler(BaseResponse):
             }
         return dynamo_json_dump(results)
 
-    def query(self):
+    def query(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         hash_key = self.body["HashKeyValue"]
         range_condition = self.body.get("RangeKeyCondition")
@@ -202,16 +211,14 @@ class DynamoHandler(BaseResponse):
             range_comparison = None
             range_values = []
 
-        items, _ = dynamodb_backend.query(
-            name, hash_key, range_comparison, range_values
-        )
+        items, _ = self.backend.query(name, hash_key, range_comparison, range_values)
 
         if items is None:
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er)
 
         result = {
-            "Count": len(items),
+            "Count": len(items),  # type: ignore[arg-type]
             "Items": [item.attrs for item in items],
             "ConsumedCapacityUnits": 1,
         }
@@ -224,7 +231,7 @@ class DynamoHandler(BaseResponse):
         #     }
         return dynamo_json_dump(result)
 
-    def scan(self):
+    def scan(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
 
         filters = {}
@@ -236,7 +243,7 @@ class DynamoHandler(BaseResponse):
             comparison_values = scan_filter.get("AttributeValueList", [])
             filters[attribute_name] = (comparison_operator, comparison_values)
 
-        items, scanned_count, _ = dynamodb_backend.scan(name, filters)
+        items, scanned_count, _ = self.backend.scan(name, filters)
 
         if items is None:
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
@@ -257,13 +264,13 @@ class DynamoHandler(BaseResponse):
         #     }
         return dynamo_json_dump(result)
 
-    def delete_item(self):
+    def delete_item(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         key = self.body["Key"]
         hash_key = key["HashKeyElement"]
         range_key = key.get("RangeKeyElement")
         return_values = self.body.get("ReturnValues", "")
-        item = dynamodb_backend.delete_item(name, hash_key, range_key)
+        item = self.backend.delete_item(name, hash_key, range_key)
         if item:
             if return_values == "ALL_OLD":
                 item_dict = item.to_json()
@@ -275,14 +282,14 @@ class DynamoHandler(BaseResponse):
             er = "com.amazonaws.dynamodb.v20111205#ResourceNotFoundException"
             return self.error(er)
 
-    def update_item(self):
+    def update_item(self) -> Union[TYPE_RESPONSE, str]:
         name = self.body["TableName"]
         key = self.body["Key"]
         hash_key = key["HashKeyElement"]
         range_key = key.get("RangeKeyElement")
         updates = self.body["AttributeUpdates"]
 
-        item = dynamodb_backend.update_item(name, hash_key, range_key, updates)
+        item = self.backend.update_item(name, hash_key, range_key, updates)
 
         if item:
             item_dict = item.to_json()

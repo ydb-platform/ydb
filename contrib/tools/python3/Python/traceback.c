@@ -13,6 +13,7 @@
 #include "pycore_pyarena.h"       // _PyArena_Free()
 #include "pycore_pyerrors.h"      // _PyErr_GetRaisedException()
 #include "pycore_pystate.h"       // _PyThreadState_GET()
+#include "pycore_sysmodule.h"     // _PySys_GetOptionalAttr()
 #include "pycore_traceback.h"     // EXCEPTION_TB_HEADER
 
 #include "../Parser/pegen.h"      // _PyPegen_byte_offset_to_character_offset()
@@ -349,9 +350,13 @@ _Py_FindSourceFile(PyObject *filename, char* namebuf, size_t namelen, PyObject *
     taillen = strlen(tail);
 
     PyThreadState *tstate = _PyThreadState_GET();
-    syspath = _PySys_GetAttr(tstate, &_Py_ID(path));
-    if (syspath == NULL || !PyList_Check(syspath))
+    if (_PySys_GetOptionalAttr(&_Py_ID(path), &syspath) < 0) {
+        PyErr_Clear();
         goto error;
+    }
+    if (syspath == NULL || !PyList_Check(syspath)) {
+        goto error;
+    }
     npath = PyList_Size(syspath);
 
     open = PyObject_GetAttr(io, &_Py_ID(open));
@@ -394,6 +399,7 @@ error:
     result = NULL;
 finally:
     Py_XDECREF(open);
+    Py_XDECREF(syspath);
     Py_DECREF(filebytes);
     return result;
 }
@@ -1064,17 +1070,21 @@ _PyTraceBack_Print_Indented(PyObject *v, int indent, const char *margin,
         PyErr_BadInternalCall();
         return -1;
     }
-    limitv = PySys_GetObject("tracebacklimit");
-    if (limitv && PyLong_Check(limitv)) {
+    if (_PySys_GetOptionalAttrString("tracebacklimit", &limitv) < 0) {
+        return -1;
+    }
+    else if (limitv != NULL && PyLong_Check(limitv)) {
         int overflow;
         limit = PyLong_AsLongAndOverflow(limitv, &overflow);
         if (overflow > 0) {
             limit = LONG_MAX;
         }
         else if (limit <= 0) {
+            Py_DECREF(limitv);
             return 0;
         }
     }
+    Py_XDECREF(limitv);
     if (_Py_WriteIndentedMargin(indent, header_margin, f) < 0) {
         return -1;
     }
@@ -1242,6 +1252,8 @@ done:
 static void
 dump_frame(int fd, _PyInterpreterFrame *frame)
 {
+    assert(frame->owner != FRAME_OWNED_BY_CSTACK);
+
     PyCodeObject *code = frame->f_code;
     PUTS(fd, "  File ");
     if (code->co_filename != NULL
@@ -1315,24 +1327,27 @@ dump_traceback(int fd, PyThreadState *tstate, int write_header)
 
     unsigned int depth = 0;
     while (1) {
+        if (frame->owner == FRAME_OWNED_BY_CSTACK) {
+            /* Trampoline frame */
+            frame = frame->previous;
+            if (frame == NULL) {
+                break;
+            }
+
+            /* Can't have more than one shim frame in a row */
+            assert(frame->owner != FRAME_OWNED_BY_CSTACK);
+        }
+
         if (MAX_FRAME_DEPTH <= depth) {
             PUTS(fd, "  ...\n");
             break;
         }
+
         dump_frame(fd, frame);
         frame = frame->previous;
         if (frame == NULL) {
             break;
         }
-        if (frame->owner == FRAME_OWNED_BY_CSTACK) {
-            /* Trampoline frame */
-            frame = frame->previous;
-        }
-        if (frame == NULL) {
-            break;
-        }
-        /* Can't have more than one shim frame in a row */
-        assert(frame->owner != FRAME_OWNED_BY_CSTACK);
         depth++;
     }
 }

@@ -8,7 +8,7 @@ namespace NKikimr::NArrow {
 
 class TRecordBatchReader {
 private:
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 public:
     TRecordBatchReader() = default;
     TRecordBatchReader(const std::shared_ptr<arrow::RecordBatch>& batch)
@@ -149,7 +149,10 @@ public:
 
     /// @note compression is disabled by default KIKIMR-11690
     // Allowed codecs: UNCOMPRESSED, LZ4_FRAME, ZSTD
-    TArrowBatchBuilder(arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED, const std::set<std::string>& notNullColumns = {});
+    TArrowBatchBuilder(
+        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED,
+        const std::set<std::string>& notNullColumns = {},
+        arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
     ~TArrowBatchBuilder() = default;
 
     bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -180,7 +183,7 @@ public:
     }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
+    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
 protected:
@@ -197,6 +200,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};
     const std::set<std::string> NotNullColumns;
+    arrow::MemoryPool* MemoryPool;
 
 protected:
     size_t NumRows{0};

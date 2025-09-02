@@ -1,0 +1,205 @@
+diff --git a/include/grpcpp/impl/codegen/call_op_set.h b/include/grpcpp/impl/codegen/call_op_set.h
+index 5ce081a..3793331 100644
+--- a/include/grpcpp/impl/call_op_set.h
++++ b/include/grpcpp/impl/call_op_set.h
+@@ -804,8 +804,8 @@ class CallOpClientRecvStatus {
+           Status(static_cast<StatusCode>(status_code_),
+                  GRPC_SLICE_IS_EMPTY(error_message_)
+                      ? TString()
+-                     : TString(GRPC_SLICE_START_PTR(error_message_),
+-                                   GRPC_SLICE_END_PTR(error_message_)),
++                     : TString(reinterpret_cast<const char*>GRPC_SLICE_START_PTR(error_message_),
++                                   reinterpret_cast<const char*>GRPC_SLICE_END_PTR(error_message_)),
+                  metadata_map_->GetBinaryErrorDetails());
+       if (debug_error_string_ != nullptr) {
+         client_context_->set_debug_error_string(debug_error_string_);
+diff --git a/include/grpcpp/impl/codegen/config.h b/include/grpcpp/impl/codegen/config.h
+index c32be67..87f9914 100644
+--- a/include/grpcpp/support/config.h
++++ b/include/grpcpp/support/config.h
+@@ -37,8 +37,7 @@
+ // Using grpc::string and grpc::to_string is discouraged in favor of
+ // TString and ::ToString. This is only for legacy code using
+ // them explictly.
+-using TString;     // deprecated // NOLINT(misc-unused-using-decls)
+-using ::ToString;  // deprecated // NOLINT(misc-unused-using-decls)
++typedef TString string;
+ 
+ }  // namespace grpc
+ 
+diff --git a/include/grpcpp/impl/codegen/string_ref.h b/include/grpcpp/impl/codegen/string_ref.h
+index 26b4f37..c5dcd31 100644
+--- a/include/grpcpp/support/string_ref.h
++++ b/include/grpcpp/support/string_ref.h
+@@ -28,6 +28,8 @@
+ 
+ #include <grpcpp/support/config.h>
+ 
++#include <util/stream/output.h>
++
+ namespace grpc {
+ 
+ /// This class is a non owning reference to a string.
+@@ -137,8 +139,9 @@ inline bool operator<=(string_ref x, string_ref y) { return x.compare(y) <= 0; }
+ inline bool operator>(string_ref x, string_ref y) { return x.compare(y) > 0; }
+ inline bool operator>=(string_ref x, string_ref y) { return x.compare(y) >= 0; }
+ 
+-inline std::ostream& operator<<(std::ostream& out, const string_ref& string) {
+-  return out << TString(string.begin(), string.end());
++inline IOutputStream& operator<<(IOutputStream& out, const string_ref& string) {
++  TString t(string.begin(), string.end());
++  return out << t;
+ }
+ 
+ }  // namespace grpc
+diff --git a/src/compiler/config.h b/src/compiler/config.h
+index 52e660c..95213b0 100644
+--- a/src/compiler/config.h
++++ b/src/compiler/config.h
+@@ -33,8 +33,7 @@
+ // Using grpc::string and grpc::to_string is discouraged in favor of
+ // TString and ::ToString. This is only for legacy code using
+ // them explictly.
+-using TString;     // deprecated
+-using ::ToString;  // deprecated
++typedef TString string;
+ 
+ namespace protobuf {
+ 
+diff --git a/src/compiler/cpp_generator.h b/src/compiler/cpp_generator.h
+index 772fd0a..606b850 100644
+--- a/src/compiler/cpp_generator.h
++++ b/src/compiler/cpp_generator.h
+@@ -39,8 +39,7 @@ namespace grpc {
+ // Using grpc::string and grpc::to_string is discouraged in favor of
+ // TString and ::ToString. This is only for legacy code using
+ // them explictly.
+-using TString;     // deprecated
+-using ::ToString;  // deprecated
++typedef TString string;     // deprecated
+ 
+ }  // namespace grpc
+ 
+diff --git a/src/compiler/generator_helpers.h b/src/compiler/generator_helpers.h
+index 4bfbb4e..265713a 100644
+--- a/src/compiler/generator_helpers.h
++++ b/src/compiler/generator_helpers.h
+@@ -26,6 +26,9 @@
+ #include <util/string/cast.h>
+ #include <vector>
+ 
++#include <util/string/split.h>
++#include <util/stream/str.h>
++
+ #include "src/compiler/config.h"
+ #include "src/compiler/proto_parser_helper.h"
+ 
+@@ -166,15 +170,26 @@ inline MethodType GetMethodType(
+   }
+ }
+ 
+-inline void Split(const TString& s, char /*delim*/,
+-                  std::vector<TString>* append_to) {
++template <typename TStringType>
++inline void Split(const TStringType& s, char /*delim*/,
++                  std::vector<TStringType>* append_to) {
+   std::istringstream iss(s);
+-  TString piece;
++  TStringType piece;
+   while (std::getline(iss, piece)) {
+     append_to->push_back(piece);
+   }
+ }
+ 
++template <>
++inline void Split(const TString &s, char delim,
++                  std::vector<TString> *append_to) {
++  TVector<TString> parts;
++  Split(s, TString(1, delim), parts);
++  for (auto& p : parts) {
++    append_to->push_back(std::move(p));
++  }
++}
++
+ enum CommentType {
+   COMMENTTYPE_LEADING,
+   COMMENTTYPE_TRAILING,
+diff --git a/src/compiler/schema_interface.h b/src/compiler/schema_interface.h
+index 3d624a9..60b9d33 100644
+--- a/src/compiler/schema_interface.h
++++ b/src/compiler/schema_interface.h
+@@ -34,8 +34,7 @@ namespace grpc {
+ // Using grpc::string and grpc::to_string is discouraged in favor of
+ // TString and ::ToString. This is only for legacy code using
+ // them explictly.
+-using TString;     // deprecated
+-using ::ToString;  // deprecated
++typedef TString string;     // deprecated
+ 
+ }  // namespace grpc
+ 
+diff --git a/src/core/ext/xds/xds_routing.cc b/src/core/ext/xds/xds_routing.cc
+index f5e9659..b0f5cee 100644
+--- a/src/core/ext/xds/xds_routing.cc
++++ b/src/core/ext/xds/xds_routing.cc
+@@ -39,10 +39,10 @@ bool DomainMatch(MatchType match_type, y_absl::string_view domain_pattern_in,
+   // Normalize the args to lower-case. Domain matching is case-insensitive.
+   TString domain_pattern = TString(domain_pattern_in);
+   TString expected_host_name = TString(expected_host_name_in);
+-  std::transform(domain_pattern.begin(), domain_pattern.end(),
++  std::transform(domain_pattern.cbegin(), domain_pattern.cend(),
+                  domain_pattern.begin(),
+                  [](unsigned char c) { return std::tolower(c); });
+-  std::transform(expected_host_name.begin(), expected_host_name.end(),
++  std::transform(expected_host_name.cbegin(), expected_host_name.cend(),
+                  expected_host_name.begin(),
+                  [](unsigned char c) { return std::tolower(c); });
+   if (match_type == EXACT_MATCH) {
+--- a/src/core/lib/gprpp/status_helper.cc
++++ b/src/core/lib/gprpp/status_helper.cc
+@@ -43,6 +43,8 @@
+ #include "src/core/lib/slice/percent_encoding.h"
+ #include "src/core/lib/slice/slice.h"
+ 
++#include <util/string/cast.h>
++
+ namespace grpc_core {
+ 
+ namespace {
+--- a/src/core/lib/security/credentials/external/aws_request_signer.cc
++++ b/src/core/lib/security/credentials/external/aws_request_signer.cc
+@@ -57,7 +57,7 @@ TString HMAC(const TString& key, const TString& msg) {
+   HMAC(EVP_sha256(), key.c_str(), key.length(),
+        reinterpret_cast<const unsigned char*>(msg.c_str()), msg.length(),
+        digest, &len);
+-  return TString(digest, digest + len);
++  return TString(reinterpret_cast<const char*>(digest), reinterpret_cast<const char*>(digest + len));
+ }
+
+ }  // namespace
+diff --git a/src/cpp/server/server_cc.cc b/src/cpp/server/server_cc.cc
+index 7576121..c2a911c 100644
+--- a/src/cpp/server/server_cc.cc
++++ b/src/cpp/server/server_cc.cc
+@@ -53,6 +53,8 @@
+ #include "src/cpp/server/health/default_health_check_service.h"
+ #include "src/cpp/thread_manager/thread_manager.h"
+ 
++#include <util/stream/str.h>
++
+ namespace grpc {
+ namespace {
+ 
+@@ -1053,10 +1055,10 @@ bool Server::RegisterService(const TString* host, grpc::Service* service) {
+   // Parse service name.
+   if (method_name != nullptr) {
+     std::stringstream ss(method_name);
+-    TString service_name;
++    std::string service_name;
+     if (std::getline(ss, service_name, '/') &&
+         std::getline(ss, service_name, '/')) {
+-      services_.push_back(service_name);
++      services_.push_back(service_name.c_str());
+     }
+   }
+   return true;

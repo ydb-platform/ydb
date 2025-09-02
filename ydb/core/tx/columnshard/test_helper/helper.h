@@ -51,6 +51,9 @@ private:
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(NScheme::TTypeInfo, Type);
     YDB_ACCESSOR_DEF(TString, StorageId);
+    YDB_ACCESSOR_DEF(TString, AccessorClassName);
+    YDB_ACCESSOR(bool, Nullable, true);
+
 public:
     explicit TTestColumn(const TString& name, const NScheme::TTypeInfo& type)
         : Name(name)
@@ -63,13 +66,14 @@ public:
     static THashMap<TString, NScheme::TTypeInfo> ConvertToHash(const std::vector<TTestColumn>& columns);
     static std::vector<TTestColumn> BuildFromPairs(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
     static std::vector<TTestColumn> CropSchema(const std::vector<TTestColumn>& input, const ui32 size);
+    static std::set<std::string> GetNullableSet(const std::vector<TTestColumn>& columns);
 };
 
 }
 
 namespace NKikimr::NArrow {
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns = {});
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns = {});
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns);
 
 }

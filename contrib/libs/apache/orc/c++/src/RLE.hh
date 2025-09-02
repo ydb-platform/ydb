@@ -25,9 +25,8 @@
 #include <memory>
 
 namespace orc {
-
   inline int64_t zigZag(int64_t value) {
-    return (value << 1) ^ (value >> 63);
+    return ((static_cast<uint64_t>(value) << 1) ^ (value >> 63));
   }
 
   inline int64_t unZigZag(uint64_t value) {
@@ -84,6 +83,13 @@ namespace orc {
 
     virtual void write(int64_t val) = 0;
 
+    /**
+     * Finalize the encoding process. This function should be called after all data required for
+     * encoding has been added. It ensures that any remaining data is processed and the final state
+     * of the encoder is set.
+     */
+    virtual void finishEncode();
+
    protected:
     std::unique_ptr<BufferedOutputStream> outputStream;
     size_t bufferPosition;
@@ -105,7 +111,7 @@ namespace orc {
     // must be non-inline!
     virtual ~RleDecoder();
 
-    RleDecoder(ReaderMetrics* _metrics) : metrics(_metrics) {
+    RleDecoder(ReaderMetrics* metrics) : metrics(metrics) {
       // pass
     }
 

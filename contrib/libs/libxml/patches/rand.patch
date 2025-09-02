@@ -1,0 +1,52 @@
+commit 9d4379ac1a951a46959c7c02fdca2df237ef475e
+author: eninng
+date: 2022-05-12T17:48:42+03:00
+
+    [libxml] Use thread_local rand_seed when rand_r is avaliable
+    
+    Task: SK-6086
+
+--- a/dict.c	(f4373e5855353e6a2cbee8bda5d59c20f67e14c7)
++++ b/dict.c	(9d4379ac1a951a46959c7c02fdca2df237ef475e)
+@@ -142,9 +142,9 @@ static int xmlDictInitialized = 0;
+ #ifdef DICT_RANDOMIZATION
+ #ifdef HAVE_RAND_R
+ /*
+- * Internal data for random function, protected by xmlDictMutex
++ * Internal data for random function
+  */
+-static unsigned int rand_seed = 0;
++static _Thread_local unsigned int rand_seed = 0;
+ #endif
+ #endif
+ 
+@@ -182,10 +182,7 @@ int __xmlInitializeDict(void) {
+     xmlRMutexLock(xmlDictMutex);
+ 
+ #ifdef DICT_RANDOMIZATION
+-#ifdef HAVE_RAND_R
+-    rand_seed = time(NULL);
+-    rand_r(& rand_seed);
+-#else
++#ifndef HAVE_RAND_R
+     srand(time(NULL));
+ #endif
+ #endif
+@@ -201,13 +198,15 @@ int __xmlRandom(void) {
+     if (xmlDictInitialized == 0)
+         __xmlInitializeDict();
+ 
+-    xmlRMutexLock(xmlDictMutex);
+ #ifdef HAVE_RAND_R
++    if (rand_seed == 0)
++        rand_seed = time(NULL);
+     ret = rand_r(& rand_seed);
+ #else
++    xmlRMutexLock(xmlDictMutex);
+     ret = rand();
+-#endif
+     xmlRMutexUnlock(xmlDictMutex);
++#endif
+     return(ret);
+ }
+ #endif

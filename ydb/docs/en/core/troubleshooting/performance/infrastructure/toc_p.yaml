@@ -1,0 +1,9 @@
+items:
+    - name: Network issues
+      href: network.md
+    - name: Data center outages
+      href: dc-outage.md
+    - name: Data center maintenance and drills
+      href: dc-drills.md
+    - name: Hardware issues
+      href: hardware.md

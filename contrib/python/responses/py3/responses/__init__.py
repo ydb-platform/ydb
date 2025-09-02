@@ -246,11 +246,11 @@ class CallList(Sequence[Any], Sized):
 
     @overload
     def __getitem__(self, idx: int) -> Call:
-        ...
+        """Overload for scenario when index is provided."""
 
     @overload
-    def __getitem__(self, idx: slice) -> List[Call]:
-        ...
+    def __getitem__(self, idx: "slice[int, int, Optional[int]]") -> List[Call]:
+        """Overload for scenario when slice is provided."""
 
     def __getitem__(self, idx: Union[int, slice]) -> Union[Call, List[Call]]:
         return self._calls[idx]
@@ -714,6 +714,11 @@ class RequestsMock:
     POST: Literal["POST"] = "POST"
     PUT: Literal["PUT"] = "PUT"
 
+    Response: Type[Response] = Response
+
+    # Make the `matchers` name available under a RequestsMock instance
+    from responses import matchers
+
     response_callback: Optional[Callable[[Any], Any]] = None
 
     def __init__(
@@ -962,8 +967,8 @@ class RequestsMock:
         match_querystring: Union[bool, FalseBool] = FalseBool(),
         content_type: Optional[str] = "text/plain",
         match: "_MatcherIterable" = (),
-    ) -> None:
-        self._registry.add(
+    ) -> BaseResponse:
+        return self._registry.add(
             CallbackResponse(
                 url=url,
                 method=method,
@@ -985,20 +990,19 @@ class RequestsMock:
         self.start()
         return self
 
-    def __exit__(self, type: Any, value: Any, traceback: Any) -> bool:
+    def __exit__(self, type: Any, value: Any, traceback: Any) -> None:
         success = type is None
         try:
             self.stop(allow_assert=success)
         finally:
             self.reset()
-        return success
 
     @overload
     def activate(self, func: "_F" = ...) -> "_F":
         """Overload for scenario when 'responses.activate' is used."""
 
     @overload
-    def activate(  # type: ignore[misc]
+    def activate(
         self,
         *,
         registry: Type[Any] = ...,
@@ -1054,6 +1058,22 @@ class RequestsMock:
             params[key] = values
         return params
 
+    def _read_filelike_body(
+        self, body: Union[str, bytes, BufferedReader, None]
+    ) -> Union[str, bytes, None]:
+        # Requests/urllib support multiple types of body, including file-like objects.
+        # Read from the file if it's a file-like object to avoid storing a closed file
+        # in the call list and allow the user to compare against the data that was in the
+        # request.
+        # See GH #719
+        if isinstance(body, str) or isinstance(body, bytes) or body is None:
+            return body
+        # Based on
+        # https://github.com/urllib3/urllib3/blob/abbfbcb1dd274fc54b4f0a7785fd04d59b634195/src/urllib3/util/request.py#L220
+        if hasattr(body, "read") or isinstance(body, BufferedReader):
+            return body.read()
+        return body
+
     def _on_request(
         self,
         adapter: "HTTPAdapter",
@@ -1067,6 +1087,7 @@ class RequestsMock:
         request.params = self._parse_request_params(request.path_url)  # type: ignore[attr-defined]
         request.req_kwargs = kwargs  # type: ignore[attr-defined]
         request_url = str(request.url)
+        request.body = self._read_filelike_body(request.body)
 
         match, match_failed_reasons = self._find_match(request)
         resp_callback = self.response_callback

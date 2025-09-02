@@ -54,4 +54,3 @@ Result:
 ```text
 seasons-v1
 ```
-

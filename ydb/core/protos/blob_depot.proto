@@ -25,10 +25,17 @@ message TBlobLocator {
     optional uint32 FooterLen = 5;
 }
 
+message TS3Locator {
+    optional uint32 Len = 1; // length of contained data
+    optional uint32 Generation = 2; // generation of tablet issued this object into S3
+    optional uint64 KeyId = 3; // key id unique within the generation
+}
+
 message TValueChain {
-    optional TBlobLocator Locator = 1;
+    optional TBlobLocator BlobLocator = 1;
     optional uint64 SubrangeBegin = 2;
     optional uint64 SubrangeEnd = 3;
+    optional TS3Locator S3Locator = 4; // if filled, then this blob is stored in S3
 }
 
 message TValue {
@@ -54,6 +61,7 @@ message TResolvedValueChain {
     optional NKikimrProto.TLogoBlobID BlobId = 2;
     optional uint32 SubrangeBegin = 3;
     optional uint32 SubrangeEnd = 4;
+    optional TS3Locator S3Locator = 5;
 }
 
 
@@ -87,6 +95,8 @@ message TEvRegisterAgentResult {
     optional uint32 DecommitGroupId = 3;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 4;
     optional float ApproximateFreeSpaceShare = 5;
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 6;
+    optional string Name = 7;
 }
 
 message TEvAllocateIds {
@@ -153,6 +163,7 @@ message TEvCollectGarbage {
     optional bool Hard = 7;
     optional uint32 CollectGeneration = 8;
     optional uint64 CollectStep = 9;
+    optional bool IgnoreBlock = 10;
 }
 
 message TEvCollectGarbageResult {
@@ -161,12 +172,21 @@ message TEvCollectGarbageResult {
 }
 
 message TEvCommitBlobSeq {
+    message TExtraBlockCheck {
+        optional uint64 TabletId = 1;
+        optional uint32 Generation = 2;
+    }
+
     message TItem {
         optional TBlobLocator BlobLocator = 1; // GroupId and Generation are for validation purposes
         optional bytes Key = 2;
         optional bytes Meta = 3;
         optional bool UncertainWrite = 4;
         optional bool CommitNotify = 5;
+        optional TS3Locator S3Locator = 6; // if blob has been written to S3
+        repeated TExtraBlockCheck ExtraBlockChecks = 7;
+        optional bool IssueKeepFlag = 8;
+        optional bool IgnoreBlock = 9;
     }
 
     repeated TItem Items = 1;
@@ -183,6 +203,7 @@ message TEvCommitBlobSeqResult {
 
 message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
+    repeated TS3Locator S3Locators = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -232,4 +253,29 @@ message TEvResolveResult {
 message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
+}
+
+message TEvPrepareWriteS3 {
+    message TExtraBlockCheck {
+        optional uint64 TabletId = 1;
+        optional uint32 Generation = 2;
+    }
+
+    message TItem {
+        optional bytes Key = 1; // the key user is going to write
+        repeated TExtraBlockCheck ExtraBlockChecks = 2;
+        optional uint32 Len = 3; // length of the value
+    }
+
+    repeated TItem Items = 1;
+}
+
+message TEvPrepareWriteS3Result {
+    message TItem {
+        optional NKikimrProto.EReplyStatus Status = 1;
+        optional string ErrorReason = 2;
+        optional TS3Locator S3Locator = 3;
+    }
+
+    repeated TItem Items = 1;
 }

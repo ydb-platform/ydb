@@ -33,6 +33,7 @@
 `--dry-run` | Не восстанавливать таблицы. Проверить, что:<br/><ul><li>— все таблицы дампа имеются в базе данных;</li><li>— схемы всех таблиц дампа соответствую схемам таблиц БД.
   --restore-data VAL       Whether to restore data or not (default: 1)
   --restore-indexes VAL    Whether to restore indexes or not (default: 1)
+  --restore-acl VAL        Whether to restore ACL and owner or not (default: 1)
   --skip-document-tables VAL
                            Document API tables cannot be restored for now. Specify this option to skip such tables
                            (default: 0)
@@ -85,5 +86,8 @@ sub-directory1-1
 data_00.csv  scheme.pb
 
 /home/user/dump/series:
-data_00.csv  scheme.pb
+data_00.csv  scheme.pb  update_feed
+
+/home/user/dump/series/update_feed:
+changefeed_description.pb  topic_description.pb
 ```

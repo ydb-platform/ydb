@@ -5,7 +5,7 @@ from random import choice
 from string import ascii_lowercase, digits
 
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
@@ -67,8 +67,8 @@ class Factory:
         test_case = TestCase(
             name_=test_case_name,
             data_in=[[1, 2], [10, 20]],
-            data_source_kind=EDataSourceKind.POSTGRESQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.POSTGRESQL,
+            protocol=EGenericProtocol.NATIVE,
             select_what=select_what,
             schema=schema,
             data_out_=[[1, 2], [10, 20]],

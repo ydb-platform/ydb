@@ -1,14 +1,20 @@
-RECURSE_FOR_TESTS(
+RECURSE(
     common
-    control_plane_storage
     generic
+    pq_async_io
+    solomon
+    streaming_optimize
+    tools
+    yt
+)
+
+RECURSE_FOR_TESTS(
+    control_plane_storage
     http_api
     mem_alloc
     multi_plane
     plans
-    pq_async_io
     restarts
     s3
     yds
-    yt
 )

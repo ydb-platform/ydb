@@ -4,11 +4,12 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/providers/common/structured_token
+    yql/essentials/minikql/computation
+    yql/essentials/providers/common/structured_token
     ydb/library/yql/providers/ydb/proto
     ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 SRCS(

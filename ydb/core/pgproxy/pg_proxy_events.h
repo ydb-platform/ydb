@@ -36,7 +36,7 @@ struct TEvPGEvents {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PGWIRE), "ES_PGWIRE event space is too small.");
 
     struct TRowDescriptionField {
-        TString Name;
+        std::string Name;
         uint32_t TableId = 0;
         uint16_t ColumnId = 0;
         uint32_t DataType;

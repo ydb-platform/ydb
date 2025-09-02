@@ -10,8 +10,13 @@ namespace NTable {
     struct TLead {
         void To(TTagsRef tags, TArrayRef<const TCell> key, ESeek seek)
         {
+            To(key, seek);
+            SetTags(tags);
+        }
+
+        void To(TArrayRef<const TCell> key, ESeek seek)
+        {
             Valid = true;
-            Tags.assign(tags.begin(), tags.end());
             Relation = seek;
             Key = TSerializedCellVec(key);
             StopKey = { };
@@ -19,9 +24,13 @@ namespace NTable {
 
         void Until(TArrayRef<const TCell> key, bool inclusive)
         {
-            Y_ABORT_UNLESS(Valid, "Until must be called after To");
+            Y_ENSURE(Valid, "Until must be called after To");
             StopKey = TSerializedCellVec(key);
             StopKeyInclusive = inclusive;
+        }
+
+        void SetTags(TTagsRef tags) {
+            Tags.assign(tags.begin(), tags.end());
         }
 
         explicit operator bool() const noexcept
@@ -34,12 +43,12 @@ namespace NTable {
             Valid = false;
         }
 
-        bool Valid = false;
         ESeek Relation = ESeek::Exact;
+        bool Valid = false;
+        bool StopKeyInclusive = true;
         TVector<ui32> Tags;
         TSerializedCellVec Key;
         TSerializedCellVec StopKey;
-        bool StopKeyInclusive = true;
     };
 
 }

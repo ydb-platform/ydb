@@ -37,6 +37,8 @@ namespace NKikimr::NBsController {
         P(GroupId, ui32)
         P(StoragePoolName, TString)
         P(DiskSerialNumber, TString)
+        P(GroupGenerationProvided, ui32)
+        P(GroupGenerationExpected, ui32)
 
         struct TVDiskIdTraits {
             using Type = TVDiskID;
@@ -105,6 +107,11 @@ namespace NKikimr::NBsController {
                 << TErrorParams::IcPort(std::get<1>(hostKey));
         }
 
+        TExHostNotFound(ui32 nodeId) {
+            *this << "Host not found"
+                << TErrorParams::NodeId(nodeId);
+        }
+
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kHostNotFound;
         }
@@ -124,6 +131,12 @@ namespace NKikimr::NBsController {
             *this << "PDisk not found"
                 << TErrorParams::NodeId(nodeId)
                 << TErrorParams::PDiskId(pdiskId);
+        }
+
+        TExPDiskNotFound(const TString& fqdn, TString path) {
+            *this << "PDisk not found"
+                << TErrorParams::Fqdn(fqdn)
+                << TErrorParams::Path(path);
         }
 
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
@@ -221,6 +234,25 @@ namespace NKikimr::NBsController {
     struct TExAlready : TExError {
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kAlready;
+        }
+    };
+
+    struct TExReassignNotViable : TExError {
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable;
+        }
+    };
+
+    struct TExGroupGenerationMismatch : TExError {
+        TExGroupGenerationMismatch(ui32 groupId, ui32 provided, ui32 expected) {
+            *this << "Group generation mismatch"
+                << TErrorParams::GroupId(groupId)
+                << TErrorParams::GroupGenerationProvided(provided)
+                << TErrorParams::GroupGenerationExpected(expected);
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kGroupGenerationMismatch;
         }
     };
 

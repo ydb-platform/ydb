@@ -1,4 +1,5 @@
 //  (C) Copyright John Maddock 2006.
+//  (C) Copyright Matt Borland 2024.
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,7 +11,11 @@
 #pragma once
 #endif
 
+#include <boost/math/tools/config.hpp>
 #include <boost/math/tools/big_constant.hpp>
+#include <boost/math/tools/type_traits.hpp>
+#include <boost/math/tools/precision.hpp>
+#include <boost/math/special_functions/lanczos.hpp>
 
 #if defined(__GNUC__) && defined(BOOST_MATH_USE_FLOAT128)
 //
@@ -28,15 +33,15 @@ namespace boost{ namespace math{ namespace detail{
 // These need forward declaring to keep GCC happy:
 //
 template <class T, class Policy, class Lanczos>
-T gamma_imp(T z, const Policy& pol, const Lanczos& l);
+BOOST_MATH_GPU_ENABLED T gamma_imp(T z, const Policy& pol, const Lanczos& l);
 template <class T, class Policy>
-T gamma_imp(T z, const Policy& pol, const lanczos::undefined_lanczos& l);
+BOOST_MATH_GPU_ENABLED T gamma_imp(T z, const Policy& pol, const lanczos::undefined_lanczos& l);
 
 //
 // lgamma for small arguments:
 //
 template <class T, class Policy, class Lanczos>
-T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, const Policy& /* l */, const Lanczos&)
+BOOST_MATH_GPU_ENABLED T lgamma_small_imp(T z, T zm1, T zm2, const boost::math::integral_constant<int, 64>&, const Policy& /* l */, const Lanczos&)
 {
    // This version uses rational approximations for small
    // values of z accurate enough for 64-bit mantissas
@@ -45,11 +50,17 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
 
    BOOST_MATH_STD_USING  // for ADL of std names
    T result = 0;
+
+   BOOST_MATH_ASSERT(z >= tools::root_epsilon<T>());
+   /*
+   * Can not be reached:
+   * 
    if(z < tools::epsilon<T>())
    {
       result = -log(z);
    }
-   else if((zm1 == 0) || (zm2 == 0))
+   */
+   if((zm1 == 0) || (zm2 == 0))
    {
       // nothing to do, result is zero....
    }
@@ -87,7 +98,8 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
       // At long double: Max error found:               1.987e-21
       // Maximum Deviation Found (approximation error): 5.900e-24
       //
-      static const T P[] = {
+      // LCOV_EXCL_START
+      BOOST_MATH_STATIC const T P[] = {
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.180355685678449379109e-1)),
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.25126649619989678683e-1)),
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.494103151567532234274e-1)),
@@ -96,7 +108,7 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.541009869215204396339e-3)),
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.324588649825948492091e-4))
       };
-      static const T Q[] = {
+      BOOST_MATH_STATIC const T Q[] = {
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.1e1)),
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.196202987197795200688e1)),
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.148019669424231326694e1)),
@@ -107,7 +119,8 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
          static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.223352763208617092964e-6))
       };
 
-      static const float Y = 0.158963680267333984375e0f;
+      // LCOV_EXCL_STOP
+      constexpr float Y = 0.158963680267333984375e0f;
 
       T r = zm2 * (z + 1);
       T R = tools::evaluate_polynomial(P, zm2);
@@ -151,10 +164,10 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
          // Maximum Deviation Found:                             3.139e-021
          // Expected Error Term:                                 3.139e-021
 
-         //
-         static const float Y = 0.52815341949462890625f;
+         // LCOV_EXCL_START
+         constexpr float Y = 0.52815341949462890625f;
 
-         static const T P[] = {
+         BOOST_MATH_STATIC const T P[] = {
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.490622454069039543534e-1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.969117530159521214579e-1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.414983358359495381969e0)),
@@ -163,7 +176,7 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.240149820648571559892e-1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.100346687696279557415e-2))
          };
-         static const T Q[] = {
+         BOOST_MATH_STATIC const T Q[] = {
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.1e1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.302349829846463038743e1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.348739585360723852576e1)),
@@ -172,6 +185,7 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.577039722690451849648e-1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.195768102601107189171e-2))
          };
+         // LCOV_EXCL_STOP
 
          T r = tools::evaluate_polynomial(P, zm1) / tools::evaluate_polynomial(Q, zm1);
          T prefix = zm1 * zm2;
@@ -197,9 +211,10 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
          // Maximum Deviation Found:                           2.151e-021
          // Expected Error Term:                               2.150e-021
          //
-         static const float Y = 0.452017307281494140625f;
+         // LCOV_EXCL_START
+         constexpr float Y = 0.452017307281494140625f;
 
-         static const T P[] = {
+         BOOST_MATH_STATIC const T P[] = {
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.292329721830270012337e-1)), 
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.144216267757192309184e0)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.142440390738631274135e0)),
@@ -207,7 +222,7 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.850535976868336437746e-2)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.431171342679297331241e-3))
          };
-         static const T Q[] = {
+         BOOST_MATH_STATIC const T Q[] = {
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.1e1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.150169356054485044494e1)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, 0.846973248876495016101e0)),
@@ -216,6 +231,8 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.100666795539143372762e-2)),
             static_cast<T>(BOOST_MATH_BIG_CONSTANT(T, 64, -0.827193521891290553639e-6))
          };
+         // LCOV_EXCL_STOP
+
          T r = zm2 * zm1;
          T R = tools::evaluate_polynomial(P, T(-zm2)) / tools::evaluate_polynomial(Q, T(-zm2));
 
@@ -224,8 +241,15 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 64>&, co
    }
    return result;
 }
+
+#ifndef BOOST_MATH_HAS_GPU_SUPPORT
+
+//
+// 128-bit floats aren't directly tested in our coverage tests (takes too long)
+// LCOV_EXCL_START
+//
 template <class T, class Policy, class Lanczos>
-T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 113>&, const Policy& /* l */, const Lanczos&)
+T lgamma_small_imp(T z, T zm1, T zm2, const boost::math::integral_constant<int, 113>&, const Policy& /* l */, const Lanczos&)
 {
    //
    // This version uses rational approximations for small
@@ -234,12 +258,16 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 113>&, c
    //
    BOOST_MATH_STD_USING  // for ADL of std names
    T result = 0;
+   BOOST_MATH_ASSERT(z >= tools::root_epsilon<T>());
+   /*
+   *  Can not be reached:
    if(z < tools::epsilon<T>())
    {
       result = -log(z);
       BOOST_MATH_INSTRUMENT_CODE(result);
    }
-   else if((zm1 == 0) || (zm2 == 0))
+   */
+   if((zm1 == 0) || (zm2 == 0))
    {
       // nothing to do, result is zero....
    }
@@ -481,8 +509,10 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 113>&, c
    BOOST_MATH_INSTRUMENT_CODE(result);
    return result;
 }
+// LCOV_EXCL_STOP
+
 template <class T, class Policy, class Lanczos>
-T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 0>&, const Policy& pol, const Lanczos& l)
+BOOST_MATH_GPU_ENABLED T lgamma_small_imp(T z, T zm1, T zm2, const boost::math::integral_constant<int, 0>&, const Policy& pol, const Lanczos& l)
 {
    //
    // No rational approximations are available because either
@@ -493,11 +523,16 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 0>&, con
    //
    BOOST_MATH_STD_USING  // for ADL of std names
    T result = 0;
+
+   BOOST_MATH_ASSERT(z >= tools::root_epsilon<T>());
+   /*
+   * Not reachable:
    if(z < tools::epsilon<T>())
    {
       result = -log(z);
    }
-   else if(z < 0.5)
+   */
+   if(z < 0.5)
    {
       // taking the log of tgamma reduces the error, no danger of overflow here:
       result = log(gamma_imp(z, pol, Lanczos()));
@@ -525,6 +560,8 @@ T lgamma_small_imp(T z, T zm1, T zm2, const std::integral_constant<int, 0>&, con
    }
    return result;
 }
+
+#endif // BOOST_MATH_HAS_GPU_SUPPORT
 
 }}} // namespaces
 

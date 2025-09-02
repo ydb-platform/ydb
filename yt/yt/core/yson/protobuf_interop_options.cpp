@@ -11,6 +11,19 @@ TProtobufWriterOptions::TUnknownYsonFieldModeResolver TProtobufWriterOptions::Cr
     };
 }
 
+TProtobufWriterOptions TProtobufWriterOptions::CreateChildOptions(
+    const NYPath::TYPath& path) const
+{
+    auto options = *this;
+    options.UnknownYsonFieldModeResolver = [path, parentResolver = UnknownYsonFieldModeResolver] (
+        const NYPath::TYPath& subpath)
+    {
+        return parentResolver(path + subpath);
+    };
+
+    return options;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson

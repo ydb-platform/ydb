@@ -1,0 +1,19 @@
+items:
+- name: Обзор конфигурации
+  href: config-overview.md
+- name: Обновление конфигурации
+  href: update-config.md
+- name: DSL конфигурации кластера
+  href: dynamic-config-selectors.md
+- name: Параметры конфигурации
+  href: config-settings.md
+- name: Расширение кластера
+  href: cluster-expansion.md
+- name: Перемещение State Storage
+  href: state-storage-move.md
+- name: Перемещение статической группы
+  href: static-group-move.md
+- name: Замена FQDN узла
+  href: replacing-nodes.md
+- name: Аутентификация и авторизация узлов баз данных
+  href: node-authorization.md

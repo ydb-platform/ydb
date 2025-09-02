@@ -1,0 +1,92 @@
+{%- if current_target.runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
+{%-     for run in current_target.runs %}
+
+val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
+    group = "build"
+    description = "Code generation by run java program"
+
+{#- Ignore default CWD to export_root -#}
+{%-        if run.cwd and run.cwd != export_root %}
+    workingDir = file({{ PatchRoots(run.cwd) }})
+{%-        else %}
+    workingDir = file("$buildDir")
+{%-        endif -%}
+
+{%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
+{%-        if classpaths|length -%}
+{%             for classpath in classpaths -%}
+{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '')|replace(output_root, '') %}
+
+    val classpaths = "$output_root/" + File("$output_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$output_root/")
+    classpath = files(classpaths.split(":"))
+{%-            endfor -%}
+{%-        endif %}
+
+    mainClass.set("{{ run.args[0] }}")
+{%-        if run.args|length > 1 %}
+
+    args = listOf(
+{%-            for arg in run.args -%}
+{%-                if not loop.first %}
+{%-                    if (run.out_dir|select("eq", arg)|length) or (run.out_dir[0] == '/' and run.out_dir|select("in", arg)|length) or (run.out|select("eq", arg)|length) or (run.out[0] == '/' and run.out|select("in", arg)|length) -%}
+{%-                        if proto_template %}
+        {{ PatchGeneratedProto(arg) }},
+{%-                        else %}
+        {{ PatchRoots(arg, false, true) }},
+{%-                        endif %}
+{%-                    elif run.tool|select("in", arg)|length %}
+        {{ PatchRoots(arg, true) }},
+{%-                    else %}
+        {{ PatchRoots(arg) }},
+{%-                    endif -%}
+{%-                endif -%}
+{%-            endfor %}
+    )
+{%         endif -%}
+
+{%-        if run.in_dir|length -%}
+{%-            for in_dir in run.in_dir|unique %}
+    inputs.files(fileTree({{ PatchRoots(in_dir) }}))
+{%             endfor -%}
+{%-        endif -%}
+
+{%-        if run.in|length -%}
+{%-            for in_file in run.in|unique %}
+    inputs.files({{ PatchRoots(in_file) }})
+{%             endfor -%}
+{%-        endif -%}
+
+{%-        if run.in_noparse|length -%}
+{%-            for in_file in run.in_noparse|unique %}
+    inputs.files({{ PatchRoots(in_file) }})
+{%             endfor -%}
+{%-        endif -%}
+
+{%-        if run.out_dir|length -%}
+{%-            for out_dir in run.out_dir|unique %}
+{%-                if proto_template %}
+    outputs.files({{ PatchGeneratedProto(out_dir) }})
+{%-                else %}
+    outputs.dir({{ PatchRoots(out_dir, false, true) }})
+{%-                endif -%}
+{%-            endfor -%}
+{%-        endif -%}
+
+{%-        if run.out|length -%}
+{%-            for out in run.out|unique %}
+{%-                if proto_template %}
+    outputs.files({{ PatchGeneratedProto(out) }})
+{%-                else %}
+    outputs.files({{ PatchRoots(out, false, true) }})
+{%-                endif -%}
+{%-            endfor -%}
+{%-        endif -%}
+
+{#-
+    Не использованы атрибуты
+    run-tool="list"
+#}
+}
+{%-     endfor -%}
+{%- endif -%}

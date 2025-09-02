@@ -2,11 +2,11 @@
 
 #include "dqs_task_graph.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
 #include <util/generic/vector.h>
@@ -104,7 +104,8 @@ namespace NYql::NDqs {
             const TString& program,
             NActors::TActorId executerID,
             NActors::TActorId resultID,
-            const TTypeAnnotationNode* typeAnn);
+            const TTypeAnnotationNode* typeAnn,
+            TLangVersion langver);
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
@@ -119,6 +120,7 @@ namespace NYql::NDqs {
         TMaybe<NActors::TActorId> SourceID = {};
         TVector<NDqProto::TDqTask> Tasks;
         const TTypeAnnotationNode* TypeAnn;
+        const TLangVersion LangVer;
     };
 
     // Execution planner for Graph

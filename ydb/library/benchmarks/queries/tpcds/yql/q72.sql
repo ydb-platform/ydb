@@ -22,8 +22,8 @@ left join {{catalog_returns}} as catalog_returns on (catalog_returns.cr_item_sk 
 where d1.d_week_seq = d2.d_week_seq
   and inv_quantity_on_hand < cs_quantity
   and cast(d3.d_date as date) > cast(d1.d_date as date) + DateTime::IntervalFromDays(5)
-  and hd_buy_potential = '1001-5000'
-  and d1.d_year = 2000
+  and hd_buy_potential = '>10000'
+  and d1.d_year = 1999
   and cd_marital_status = 'D'
 group by item.i_item_desc,warehouse.w_warehouse_name,d1.d_week_seq
 order by total_cnt desc, item.i_item_desc, warehouse.w_warehouse_name, d1.d_week_seq

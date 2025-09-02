@@ -9,6 +9,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
+#include <ydb/library/services/services.pb.h>
+
 namespace NKikimr {
 namespace NGRpcProxy {
 
@@ -45,7 +47,19 @@ public:
 
 class TClustersUpdater : public NActors::TActorBootstrapped<TClustersUpdater> {
 public:
-    TClustersUpdater(IPQClustersUpdaterCallback* callback);
+    struct TStatus {
+        using TPtr = std::shared_ptr<TStatus>;
+
+        bool Running = true;
+        TSpinLock Lock;
+
+        void Stop() {
+            TGuard guard(Lock);
+            Running = false;
+        }
+    };
+
+    TClustersUpdater(IPQClustersUpdaterCallback* callback, TStatus::TPtr& status);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -56,6 +70,7 @@ private:
     TString LocalCluster;
     TVector<TString> Clusters;
     bool Enabled = false;
+    TStatus::TPtr Status;
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

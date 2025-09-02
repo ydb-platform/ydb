@@ -78,6 +78,8 @@ def iter_resp_lines(resp):
             buffer = buffer[next_newline+1:]
             if line:
                 yield line
+            else:
+                yield ''  # Only print one empty line
             next_newline = buffer.find(b'\n')
 
 
@@ -107,24 +109,29 @@ class Watch(object):
             return 'watch'
 
     def unmarshal_event(self, data, return_type):
-        js = json.loads(data)
-        js['raw_object'] = js['object']
-        # BOOKMARK event is treated the same as ERROR for a quick fix of
-        # decoding exception
-        # TODO: make use of the resource_version in BOOKMARK event for more
-        # efficient WATCH
-        if return_type and js['type'] != 'ERROR' and js['type'] != 'BOOKMARK':
-            obj = SimpleNamespace(data=json.dumps(js['raw_object']))
-            js['object'] = self._api_client.deserialize(obj, return_type)
-            if hasattr(js['object'], 'metadata'):
-                self.resource_version = js['object'].metadata.resource_version
-            # For custom objects that we don't have model defined, json
-            # deserialization results in dictionary
-            elif (isinstance(js['object'], dict) and 'metadata' in js['object']
-                  and 'resourceVersion' in js['object']['metadata']):
-                self.resource_version = js['object']['metadata'][
-                    'resourceVersion']
-        return js
+        if not data or data.isspace():
+            return None
+        try:
+            js = json.loads(data)
+            js['raw_object'] = js['object']
+            # BOOKMARK event is treated the same as ERROR for a quick fix of
+            # decoding exception
+            # TODO: make use of the resource_version in BOOKMARK event for more
+            # efficient WATCH
+            if return_type and js['type'] != 'ERROR' and js['type'] != 'BOOKMARK':
+                obj = SimpleNamespace(data=json.dumps(js['raw_object']))
+                js['object'] = self._api_client.deserialize(obj, return_type)
+                if hasattr(js['object'], 'metadata'):
+                    self.resource_version = js['object'].metadata.resource_version
+                # For custom objects that we don't have model defined, json
+                # deserialization results in dictionary
+                elif (isinstance(js['object'], dict) and 'metadata' in js['object']
+                      and 'resourceVersion' in js['object']['metadata']):
+                    self.resource_version = js['object']['metadata'][
+                        'resourceVersion']
+            return js
+        except json.JSONDecodeError:
+            return None
 
     def stream(self, func, *args, **kwargs):
         """Watch an API resource and stream the result back via a generator.
@@ -152,8 +159,8 @@ class Watch(object):
             v1 = kubernetes.client.CoreV1Api()
             watch = kubernetes.watch.Watch()
             for e in watch.stream(v1.list_namespace, resource_version=1127):
-                type = e['type']
-                object = e['object']  # object is one of type return_type
+                type_ = e['type']
+                object_ = e['object']  # object is one of type return_type
                 raw_object = e['raw_object']  # raw_object is a dict
                 ...
                 if should_stop:
@@ -198,7 +205,10 @@ class Watch(object):
                             retry_after_410 = False
                             yield event
                     else:
-                        yield line
+                        if line:  
+                            yield line  # Normal non-empty line
+                        else:  
+                            yield ''  # Only yield one empty line  
                     if self._stop:
                         break
             finally:

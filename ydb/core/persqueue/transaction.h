@@ -29,11 +29,12 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
-    void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
+    void OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event);
     void OnReadSet(const NKikimrTx::TEvReadSet& event,
                    const TActorId& sender,
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
     void OnReadSetAck(const NKikimrTx::TEvReadSetAck& event);
+    void OnReadSetAck(ui64 tabletId);
     void OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event);
 
     using EDecision = NKikimrTx::TReadSetData::EDecision;
@@ -46,8 +47,8 @@ struct TDistributedTransaction {
     EState State = NKikimrPQ::TTransaction::UNKNOWN;
     ui64 MinStep = Max<ui64>();
     ui64 MaxStep = Max<ui64>();
-    THashSet<ui64> Senders;        // список отправителей TEvReadSet
-    THashSet<ui64> Receivers;      // список получателей TEvReadSet
+    THashMap<ui64, NKikimrPQ::TTransaction::TPredicateReceived> PredicatesReceived;
+    THashMap<ui64, bool> PredicateRecipients;
     TVector<NKikimrPQ::TPartitionOperation> Operations;
     TMaybe<TWriteId> WriteId;
 
@@ -66,6 +67,7 @@ struct TDistributedTransaction {
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
     NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimrPQ::TPartitions PartitionsData;
 
     bool WriteInProgress = false;
 
@@ -75,7 +77,8 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
-    void AddCmdDelete(NKikimrClient::TKeyValueRequest& request);
+    NKikimrPQ::TTransaction Serialize();
+    NKikimrPQ::TTransaction Serialize(EState state);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
@@ -91,26 +94,44 @@ struct TDistributedTransaction {
     void InitPartitions();
 
     template<class E>
-    void OnPartitionResult(const E& event, EDecision decision);
+    void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    struct TSerializedMessage {
-        ui32 Type;
-        TIntrusivePtr<TEventSerializedData> Data;
+    TString LogPrefix() const;
 
-        TSerializedMessage(ui32 type, TIntrusivePtr<TEventSerializedData> data) :
-            Type(type),
-            Data(data)
-        {
-        }
-    };
+    THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 
-    THashMap<ui64, TVector<TSerializedMessage>> OutputMsgs;
-
-    void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
+    void BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
-    const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
+    const TVector<NKikimrTx::TEvReadSet>& GetBindedMsgs(ui64 tabletId);
 
     bool HasWriteOperations = false;
+    size_t PredicateAcksCount = 0;
+
+    bool Pending = false;
+
+    void SetExecuteSpan(NWilson::TSpan&& span);
+    void EndExecuteSpan();
+    NWilson::TSpan CreatePlanStepSpan(ui64 tabletId, ui64 step);
+    void BeginWaitRSSpan(ui64 tabletId);
+    void SetLastTabletSentByRS(ui64 tabletId);
+    void EndWaitRSSpan();
+    void BeginWaitRSAcksSpan(ui64 tabletId);
+    void EndWaitRSAcksSpan();
+    void BeginPersistSpan(ui64 tabletId, EState state, const NWilson::TTraceId& traceId);
+    void EndPersistSpan();
+    void BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId);
+    void EndDeleteSpan();
+
+    NWilson::TTraceId GetExecuteSpanTraceId();
+
+private:
+    NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);
+
+    NWilson::TSpan ExecuteSpan;
+    NWilson::TSpan PersistSpan;
+    NWilson::TSpan WaitRSSpan;
+    NWilson::TSpan WaitRSAcksSpan;
+    NWilson::TSpan DeleteSpan;
 };
 
 }

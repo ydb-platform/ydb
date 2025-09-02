@@ -35,9 +35,9 @@ message TConfig {
 
     optional uint32 StorageMediaKind = 32;
 
-    optional uint32 PerformanceProfileMaxReadBandwidth = 33;
+    optional uint64 PerformanceProfileMaxReadBandwidth = 33;
     optional uint32 PerformanceProfileMaxReadIops = 34;
-    optional uint32 PerformanceProfileMaxWriteBandwidth = 35;
+    optional uint64 PerformanceProfileMaxWriteBandwidth = 35;
     optional uint32 PerformanceProfileMaxWriteIops = 36;
     optional uint32 PerformanceProfileBoostTime = 37;
     optional uint32 PerformanceProfileBoostRefillTime = 38;
@@ -52,6 +52,9 @@ message TConfig {
     optional uint32 PerformanceProfileMaxWriteCostMultiplier = 45;
     optional uint32 PerformanceProfileMaxPostponedTime = 46;
     optional uint32 PerformanceProfileMaxPostponedCount = 47;
+
+    // Indicates that filestore does not belong to user directly, but used for system needs
+    optional bool IsSystem = 48;
 }
 
 message TUpdateConfig {

@@ -23,6 +23,9 @@ public:
     //! Returns |true| iff the context is canceled.
     bool IsCanceled() const;
 
+    //! Only safe to use after IsCanceled returned |true|.
+    const TError& GetCancelationError() const;
+
     //! Marks the context as canceled raising the handlers
     //! and propagates cancelation.
     void Cancel(const TError& error);
@@ -51,7 +54,7 @@ private:
     class TCancelableInvoker;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    std::atomic<bool> Canceled_ = {false};
+    std::atomic<bool> Canceled_ = false;
     TError CancelationError_;
     TCallbackList<void(const TError&)> Handlers_;
     THashSet<TWeakPtr<TCancelableContext>> PropagateToContexts_;

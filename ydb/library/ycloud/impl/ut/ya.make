@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/library/ycloud/impl)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -19,7 +17,5 @@ SRCS(
     service_account_service_ut.cpp
     user_account_service_ut.cpp
 )
-
-REQUIREMENTS(ram:10)
 
 END()

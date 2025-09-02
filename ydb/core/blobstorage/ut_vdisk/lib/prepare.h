@@ -51,6 +51,7 @@ struct TOnePDisk {
     const TString Filename;
     const ui32 ChunkSize;
     const ui64 DiskSize;
+    bool ReadOnly = false;
 
     TOnePDisk(ui32 pDiskId, ui64 pDiskGuid, const TString &filename,
               ui32 chunkSize, ui64 diskSize);

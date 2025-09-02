@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_arrow_memory_pool.h"
 #include "kqp_compute.h"
 #include "kqp_scan_data_meta.h"
 
@@ -8,16 +9,18 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimrTxDataShard {
@@ -85,26 +88,42 @@ public:
         return DataIndexes.size() ? DataIndexes.size() : Batch->num_rows();
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes)
-        : Batch(batch)
+    using EBlockTrackingMode = NKikimrConfig::TTableServiceConfig::EBlockTrackingMode;
+
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch, std::vector<ui32>&& dataIndexes, EBlockTrackingMode mode)
+        : Batch(HandleBatch(mode, batch))
         , DataIndexes(std::move(dataIndexes))
     {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch)
-        : Batch(batch) {
+    TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch,
+        EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
+        : Batch(HandleBatch(mode, batch)) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
 
     }
 
-    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
-        : Batch(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch}))) {
+    TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch,
+        EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
+        : Batch(HandleBatch(mode, NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch})))) {
         AFL_VERIFY(Batch);
         AFL_VERIFY(Batch->num_rows());
 
+    }
+
+private:
+    static inline std::shared_ptr<arrow::Table> HandleBatch(EBlockTrackingMode mode, const std::shared_ptr<arrow::Table>& batch) {
+        switch(mode) {
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE:
+                return batch;
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY:
+                return NArrow::DeepCopy(batch, GetArrowMemoryPool());
+            case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_SERIALIZE:
+                return NArrow::ReallocateBatch(batch, GetArrowMemoryPool());
+        }
     }
 };
 
@@ -148,8 +167,9 @@ public:
             return BatchReader->GetColumns();
         }
 
-        ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
-        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
+        void UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
+        ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
+        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
 
         bool IsEmpty() const {
             return BatchReader->IsEmpty();
@@ -178,10 +198,36 @@ public:
         // shared with actor via TableReader
         TIntrusivePtr<IKqpTableReader> TableReader;
 
+        struct TExternalStats {
+            ui64 ExternalRows = 0;
+            ui64 ExternalBytes = 0;
+            ui64 FirstMessageMs = 0;
+            ui64 LastMessageMs = 0;
+            ui64 CpuTimeUs = 0;
+            ui64 WaitTimeUs = 0;
+            ui64 WaitOutputTimeUs = 0;
+            bool Finished = false;
+
+            TExternalStats() = default;
+            TExternalStats(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished)
+                : ExternalRows(externalRows)
+                , ExternalBytes(externalBytes)
+                , FirstMessageMs(firstMessageMs)
+                , LastMessageMs(lastMessageMs)
+                , CpuTimeUs(cpuTime)
+                , WaitTimeUs(waitTime)
+                , WaitOutputTimeUs(waitOutputTime)
+                , Finished(finished)
+            {}
+        };
+
         struct TBasicStats {
-            size_t Rows = 0;
-            size_t Bytes = 0;
+            ui64 Rows = 0;
+            ui64 Bytes = 0;
+            ui64 FirstMessageMs = 0;
+            ui64 LastMessageMs = 0;
             ui32 AffectedShards = 0;
+            std::unordered_map<ui64, TExternalStats> ExternalStats;
         };
 
         struct TProfileStats {
@@ -201,7 +247,6 @@ public:
 
         std::unique_ptr<TBasicStats> BasicStats;
         std::unique_ptr<TProfileStats> ProfileStats;
-
     private:
         class IDataBatchReader: public TScanDataColumnsMeta {
         private:
@@ -378,7 +423,7 @@ private:
     TMap<ui32, TScanData> Scans;
 };
 
-TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData);
+TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, bool& inputConsumed);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

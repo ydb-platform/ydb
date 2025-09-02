@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <ydb/library/yql/public/udf/udf_types.h>
+#include <yql/essentials/public/udf/udf_types.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/hash_set.h>
@@ -270,8 +270,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     }
 
     static ui64 GetShardId(const TTableRange& range, const TKeyDesc* keyDesc) {
-        Y_ABORT_UNLESS(range.Point);
-        Y_ABORT_UNLESS(!keyDesc->GetPartitions().empty());
+        Y_ENSURE(range.Point);
+        Y_ENSURE(!keyDesc->GetPartitions().empty());
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
             keyDesc->GetPartitions().begin(), keyDesc->GetPartitions().end(), true,
@@ -286,7 +286,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
         );
 
-        Y_ABORT_UNLESS(it != keyDesc->GetPartitions().end());
+        Y_ENSURE(it != keyDesc->GetPartitions().end());
         return it->ShardId;
     }
 
@@ -479,7 +479,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
         }
 
-        Y_ABORT_UNLESS(TxId);
+        Y_ENSURE(TxId);
         SelectedCoordinator = domainInfo->Coordinators.Select(TxId);
 
         ResolveKeys();
@@ -491,7 +491,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         LOG_D("Resolve keys"
             << ": txId# " << TxId);
 
-        Y_ABORT_UNLESS(!TableInfos.empty());
+        Y_ENSURE(!TableInfos.empty());
 
         auto request = MakeHolder<TResolve>();
         for (auto& [_, info] : TableInfos) {
@@ -592,7 +592,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
         TVector<ui32> indexColumnIds;
         {
-            Y_ABORT_UNLESS(TableInfos.contains(MainTableId));
+            Y_ENSURE(TableInfos.contains(MainTableId));
             const auto& mainTableInfo = TableInfos.at(MainTableId);
 
             THashSet<ui32> mainTableKeys;
@@ -648,7 +648,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
                 TVector<TCell> indexCells(Reserve(indexColumnIds.size()));
                 for (const auto& id : indexColumnIds) {
-                    Y_ABORT_UNLESS(keyColumnIdToIdx.contains(id));
+                    Y_ENSURE(keyColumnIdToIdx.contains(id));
                     indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
                 }
 
@@ -656,7 +656,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
         }
 
-        Y_ABORT_UNLESS(keys.contains(MainTableId));
+        Y_ENSURE(keys.contains(MainTableId));
         if (keys.at(MainTableId).size() > 1) {
             return ExecError(TStringBuilder() << "Too many main table's shards"
                 << ": tableId# " << MainTableId
@@ -680,7 +680,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         };
 
         for (auto& [tableId, data] : keys) {
-            Y_ABORT_UNLESS(TableInfos.contains(tableId));
+            Y_ENSURE(TableInfos.contains(tableId));
             const auto& keyMap = TableInfos.at(tableId).GetKeyMap();
 
             for (auto& kv : data) {
@@ -697,7 +697,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     request.AddKeyColumnIds(id);
                 }
 
-                Y_VERIFY_S(shardKeys.GetKeys().size() == shardKeys.GetPresentRows().Count(), "Rows count mismatch"
+                Y_ENSURE(shardKeys.GetKeys().size() == shardKeys.GetPresentRows().Count(), "Rows count mismatch"
                     << ": expected# " << shardKeys.GetKeys().size()
                     << ", actual# " << shardKeys.GetPresentRows().Count());
 
@@ -710,7 +710,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     request.MutableExpiration()->CopyFrom(record.GetExpiration());
                     break;
                 default:
-                    Y_FAIL_S("Unknown condition: " << static_cast<ui32>(record.GetConditionCase()));
+                    Y_ENSURE(false, "Unknown condition: " << static_cast<ui32>(record.GetConditionCase()));
                 }
 
                 if (tableId == MainTableId) {
@@ -727,7 +727,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                         tx.AddIndexColumns(std::move(value));
                     }
                 } else {
-                    Y_ABORT_UNLESS(keys.contains(MainTableId));
+                    Y_ENSURE(keys.contains(MainTableId));
 
                     auto& dependency = *tx.AddDependencies();
                     dependency.SetShardId(keys.at(MainTableId).begin()->first);
@@ -893,7 +893,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     /// Plan
 
     void RegisterPlan() {
-        Y_ABORT_UNLESS(SelectedCoordinator);
+        Y_ENSURE(SelectedCoordinator);
 
         LOG_D("Register plan"
             << ": txId# " << TxId

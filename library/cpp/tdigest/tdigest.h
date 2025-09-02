@@ -36,6 +36,8 @@ class TDigest {
     double N;
     double Delta;
     double K;
+    bool SupportsNaN = false;
+    bool HasNaN = false;
 
     void Add(const TDigest& otherDigest);
     void AddCentroid(const TCentroid& centroid);
@@ -47,10 +49,10 @@ protected:
     void Update(double x, double w = 1.0);
 
 public:
-    TDigest(double delta = 0.01, double k = 25);
-    TDigest(double delta, double k, double firstValue);
-    TDigest(TStringBuf serializedDigest);
-    TDigest(const TDigest* digest1, const TDigest* digest2); // merge
+    TDigest(double delta = 0.01, double k = 25, bool supportsNaN = false);
+    TDigest(double delta, double k, double firstValue, bool supportsNaN = false);
+    TDigest(TStringBuf serializedDigest, bool supportsNaN = false);
+    TDigest(const TDigest* digest1, const TDigest* digest2, bool supportsNaN = false); // merge
 
     TString Serialize();
 

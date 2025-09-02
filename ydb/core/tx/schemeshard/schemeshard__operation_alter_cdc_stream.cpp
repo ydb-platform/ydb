@@ -1,8 +1,8 @@
 #include "schemeshard__operation_alter_cdc_stream.h"
 
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -61,7 +61,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId] = stream->AlterData;
+        context.SS->CdcStreams[pathId]->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -143,8 +143,17 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
-                .NotUnderOperation();
+                .NotUnderDeleting();
+
+            // Allow CDC operations on tables that are under incremental backup/restore
+            if (checks && tablePath.IsUnderOperation() &&
+                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                checks.NotUnderOperation();
+            }
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -236,7 +245,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -252,7 +261,7 @@ protected:
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to alter"
-                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamDescription().GetPathId())
                 << ", another# " << childPathId);
             found = true;
 
@@ -359,7 +368,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
+        const auto tablePath = TPath::Resolve(workingDir, context.SS).Child(tableName, TPath::TSplitChildTag{});
         {
             const auto checks = tablePath.Check();
             checks
@@ -370,9 +379,17 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
-                .NotUnderDeleting()
-                .NotUnderOperation();
+                .NotUnderDeleting();
+
+            // Allow CDC operations on tables that are under incremental backup/restore
+            if (checks && tablePath.IsUnderOperation() &&
+                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                checks.NotUnderOperation();
+            }
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -476,12 +493,12 @@ private:
 } // anonymous
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TString& tableName,
-    const TString& streamName)
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TString& tableName,
+        const TString& streamName)
 {
-    const auto tablePath = workingDirPath.Child(tableName);
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     {
         const auto checks = tablePath.Check();
         checks
@@ -491,9 +508,17 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
             .IsResolved()
             .NotDeleted()
             .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderOperation();
+            .NotAsyncReplicaTable();
+
+        // Allow CDC operations on tables that are under incremental backup/restore
+        if (checks && tablePath.IsUnderOperation() && 
+            !tablePath.IsUnderOutgoingIncrementalRestore()) {
+            checks.NotUnderOperation();
+        }
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!checks) {
             return CreateReject(opId, checks.GetStatus(), checks.GetError());
@@ -521,27 +546,24 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
 }
 
 void DoAlterStream(
-    const NKikimrSchemeOp::TAlterCdcStream& op,
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TPath& tablePath,
-    TVector<ISubOperation::TPtr>& result)
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TAlterCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath)
 {
     {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
 
         result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
     }
-
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
@@ -601,7 +623,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    DoAlterStream(op, opId, workingDirPath, tablePath, result);
+    DoAlterStream(result, op, opId, workingDirPath, tablePath);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
@@ -611,6 +633,14 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
         outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
 
         result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     return result;

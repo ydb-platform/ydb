@@ -9,7 +9,7 @@ class TTpchWorkloadDataInitializerGenerator: public TWorkloadDataInitializerBase
 public:
     TTpchWorkloadDataInitializerGenerator(const TTpchWorkloadParams& params);
     void ConfigureOpts(NLastGetopt::TOpts& opts) override;
-    YDB_READONLY(ui64, Scale, 1);
+    YDB_READONLY(double, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);
     YDB_READONLY(ui32, ProcessCount, 1);
@@ -48,18 +48,17 @@ public:
 
         using TContexts = TVector<TContext>;
 
-        virtual void GenerateRows(TContexts& ctxs) = 0;
+        virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) = 0;
 
         int TableNum;
         ui64 Generated = 0;
-        TAdaptiveLock NumbersLock;
-        TAdaptiveLock DriverLock;
+        ui64 FirstRow = 1;
+        TAdaptiveLock Lock;
 
     private:
         TString GetFullTableName(const char* table) const;
-        static ui64 CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
         const TTpchWorkloadDataInitializerGenerator& Owner;
-        ui64 TableSize;
+        TDataPortionPtr FirstPortion;
     };
 
 };

@@ -12,17 +12,18 @@ TSamplingThrottlingControl::~TSamplingThrottlingControl() {
     UpdateImpl(nullptr);
 }
 
-void TSamplingThrottlingControl::HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator) {
+NWilson::TTraceId TSamplingThrottlingControl::HandleTracing(const TRequestDiscriminator& discriminator,
+        const TMaybe<TString>& traceparent) {
     if (ImplUpdate.load(std::memory_order_relaxed)) {
-        auto newImpl = std::unique_ptr<TSamplingThrottlingImpl>(ImplUpdate.exchange(nullptr, std::memory_order_relaxed));
+        auto newImpl = std::unique_ptr<TSamplingThrottlingImpl>(ImplUpdate.exchange(nullptr, std::memory_order_acquire));
         Y_ABORT_UNLESS(newImpl);
         Impl = std::move(newImpl);
     }
-    Impl->HandleTracing(traceId, discriminator);
+    return Impl->HandleTracing(discriminator, traceparent);
 }
 
 void TSamplingThrottlingControl::UpdateImpl(std::unique_ptr<TSamplingThrottlingImpl> newImpl) {
-    std::unique_ptr<TSamplingThrottlingImpl> guard(ImplUpdate.exchange(newImpl.release(), std::memory_order_relaxed));
+    std::unique_ptr<TSamplingThrottlingImpl> guard(ImplUpdate.exchange(newImpl.release(), std::memory_order_acq_rel));
 }
 
 } // namespace NKikimr::NJaegerTracing

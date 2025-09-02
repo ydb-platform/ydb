@@ -10,11 +10,13 @@
 #define JSON_UNICHR Py_UCS4
 #define JSON_InternFromString PyUnicode_InternFromString
 #define PyString_GET_SIZE PyUnicode_GET_LENGTH
+#define JSON_StringCheck PyUnicode_Check
 #define PY2_UNUSED
 #define PY3_UNUSED UNUSED
 #else /* PY_MAJOR_VERSION >= 3 */
 #define PY2_UNUSED UNUSED
 #define PY3_UNUSED
+#define JSON_StringCheck(obj) (PyString_Check(obj) || PyUnicode_Check(obj))
 #define PyBytes_Check PyString_Check
 #define PyUnicode_READY(obj) 0
 #define PyUnicode_KIND(obj) (sizeof(Py_UNICODE))
@@ -1843,7 +1845,7 @@ bail:
 }
 
 static PyObject *
-_parse_constant(PyScannerObject *s, PyObject *constant, Py_ssize_t idx, Py_ssize_t *next_idx_ptr)
+_parse_constant(PyScannerObject *s, PyObject *pystr, PyObject *constant, Py_ssize_t idx, Py_ssize_t *next_idx_ptr)
 {
     /* Read a JSON constant from PyString pystr.
     constant is the Python string that was found
@@ -1855,6 +1857,10 @@ _parse_constant(PyScannerObject *s, PyObject *constant, Py_ssize_t idx, Py_ssize
     Returns the result of parse_constant
     */
     PyObject *rval;
+    if (s->parse_constant == Py_None) {
+        raise_errmsg(ERR_EXPECTING_VALUE, pystr, idx);
+        return NULL;
+    }
 
     /* rval = parse_constant(constant) */
     rval = PyObject_CallOneArg(s->parse_constant, constant);
@@ -1886,7 +1892,7 @@ _match_number_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_ssiz
     /* read a sign if it's there, make sure it's not the end of the string */
     if (str[idx] == '-') {
         if (idx >= end_idx) {
-            raise_errmsg(ERR_EXPECTING_VALUE, pystr, idx);
+            raise_errmsg(ERR_EXPECTING_VALUE, pystr, start);
             return NULL;
         }
         idx++;
@@ -1903,7 +1909,7 @@ _match_number_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_ssiz
     }
     /* no integer digits, error */
     else {
-        raise_errmsg(ERR_EXPECTING_VALUE, pystr, idx);
+        raise_errmsg(ERR_EXPECTING_VALUE, pystr, start);
         return NULL;
     }
 
@@ -1949,8 +1955,10 @@ _match_number_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_ssiz
             /* rval = PyFloat_FromDouble(PyOS_ascii_atof(PyString_AS_STRING(numstr))); */
             double d = PyOS_string_to_double(PyString_AS_STRING(numstr),
                                              NULL, NULL);
-            if (d == -1.0 && PyErr_Occurred())
+            if (d == -1.0 && PyErr_Occurred()) {
+                Py_DECREF(numstr);
                 return NULL;
+            }
             rval = PyFloat_FromDouble(d);
         }
     }
@@ -1993,7 +2001,7 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
     /* read a sign if it's there, make sure it's not the end of the string */
     if (PyUnicode_READ(kind, str, idx) == '-') {
         if (idx >= end_idx) {
-            raise_errmsg(ERR_EXPECTING_VALUE, pystr, idx);
+            raise_errmsg(ERR_EXPECTING_VALUE, pystr, start);
             return NULL;
         }
         idx++;
@@ -2013,7 +2021,7 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
     }
     else {
         /* no integer digits, error */
-        raise_errmsg(ERR_EXPECTING_VALUE, pystr, idx);
+        raise_errmsg(ERR_EXPECTING_VALUE, pystr, start);
         return NULL;
     }
 
@@ -2156,7 +2164,7 @@ scan_once_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_t *n
         case 'N':
             /* NaN */
             if ((idx + 2 < length) && str[idx + 1] == 'a' && str[idx + 2] == 'N') {
-                rval = _parse_constant(s, JSON_NaN, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_NaN, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -2164,7 +2172,7 @@ scan_once_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_t *n
         case 'I':
             /* Infinity */
             if ((idx + 7 < length) && str[idx + 1] == 'n' && str[idx + 2] == 'f' && str[idx + 3] == 'i' && str[idx + 4] == 'n' && str[idx + 5] == 'i' && str[idx + 6] == 't' && str[idx + 7] == 'y') {
-                rval = _parse_constant(s, JSON_Infinity, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_Infinity, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -2172,7 +2180,7 @@ scan_once_str(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_t *n
         case '-':
             /* -Infinity */
             if ((idx + 8 < length) && str[idx + 1] == 'I' && str[idx + 2] == 'n' && str[idx + 3] == 'f' && str[idx + 4] == 'i' && str[idx + 5] == 'n' && str[idx + 6] == 'i' && str[idx + 7] == 't' && str[idx + 8] == 'y') {
-                rval = _parse_constant(s, JSON_NegInfinity, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_NegInfinity, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -2275,7 +2283,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
             if ((idx + 2 < length) &&
                 PyUnicode_READ(kind, str, idx + 1) == 'a' &&
                 PyUnicode_READ(kind, str, idx + 2) == 'N') {
-                rval = _parse_constant(s, JSON_NaN, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_NaN, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -2290,7 +2298,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
                 PyUnicode_READ(kind, str, idx + 5) == 'i' &&
                 PyUnicode_READ(kind, str, idx + 6) == 't' &&
                 PyUnicode_READ(kind, str, idx + 7) == 'y') {
-                rval = _parse_constant(s, JSON_Infinity, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_Infinity, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -2306,7 +2314,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
                 PyUnicode_READ(kind, str, idx + 6) == 'i' &&
                 PyUnicode_READ(kind, str, idx + 7) == 't' &&
                 PyUnicode_READ(kind, str, idx + 8) == 'y') {
-                rval = _parse_constant(s, JSON_NegInfinity, idx, next_idx_ptr);
+                rval = _parse_constant(s, pystr, JSON_NegInfinity, idx, next_idx_ptr);
             }
             else
                 fallthrough = 1;
@@ -3028,25 +3036,29 @@ encoder_listencode_dict(PyEncoderObject *s, JSON_Accu *rval, PyObject *dct, Py_s
         if (value == NULL)
             goto bail;
 
-        encoded = PyDict_GetItem(s->key_memo, key);
-        if (encoded != NULL) {
-            Py_INCREF(encoded);
-        } else {
-            kstr = encoder_stringify_key(s, key);
-            if (kstr == NULL)
-                goto bail;
-            else if (kstr == Py_None) {
-                /* skipkeys */
-                Py_DECREF(item);
-                Py_DECREF(kstr);
-                continue;
-            }
+        kstr = encoder_stringify_key(s, key);
+        if (kstr == NULL)
+            goto bail;
+        else if (kstr == Py_None) {
+            /* skipkeys */
+            Py_DECREF(item);
+            Py_DECREF(kstr);
+            continue;
         }
         if (idx) {
             if (JSON_Accu_Accumulate(rval, s->item_separator))
                 goto bail;
         }
-        if (encoded == NULL) {
+        /*
+         * Only cache the encoding of string keys. False and True are
+         * indistinguishable from 0 and 1 in a dictionary lookup and there
+         * may be other quirks with user defined subclasses.
+         */
+        encoded = PyDict_GetItem(s->key_memo, kstr);
+        if (encoded != NULL) {
+            Py_INCREF(encoded);
+            Py_CLEAR(kstr);
+        } else {
             encoded = encoder_encode_string(s, kstr);
             Py_CLEAR(kstr);
             if (encoded == NULL)

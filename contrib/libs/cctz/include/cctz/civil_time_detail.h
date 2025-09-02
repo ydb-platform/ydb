@@ -79,19 +79,30 @@ CONSTEXPR_F bool is_leap_year(year_t y) noexcept {
   return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
 }
 CONSTEXPR_F int year_index(year_t y, month_t m) noexcept {
-  return (static_cast<int>((y + (m > 2)) % 400) + 400) % 400;
+  const int yi = static_cast<int>((y + (m > 2)) % 400);
+  return yi < 0 ? yi + 400 : yi;
 }
-CONSTEXPR_F int days_per_century(year_t y, month_t m) noexcept {
-  const int yi = year_index(y, m);
+CONSTEXPR_F int days_per_century(int yi) noexcept {
   return 36524 + (yi == 0 || yi > 300);
 }
-CONSTEXPR_F int days_per_4years(year_t y, month_t m) noexcept {
-  const int yi = year_index(y, m);
+CONSTEXPR_F int days_per_4years(int yi) noexcept {
   return 1460 + (yi == 0 || yi > 300 || (yi - 1) % 100 < 96);
 }
 CONSTEXPR_F int days_per_year(year_t y, month_t m) noexcept {
   return is_leap_year(y + (m > 2)) ? 366 : 365;
 }
+// The compiler cannot optimize away the check if we use
+// -fsanitize=array-bounds.
+// m is guaranteed to be in [1:12] in the caller, but the compiler cannot
+// optimize away the check even when this function is inlined into BreakTime.
+// To reduce the overhead, we use no_sanitize to skip the unnecessary
+// -fsanitize=array-bounds check. Remove no_sanitize once the missed
+// optimization is fixed.
+#if defined(__clang__) && defined(__has_cpp_attribute)
+#if __has_cpp_attribute(clang::no_sanitize)
+[[clang::no_sanitize("array-bounds")]]
+#endif
+#endif
 CONSTEXPR_F int days_per_month(year_t y, month_t m) noexcept {
   CONSTEXPR_D int k_days_per_month[1 + 12] = {
       -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  // non leap year
@@ -128,17 +139,22 @@ CONSTEXPR_F fields n_day(year_t y, month_t m, diff_t d, diff_t cd,
     }
   }
   if (d > 365) {
+    int yi = year_index(ey, m);  // Index into Gregorian 400 year cycle.
     for (;;) {
-      int n = days_per_century(ey, m);
+      int n = days_per_century(yi);
       if (d <= n) break;
       d -= n;
       ey += 100;
+      yi += 100;
+      if (yi >= 400) yi -= 400;
     }
     for (;;) {
-      int n = days_per_4years(ey, m);
+      int n = days_per_4years(yi);
       if (d <= n) break;
       d -= n;
       ey += 4;
+      yi += 4;
+      if (yi >= 400) yi -= 400;
     }
     for (;;) {
       int n = days_per_year(ey, m);
@@ -363,11 +379,11 @@ class civil_time {
       : civil_time(ct.f_) {}
 
   // Factories for the maximum/minimum representable civil_time.
-  static CONSTEXPR_F civil_time (max)() {
+  static CONSTEXPR_F auto (max)() -> civil_time {
     const auto max_year = (std::numeric_limits<std::int_least64_t>::max)();
     return civil_time(max_year, 12, 31, 23, 59, 59);
   }
-  static CONSTEXPR_F civil_time (min)() {
+  static CONSTEXPR_F auto (min)() -> civil_time {
     const auto min_year = (std::numeric_limits<std::int_least64_t>::min)();
     return civil_time(min_year, 1, 1, 0, 0, 0);
   }

@@ -27,20 +27,20 @@ struct IViablePeerRegistry
     //! Returns nullptr if the registry is empty.
     virtual IChannelPtr PickStickyChannel(const IClientRequestPtr& request) const = 0;
     //! Returns nullptr if this address is not an active peer.
-    virtual IChannelPtr GetChannel(const TString& address) const = 0;
+    virtual IChannelPtr GetChannel(const std::string& address) const = 0;
 
     //! Returns true if a new peer was actually registered and false if it already existed.
-    virtual bool RegisterPeer(const TString& address) = 0;
+    virtual bool RegisterPeer(const std::string& address) = 0;
     //! Returns true if this peer was actually unregistered.
-    virtual bool UnregisterPeer(const TString& address) = 0;
+    virtual bool UnregisterPeer(const std::string& address) = 0;
     //! Unregisters stored active peer with the given channel.
     //! Does nothing and returns false if the peer is no longer active
     //! or if the currently stored channel differs from the one given.
-    virtual bool UnregisterChannel(const TString& address, const IChannelPtr& channel) = 0;
+    virtual bool UnregisterChannel(const std::string& address, const IChannelPtr& channel) = 0;
     //! Tries to evict a random active peer and replace it with a peer from the backlog.
     //! The evicted peer is stored in the backlog instead.
     //! Returns the address of the rotated peer.
-    virtual std::optional<TString> MaybeRotateRandomPeer() = 0;
+    virtual std::optional<std::string> MaybeRotateRandomPeer() = 0;
 
     virtual std::vector<IChannelPtr> GetActiveChannels() const = 0;
     virtual void Clear() = 0;
@@ -58,7 +58,7 @@ struct IViablePeerRegistry
 
 DEFINE_REFCOUNTED_TYPE(IViablePeerRegistry)
 
-using TCreateChannelCallback = TCallback<IChannelPtr(const TString& address)>;
+using TCreateChannelCallback = TCallback<IChannelPtr(const std::string& address)>;
 
 IViablePeerRegistryPtr CreateViablePeerRegistry(
     TViablePeerRegistryConfigPtr config,

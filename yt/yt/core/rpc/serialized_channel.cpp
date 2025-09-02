@@ -72,9 +72,9 @@ private:
             UnderlyingHandler_->HandleAcknowledgement();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
-            UnderlyingHandler_->HandleResponse(std::move(message), std::move(address));
+            UnderlyingHandler_->HandleResponse(std::move(message), address);
             Owner_->OnRequestCompleted();
         }
 

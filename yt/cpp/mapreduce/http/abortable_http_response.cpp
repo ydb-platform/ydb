@@ -14,20 +14,20 @@ public:
     {
         auto g = Guard(Lock_);
         auto id = NextId_++;
-        IdToOutage.emplace(id, TOutageEntry{std::move(urlPattern), options.ResponseCount_, options.LengthLimit_});
+        IdToOutage_.emplace(id, TOutageEntry{std::move(urlPattern), options.ResponseCount_, options.LengthLimit_});
         return id;
     }
 
     void StopOutage(TOutageId id)
     {
         auto g = Guard(Lock_);
-        IdToOutage.erase(id);
+        IdToOutage_.erase(id);
     }
 
     void Add(IAbortableHttpResponse* response)
     {
         auto g = Guard(Lock_);
-        for (auto& [id, entry] : IdToOutage) {
+        for (auto& [id, entry] : IdToOutage_) {
             if (entry.Counter > 0 && response->GetUrl().find(entry.Pattern) != TString::npos) {
                 response->SetLengthLimit(entry.LengthLimit);
                 entry.Counter -= 1;
@@ -49,6 +49,7 @@ public:
 
     int AbortAll(const TString& urlPattern)
     {
+        auto g = Guard(Lock_);
         int result = 0;
         for (auto& response : ResponseList_) {
             if (!response.IsAborted() && response.GetUrl().find(urlPattern) != TString::npos) {
@@ -70,7 +71,7 @@ private:
 private:
     TOutageId NextId_ = 0;
     TIntrusiveList<IAbortableHttpResponse> ResponseList_;
-    THashMap<TOutageId, TOutageEntry> IdToOutage;
+    THashMap<TOutageId, TOutageEntry> IdToOutage_;
     TMutex Lock_;
 };
 
@@ -137,11 +138,10 @@ bool TAbortableHttpResponseBase::IsAborted() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TAbortableHttpResponse::TAbortableHttpResponse(
+    TRequestContext context,
     IInputStream* socketStream,
-    const TString& requestId,
-    const TString& hostName,
     const TString& url)
-    : THttpResponse(socketStream, requestId, hostName)
+    : THttpResponse(std::move(context), socketStream)
     , TAbortableHttpResponseBase(url)
 {
 }

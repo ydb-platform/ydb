@@ -52,6 +52,10 @@ namespace NKikimr {
                 s << "]";
             }
 
+            const TSet<ui32>& Get() const {
+                return Chunks;
+            }
+
         private:
             TSet<ui32> Chunks;
         };
@@ -149,6 +153,8 @@ namespace NKikimr {
             TSyncLogKeeperCommitData PrepareCommitData(ui64 recoveryLogConfirmedLsn);
             // applies commit result and returns first lsn to keep
             ui64 ApplyCommitResult(TEvSyncLogCommitDone *msg);
+
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
         private:
             // VDisk Context

@@ -1,3 +1,4 @@
+# type: ignore
 import logging
 from abc import abstractmethod
 import abc
@@ -35,7 +36,7 @@ from moto.dynamodb.parsing.tokens import Token, ExpressionTokenizer
 logger = logging.getLogger(__name__)
 
 
-class NestableExpressionParserMixin(object):
+class NestableExpressionParserMixin:
     """
     For nodes that can be nested in themselves (recursive). Take for example UpdateExpression's grammar:
 
@@ -64,19 +65,15 @@ class NestableExpressionParserMixin(object):
         Returns:
 
         """
+        pos = self.token_pos
+        fc = factory_class.__class__.__name__
         logger.debug(
-            "Move token pos {pos} to continue parsing with specific factory class {fc}".format(
-                pos=self.token_pos, fc=factory_class.__class__.__name__
-            )
+            f"Move token pos {pos} to continue parsing with specific factory class {fc}"
         )
         # noinspection PyProtectedMember
         ast, token_pos = factory_class(**self._initializer_args())._parse_with_pos()
         self.target_clauses.append(ast)
-        logger.debug(
-            "Continue where previous parsing ended {token_pos}".format(
-                token_pos=token_pos
-            )
-        )
+        logger.debug(f"Continue where previous parsing ended {token_pos}")
         self.token_pos = token_pos
 
     @abstractmethod
@@ -116,11 +113,10 @@ class NestableExpressionParserMixin(object):
 
         self.target_clauses looks like:  ( SET a=3 >> REMOVE b )
         Returns:
-            moto.dynamodb2.ast_nodes.Node: Node of an AST representing the Expression as produced by the factory.
+            moto.dynamodb.ast_nodes.Node: Node of an AST representing the Expression as produced by the factory.
         """
-        assert len(self.target_clauses) > 0, "No nodes for {cn}".format(
-            cn=self.__class__.__name__
-        )
+        cn = self.__class__.__name__
+        assert len(self.target_clauses) > 0, f"No nodes for {cn}"
         target_node = self._nestable_class()(children=[self.target_clauses.pop()])
         while len(self.target_clauses) > 0:
             target_node = self._nestable_class()(
@@ -151,7 +147,7 @@ class ExpressionParser(metaclass=abc.ABCMeta):
         Start parsing the token_list from token_pos for the factory type.
 
         Returns:
-            moto.dynamodb2.ast_nodes.Node: AST which is root node of resulting abstract syntax tree
+            moto.dynamodb.ast_nodes.Node: AST which is root node of resulting abstract syntax tree
         """
 
     @classmethod
@@ -164,7 +160,7 @@ class ExpressionParser(metaclass=abc.ABCMeta):
         """
 
         Args:
-            token(moto.dynamodb2.tokens.Token):
+            token(moto.dynamodb.tokens.Token):
 
         Returns:
             bool: True if token is a possible start for entries processed by `cls`
@@ -200,7 +196,7 @@ class ExpressionParser(metaclass=abc.ABCMeta):
         Get the next token to be processed
 
         Returns:
-            moto.dynamodb2.tokens.Token: or None if no more next token
+            moto.dynamodb.tokens.Token: or None if no more next token
         """
         try:
             return self.token_list[self.token_pos]
@@ -358,11 +354,7 @@ class NestableBinExpressionParser(ExpressionParser):
             **self._initializer_args()
         )._parse_with_pos()
         self.target_nodes.append(ast)
-        logger.debug(
-            "Continue where previous parsing ended {token_pos}".format(
-                token_pos=self.token_pos
-            )
-        )
+        logger.debug(f"Continue where previous parsing ended {self.token_pos}")
 
     def _parse(self):
         self._parse_target_clause(self._operand_factory_class())
@@ -413,7 +405,7 @@ class NestableBinExpressionParser(ExpressionParser):
 
         self.target_nodes looks like: (  a >> + >> :val >> - >> :val2 )
         Returns:
-            moto.dynamodb2.ast_nodes.Node: Node of an AST representing the Expression as produced by the factory.
+            moto.dynamodb.ast_nodes.Node: Node of an AST representing the Expression as produced by the factory.
         """
         if len(self.target_nodes) == 1:
             return UpdateExpressionValue(children=[self.target_nodes.popleft()])
@@ -525,11 +517,8 @@ class UpdateExpressionActionsParser(ExpressionParser, NestableExpressionParserMi
 
     @classmethod
     def _is_possible_start(cls, token):
-        raise RuntimeError(
-            "{class_name} cannot be identified by the next token.".format(
-                class_name=cls._nestable_class().__name__
-            )
-        )
+        cn = cls._nestable_class().__name__
+        raise RuntimeError(f"{cn} cannot be identified by the next token.")
 
     @classmethod
     @abstractmethod
@@ -562,12 +551,9 @@ class UpdateExpressionActionsParser(ExpressionParser, NestableExpressionParserMi
                 break
 
         if len(self.target_clauses) == 0:
-            logger.debug(
-                "Didn't encounter a single {nc} in {nepc}.".format(
-                    nc=self._nestable_class().__name__,
-                    nepc=self._nested_expression_parser_class().__name__,
-                )
-            )
+            nc = self._nestable_class().__name__
+            nepc = self._nested_expression_parser_class().__name__
+            logger.debug(f"Didn't encounter a single {nc} in {nepc}.")
             self.raise_unexpected_token()
 
         return self._create_node()

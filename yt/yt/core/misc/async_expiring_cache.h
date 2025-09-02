@@ -18,6 +18,10 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/*!
+ *  \note
+ *  Thread affinity: delayed executor's thread
+ */
 template <class TKey, class TValue>
 class TAsyncExpiringCache
     : public virtual TRefCounted
@@ -92,6 +96,9 @@ protected:
 
     virtual bool CanCacheError(const TError& error) noexcept;
 
+    //! Ping resets refresh timer period and behaves like successful entry update.
+    void Ping(const TKey& key);
+
 private:
     const NLogging::TLogger Logger_;
 
@@ -131,23 +138,25 @@ private:
     NProfiling::TGauge SizeCounter_;
 
     void SetResult(
-        const TWeakPtr<TEntry>& entry,
+        const TWeakPtr<TEntry>& weakEntry,
         const TKey& key,
         const TErrorOr<TValue>& valueOrError,
         bool isPeriodicUpdate);
 
     void InvokeGetMany(
-        const std::vector<TWeakPtr<TEntry>>& entries,
+        const std::vector<TWeakPtr<TEntry>>& weakEntries,
         const std::vector<TKey>& keys,
         std::optional<TDuration> periodicRefreshTime);
 
     void InvokeGet(
-        const TEntryPtr& entry,
+        TWeakPtr<TEntry> weakEntry,
         const TKey& key);
 
     bool TryEraseExpired(
         const TEntryPtr& Entry,
         const TKey& key);
+
+    void Erase(THashMap<TKey, TEntryPtr>::iterator it);
 
     void UpdateAll();
 

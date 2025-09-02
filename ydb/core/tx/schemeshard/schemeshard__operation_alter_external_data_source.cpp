@@ -1,7 +1,9 @@
+#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_data_source.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/tx/tiering/tier/object.h>
 
 #include <utility>
 
@@ -89,18 +91,14 @@ class TAlterExternalDataSource : public TSubOperation {
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
-                                       const TPath& dstPath,
-                                       const TString& acl) {
+                                       const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalDataSource)
-            .IsValidLeafName()
-            .DepthLimit()
-            .PathsLimit()
-            .DirChildrenLimit()
-            .IsValidACL(acl);
+            ;
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -177,15 +175,11 @@ class TAlterExternalDataSource : public TSubOperation {
         const TOperationContext& context,
         NIceDb::TNiceDb& db,
         const TPathElement::TPtr& externalDataSourcePath,
-        const TExternalDataSourceInfo::TPtr& externalDataSourceInfo,
-        const TString& acl) const {
+        const TExternalDataSourceInfo::TPtr& externalDataSourceInfo) const {
         const auto& externalDataSourcePathId = externalDataSourcePath->PathId;
 
         context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
 
-        if (!acl.empty()) {
-            externalDataSourcePath->ApplyACL(acl);
-        }
         context.SS->PersistPath(db, externalDataSourcePathId);
 
         context.SS->PersistExternalDataSource(db,
@@ -213,18 +207,22 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
             result, parentPath, Transaction, /* isCreate */ false));
 
-        const TString acl   = Transaction.GetModifyACL().GetDiffACL();
         const TPath dstPath = parentPath.Child(name);
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        RETURN_RESULT_UNLESS(IsDescriptionValid(result,
-                                externalDataSourceDescription,
-                                context.SS->ExternalSourceFactory));
+        RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo =
         context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
@@ -233,6 +231,24 @@ public:
             NExternalDataSource::CreateExternalDataSource(externalDataSourceDescription,
                                      oldExternalDataSourceInfo->AlterVersion + 1);
         Y_ABORT_UNLESS(externalDataSourceInfo);
+
+        {
+            bool isTieredStorage = false;
+            for (const auto& referrer : externalDataSourceInfo->ExternalTableReferences.GetReferences()) {
+                if (TPath::Init(TPathId::FromProto(referrer.GetPathId()), context.SS)->PathType ==
+                    NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
+                    isTieredStorage = true;
+                    break;
+                }
+            }
+            if (isTieredStorage) {
+                if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Cannot make this change while the external data source is used as a tiered storage: " + status.GetErrorMessage());
+                    return result;
+                }
+            }
+        }
 
         AddPathInSchemeShard(result, dstPath);
         const TPathElement::TPtr externalDataSource =
@@ -246,7 +262,7 @@ public:
         AdvanceTransactionStateToPropose(context, db);
 
         PersistExternalDataSource(
-            context, db, externalDataSource, externalDataSourceInfo, acl);
+            context, db, externalDataSource, externalDataSourceInfo);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,

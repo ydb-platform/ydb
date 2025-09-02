@@ -20,7 +20,7 @@ struct TThreadIntrospectionInfo
     TString ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    TString TraceLoggingTag;
+    std::string TraceLoggingTag;
     std::vector<const void*> Backtrace;
 };
 
@@ -41,7 +41,7 @@ struct TFiberIntrospectionInfo
     TString ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    TString TraceLoggingTag;
+    std::string TraceLoggingTag;
     std::vector<const void*> Backtrace;
 };
 

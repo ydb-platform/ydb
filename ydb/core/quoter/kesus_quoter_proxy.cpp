@@ -8,7 +8,7 @@
 #include <ydb/core/kesus/tablet/quoter_constants.h>
 
 #include <ydb/library/time_series_vec/time_series_vec.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -41,7 +41,9 @@
 namespace NKikimr {
 namespace NQuoter {
 
-using NKesus::TEvKesus;
+namespace TEvKesus = NKesus::TEvKesus;
+
+const ui64 KesusReconnectLimit = 5;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {
@@ -289,6 +291,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     bool Connected = false;
     TInstant DisconnectTime;
     ui64 OfflineAllocationCookie = 0;
+    ui64 KesusReconnectCount = 0;
 
     TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
     THashMap<ui64, decltype(Resources)::iterator> ResIndex;
@@ -796,6 +799,7 @@ private:
         if (ev->Get()->Status == NKikimrProto::OK) {
             KESUS_PROXY_LOG_DEBUG("Successfully connected to tablet");
             Connected = true;
+            KesusReconnectCount = 0;
             SubscribeToAllResources();
         } else {
             if (ev->Get()->Dead) {
@@ -803,7 +807,13 @@ private:
                 SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
             } else {
                 KESUS_PROXY_LOG_WARN("Failed to connect to tablet. Status: " << ev->Get()->Status);
-                ConnectToKesus(true);
+                if (++KesusReconnectCount <= KesusReconnectLimit) {
+                    ConnectToKesus(true);
+                } else {
+                    KESUS_PROXY_LOG_WARN("Too many reconnect attempts in a row, assuming kesus dead");
+                    SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
+                    KesusReconnectCount = 0;
+                }
             }
         }
     }
@@ -1117,9 +1127,8 @@ public:
         return KesusInfo->Description.GetKesusTabletId();
     }
 
-    NTabletPipe::TClientConfig GetPipeConnectionOptions(bool reconnection) {
+    static NTabletPipe::TClientConfig GetPipeConnectionOptions(bool reconnection) {
         NTabletPipe::TClientConfig cfg;
-        cfg.CheckAliveness = true;
         cfg.RetryPolicy = {
             .RetryLimitCount = 3u,
             .DoFirstRetryInstantly = !reconnection

@@ -3,6 +3,6 @@
 
 namespace NKikimr::NKqp {
 
-void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false);
-
+void WriteTestData(
+    TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false, ui64 tsStepUs = 1);
 }

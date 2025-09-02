@@ -20,5 +20,10 @@ message TDataShardConfig {
     optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
     optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
+    optional uint64 CdcInitialScanReadAheadLo = 22 [default = 524288];
+    optional uint64 CdcInitialScanReadAheadHi = 23 [default = 1048576];
     optional bool DisabledOnSchemeShard = 19 [default = false];
+    optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
+    optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];
+    optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
 }

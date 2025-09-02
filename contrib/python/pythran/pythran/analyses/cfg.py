@@ -35,9 +35,7 @@ class CFG(FunctionAnalysis):
     #: control flow without a return statement.
     NIL = object()
 
-    def __init__(self):
-        self.result = DiGraph()
-        super(CFG, self).__init__()
+    ResultType = DiGraph
 
     def visit_FunctionDef(self, node):
         """OUT = node, RAISES = ()"""
@@ -61,9 +59,10 @@ class CFG(FunctionAnalysis):
         return (node,), ()
 
     # All these nodes have the same behavior as pass
-    visit_Assign = visit_AugAssign = visit_Import = visit_Pass
+    visit_Assign = visit_AnnAssign = visit_AugAssign = visit_Import = visit_Pass
     visit_Expr = visit_Print = visit_ImportFrom = visit_Pass
     visit_Yield = visit_Delete = visit_Pass
+    visit_Nonlocal = visit_Pass
 
     def visit_Return(self, node):
         """OUT = (), RAISES = ()"""

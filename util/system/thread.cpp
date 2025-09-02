@@ -4,6 +4,7 @@
 #include "thread.h"
 #include "thread.i"
 
+#include <util/generic/bitops.h>
 #include <util/generic/ptr.h>
 #include <util/generic/ymath.h>
 #include <util/generic/ylimits.h>
@@ -50,7 +51,7 @@ bool SetLowestThreadPriority() {
     struct sched_param sch;
     memset(&sch, 0, sizeof(sch));
     sch.sched_priority = 0;
-    #ifdef _darwin_
+    #if defined(_darwin_) || defined(_freebsd_)
     return pthread_setschedparam(pthread_self(), SCHED_RR, &sch) == 0;
     #else
     return pthread_setschedparam(pthread_self(), SCHED_IDLE, &sch) == 0;
@@ -135,7 +136,7 @@ namespace {
             {
                 TParamsRef p((TMyParams*)(ptr));
 
-                //drop counter, gotten in Start()
+                // drop counter, gotten in Start()
                 p->UnRef();
 
                 SetThrName(*p);
@@ -146,7 +147,7 @@ namespace {
         }
 
         inline void Start() {
-            //do not do this, kids, at home
+            // do not do this, kids, at home
             P_->Ref();
     #if _WIN32_WINNT < 0x0502
             Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, &ThreadId));
@@ -170,7 +171,7 @@ namespace {
 
     using TThreadBase = TWinThread;
 #else
-    //unix
+    // unix
 
     #define PCHECK(x, y)                                    \
         {                                                   \
@@ -268,7 +269,7 @@ namespace {
 
         return t.Get();
     }
-}
+} // namespace
 
 class TThread::TImpl: public TThreadBase {
 public:
@@ -352,6 +353,8 @@ TThread::TId TThread::CurrentThreadId() noexcept {
 TThread::TId TThread::CurrentThreadNumericId() noexcept {
 #if defined(_win_)
     return GetCurrentThreadId();
+#elif defined(_freebsd_)
+    return pthread_getthreadid_np();
 #elif defined(_darwin_)
     // There is no gettid() on MacOS and SYS_gettid returns completely unrelated numbers.
     // See: http://elliotth.blogspot.com/2012/04/gettid-on-mac-os.html
@@ -382,7 +385,7 @@ namespace {
     static void* ThreadProcWrapper(void* param) {
         return reinterpret_cast<T*>(param)->ThreadProc();
     }
-}
+} // namespace
 
 ISimpleThread::ISimpleThread(size_t stackSize)
     : TThread(TParams(ThreadProcWrapper<ISimpleThread>, reinterpret_cast<void*>(this), stackSize))
@@ -463,7 +466,7 @@ namespace {
         TSetThreadDescription SetThreadDescription;
         TGetThreadDescription GetThreadDescription;
     };
-}
+} // namespace
 #endif // _win_
 
 void TThread::SetCurrentThreadName(const char* name) {
@@ -535,11 +538,11 @@ TCurrentThreadLimits::TCurrentThreadLimits() noexcept
     : StackBegin(nullptr)
     , StackLength(0)
 {
-#if defined(_linux_) || defined(_cygwin_) || defined(_freebsd_)
+#if defined(_linux_) || defined(_cygwin_) || defined(_freebsd_) || defined(__EMSCRIPTEN__)
     pthread_attr_t attr;
     pthread_attr_init(&attr);
 
-    #if defined(_linux_) || defined(_cygwin_)
+    #if defined(_linux_) || defined(_cygwin_) || defined(__EMSCRIPTEN__)
     Y_ABORT_UNLESS(pthread_getattr_np(pthread_self(), &attr) == 0, "pthread_getattr failed");
     #else
     Y_ABORT_UNLESS(pthread_attr_get_np(pthread_self(), &attr) == 0, "pthread_attr_get_np failed");

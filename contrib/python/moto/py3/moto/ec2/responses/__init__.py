@@ -1,5 +1,4 @@
 from .account_attributes import AccountAttributes
-from .amazon_dev_pay import AmazonDevPay
 from .amis import AmisResponse
 from .availability_zones_and_regions import AvailabilityZonesAndRegions
 from .customer_gateways import CustomerGateways
@@ -7,7 +6,9 @@ from .dhcp_options import DHCPOptions
 from .elastic_block_store import ElasticBlockStore
 from .elastic_ip_addresses import ElasticIPAddresses
 from .elastic_network_interfaces import ElasticNetworkInterfaces
+from .fleets import Fleets
 from .general import General
+from .hosts import HostsResponse
 from .instances import InstanceResponse
 from .internet_gateways import InternetGateways
 from .egress_only_internet_gateways import EgressOnlyInternetGateway
@@ -16,7 +17,6 @@ from .key_pairs import KeyPairs
 from .launch_templates import LaunchTemplates
 from .monitoring import Monitoring
 from .network_acls import NetworkACLs
-from .placement_groups import PlacementGroups
 from .reserved_instances import ReservedInstances
 from .route_tables import RouteTables
 from .security_groups import SecurityGroups
@@ -27,8 +27,6 @@ from .subnets import Subnets
 from .flow_logs import FlowLogs
 from .tags import TagResponse
 from .virtual_private_gateways import VirtualPrivateGateways
-from .vm_export import VMExport
-from .vm_import import VMImport
 from .vpcs import VPCs
 from .vpc_service_configuration import VPCEndpointServiceConfiguration
 from .vpc_peering_connections import VPCPeeringConnections
@@ -44,7 +42,6 @@ from .carrier_gateways import CarrierGateway
 
 class EC2Response(
     AccountAttributes,
-    AmazonDevPay,
     AmisResponse,
     AvailabilityZonesAndRegions,
     CustomerGateways,
@@ -52,7 +49,9 @@ class EC2Response(
     ElasticBlockStore,
     ElasticIPAddresses,
     ElasticNetworkInterfaces,
+    Fleets,
     General,
+    HostsResponse,
     InstanceResponse,
     InternetGateways,
     EgressOnlyInternetGateway,
@@ -61,7 +60,6 @@ class EC2Response(
     LaunchTemplates,
     Monitoring,
     NetworkACLs,
-    PlacementGroups,
     ReservedInstances,
     RouteTables,
     SecurityGroups,
@@ -72,8 +70,6 @@ class EC2Response(
     FlowLogs,
     TagResponse,
     VirtualPrivateGateways,
-    VMExport,
-    VMImport,
     VPCs,
     VPCEndpointServiceConfiguration,
     VPCPeeringConnections,
@@ -86,12 +82,9 @@ class EC2Response(
     IamInstanceProfiles,
     CarrierGateway,
 ):
-    @property
-    def ec2_backend(self):
-        from moto.ec2.models import ec2_backends
-
-        return ec2_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="ec2")
 
     @property
-    def should_autoescape(self):
+    def should_autoescape(self) -> bool:
         return True

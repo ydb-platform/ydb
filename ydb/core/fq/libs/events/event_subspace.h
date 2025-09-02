@@ -32,7 +32,8 @@ struct TYqEventSubspace {
         ControlPlaneConfig,
         YdbCompute,
         TableOverFq,
-
+        RowDispatcher,
+        NodesManager,
         SubspacesEnd,
     };
 

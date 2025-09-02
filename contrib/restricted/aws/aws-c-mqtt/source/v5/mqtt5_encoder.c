@@ -800,7 +800,25 @@ static int s_aws_mqtt5_encoder_begin_publish(struct aws_mqtt5_encoder *encoder, 
 
         local_publish_view.topic = outbound_topic;
         if (outbound_topic_alias != 0) {
+            AWS_LOGF_DEBUG(
+                AWS_LS_MQTT5_GENERAL,
+                "(%p) mqtt5 client encoder - PUBLISH packet using topic alias value %" PRIu16,
+                (void *)encoder->config.client,
+                outbound_topic_alias);
+            if (outbound_topic.len == 0) {
+                AWS_LOGF_DEBUG(
+                    AWS_LS_MQTT5_GENERAL,
+                    "(%p) mqtt5 client encoder - PUBLISH packet dropping topic field for previously established alias",
+                    (void *)encoder->config.client);
+            }
             local_publish_view.topic_alias = &outbound_topic_alias;
+        } else {
+            AWS_FATAL_ASSERT(local_publish_view.topic.len > 0);
+            AWS_LOGF_DEBUG(
+                AWS_LS_MQTT5_GENERAL,
+                "(%p) mqtt5 client encoder - PUBLISH packet not using a topic alias",
+                (void *)encoder->config.client);
+            local_publish_view.topic_alias = NULL;
         }
     }
 

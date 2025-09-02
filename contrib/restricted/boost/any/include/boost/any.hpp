@@ -3,13 +3,26 @@
 #ifndef BOOST_ANY_INCLUDED
 #define BOOST_ANY_INCLUDED
 
+#include <boost/any/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
+
+/// \file boost/any.hpp
+/// \brief \copybrief boost::any
+
+#ifndef BOOST_ANY_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
-/// \file boost/any.hpp
-/// \brief \copybrief boost::any
+#include <memory>  // for std::addressof
+#include <type_traits>
+
+#include <boost/throw_exception.hpp>
+#include <boost/type_index.hpp>
+
+#endif  // #ifndef BOOST_ANY_INTERFACE_UNIT
 
 // what:  variant type boost::any
 // who:   contributed by Kevlin Henney,
@@ -21,14 +34,11 @@
 #include <boost/any/bad_any_cast.hpp>
 #include <boost/any/fwd.hpp>
 #include <boost/any/detail/placeholder.hpp>
-#include <boost/throw_exception.hpp>
-#include <boost/type_index.hpp>
 
-#include <memory>  // for std::addressof
-#include <type_traits>
+namespace boost {
 
-namespace boost
-{
+BOOST_ANY_BEGIN_MODULE_EXPORT
+
     /// \brief A class whose instances can hold instances of any
     /// type that satisfies \forcedlink{ValueType} requirements.
     class any
@@ -306,7 +316,7 @@ namespace boost
     template<typename ValueType>
     ValueType any_cast(any & operand)
     {
-        typedef typename std::remove_reference<ValueType>::type nonref;
+        using nonref = typename std::remove_reference<ValueType>::type;
 
         nonref * result = boost::any_cast<nonref>(std::addressof(operand));
         if(!result)
@@ -338,7 +348,7 @@ namespace boost
     template<typename ValueType>
     inline ValueType any_cast(const any & operand)
     {
-        typedef typename std::remove_reference<ValueType>::type nonref;
+        using nonref = typename std::remove_reference<ValueType>::type;
         return boost::any_cast<const nonref &>(const_cast<any &>(operand));
     }
 
@@ -355,13 +365,18 @@ namespace boost
         );
         return boost::any_cast<ValueType>(operand);
     }
+
+BOOST_ANY_END_MODULE_EXPORT
+
 }
 
 // Copyright Kevlin Henney, 2000, 2001, 2002. All rights reserved.
-// Copyright Antony Polukhin, 2013-2024.
+// Copyright Antony Polukhin, 2013-2025.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
 
 #endif

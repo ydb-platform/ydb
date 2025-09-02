@@ -1,17 +1,16 @@
 #pragma once
-#include <ydb/core/formats/arrow/common/accessor.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
-#include <ydb/core/formats/arrow/common/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
 
 namespace NKikimr::NArrow::NMerger {
@@ -22,16 +21,15 @@ class TSortableScanData;
 class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
-    std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress> PositionAddress;
+    std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
+
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
-    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>& addresses)
+    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
         : Position(position)
-        , PositionAddress(addresses)
-    {
-
+        , PositionAddress(addresses) {
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -59,12 +57,13 @@ public:
     std::partial_ordering Compare(const TSortableScanData& item, const ui64 itemPosition) const;
     std::partial_ordering Compare(const TCursor& item) const;
 
+    void ValidateSchema(const TSortableScanData& position) const;
 };
 
 class TSortableScanData {
 private:
     ui64 RecordsCount = 0;
-    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>, PositionAddress);
+    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TFullDataAddress>, PositionAddress);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     ui64 StartPosition = 0;
@@ -75,69 +74,29 @@ private:
     bool Contains(const ui64 position) const {
         return StartPosition <= position && position < FinishPosition;
     }
-public:
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
-        : RecordsCount(recordsCount)
-        , Columns(columns)
-        , Fields(fields)
-    {
-        BuildPosition(position);
-    }
 
-    const NAccessor::IChunkedArray::TCurrentChunkAddress& GetPositionAddress(const ui32 colIdx) const {
-        AFL_VERIFY(colIdx < PositionAddress.size());
-        return PositionAddress[colIdx];
-    }
-
-    ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
-        AFL_VERIFY(colIdx < PositionAddress.size());
-        AFL_VERIFY(pos >= PositionAddress[colIdx].GetStartPosition());
-        return pos - PositionAddress[colIdx].GetStartPosition();
-    }
-
-    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
-        return std::make_shared<TSortableScanData>(position, RecordsCount, Columns, Fields);
-    }
-
-    TCursor BuildCursor(const ui64 position) const {
-        if (Contains(position)) {
-            return TCursor(position, PositionAddress);
-        }
-        auto addresses = PositionAddress;
-        ui32 idx = 0;
-        for (auto&& i : addresses) {
-            if (!i.Contains(position)) {
-                i = Columns[idx]->GetChunk(i, position);
-            }
-            ++idx;
-        }
-        return TCursor(position, addresses);
-    }
-
-    std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
-        AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
+    std::partial_ordering CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const {
+        AFL_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
+        AFL_VERIFY(size);
         if (Contains(position) && item.Contains(itemPosition)) {
-            for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
+            for (ui32 idx = 0; idx < size; ++idx) {
                 std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
                 }
             }
         } else {
-            for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
+            for (ui32 idx = 0; idx < size; ++idx) {
                 std::partial_ordering cmp = std::partial_ordering::equivalent;
-                const bool containsSelf = PositionAddress[idx].Contains(position);
-                const bool containsItem = item.PositionAddress[idx].Contains(itemPosition);
+                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
+                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
                     cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
                 } else if (containsSelf) {
-                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx], itemPosition);
+                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
                     cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
                 } else if (containsItem) {
-                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx], position);
+                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
                     cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
                 } else {
                     AFL_VERIFY(false);
@@ -151,9 +110,64 @@ public:
         return std::partial_ordering::equivalent;
     }
 
+public:
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch);
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
+        const std::vector<std::shared_ptr<arrow::Field>>& fields)
+        : RecordsCount(recordsCount)
+        , Columns(columns)
+        , Fields(fields) {
+        BuildPosition(position);
+    }
+
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+        const std::vector<std::shared_ptr<arrow::Field>>& fields);
+
+    const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
+        AFL_VERIFY(colIdx < PositionAddress.size());
+        return PositionAddress[colIdx];
+    }
+
+    ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
+        AFL_VERIFY(colIdx < PositionAddress.size());
+        return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
+    }
+
+    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
+        return std::make_shared<TSortableScanData>(*this);
+    }
+
+    TCursor BuildCursor(const ui64 position) const {
+        if (Contains(position)) {
+            return TCursor(position, PositionAddress);
+        }
+        auto addresses = PositionAddress;
+        ui32 idx = 0;
+        for (auto&& i : addresses) {
+            if (!i.GetAddress().Contains(position)) {
+                i = Columns[idx]->GetChunk(i.GetAddress(), position);
+            }
+            ++idx;
+        }
+        return TCursor(position, addresses);
+    }
+
+    std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
+        AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
+        return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
+    }
+
+    std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
+        return CompareImpl(position, item, itemPosition, std::min<ui32>(PositionAddress.size(), item.PositionAddress.size()));
+    }
+
     void AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const;
 
-    bool InitPosition(const ui64 position);
+    [[nodiscard]] bool InitPosition(const ui64 position);
 
     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
@@ -163,15 +177,15 @@ public:
         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
     }
 
-    bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (Fields.size() != (size_t)schema->num_fields()) {
+    bool IsSameSchema(const arrow::Schema& schema) const {
+        if (Fields.size() != (size_t)schema.num_fields()) {
             return false;
         }
         for (ui32 i = 0; i < Fields.size(); ++i) {
-            if (!Fields[i]->type()->Equals(schema->field(i)->type())) {
+            if (!Fields[i]->type()->Equals(schema.field(i)->type())) {
                 return false;
             }
-            if (Fields[i]->name() != schema->field(i)->name()) {
+            if (Fields[i]->name() != schema.field(i)->name()) {
                 return false;
             }
         }
@@ -210,6 +224,18 @@ protected:
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
+
+    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting,
+        const std::shared_ptr<TSortableScanData>& data)
+        : Position(position)
+        , RecordsCount(recordsCount)
+        , ReverseSort(reverseSort)
+        , Sorting(sorting)
+        , Data(data) {
+        AFL_VERIFY(!!Sorting);
+        AFL_VERIFY(IsAvailablePosition(Position));
+    }
+
 public:
     TSortableBatchPosition() = default;
 
@@ -221,7 +247,7 @@ public:
         return RecordsCount;
     }
 
-    std::shared_ptr<TSortableScanData> GetSorting() const {
+    const std::shared_ptr<TSortableScanData>& GetSorting() const {
         return Sorting;
     }
 
@@ -240,25 +266,15 @@ public:
         return Sorting->GetFields();
     }
 
-    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting, const std::shared_ptr<TSortableScanData>& data)
-        : Position(position)
-        , RecordsCount(recordsCount)
-        , ReverseSort(reverseSort)
-        , Sorting(sorting)
-        , Data(data)
-    {
-
-    }
-
     TSortableBatchPosition(const TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition&& source) = delete;
 
-    TSortableBatchPosition operator= (const TRWSortableBatchPosition& source) = delete;
-    TSortableBatchPosition operator= (TRWSortableBatchPosition& source) = delete;
-    TSortableBatchPosition operator= (TRWSortableBatchPosition&& source) = delete;
+    TSortableBatchPosition operator=(const TRWSortableBatchPosition& source) = delete;
+    TSortableBatchPosition operator=(TRWSortableBatchPosition& source) = delete;
+    TSortableBatchPosition operator=(TRWSortableBatchPosition&& source) = delete;
 
-    TRWSortableBatchPosition BuildRWPosition() const;
+    TRWSortableBatchPosition BuildRWPosition(const bool needData, const bool deepCopy) const;
 
     std::shared_ptr<arrow::Table> SliceData(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Data);
@@ -281,6 +297,7 @@ public:
         explicit TFoundPosition(const ui32 pos)
             : Position(pos) {
         }
+
     public:
         TString DebugString() const {
             TStringBuilder result;
@@ -314,10 +331,25 @@ public:
         static TFoundPosition Equal(const ui32 pos) {
             return TFoundPosition(pos);
         }
+
+        TFoundPosition(const ui32 pos, const std::partial_ordering cmp)
+            : Position(pos) {
+            if (cmp == std::partial_ordering::less) {
+                GreaterIfNotEqual = false;
+            } else if (cmp == std::partial_ordering::greater) {
+                GreaterIfNotEqual = true;
+            }
+        }
     };
 
-    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
-    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
+    [[nodiscard]] bool IsAvailablePosition(const i64 position) const {
+        return 0 <= position && position < RecordsCount;
+    }
+
+    static std::optional<TFoundPosition> FindBound(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
+        const bool needGreater, const std::optional<ui32> includedStartPosition);
+    static std::optional<TSortableBatchPosition::TFoundPosition> FindBound(TRWSortableBatchPosition& position, const ui64 posStart,
+        const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
         AFL_VERIFY(!!Data);
@@ -331,8 +363,15 @@ public:
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
-    bool IsSameSortingSchema(const std::shared_ptr<arrow::Schema>& schema) const {
+    bool IsSameSortingSchema(const arrow::Schema& schema) const {
         return Sorting->IsSameSchema(schema);
+    }
+
+    bool IsSameDataSchema(const arrow::Schema& schema) const {
+        if (!Data) {
+            return schema.num_fields() == 0;
+        }
+        return Data->IsSameSchema(schema);
     }
 
     template <class TRecords>
@@ -350,6 +389,34 @@ public:
         }
         Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
+    template <class TRecords>
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_rows());
+        RecordsCount = batch->num_rows();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, batch);
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
+    TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+        const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(columns.size());
+        Y_ABORT_UNLESS(columns.front()->length());
+        for (ui32 i = 1; i < columns.size(); ++i) {
+            AFL_VERIFY(columns.front()->length() == columns[i]->length());
+        }
+        RecordsCount = columns.front()->length();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
@@ -372,6 +439,7 @@ public:
     }
 
     std::partial_ordering Compare(const TCursor& cursor) const {
+        AFL_VERIFY(!!Sorting);
         if (ReverseSort) {
             return cursor.Compare(*Sorting, Position);
         } else {
@@ -383,6 +451,12 @@ public:
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
         const auto directResult = Sorting->Compare(Position, *item.Sorting, item.GetPosition());
+        return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
+    std::partial_ordering ComparePartial(const TSortableBatchPosition& item) const {
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        const auto directResult = Sorting->ComparePartial(Position, *item.Sorting, item.GetPosition());
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
@@ -401,38 +475,197 @@ public:
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
     }
+};
 
+class TIntervalPosition {
+private:
+    TSortableBatchPosition Position;
+    bool LeftIntervalInclude;
+
+public:
+    const TSortableBatchPosition& GetPosition() const {
+        return Position;
+    }
+    bool IsIncludedToLeftInterval() const {
+        return LeftIntervalInclude;
+    }
+    TIntervalPosition(TSortableBatchPosition&& position, const bool leftIntervalInclude)
+        : Position(std::move(position))
+        , LeftIntervalInclude(leftIntervalInclude) {
+    }
+
+    TIntervalPosition(const TSortableBatchPosition& position, const bool leftIntervalInclude)
+        : Position(position)
+        , LeftIntervalInclude(leftIntervalInclude) {
+    }
+
+    bool operator<(const TIntervalPosition& item) const {
+        std::partial_ordering cmp = Position.Compare(item.Position);
+        if (cmp == std::partial_ordering::equivalent) {
+            return (LeftIntervalInclude ? 1 : 0) < (item.LeftIntervalInclude ? 1 : 0);
+        }
+        return cmp == std::partial_ordering::less;
+    }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("position", Position.DebugJson());
+        result.InsertValue("include", LeftIntervalInclude);
+        return result;
+    }
+};
+
+class TIntervalPositions {
+private:
+    std::vector<TIntervalPosition> Positions;
+
+public:
+    using const_iterator = std::vector<TIntervalPosition>::const_iterator;
+
+    void Merge(const TIntervalPositions& from) {
+        auto itSelf = Positions.begin();
+        auto itFrom = from.Positions.begin();
+        while (itSelf != Positions.end() && itFrom != from.Positions.end()) {
+            if (*itSelf < *itFrom) {
+                Positions.emplace_back(*itSelf);
+                ++itSelf;
+            } else if (*itFrom < *itSelf) {
+                Positions.emplace_back(*itFrom);
+                ++itFrom;
+            } else {
+                Positions.emplace_back(*itFrom);
+                ++itSelf;
+                ++itFrom;
+            }
+        }
+        if (itSelf == Positions.end()) {
+            Positions.insert(Positions.end(), itFrom, from.Positions.end());
+        } else {
+            Positions.insert(Positions.end(), itSelf, Positions.end());
+        }
+    }
+
+    ui32 GetPointsCount() const {
+        return Positions.size();
+    }
+
+    bool IsEmpty() const {
+        return Positions.empty();
+    }
+
+    std::vector<TIntervalPosition>::const_iterator begin() const {
+        return Positions.begin();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& p : Positions) {
+            sb << p.DebugJson().GetStringRobust() << ";";
+        }
+        sb << "]";
+        return sb;
+    }
+
+    std::vector<TIntervalPosition>::const_iterator end() const {
+        return Positions.end();
+    }
+
+    void InsertPosition(TIntervalPosition&& intervalPosition) {
+        Positions.emplace_back(std::move(intervalPosition));
+        ui32 index = Positions.size() - 1;
+        while (index >= 1 && Positions[index] < Positions[index - 1]) {
+            std::swap(Positions[index], Positions[index - 1]);
+            index = index - 1;
+        }
+    }
+
+    void InsertPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void InsertPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void AddPosition(TIntervalPosition&& intervalPosition) {
+        if (Positions.size()) {
+            AFL_VERIFY_DEBUG(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+        }
+        Positions.emplace_back(std::move(intervalPosition));
+    }
+
+    void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        AddPosition(TIntervalPosition(std::move(position), includePositionToLeftInterval));
+    }
+
+    void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        AddPosition(TIntervalPosition(position, includePositionToLeftInterval));
+    }
 };
 
 class TRWSortableBatchPosition: public TSortableBatchPosition, public TMoveOnly {
 private:
     using TBase = TSortableBatchPosition;
+
 public:
     using TBase::TBase;
 
-    bool NextPosition(const i64 delta) {
+    [[nodiscard]] bool NextPosition(const i64 delta) {
         return InitPosition(Position + delta);
     }
 
-    bool InitPosition(const i64 position) {
-        if (position < RecordsCount && position >= 0) {
-            Sorting->InitPosition(position);
-            if (Data) {
-                Data->InitPosition(position);
-            }
-            Position = position;
-            return true;
-        } else {
+    [[nodiscard]] bool InitPosition(const i64 position) {
+        if (!IsAvailablePosition(position)) {
             return false;
         }
-
+        AFL_VERIFY(Sorting->InitPosition(position))("pos", position)("count", RecordsCount);
+        if (Data) {
+            AFL_VERIFY(Data->InitPosition(position))("pos", position)("count", RecordsCount);
+        }
+        Position = position;
+        return true;
     }
+
+    class TAsymmetricPositionGuard: TNonCopyable {
+    private:
+        TRWSortableBatchPosition& Owner;
+
+    public:
+        TAsymmetricPositionGuard(TRWSortableBatchPosition& owner)
+            : Owner(owner) {
+        }
+
+        [[nodiscard]] bool InitSortingPosition(const i64 position) {
+            if (!Owner.IsAvailablePosition(position)) {
+                return false;
+            }
+            AFL_VERIFY(Owner.Sorting->InitPosition(position));
+            Owner.Position = position;
+            return true;
+        }
+
+        ~TAsymmetricPositionGuard() {
+            if (Owner.IsAvailablePosition(Owner.Position)) {
+                if (Owner.Data) {
+                    AFL_VERIFY(Owner.Data->InitPosition(Owner.Position));
+                }
+            }
+        }
+    };
+
+    TAsymmetricPositionGuard CreateAsymmetricAccessGuard() {
+        return TAsymmetricPositionGuard(*this);
+    }
+
     TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, TBordersIterator& it) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, TBordersIterator& it) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> result;
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
@@ -442,7 +675,11 @@ public:
             result.emplace_back(nullptr);
             return result;
         }
+        if (!it.IsValid()) {
+            return { batch };
+        }
         TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false);
+        it.SkipToUpper(pos);
         bool batchFinished = false;
         i64 recordsCountSplitted = 0;
         for (; it.IsValid() && !batchFinished; it.Next()) {
@@ -481,6 +718,7 @@ public:
     private:
         typename TContainer::const_iterator Current;
         typename TContainer::const_iterator End;
+
     public:
         TAssociatedContainerIterator(const TContainer& container)
             : Current(container.begin())
@@ -498,10 +736,15 @@ public:
         const auto& CurrentPosition() const {
             return Current->first;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
         TAssociatedContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it);
     }
@@ -511,6 +754,7 @@ public:
     private:
         typename TContainer::const_iterator Current;
         typename TContainer::const_iterator End;
+
     public:
         TSequentialContainerIterator(const TContainer& container)
             : Current(container.begin())
@@ -528,14 +772,61 @@ public:
         const auto& CurrentPosition() const {
             return *Current;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
         TSequentialContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it);
     }
 
+    class TIntervalPointsIterator {
+    private:
+        TIntervalPositions::const_iterator Current;
+        TIntervalPositions::const_iterator End;
+
+    public:
+        TIntervalPointsIterator(const TIntervalPositions& container)
+            : Current(container.begin())
+            , End(container.end()) {
+        }
+
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return Current->GetPosition();
+        }
+
+        struct TComparator {
+            bool operator()(const TIntervalPosition& pos, const TSortableBatchPosition& value) const {
+                return pos.GetPosition() < value;
+            }
+            bool operator()(const TSortableBatchPosition& value, const TIntervalPosition& pos) const {
+                return value < pos.GetPosition();
+            }
+        };
+
+        void SkipToUpper(const TSortableBatchPosition& toPos) {
+            Current = std::upper_bound(Current, End, toPos, TComparator());
+        }
+    };
+
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TIntervalPositions& container) {
+        TIntervalPointsIterator it(container);
+        return SplitByBorders(batch, columnNames, it);
+    }
 };
 
-}
+}   // namespace NKikimr::NArrow::NMerger

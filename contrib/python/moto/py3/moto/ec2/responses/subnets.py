@@ -1,19 +1,17 @@
-import random
 from moto.core.utils import camelcase_to_underscores
+from moto.moto_api._internal import mock_random as random
 
 from ._base_response import EC2BaseResponse
 
 
 class Subnets(EC2BaseResponse):
-    def create_subnet(self):
+    def create_subnet(self) -> str:
         vpc_id = self._get_param("VpcId")
         cidr_block = self._get_param("CidrBlock")
         ipv6_cidr_block = self._get_param("Ipv6CidrBlock")
         availability_zone = self._get_param("AvailabilityZone")
         availability_zone_id = self._get_param("AvailabilityZoneId")
-        tags = self._get_multi_param("TagSpecification")
-        if tags:
-            tags = tags[0].get("Tag")
+        tags = self._parse_tag_specification("subnet")
 
         if not availability_zone and not availability_zone_id:
             availability_zone = random.choice(
@@ -30,33 +28,34 @@ class Subnets(EC2BaseResponse):
         template = self.response_template(CREATE_SUBNET_RESPONSE)
         return template.render(subnet=subnet)
 
-    def delete_subnet(self):
+    def delete_subnet(self) -> str:
         subnet_id = self._get_param("SubnetId")
         subnet = self.ec2_backend.delete_subnet(subnet_id)
         template = self.response_template(DELETE_SUBNET_RESPONSE)
         return template.render(subnet=subnet)
 
-    def describe_subnets(self):
+    def describe_subnets(self) -> str:
         self.error_on_dryrun()
         subnet_ids = self._get_multi_param("SubnetId")
         filters = self._filters_from_querystring()
-        subnets = self.ec2_backend.get_all_subnets(subnet_ids, filters)
+        subnets = self.ec2_backend.describe_subnets(subnet_ids, filters)
         template = self.response_template(DESCRIBE_SUBNETS_RESPONSE)
         return template.render(subnets=subnets)
 
-    def modify_subnet_attribute(self):
+    def modify_subnet_attribute(self) -> str:
         subnet_id = self._get_param("SubnetId")
 
         for attribute in ("MapPublicIpOnLaunch", "AssignIpv6AddressOnCreation"):
-            if self.querystring.get("%s.Value" % attribute):
+            if self.querystring.get(f"{attribute}.Value"):
                 attr_name = camelcase_to_underscores(attribute)
-                attr_value = self.querystring.get("%s.Value" % attribute)[0]
+                attr_value = self.querystring[f"{attribute}.Value"][0]
                 self.ec2_backend.modify_subnet_attribute(
                     subnet_id, attr_name, attr_value
                 )
                 return MODIFY_SUBNET_ATTRIBUTE_RESPONSE
+        return ""
 
-    def associate_subnet_cidr_block(self):
+    def associate_subnet_cidr_block(self) -> str:
         ipv6_cidr_block = self._get_param("Ipv6CidrBlock")
         subnet_id = self._get_param("SubnetId")
 
@@ -66,7 +65,7 @@ class Subnets(EC2BaseResponse):
         template = self.response_template(ASSOCIATE_SUBNET_CIDR_BLOCK_RESPONSE)
         return template.render(subnet_id=subnet_id, association=association)
 
-    def disassociate_subnet_cidr_block(self):
+    def disassociate_subnet_cidr_block(self) -> str:
         association_id = self._get_param("AssociationId")
 
         subnet_id, association = self.ec2_backend.disassociate_subnet_cidr_block(

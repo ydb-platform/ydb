@@ -44,7 +44,7 @@ public:
 
             const auto& [sender, req] = Self->PendingChangeExchangeHandshakes.front();
             auto& [_, resp] = Statuses.emplace_back(sender, MakeHolder<TEvChangeExchange::TEvStatus>());
-            Y_ABORT_UNLESS(ExecuteHandshake(db, req, resp->Record));
+            Y_ENSURE(ExecuteHandshake(db, req, resp->Record));
             Self->PendingChangeExchangeHandshakes.pop_front();
         }
 
@@ -137,7 +137,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             case NKikimrChangeExchange::TDataChange::kReset:
                 return record.GetReset();
             default:
-                Y_FAIL_S("Unexpected row operation: " << static_cast<ui32>(record.GetRowOperationCase()));
+                Y_ENSURE(false, "Unexpected row operation: " << static_cast<ui32>(record.GetRowOperationCase()));
         }
     }
 
@@ -166,11 +166,20 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         }
     }
 
+    static bool UseStepTxId(const NKikimrChangeExchange::TChangeRecord& record) {
+        return record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kAsyncIndex;
+    }
+
+    static bool ValidChangeKind(const NKikimrChangeExchange::TChangeRecord& record) {
+        return record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kAsyncIndex
+            || record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kIncrementalRestore;
+    }
+
     bool ProcessRecord(const NKikimrChangeExchange::TChangeRecord& record, TTransactionContext& txc, const TActorContext& ctx) {
         Key.clear();
         Value.clear();
 
-        if (record.GetKindCase() != NKikimrChangeExchange::TChangeRecord::kAsyncIndex) {
+        if (!ValidChangeKind(record)) {
             AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_UNEXPECTED_KIND,
                 TStringBuilder() << "Unexpected kind: " << static_cast<ui32>(record.GetKindCase()));
@@ -186,9 +195,10 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             return false;
         }
 
+        const TTableId tableId(Self->GetPathOwnerId(), record.GetLocalPathId());
         const auto& tableInfo = *it->second;
-        const auto& asyncIndex = record.GetAsyncIndex();
-        const auto& serializedKey = asyncIndex.GetKey();
+        const auto& change = record.HasAsyncIndex() ? record.GetAsyncIndex() : record.GetIncrementalRestore();
+        const auto& serializedKey = change.GetKey();
 
         if (serializedKey.TagsSize() != tableInfo.KeyColumnIds.size()) {
             AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
@@ -225,16 +235,8 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
 
         ui64 keyBytes = 0;
         for (size_t i = 0; i < tableInfo.KeyColumnTypes.size(); ++i) {
-            const auto type = tableInfo.KeyColumnTypes.at(i);
+            const NScheme::TTypeId type = tableInfo.KeyColumnTypes.at(i).GetTypeId();
             const auto& cell = KeyCells.GetCells().at(i);
-
-            if (type.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
-                    NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-                    "Keys with Uint8 column values >127 are currently prohibited");
-                return false;
-            }
-
             keyBytes += cell.Size();
             Key.emplace_back(cell.AsRef(), type);
         }
@@ -248,11 +250,11 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             return false;
         }
 
-        const NTable::ERowOp rop = GetRowOperation(asyncIndex);
+        const NTable::ERowOp rop = GetRowOperation(change);
         switch (rop) {
             case NTable::ERowOp::Upsert:
             case NTable::ERowOp::Reset: {
-                const auto& serializedValue = GetValue(asyncIndex);
+                const auto& serializedValue = GetValue(change);
 
                 if (!TSerializedCellVec::TryParse(serializedValue.GetData(), ValueCells)) {
                     AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
@@ -290,7 +292,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                         return false;
                     }
 
-                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type));
+                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type.GetTypeId()));
                 }
 
                 break;
@@ -305,7 +307,18 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                 return false;
         }
 
-        txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
+        if (!UseStepTxId(record) && !MvccVersion) {
+            MvccVersion = Self->GetMvccVersion();
+            Pipeline.AddCommittingOp(*MvccVersion);
+        }
+
+        if (UseStepTxId(record)) {
+            txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
+        } else {
+            Self->SysLocksTable().BreakLocks(tableId, KeyCells.GetCells()); // probably redundant, we expect target table to be locked until complete restore
+            txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccVersion);
+        }
+
         Self->GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);
         tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
         AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_OK);
@@ -314,8 +327,9 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
     }
 
 public:
-    explicit TTxApplyChangeRecords(TDataShard* self, TEvChangeExchange::TEvApplyRecords::TPtr ev)
+    explicit TTxApplyChangeRecords(TDataShard* self, TPipeline& pipeline, TEvChangeExchange::TEvApplyRecords::TPtr ev)
         : TTransactionBase(self)
+        , Pipeline(pipeline)
         , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
     {
@@ -390,7 +404,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(Status);
+        Y_ENSURE(Status);
+
+        if (MvccVersion) {
+            Pipeline.RemoveCommittingOp(*MvccVersion);
+        }
 
         if (Status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
             Self->IncCounter(COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_APPLY);
@@ -402,8 +420,10 @@ public:
     }
 
 private:
+    TPipeline& Pipeline;
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
     THolder<TEvChangeExchange::TEvStatus> Status;
+    std::optional<TRowVersion> MvccVersion;
 
     TSerializedCellVec KeyCells;
     TSerializedCellVec ValueCells;
@@ -428,7 +448,7 @@ void TDataShard::Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr&, c
 void TDataShard::RunChangeExchangeHandshakeTx() {
     if (!ChangeExchangeHandshakeTxScheduled && !PendingChangeExchangeHandshakes.empty()) {
         ChangeExchangeHandshakeTxScheduled = true;
-        EnqueueExecute(new TTxChangeExchangeHandshake(this));
+        Enqueue(new TTxChangeExchangeHandshake(this));
     }
 }
 
@@ -446,7 +466,7 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
         << ": origin# " << ev->Get()->Record.GetOrigin()
         << ", generation# " << ev->Get()->Record.GetGeneration()
         << ", at tablet# " << TabletID());
-    Execute(new TTxApplyChangeRecords(this, ev), ctx);
+    Execute(new TTxApplyChangeRecords(this, Pipeline, ev), ctx);
 }
 
 }

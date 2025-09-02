@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include "actor.h"
 #include "error.h"
 #include "events.h"
@@ -62,7 +62,7 @@ private:
     THolder<IReplyCallback> Cb_;
     bool ErrorResponse_ = false;
     TInstant StartTs_;
-    TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
+    TSchedulerCookieHolder TimeoutCookie_;
 
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;

@@ -282,10 +282,10 @@ public:
     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(const TActorContext& ctx,
+    void ModifyPersqueueConfig(TAppData* appData,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
 };
 
 class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
@@ -297,10 +297,10 @@ public:
     TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);
 
     void Bootstrap(const NActors::TActorContext &ctx);
-    void ModifyPersqueueConfig(const TActorContext& ctx,
+    void ModifyPersqueueConfig(TAppData* appData,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
 };
 
 
@@ -374,17 +374,52 @@ public:
     TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(const TActorContext& ctx,
+    void ModifyPersqueueConfig(TAppData* appData,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
 };
 
+
+class TAlterTopicActorInternal : public TPQInternalSchemaActor<TAlterTopicActorInternal, NKikimr::NGRpcProxy::V1::TAlterTopicRequest,
+                                                               TEvPQProxy::TEvAlterTopicResponse>
+                               , public TUpdateSchemeActorBase<TAlterTopicActorInternal>
+                               , public TCdcStreamCompatible
+{
+    using TUpdateSchemeBase = TUpdateSchemeActorBase<TAlterTopicActorInternal>;
+    using TRequest = NKikimr::NGRpcProxy::V1::TAlterTopicRequest;
+    using TActorBase = TPQInternalSchemaActor<TAlterTopicActorInternal, TRequest, TEvPQProxy::TEvAlterTopicResponse>;
+
+public:
+    TAlterTopicActorInternal(NKikimr::NGRpcProxy::V1::TAlterTopicRequest&& request,
+                             NThreading::TPromise<TAlterTopicResponse>&& promise,
+                             bool notExistsOk);
+
+    void Bootstrap(const NActors::TActorContext& ctx) override;
+    void ModifyPersqueueConfig(TAppData* appData,
+                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
+
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
+
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
+        TActorBase::StateWork(ev);
+    }
+
+protected:
+    bool RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) override;
+
+private:
+    NThreading::TPromise<TAlterTopicResponse> Promise;
+    bool MissingOk;
+};
 
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,
                                                                TGetPartitionsLocationRequest,
                                                                TEvPQProxy::TEvPartitionLocationResponse>
-                               , public TDescribeTopicActorImpl {
+                               , public TDescribeTopicActorImpl
+                               , public TCdcStreamCompatible {
 
 using TBase = TPQInternalSchemaActor<TPartitionsLocationActor, TGetPartitionsLocationRequest,
                                      TEvPQProxy::TEvPartitionLocationResponse>;
@@ -414,16 +449,9 @@ public:
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     void Reply(const TActorContext&) override {};
 
-    void Handle(NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev);
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;
 private:
-    void SendNodesRequest() const;
-
-    NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr NodesInfoEv;
     THashSet<ui64> PartitionIds;
-
-    bool GotPartitions = false;
-    bool GotNodesInfo = false;
 };
 
 } // namespace NKikimr::NGRpcProxy::V1

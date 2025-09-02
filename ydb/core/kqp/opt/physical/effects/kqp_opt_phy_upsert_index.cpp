@@ -2,7 +2,7 @@
 #include "kqp_opt_phy_effects_impl.h"
 #include "kqp_opt_phy_uniq_helper.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -150,21 +150,9 @@ TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDq
 
 TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecompute& inputRows,
     const TDqPhyPrecompute& lookupDict, const THashSet<TStringBuf>& inputColumns,
-    const THashSet<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
+    const TVector<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool opt)
 {
-    // Check if we can update index table from just input data
-    bool allColumnFromInput = true; // - indicate all data from input
-    for (const auto& column : indexColumns) {
-        allColumnFromInput = allColumnFromInput && inputColumns.contains(column);
-    }
-
-    if (allColumnFromInput) {
-        return mode == TKqpPhyUpsertIndexMode::UpdateOn
-            ? MakeNonexistingRowsFilter(inputRows, lookupDict, table.Metadata->KeyColumnNames, pos, ctx)
-            : TExprBase(inputRows);
-    }
-
     auto inputRowsArg = TCoArgument(ctx.NewArgument(pos, "input_rows"));
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto lookupDictArg = TCoArgument(ctx.NewArgument(pos, "lookup_dict"));
@@ -403,21 +391,13 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         const THashSet<TString> indexKeyColumns = CreateKeyColumnSetToRead(indexes);
         const THashSet<TString> indexDataColumns = CreateDataColumnSetToRead(indexes);
 
-        for (const auto& x : indexKeyColumns) {
-            columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
-        }
+        THashSet<TString> columnsToReadInPrecomputeLookupDict;
+        columnsToReadInPrecomputeLookupDict.insert(indexKeyColumns.begin(), indexKeyColumns.end());
+        columnsToReadInPrecomputeLookupDict.insert(indexDataColumns.begin(), indexDataColumns.end());
+        columnsToReadInPrecomputeLookupDict.insert(mainPk.begin(), mainPk.end());
+        columnsToReadInPrecomputeLookupDict.insert(checkDefaults.begin(), checkDefaults.end());
 
-        for (const auto& x : indexDataColumns) {
-            // Handle the case of multiple indexes
-            // one of them has 'foo' as data column but for another one foo is just indexed column
-            if (indexKeyColumns.contains(x))
-                continue;
-            columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
-        }
-
-        for (const auto& x : mainPk) {
-            if (indexKeyColumns.contains(x))
-                continue;
+        for (const auto& x : columnsToReadInPrecomputeLookupDict) {
             columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
         }
 
@@ -619,7 +599,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         columnsWithDefaultsSet.emplace(column.Value());
     }
 
-    auto filter =  (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
+    auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
     const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
 
     auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
@@ -673,11 +653,13 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         ? MakeNonexistingRowsFilter(rowsPrecompute.Cast(), lookupDict.Cast(), pk, pos, ctx)
         : rowsPrecompute.Cast();
 
+    auto mainTableNode = BuildTableMeta(table, pos, ctx);
     auto tableUpsert = Build<TKqlUpsertRows>(ctx, pos)
-        .Table(BuildTableMeta(table, pos, ctx))
+        .Table(mainTableNode)
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
+        .IsBatch(ctx.NewAtom(pos, "false"))
         .Settings(settings)
         .Done();
 
@@ -686,9 +668,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     for (const auto& [tableNode, indexDesc] : indexes) {
         bool indexKeyColumnsUpdated = false;
-        THashSet<TStringBuf> indexTableColumns;
+        THashSet<TStringBuf> indexTableColumnsSet;
+        TVector<TStringBuf> indexTableColumns;
         for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+            indexTableColumns.emplace_back(column);
 
             if (mode == TKqpPhyUpsertIndexMode::UpdateOn && table.GetKeyColumnIndex(column)) {
                 // Table PK cannot be updated, so don't consider PK columns update as index update
@@ -701,7 +685,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         }
 
         for (const auto& column : pk) {
-            indexTableColumns.insert(column);
+            if (indexTableColumnsSet.insert(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
         }
 
         auto indexTableColumnsWithoutData = indexTableColumns;
@@ -709,8 +695,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         bool indexDataColumnsUpdated = false;
         bool optUpsert = true;
         for (const auto& column : indexDesc->DataColumns) {
-            // TODO: Conder not fetching/updating data columns without input value.
-            YQL_ENSURE(indexTableColumns.emplace(column).second);
+            // TODO: Consider not fetching/updating data columns without input value.
+            if (indexTableColumnsSet.emplace(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
 
             if (inputColumnsSet.contains(column)) {
                 indexDataColumnsUpdated = true;
@@ -881,10 +869,16 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 ? MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx)
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
+                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+            }
+
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
                 .Table(tableNode)
                 .Input(deleteIndexKeys)
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 
             effects.emplace_back(indexDelete);
@@ -902,11 +896,18 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeUpsertIndexRows(mode, rowsPrecompute.Cast(), lookupDict.Cast(),
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
+                    indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            }
+
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)
                 .Table(tableNode)
                 .Input(upsertIndexRows)
                 .Columns(BuildColumnsList(indexTableColumns, pos, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 
             effects.emplace_back(indexUpsert);

@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/util/address_classifier.h>
@@ -25,7 +25,8 @@ NSc::TValue CreateMeteringBillingRecord(
     const TInstant& now,
     const ui64 quantity,
     const TString& unit,
-    const NSc::TValue& tags
+    const NSc::TValue& tags,
+    const NSc::TValue& labels = {}
 );
 
 class TProcessedRequestsAggregator {
@@ -57,6 +58,7 @@ public:
         TString ResourceId;
         ETrafficType TrafficType;
         TString NetworkClassLabel;
+        NSc::TValue Labels;
 
         bool operator<(const TReportedTrafficKey& rhs) const;
     };
@@ -64,6 +66,7 @@ public:
     struct TReportedRequestsKey {
         TString ResourceId;
         EQueueType QueueType;
+        NSc::TValue Labels;
 
         bool operator<(const TReportedRequestsKey& rhs) const;
     };

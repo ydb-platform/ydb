@@ -3,10 +3,11 @@
 DYNAMIC_LIBRARY()
 
 LICENSE(
-    "(GPL-2.0-or-later OR LGPL-3.0-or-later OR GPL-3.0-or-later)" AND
     "(LGPL-3.0-or-later OR GPL-2.0-or-later)" AND
     Custom-punycode AND
     FSFAP AND
+    GFDL-1.2-only AND
+    GFDL-1.3-or-later AND
     LGPL-2.0-or-later AND
     LGPL-2.1-only AND
     LGPL-2.1-or-later AND
@@ -14,6 +15,8 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(1.43)
 
 DYNAMIC_LIBRARY_FROM(contrib/libs/libidn/static)
 

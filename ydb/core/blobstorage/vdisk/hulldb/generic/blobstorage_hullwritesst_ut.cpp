@@ -20,11 +20,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         typedef TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TSstLogoBlob;
         typedef TSstLogoBlob::TWriter TWriterLogoBlob;
-        typedef TCompactRecordMergerIndexPass<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
+        typedef TCompactRecordMerger<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
 
         typedef TLevelSegment<TKeyBlock, TMemRecBlock> TSstBlock;
         typedef TSstBlock::TWriter TWriterBlock;
-        typedef TCompactRecordMergerIndexPass<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
+        typedef TCompactRecordMerger<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
         TTestContexts TestCtx;
 
 
@@ -171,18 +171,24 @@ namespace NKikimr {
 
                 memRec.SetDiskBlob(TDiskPart(0, 0, data.size()));
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec, &blobBuf, key, step + 1);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                if (!pushRes) {
+                auto push = [&] {
+                    TDiskPart preallocatedLocation;
+                    bool pushRes = WriterPtr->PushIndexOnly(key, merger.GetMemRec(), &merger.GetDataMerger(), &preallocatedLocation);
+                    if (pushRes && merger.GetMemRec().GetType() == TBlobType::DiskBlob && merger.GetMemRec().DataSize()) {
+                        const TDiskPart writtenLocation = WriterPtr->PushDataOnly(merger.GetDataMerger().CreateDiskBlob(Arena));
+                        Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                    }
+                    return pushRes;
+                };
+                if (!push()) {
                     Finish(step);
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
                         true);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                    Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -212,20 +218,26 @@ namespace NKikimr {
                 memRec2.SetHugeBlob(TDiskPart(1, 2, 3));
 
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec1, nullptr, key, 1);
                 merger.AddFromFresh(memRec2, nullptr, key, 2);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                if (!pushRes) {
+                auto push = [&] {
+                    TDiskPart preallocatedLocation;
+                    bool pushRes = WriterPtr->PushIndexOnly(key, merger.GetMemRec(), &merger.GetDataMerger(), &preallocatedLocation);
+                    if (pushRes && merger.GetMemRec().GetType() == TBlobType::DiskBlob && merger.GetMemRec().DataSize()) {
+                        const TDiskPart writtenLocation = WriterPtr->PushDataOnly(merger.GetDataMerger().CreateDiskBlob(Arena));
+                        Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                    }
+                    return pushRes;
+                };
+                if (!push()) {
                     Finish(step);
 
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
                         true);
-                    pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                    Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -243,19 +255,16 @@ namespace NKikimr {
                 TKeyBlock key(34 + gen);
                 TMemRecBlock memRec(gen);
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec, nullptr, key, gen + 1);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                if (!pushRes) {
+                if (!WriterPtr->PushIndexOnly(key, memRec, nullptr, nullptr)) {
                     Finish(gen);
 
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
                         true);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                    Y_ABORT_UNLESS(WriterPtr->PushIndexOnly(key, merger.GetMemRec(), nullptr, nullptr));
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);

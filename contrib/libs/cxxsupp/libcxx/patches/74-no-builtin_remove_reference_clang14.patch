@@ -1,0 +1,19 @@
+diff --git a/include/__type_traits/remove_reference.h b/include/__type_traits/remove_reference.h
+index ba67891..ef11b16 100644
+--- a/include/__type_traits/remove_reference.h
++++ b/include/__type_traits/remove_reference.h
+@@ -34,7 +34,13 @@ struct remove_reference {
+ template <class _Tp>
+ using __libcpp_remove_reference_t = typename remove_reference<_Tp>::type;
+ #else
+-#  error "remove_reference not implemented!"
++// clang-format off
++template <class _Tp> struct _LIBCPP_TEMPLATE_VIS remove_reference        {typedef _LIBCPP_NODEBUG _Tp type;};
++template <class _Tp> struct _LIBCPP_TEMPLATE_VIS remove_reference<_Tp&>  {typedef _LIBCPP_NODEBUG _Tp type;};
++template <class _Tp> struct _LIBCPP_TEMPLATE_VIS remove_reference<_Tp&&> {typedef _LIBCPP_NODEBUG _Tp type;};
++// clang-format on
++template <class _Tp>
++using __libcpp_remove_reference_t = typename remove_reference<_Tp>::type;
+ #endif // __has_builtin(__remove_reference_t)
+ 
+ #if _LIBCPP_STD_VER >= 14

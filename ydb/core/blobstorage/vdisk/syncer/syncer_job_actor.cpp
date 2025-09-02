@@ -59,7 +59,7 @@ namespace NKikimr {
 
         // function for sending a message
         void SendOutcomeMsg(std::unique_ptr<IEventBase> &&ev, TActorId &&to, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(ev && to != TActorId());
+            Y_VERIFY_S(ev && to != TActorId(), SyncerCtx->VCtx->VDiskLogPrefix);
             // subscribe on Interconnect Session/Message tracking
             ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession;
             const auto channel = TInterconnectChannels::IC_BLOBSTORAGE_SYNCER;
@@ -132,7 +132,7 @@ namespace NKikimr {
 
             // initiate requests
             TSjOutcome outcome = Task->NextRequest();
-            Y_ABORT_UNLESS(!outcome.Die && outcome.Ev); // can't die in this case and must have event
+            Y_VERIFY_S(!outcome.Die && outcome.Ev, SyncerCtx->VCtx->VDiskLogPrefix); // can't die in this case and must have event
             Handle(std::move(outcome), ctx);
 
             // state function

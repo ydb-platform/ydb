@@ -133,7 +133,7 @@ public:
         if (status == NKikimrProto::OK) {
             Collects.erase(it);
         } else if (++info.TryCounter < CollectorMaxErrors) {
-            info.NextTryTimestamp = TActivationContext::Monotonic() + TDuration::MilliSeconds(info.BackoffTimer.NextBackoffMs());
+            info.NextTryTimestamp = TActivationContext::Monotonic() + info.BackoffTimer.Next();
         } else {
             return HandleErrorAndDie();
         }

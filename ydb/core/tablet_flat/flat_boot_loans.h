@@ -4,6 +4,7 @@
 #include "flat_boot_back.h"
 #include "flat_boot_blobs.h"
 #include "flat_executor_borrowlogic.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/util/pb.h>
 #include <library/cpp/blockcodecs/codecs.h>
@@ -26,7 +27,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             for (auto slot: xrange(Queue.size()))
                 if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
@@ -35,12 +36,13 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
-            if (load->Cookie < Skip || load->Cookie - Skip >= Queue.size())
-                Y_ABORT("Got TLoadBlobs result cookie out of queue range");
+            if (load->Cookie < Skip || load->Cookie - Skip >= Queue.size()) {
+                Y_TABLET_ERROR("Got TLoadBlobs result cookie out of queue range");
+            }
 
             Queue.at(load->Cookie - Skip).Body = load->Plain();
 
@@ -48,7 +50,7 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
                 Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body));
@@ -56,14 +58,14 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_ABORT_UNLESS(Queue || !Pending, "TLoans boot actor has lost entries");
+            Y_ENSURE(Queue || !Pending, "TLoans boot actor has lost entries");
 
             if (!Queue) {
                 Env->Finish(this);
             }
         }
 
-        void Apply(const TLogoBlobID &label, TArrayRef<const char> body) noexcept
+        void Apply(const TLogoBlobID &label, TArrayRef<const char> body)
         {
             TProtoBox<NKikimrExecutorFlat::TBorrowedPart> proto(body);
 

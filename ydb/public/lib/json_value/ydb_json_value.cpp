@@ -331,16 +331,16 @@ namespace NYdb {
                 Writer.WriteLongLong(Parser.GetInterval());
                 break;
             case EPrimitiveType::Date32:
-                Writer.WriteString(FormatDate(Parser.GetDate32()));
+                Writer.WriteString(FormatDate(Parser.GetDate32().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Datetime64:
-                Writer.WriteString(FormatDatetime(Parser.GetDatetime64()));
+                Writer.WriteString(FormatDatetime(Parser.GetDatetime64().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Timestamp64:
-                Writer.WriteString(FormatTimestamp(Parser.GetTimestamp64()));
+                Writer.WriteString(FormatTimestamp(Parser.GetTimestamp64().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Interval64:
-                Writer.WriteLongLong(Parser.GetInterval64());
+                Writer.WriteLongLong(Parser.GetInterval64().count());
                 break;
             case EPrimitiveType::TzDate:
                 Writer.WriteString(Parser.GetTzDate());
@@ -489,7 +489,7 @@ namespace NYdb {
             }
         }
 
-        TString BinaryStringToJsonString(const TString& s) {
+        TString BinaryStringToJsonString(const std::string& s) {
             TStringStream str;
             str << "\"";
             switch (Encoding) {
@@ -533,7 +533,7 @@ TString FormatValueJson(const TValue& value, EBinaryStringEncoding encoding)
     return out.Str();
 }
 
-void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns, NJsonWriter::TBuf& writer,
+void FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns, NJsonWriter::TBuf& writer,
     EBinaryStringEncoding encoding)
 {
     writer.BeginObject();
@@ -545,7 +545,7 @@ void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& colum
     writer.EndObject();
 }
 
-TString FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns,
+TString FormatResultRowJson(TResultSetParser& parser, const std::vector<TColumn>& columns,
     EBinaryStringEncoding encoding)
 {
     TStringStream out;
@@ -731,7 +731,7 @@ namespace {
                 if (!date.ok()) {
                     ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Date32(std::chrono::sys_days(date).time_since_epoch().count());
+                ValueBuilder.Date32(std::chrono::sys_time<TWideDays>(date));
                 break;
             }
             case EPrimitiveType::Datetime64:
@@ -742,7 +742,7 @@ namespace {
                 if (!datetime) {
                     ThrowFatalError(TStringBuilder() << "Can't parse time point from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Datetime64(*datetime);
+                ValueBuilder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(*datetime)));
                 break;
             }
             case EPrimitiveType::Timestamp64:
@@ -752,12 +752,12 @@ namespace {
                 if (!timestamp) {
                     ThrowFatalError(TStringBuilder() << "Can't parse timestamp from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Timestamp64(*timestamp);
+                ValueBuilder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(*timestamp)));
                 break;
             }
             case EPrimitiveType::Interval64:
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
-                ValueBuilder.Interval64(jsonValue.GetInteger());
+                ValueBuilder.Interval64(TWideMicroseconds(jsonValue.GetInteger()));
                 break;
             case EPrimitiveType::TzDate:
                 EnsureType(jsonValue, NJson::JSON_STRING);
@@ -789,7 +789,7 @@ namespace {
                 break;
             case EPrimitiveType::Uuid:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Uuid(jsonValue.GetString());
+                ValueBuilder.Uuid(TUuidValue{jsonValue.GetString()});
                 break;
             case EPrimitiveType::JsonDocument:
                 EnsureType(jsonValue, NJson::JSON_STRING);
@@ -884,7 +884,7 @@ namespace {
 
             case TTypeParser::ETypeKind::Decimal:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Decimal(jsonValue.GetString());
+                ValueBuilder.Decimal(TDecimalValue(jsonValue.GetString(), TypeParser.GetDecimal().Precision, TypeParser.GetDecimal().Scale));
                 break;
 
             case TTypeParser::ETypeKind::Pg:
@@ -952,7 +952,7 @@ namespace {
 
                 const auto& jsonMap = jsonValue.GetMap();
                 while (TypeParser.TryNextMember()) {
-                    const TString& memberName = TypeParser.GetMemberName();
+                    const auto& memberName = TypeParser.GetMemberName();
                     const auto it = jsonMap.find(memberName);
                     if (it == jsonMap.end()) {
                         ThrowFatalError(TStringBuilder() << "No member \"" << memberName

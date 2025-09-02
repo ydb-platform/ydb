@@ -1,0 +1,146 @@
+commit 26d7a4430dbf9c9c6fa4efaf06c22bdf447f07b7
+author: aozeritsky
+date: 2016-12-19T19:47:17+03:00
+revision: 2596954
+
+    [LOGBROKER-2064] apply https patches
+
+--- libevent/http-internal.h	(index)
++++ libevent/http-internal.h	(working tree)
+@@ -13,6 +13,7 @@
+ #include "event2/event_struct.h"
+ #include "util-internal.h"
+ #include "defer-internal.h"
++#include "event2/http.h"
+
+ #define HTTP_CONNECT_TIMEOUT	45
+ #define HTTP_WRITE_TIMEOUT	50
+@@ -55,6 +56,8 @@ struct evhttp_connection {
+
+ 	evutil_socket_t fd;
+ 	struct bufferevent *bufev;
++	bev_factory_cb bufcb;
++	void *bufcb_arg;
+
+ 	struct event retry_ev;		/* for retrying connects */
+
+--- libevent/http.c	(index)
++++ libevent/http.c	(working tree)
+@@ -1355,6 +1355,23 @@ evhttp_connection_reset_(struct evhttp_connection *evcon)
+ 		if (evhttp_connected(evcon) && evcon->closecb != NULL)
+ 			(*evcon->closecb)(evcon, evcon->closecb_arg);
+
++		/* if we have a bufferevent factory callback set, get a new bufferevent */
++		if (NULL != evcon->bufcb && -1 != bufferevent_getfd(evcon->bufev)) {
++			struct bufferevent *bev = (*evcon->bufcb)(evcon->bufcb_arg);
++
++			if (NULL == bev) {
++				event_warn("%s: bufferevent factory callback failed", __func__);
++			}
++			else {
++				if (bufferevent_get_base(bev) != evcon->base) {
++					bufferevent_base_set(evcon->base, bev);
++				}
++
++				bufferevent_free(evcon->bufev);
++				evcon->bufev = bev;
++			}
++		}
++
+ 		shutdown(evcon->fd, EVUTIL_SHUT_WR);
+ 		evutil_closesocket(evcon->fd);
+ 		evcon->fd = -1;
+@@ -2376,6 +2393,30 @@ evhttp_read_header(struct evhttp_connection *evcon,
+  * happen elsewhere.
+  */
+
++struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new(
++       struct event_base *base, struct evdns_base *dnsbase,
++       bev_factory_cb cb, void * arg, const char *address, unsigned short port)
++{
++       struct bufferevent *bev = NULL;
++
++       if (NULL != cb) {
++               if (NULL == (bev = (*cb)(arg))) {
++                       event_warn("%s: bufferevent factory callback failed", __func__);
++                       return (NULL);
++               }
++       }
++
++       struct evhttp_connection *ret =
++               evhttp_connection_base_bufferevent_new(base, dnsbase, bev, address, port);
++
++       if (NULL != ret) {
++               ret->bufcb = cb;
++               ret->bufcb_arg = arg;
++       }
++
++       return (ret);
++}
++
+ struct evhttp_connection *
+ evhttp_connection_new(const char *address, ev_uint16_t port)
+ {
+--- libevent/include/event2/http.h	(index)
++++ libevent/include/event2/http.h	(working tree)
+@@ -234,6 +234,9 @@ EVENT2_EXPORT_SYMBOL
+ void evhttp_set_default_content_type(struct evhttp *http,
+ 	const char *content_type);
+
++void evhttp_set_bevcb(struct evhttp *http,
++    struct bufferevent* (*cb)(struct event_base *, void *), void *arg);
++
+ /**
+   Sets the what HTTP methods are supported in requests accepted by this
+   server, and passed to user callbacks.
+@@ -392,6 +395,11 @@ int evhttp_set_flags(struct evhttp *http, int flags);
+
+ /* Request/Response functionality */
+
++struct evhttp_connection *evhttp_connection_base_bufferevent_new(
++	struct event_base *base, struct evdns_base *dnsbase, struct bufferevent* bev, const char *address, unsigned short port);
++
++struct bufferevent* evhttp_connection_get_bufferevent(struct evhttp_connection *evcon);
++
+ /**
+  * Send an HTML error message to the client.
+  *
+@@ -528,6 +536,38 @@ struct evhttp_connection *evhttp_connection_base_bufferevent_new(
+ 	struct event_base *base, struct evdns_base *dnsbase, struct bufferevent* bev, const char *address, ev_uint16_t port);
+
+ /**
++ * Creates and returns a new bufferevent object.
++ */
++typedef struct bufferevent* (*bev_factory_cb)(void *);
++
++/**
++ * Create and return a connection object that can be used for making HTTP
++ * requests.  The connection object tries to resolve address and establish the
++ * connection when it is given an http request object.  The specified factory
++ * function is called with the user-supplied argument to retrieve a new
++ * bufferevent whenever the underlying HTTP connection needs to be
++ * reestablished.  This is what you want if, for example, you have a bufferevent
++ * that needs to perform some setup for new connections, such as an SSL
++ * bufferevent.
++ *
++ * @param base the event_base to use for handling the connection
++ * @param dnsbase the dns_base to use for resolving host names; if not
++ *     specified host name resolution will block.
++ * @param cb a callback that returns a new bufferevent to use for connecting to
++ *     the server; if NULL, behavior is the same as in calling
++ *     evhttp_connection_base_bufferevent_new with a NULL bufferevent.  The
++ *     returned bufferevents will be freed as necessary.  The returned
++ *     bufferevents must have no fd set on them.
++ * @param arg the argument to supply to the callback
++ * @param address the address to which to connect
++ * @param port the port to connect to
++ * @return an evhttp_connection object that can be used for making requests
++ */
++struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new(
++	struct event_base *base, struct evdns_base *dnsbase,
++	bev_factory_cb cb, void * arg, const char *address, unsigned short port);
++
++/**
+  * Return the bufferevent that an evhttp_connection is using.
+  */
+ EVENT2_EXPORT_SYMBOL

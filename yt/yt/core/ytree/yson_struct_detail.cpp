@@ -27,10 +27,14 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
+void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers) const
 {
+    if (auto* bitmap = target->GetSetFieldsBitmap()) {
+        bitmap->Initialize(ssize(Parameters_));
+    }
+
     for (const auto& [_, parameter] : SortedParameters_) {
-        parameter->SetDefaultsInitialized(target);
+        parameter->SetDefaultsInitialized(target, dontSetLiteMembers);
     }
 
     for (const auto& preprocessor : Preprocessors_) {
@@ -38,22 +42,22 @@ void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) co
     }
 }
 
-const THashSet<TString>& TYsonStructMeta::GetRegisteredKeys() const
+const THashSet<std::string>& TYsonStructMeta::GetRegisteredKeys() const
 {
     return RegisteredKeys_;
 }
 
-const THashMap<TString, IYsonStructParameterPtr>& TYsonStructMeta::GetParameterMap() const
+const THashMap<std::string, IYsonStructParameterPtr>& TYsonStructMeta::GetParameterMap() const
 {
     return Parameters_;
 }
 
-const std::vector<std::pair<TString, IYsonStructParameterPtr>>& TYsonStructMeta::GetParameterSortedList() const
+const std::vector<std::pair<std::string, IYsonStructParameterPtr>>& TYsonStructMeta::GetParameterSortedList() const
 {
     return SortedParameters_;
 }
 
-IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias) const
+IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAlias) const
 {
     auto it = Parameters_.find(keyOrAlias);
     if (it != Parameters_.end()) {
@@ -68,11 +72,14 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
     THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias);
 }
 
-void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
+void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
+    auto pathGetter = [&] {
+        return "/" + key;
+    };
     auto validate = [&] {
-        parameter->PostprocessParameter(target, "/" + key);
+        parameter->PostprocessParameter(target, pathGetter);
         try {
             for (const auto& postprocessor : Postprocessors_) {
                 postprocessor(target);
@@ -86,16 +93,18 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
         }
     };
     auto loadOptions = TLoadParameterOptions{
-        .Path = "",
+        .PathGetter = pathGetter,
     };
 
     parameter->SafeLoad(target, node, loadOptions, validate);
 }
 
-void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& path) const
+void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::function<TYPath()>& pathGetter) const
 {
     for (const auto& [name, parameter] : SortedParameters_) {
-        parameter->PostprocessParameter(target, path + "/" + ToYPathLiteral(name));
+        parameter->PostprocessParameter(target, [&] {
+            return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(name);
+        });
     }
 
     try {
@@ -104,7 +113,7 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& p
         }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Postprocess failed at %v",
-            path.empty() ? "root" : path)
+            !pathGetter ? "root" : pathGetter())
                 << ex;
     }
 }
@@ -114,7 +123,7 @@ void TYsonStructMeta::LoadStruct(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path) const
+    const std::function<TYPath()>& pathGetter) const
 {
     YT_VERIFY(*StructType_ == typeid(*target));
     YT_VERIFY(node);
@@ -126,7 +135,7 @@ void TYsonStructMeta::LoadStruct(
     auto mapNode = node->AsMap();
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
     for (const auto& [name, parameter] : SortedParameters_) {
-        TString key = name;
+        std::string key = name;
         auto child = mapNode->FindChild(name); // can be NULL
         for (const auto& alias : parameter->GetAliases()) {
             auto otherChild = mapNode->FindChild(alias);
@@ -141,7 +150,9 @@ void TYsonStructMeta::LoadStruct(
             }
         }
         auto loadOptions = TLoadParameterOptions{
-            .Path = path + "/" + ToYPathLiteral(key),
+            .PathGetter = [&] {
+                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
+            },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
         parameter->Load(target, child, loadOptions);
@@ -155,6 +166,7 @@ void TYsonStructMeta::LoadStruct(
         for (const auto& [key, child] : mapNode->GetChildren()) {
             if (!registeredKeys.contains(key)) {
                 if (ShouldThrow(unrecognizedStrategy)) {
+                    auto path = (pathGetter ? pathGetter() : TYPath(""));
                     THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
                         << TErrorAttribute("key", key)
                         << TErrorAttribute("path", path);
@@ -166,7 +178,7 @@ void TYsonStructMeta::LoadStruct(
     }
 
     if (postprocess) {
-        PostprocessStruct(target, path);
+        PostprocessStruct(target, pathGetter);
     }
 }
 
@@ -175,7 +187,7 @@ void TYsonStructMeta::LoadStruct(
     NYson::TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path) const
+    const std::function<TYPath()>& pathGetter) const
 {
     YT_VERIFY(*StructType_ == typeid(*target));
     YT_VERIFY(cursor);
@@ -188,25 +200,21 @@ void TYsonStructMeta::LoadStruct(
 
     auto createLoadOptions = [&] (TStringBuf key) {
         return TLoadParameterOptions{
-            .Path = path + "/" + ToYPathLiteral(key),
+            .PathGetter = [&pathGetter, key] {
+                return (pathGetter ? pathGetter() : TYPath("")) + "/" + ToYPathLiteral(key);
+            },
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
     };
 
-    THashMap<TStringBuf, IYsonStructParameter*> keyToParameter;
-    THashSet<IYsonStructParameter*> pendingParameters;
-    for (const auto& [key, parameter] : SortedParameters_) {
-        EmplaceOrCrash(keyToParameter, key, parameter.Get());
-        for (const auto& alias : parameter->GetAliases()) {
-            EmplaceOrCrash(keyToParameter, alias, parameter.Get());
-        }
-        InsertOrCrash(pendingParameters, parameter.Get());
-    }
+    i64 pendingParameterCount = SortedParameters_.size();
+    TCompactBitmap foundParameters;
+    foundParameters.Initialize(pendingParameterCount);
 
-    THashMap<TString, TString> aliasedData;
+    THashMap<std::string, std::string> aliasedData;
 
     auto processPossibleAlias = [&] (
-        IYsonStructParameter* parameter,
+        const IYsonStructParameterPtr& parameter,
         TStringBuf key,
         NYson::TYsonPullParserCursor* cursor)
     {
@@ -237,12 +245,13 @@ void TYsonStructMeta::LoadStruct(
         EmplaceOrCrash(aliasedData, canonicalKey, std::move(data));
     };
 
-    auto processUnrecognized = [&] (const TString& key, NYson::TYsonPullParserCursor* cursor) {
+    auto processUnrecognized = [&] (const std::string& key, NYson::TYsonPullParserCursor* cursor) {
         if (unrecognizedStrategy == EUnrecognizedStrategy::Drop) {
             cursor->SkipComplexValue();
             return;
         }
         if (ShouldThrow(unrecognizedStrategy)) {
+            auto path = (pathGetter ? pathGetter() : TYPath(""));
             THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
                 << TErrorAttribute("key", key)
                 << TErrorAttribute("path", path);
@@ -256,29 +265,38 @@ void TYsonStructMeta::LoadStruct(
     };
 
     cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
-        auto key = ExtractTo<TString>(cursor);
-        auto it = keyToParameter.find(key);
-        if (it == keyToParameter.end()) {
+        auto key = ExtractTo<std::string>(cursor);
+        auto it = RegisteredParametersIndexes_.find(key);
+        if (it == RegisteredParametersIndexes_.end()) {
             processUnrecognized(key, cursor);
             return;
         }
 
-        auto* parameter = it->second;
+        i64 parameterIndex = it->second;
+        auto& parameter = SortedParameters_[parameterIndex].second;
         if (parameter->GetAliases().empty()) {
             parameter->Load(target, cursor, createLoadOptions(key));
         } else {
             processPossibleAlias(parameter, key, cursor);
         }
-        // NB: Key may be missing in case of aliasing.
-        pendingParameters.erase(parameter);
+
+        if (!foundParameters[parameterIndex]) {
+            pendingParameterCount--;
+            foundParameters.Set(parameterIndex);
+        }
     });
 
-    for (const auto parameter : pendingParameters) {
-        parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+    if (pendingParameterCount > 0) {
+        for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+            if (!foundParameters[i]) {
+                const auto& [_, parameter] = SortedParameters_[i];
+                parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+            }
+        }
     }
 
     if (postprocess) {
-        PostprocessStruct(target, path);
+        PostprocessStruct(target, pathGetter);
     }
 }
 
@@ -296,7 +314,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
     return result;
 }
 
-void TYsonStructMeta::RegisterParameter(TString key, IYsonStructParameterPtr parameter)
+void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
     YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
 }
@@ -348,13 +366,46 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         }
     }
 
-    SortedParameters_ = std::vector<std::pair<TString, IYsonStructParameterPtr>>(Parameters_.begin(), Parameters_.end());
+    SortedParameters_ = std::vector<std::pair<std::string, IYsonStructParameterPtr>>(Parameters_.begin(), Parameters_.end());
     std::sort(
         SortedParameters_.begin(),
         SortedParameters_.end(),
         [] (const auto& lhs, const auto& rhs) {
             return lhs.first < rhs.first;
         });
+
+    for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+        const auto& [name, parameter] = SortedParameters_[i];
+        RegisteredParametersIndexes_.emplace(name, i);
+        for (const auto& alias : parameter->GetAliases()) {
+            RegisteredParametersIndexes_.emplace(alias, i);
+        }
+    }
+}
+
+bool TYsonStructMeta::CompareStructs(
+    const TYsonStructBase* lhs,
+    const TYsonStructBase* rhs) const
+{
+    YT_VERIFY(lhs->Meta_ == this);
+
+    if (lhs == rhs) {
+        return true;
+    }
+
+    if (rhs->Meta_ != lhs->Meta_) {
+        return false;
+    }
+
+    // Equal Meta implies equal struct types.
+    // Thus structs must be instances of the same class.
+    for (const auto& [_, parameter] : SortedParameters_) {
+        if (!parameter->CompareParameter(lhs, rhs)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

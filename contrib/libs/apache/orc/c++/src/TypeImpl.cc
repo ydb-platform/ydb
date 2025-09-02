@@ -19,8 +19,10 @@
 #include "TypeImpl.hh"
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
+#include "orc/Type.hh"
 
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 namespace orc {
@@ -29,54 +31,81 @@ namespace orc {
     // PASS
   }
 
-  TypeImpl::TypeImpl(TypeKind _kind) {
-    parent = nullptr;
-    columnId = -1;
-    maximumColumnId = -1;
-    kind = _kind;
-    maxLength = 0;
-    precision = 0;
-    scale = 0;
-    subtypeCount = 0;
+  TypeImpl::TypeImpl(TypeKind kind) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
   }
 
-  TypeImpl::TypeImpl(TypeKind _kind, uint64_t _maxLength) {
-    parent = nullptr;
-    columnId = -1;
-    maximumColumnId = -1;
-    kind = _kind;
-    maxLength = _maxLength;
-    precision = 0;
-    scale = 0;
-    subtypeCount = 0;
+  TypeImpl::TypeImpl(TypeKind kind, uint64_t maxLength) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = maxLength;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
   }
 
-  TypeImpl::TypeImpl(TypeKind _kind, uint64_t _precision, uint64_t _scale) {
-    parent = nullptr;
-    columnId = -1;
-    maximumColumnId = -1;
-    kind = _kind;
-    maxLength = 0;
-    precision = _precision;
-    scale = _scale;
-    subtypeCount = 0;
+  TypeImpl::TypeImpl(TypeKind kind, uint64_t precision, uint64_t scale) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = precision;
+    scale_ = scale;
+    subtypeCount_ = 0;
+  }
+
+  TypeImpl::TypeImpl(TypeKind kind, const std::string& crs) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
+    crs_ = crs;
+    edgeInterpolationAlgorithm_ = geospatial::EdgeInterpolationAlgorithm::SPHERICAL;
+  }
+
+  TypeImpl::TypeImpl(TypeKind kind, const std::string& crs,
+                     geospatial::EdgeInterpolationAlgorithm algo) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
+    crs_ = crs;
+    edgeInterpolationAlgorithm_ = algo;
   }
 
   uint64_t TypeImpl::assignIds(uint64_t root) const {
-    columnId = static_cast<int64_t>(root);
+    columnId_ = static_cast<int64_t>(root);
     uint64_t current = root + 1;
-    for (uint64_t i = 0; i < subtypeCount; ++i) {
-      current = dynamic_cast<TypeImpl*>(subTypes[i].get())->assignIds(current);
+    for (uint64_t i = 0; i < subtypeCount_; ++i) {
+      current = dynamic_cast<TypeImpl*>(subTypes_[i].get())->assignIds(current);
     }
-    maximumColumnId = static_cast<int64_t>(current) - 1;
+    maximumColumnId_ = static_cast<int64_t>(current) - 1;
     return current;
   }
 
   void TypeImpl::ensureIdAssigned() const {
-    if (columnId == -1) {
+    if (columnId_ == -1) {
       const TypeImpl* root = this;
-      while (root->parent != nullptr) {
-        root = root->parent;
+      while (root->parent_ != nullptr) {
+        root = root->parent_;
       }
       root->assignIds(0);
     }
@@ -84,94 +113,102 @@ namespace orc {
 
   uint64_t TypeImpl::getColumnId() const {
     ensureIdAssigned();
-    return static_cast<uint64_t>(columnId);
+    return static_cast<uint64_t>(columnId_);
   }
 
   uint64_t TypeImpl::getMaximumColumnId() const {
     ensureIdAssigned();
-    return static_cast<uint64_t>(maximumColumnId);
+    return static_cast<uint64_t>(maximumColumnId_);
   }
 
   TypeKind TypeImpl::getKind() const {
-    return kind;
+    return kind_;
   }
 
   uint64_t TypeImpl::getSubtypeCount() const {
-    return subtypeCount;
+    return subtypeCount_;
   }
 
   const Type* TypeImpl::getSubtype(uint64_t i) const {
-    return subTypes[i].get();
+    return subTypes_[i].get();
   }
 
   const std::string& TypeImpl::getFieldName(uint64_t i) const {
-    return fieldNames[i];
+    return fieldNames_[i];
   }
 
   uint64_t TypeImpl::getMaximumLength() const {
-    return maxLength;
+    return maxLength_;
   }
 
   uint64_t TypeImpl::getPrecision() const {
-    return precision;
+    return precision_;
   }
 
   uint64_t TypeImpl::getScale() const {
-    return scale;
+    return scale_;
+  }
+
+  const std::string& TypeImpl::getCrs() const {
+    return crs_;
+  }
+
+  geospatial::EdgeInterpolationAlgorithm TypeImpl::getAlgorithm() const {
+    return edgeInterpolationAlgorithm_;
   }
 
   Type& TypeImpl::setAttribute(const std::string& key, const std::string& value) {
-    attributes[key] = value;
+    attributes_[key] = value;
     return *this;
   }
 
   bool TypeImpl::hasAttributeKey(const std::string& key) const {
-    return attributes.find(key) != attributes.end();
+    return attributes_.find(key) != attributes_.end();
   }
 
   Type& TypeImpl::removeAttribute(const std::string& key) {
-    auto it = attributes.find(key);
-    if (it == attributes.end()) {
+    auto it = attributes_.find(key);
+    if (it == attributes_.end()) {
       throw std::range_error("Key not found: " + key);
     }
-    attributes.erase(it);
+    attributes_.erase(it);
     return *this;
   }
 
   std::vector<std::string> TypeImpl::getAttributeKeys() const {
     std::vector<std::string> ret;
-    ret.reserve(attributes.size());
-    for (auto& attribute : attributes) {
+    ret.reserve(attributes_.size());
+    for (auto& attribute : attributes_) {
       ret.push_back(attribute.first);
     }
     return ret;
   }
 
   std::string TypeImpl::getAttributeValue(const std::string& key) const {
-    auto it = attributes.find(key);
-    if (it == attributes.end()) {
+    auto it = attributes_.find(key);
+    if (it == attributes_.end()) {
       throw std::range_error("Key not found: " + key);
     }
     return it->second;
   }
 
-  void TypeImpl::setIds(uint64_t _columnId, uint64_t _maxColumnId) {
-    columnId = static_cast<int64_t>(_columnId);
-    maximumColumnId = static_cast<int64_t>(_maxColumnId);
+  void TypeImpl::setIds(uint64_t columnId, uint64_t maxColumnId) {
+    columnId_ = static_cast<int64_t>(columnId);
+    maximumColumnId_ = static_cast<int64_t>(maxColumnId);
   }
 
   void TypeImpl::addChildType(std::unique_ptr<Type> childType) {
     TypeImpl* child = dynamic_cast<TypeImpl*>(childType.get());
-    subTypes.push_back(std::move(childType));
+    subTypes_.push_back(std::move(childType));
     if (child != nullptr) {
-      child->parent = this;
+      child->parent_ = this;
     }
-    subtypeCount += 1;
+    subtypeCount_ += 1;
   }
 
   Type* TypeImpl::addStructField(const std::string& fieldName, std::unique_ptr<Type> fieldType) {
     addChildType(std::move(fieldType));
-    fieldNames.push_back(fieldName);
+    fieldNames_.push_back(fieldName);
     return this;
   }
 
@@ -189,8 +226,47 @@ namespace orc {
     return true;
   }
 
+  namespace geospatial {
+    std::string AlgoToString(EdgeInterpolationAlgorithm algo) {
+      switch (algo) {
+        case EdgeInterpolationAlgorithm::SPHERICAL:
+          return "speherial";
+        case VINCENTY:
+          return "vincenty";
+        case THOMAS:
+          return "thomas";
+        case ANDOYER:
+          return "andoyer";
+        case KARNEY:
+          return "karney";
+        default:
+          throw InvalidArgument("Unknown algo");
+      }
+    }
+
+    EdgeInterpolationAlgorithm AlgoFromString(const std::string& algo) {
+      if (algo == "speherial") {
+        return EdgeInterpolationAlgorithm::SPHERICAL;
+      }
+      if (algo == "vincenty") {
+        return VINCENTY;
+      }
+      if (algo == "thomas") {
+        return THOMAS;
+      }
+      if (algo == "andoyer") {
+        return ANDOYER;
+      }
+      if (algo == "karney") {
+        return KARNEY;
+      }
+      throw InvalidArgument("Unknown algo: " + algo);
+    }
+
+  }  // namespace geospatial
+
   std::string TypeImpl::toString() const {
-    switch (static_cast<int64_t>(kind)) {
+    switch (static_cast<int64_t>(kind_)) {
       case BOOLEAN:
         return "boolean";
       case BYTE:
@@ -214,20 +290,20 @@ namespace orc {
       case TIMESTAMP_INSTANT:
         return "timestamp with local time zone";
       case LIST:
-        return "array<" + (subTypes[0] ? subTypes[0]->toString() : "void") + ">";
+        return "array<" + (subTypes_[0] ? subTypes_[0]->toString() : "void") + ">";
       case MAP:
-        return "map<" + (subTypes[0] ? subTypes[0]->toString() : "void") + "," +
-               (subTypes[1] ? subTypes[1]->toString() : "void") + ">";
+        return "map<" + (subTypes_[0] ? subTypes_[0]->toString() : "void") + "," +
+               (subTypes_[1] ? subTypes_[1]->toString() : "void") + ">";
       case STRUCT: {
         std::string result = "struct<";
-        for (size_t i = 0; i < subTypes.size(); ++i) {
+        for (size_t i = 0; i < subTypes_.size(); ++i) {
           if (i != 0) {
             result += ",";
           }
-          if (isUnquotedFieldName(fieldNames[i])) {
-            result += fieldNames[i];
+          if (isUnquotedFieldName(fieldNames_[i])) {
+            result += fieldNames_[i];
           } else {
-            std::string name(fieldNames[i]);
+            std::string name(fieldNames_[i]);
             size_t pos = 0;
             while ((pos = name.find("`", pos)) != std::string::npos) {
               name.replace(pos, 1, "``");
@@ -238,37 +314,48 @@ namespace orc {
             result += "`";
           }
           result += ":";
-          result += subTypes[i]->toString();
+          result += subTypes_[i]->toString();
         }
         result += ">";
         return result;
       }
       case UNION: {
         std::string result = "uniontype<";
-        for (size_t i = 0; i < subTypes.size(); ++i) {
+        for (size_t i = 0; i < subTypes_.size(); ++i) {
           if (i != 0) {
             result += ",";
           }
-          result += subTypes[i]->toString();
+          result += subTypes_[i]->toString();
         }
         result += ">";
         return result;
       }
       case DECIMAL: {
         std::stringstream result;
-        result << "decimal(" << precision << "," << scale << ")";
+        result << "decimal(" << precision_ << "," << scale_ << ")";
         return result.str();
       }
       case DATE:
         return "date";
       case VARCHAR: {
         std::stringstream result;
-        result << "varchar(" << maxLength << ")";
+        result << "varchar(" << maxLength_ << ")";
         return result.str();
       }
       case CHAR: {
         std::stringstream result;
-        result << "char(" << maxLength << ")";
+        result << "char(" << maxLength_ << ")";
+        return result.str();
+      }
+      case GEOMETRY: {
+        std::stringstream result;
+        result << "geometry(" << crs_ << ")";
+        return result.str();
+      }
+      case GEOGRAPHY: {
+        std::stringstream result;
+        result << "geography(" << crs_ << ","
+               << geospatial::AlgoToString(edgeInterpolationAlgorithm_) << ")";
         return result.str();
       }
       default:
@@ -285,7 +372,7 @@ namespace orc {
   std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity,
                                                               MemoryPool& memoryPool, bool encoded,
                                                               bool useTightNumericVector) const {
-    switch (static_cast<int64_t>(kind)) {
+    switch (static_cast<int64_t>(kind_)) {
       case BOOLEAN:
         if (useTightNumericVector) {
           return std::make_unique<ByteVectorBatch>(capacity, memoryPool);
@@ -322,6 +409,8 @@ namespace orc {
       case BINARY:
       case CHAR:
       case VARCHAR:
+      case GEOMETRY:
+      case GEOGRAPHY:
         return encoded ? std::make_unique<EncodedStringVectorBatch>(capacity, memoryPool)
                        : std::make_unique<StringVectorBatch>(capacity, memoryPool);
 
@@ -419,6 +508,15 @@ namespace orc {
     return std::make_unique<TypeImpl>(UNION);
   }
 
+  std::unique_ptr<Type> createGeometryType(const std::string& crs) {
+    return std::make_unique<TypeImpl>(GEOMETRY, crs);
+  }
+
+  std::unique_ptr<Type> createGeographyType(const std::string& crs,
+                                            geospatial::EdgeInterpolationAlgorithm algo) {
+    return std::make_unique<TypeImpl>(GEOGRAPHY, crs, algo);
+  }
+
   std::string printProtobufMessage(const google::protobuf::Message& message);
   std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& footer) {
     std::unique_ptr<Type> ret;
@@ -441,6 +539,16 @@ namespace orc {
       case proto::Type_Kind_CHAR:
       case proto::Type_Kind_VARCHAR:
         ret = std::make_unique<TypeImpl>(static_cast<TypeKind>(type.kind()), type.maximum_length());
+        break;
+
+      case proto::Type_Kind_GEOMETRY:
+        ret = std::make_unique<TypeImpl>(static_cast<TypeKind>(type.kind()), type.crs());
+        break;
+
+      case proto::Type_Kind_GEOGRAPHY:
+        ret = std::make_unique<TypeImpl>(
+            static_cast<TypeKind>(type.kind()), type.crs(),
+            static_cast<geospatial::EdgeInterpolationAlgorithm>(type.algorithm()));
         break;
 
       case proto::Type_Kind_DECIMAL:
@@ -522,6 +630,13 @@ namespace orc {
       case VARCHAR:
       case CHAR:
         result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getMaximumLength());
+        break;
+      case GEOMETRY:
+        result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getCrs());
+        break;
+      case GEOGRAPHY:
+        result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getCrs(),
+                                            fileType->getAlgorithm());
         break;
 
       case LIST:
@@ -660,7 +775,8 @@ namespace orc {
       std::pair<std::string, size_t> nameRes = parseName(input, pos, end);
       pos = nameRes.second;
       if (input[pos] != ':') {
-        throw std::logic_error("Invalid struct type. No field name set.");
+        throw std::logic_error("Invalid struct type. Field name can not contain '" +
+                               std::string(1, input[pos]) + "'.");
       }
       std::pair<std::unique_ptr<Type>, size_t> typeRes = TypeImpl::parseType(input, ++pos, end);
       result->addStructField(nameRes.first, std::move(typeRes.first));
@@ -707,6 +823,22 @@ namespace orc {
     uint64_t precision = static_cast<uint64_t>(atoi(input.substr(pos, sep - pos).c_str()));
     uint64_t scale = static_cast<uint64_t>(atoi(input.substr(sep + 1, end - sep - 1).c_str()));
     return std::make_unique<TypeImpl>(DECIMAL, precision, scale);
+  }
+
+  std::unique_ptr<Type> TypeImpl::parseGeographyType(const std::string& input, size_t start,
+                                                     size_t end) {
+    if (input[start] != '(') {
+      throw std::logic_error("Missing ( after geography.");
+    }
+    size_t pos = start + 1;
+    size_t sep = input.find(',', pos);
+    if (sep + 1 >= end || sep == std::string::npos) {
+      throw std::logic_error("Geography type must specify CRS.");
+    }
+    std::string crs = input.substr(pos, sep - pos);
+    std::string algoStr = input.substr(sep + 1, end - sep - 1);
+    geospatial::EdgeInterpolationAlgorithm algo = geospatial::AlgoFromString(algoStr);
+    return std::make_unique<TypeImpl>(GEOGRAPHY, crs, algo);
   }
 
   void validatePrimitiveType(std::string category, const std::string& input, const size_t pos) {
@@ -779,6 +911,14 @@ namespace orc {
       uint64_t maxLength =
           static_cast<uint64_t>(atoi(input.substr(start + 1, end - start + 1).c_str()));
       return std::make_unique<TypeImpl>(CHAR, maxLength);
+    } else if (category == "geometry") {
+      if (input[start] != '(') {
+        throw std::logic_error("Missing ( after geometry.");
+      }
+      std::string crs = input.substr(start + 1, end - start + 1);
+      return std::make_unique<TypeImpl>(GEOMETRY, crs);
+    } else if (category == "geography") {
+      return parseGeographyType(input, start, end);
     } else {
       throw std::logic_error("Unknown type " + category);
     }

@@ -13,7 +13,7 @@ namespace NKeyValue {
     struct TIntermediate;
 };
 
-struct TEvKeyValue {
+namespace TEvKeyValue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,
@@ -24,6 +24,7 @@ struct TEvKeyValue {
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
+        EvVacuumRequest,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -32,6 +33,8 @@ struct TEvKeyValue {
         EvAcquireLock,
 
         EvResponse = EvRequest + 512,
+        EvForceTabletVacuum,
+        EvVacuumResponse,
 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
@@ -197,6 +200,60 @@ struct TEvKeyValue {
             : Repeat(repeat)
         {}
     };
-};
+
+    struct TEvVacuumResponse;
+
+    struct TEvVacuumRequest : public TEventPB<TEvVacuumRequest,
+            NKikimrKeyValue::VacuumRequest, EvVacuumRequest> {
+        using TResponse = TEvVacuumResponse;
+
+        TEvVacuumRequest() = default;
+
+        TEvVacuumRequest(ui64 generation, bool reset=false) {
+            Record.set_generation(generation);
+            Record.set_reset_actual_generation(reset);
+        }
+    };
+
+    struct TEvVacuumResponse : public TEventPB<TEvVacuumResponse,
+            NKikimrKeyValue::VacuumResponse, EvVacuumResponse> {
+        using TRequest = TEvVacuumRequest;
+
+        TEvVacuumResponse() = default;
+
+        TEvVacuumResponse(ui64 generation, NKikimrKeyValue::VacuumResponse::Status status, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            Record.set_generation(generation);
+            Record.set_status(status);
+            Record.set_error_reason(errorReason);
+            Record.set_actual_generation(actualGeneration);
+            Record.set_tablet_id(tabletId);
+        }
+
+        static std::unique_ptr<TEvVacuumResponse> MakeSuccess(ui64 generation, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_SUCCESS, "", generation, tabletId);
+        }
+
+        static std::unique_ptr<TEvVacuumResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ABORTED, errorReason, actualGeneration, tabletId);
+        }
+
+        static std::unique_ptr<TEvVacuumResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration, tabletId);
+        }
+
+        static std::unique_ptr<TEvVacuumResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvVacuumResponse>(generation, NKikimrKeyValue::VacuumResponse::STATUS_ERROR, errorReason, actualGeneration, tabletId);
+        }
+    };
+
+    struct TEvForceTabletVacuum : public TEventLocal<TEvForceTabletVacuum, EvForceTabletVacuum> {
+        ui64 Generation;
+
+        TEvForceTabletVacuum(ui64 generation)
+            : Generation(generation)
+        {}
+    };
+
+}
 
 } // NKikimr

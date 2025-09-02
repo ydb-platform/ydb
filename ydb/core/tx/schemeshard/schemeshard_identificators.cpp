@@ -1,5 +1,7 @@
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
 NKikimrSchemeOp::TShardIdx AsProto(const NKikimr::NSchemeShard::TShardIdx& shardIdx) {

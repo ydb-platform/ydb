@@ -27,7 +27,7 @@ void TTableConflictsCache::AddUncommittedWrite(TConstArrayRef<TCell> key, ui64 t
             p = std::make_unique<TUncommittedWrite>();
         }
         auto r = p->WriteKeys.insert(k);
-        Y_ABORT_UNLESS(r.second);
+        Y_ENSURE(r.second);
         AddRollbackOp(TRollbackOpRemoveUncommittedWrite{ txId, k }, db);
     }
 }
@@ -46,9 +46,9 @@ void TTableConflictsCache::RemoveUncommittedWrites(TConstArrayRef<TCell> key, NT
     auto* k = itWriteKey->second.get();
     for (ui64 txId : k->UncommittedWrites) {
         auto it = UncommittedWrites.find(txId);
-        Y_ABORT_UNLESS(it != UncommittedWrites.end());
+        Y_ENSURE(it != UncommittedWrites.end());
         auto r = it->second->WriteKeys.erase(k);
-        Y_ABORT_UNLESS(r);
+        Y_ENSURE(r);
         AddRollbackOp(TRollbackOpAddUncommittedWrite{ txId, k }, db);
         if (it->second->WriteKeys.empty()) {
             AddRollbackOp(TRollbackOpRestoreUncommittedWrite{ txId, std::move(it->second) }, db);
@@ -82,7 +82,7 @@ public:
     TTxObserver() {}
 
     void OnSkipUncommitted(ui64 txId) override {
-        Y_ABORT_UNLESS(Target);
+        Y_ENSURE(Target);
         Target->insert(txId);
     }
 
@@ -142,7 +142,7 @@ bool TTableConflictsCache::RegisterDistributedWrite(ui64 txId, const TOwnedCellV
     }
 
     auto& k = WriteKeys[key];
-    Y_ABORT_UNLESS(!k);
+    Y_ENSURE(!k);
     k = std::make_unique<TWriteKey>();
     k->Key = key;
 
@@ -154,7 +154,7 @@ bool TTableConflictsCache::RegisterDistributedWrite(ui64 txId, const TOwnedCellV
                 p = std::make_unique<TUncommittedWrite>();
             }
             auto r = p->WriteKeys.insert(k.get());
-            Y_ABORT_UNLESS(r.second);
+            Y_ENSURE(r.second);
         }
     }
 
@@ -163,7 +163,7 @@ bool TTableConflictsCache::RegisterDistributedWrite(ui64 txId, const TOwnedCellV
         p = std::make_unique<TDistributedWrite>();
     }
     auto r = p->WriteKeys.insert(k.get());
-    Y_ABORT_UNLESS(r.second);
+    Y_ENSURE(r.second);
     k->DistributedWrites++;
 
     return true;
@@ -183,7 +183,7 @@ void TTableConflictsCache::UnregisterDistributedWrites(ui64 txId) {
     DistributedWrites.erase(it);
 
     for (auto* k : p->WriteKeys) {
-        Y_ABORT_UNLESS(k->DistributedWrites > 0);
+        Y_ENSURE(k->DistributedWrites > 0);
         if (0 == --k->DistributedWrites) {
             DropWriteKey(k);
         }
@@ -191,18 +191,18 @@ void TTableConflictsCache::UnregisterDistributedWrites(ui64 txId) {
 }
 
 void TTableConflictsCache::DropWriteKey(TWriteKey* k) {
-    Y_ABORT_UNLESS(k->DistributedWrites == 0);
+    Y_ENSURE(k->DistributedWrites == 0);
 
     auto itWriteKey = WriteKeys.find(k->Key);
-    Y_ABORT_UNLESS(itWriteKey != WriteKeys.end());
-    Y_ABORT_UNLESS(itWriteKey->second.get() == k);
+    Y_ENSURE(itWriteKey != WriteKeys.end());
+    Y_ENSURE(itWriteKey->second.get() == k);
 
     std::unique_ptr<TWriteKey> saved = std::move(itWriteKey->second);
     WriteKeys.erase(itWriteKey);
 
     for (ui64 txId : k->UncommittedWrites) {
         auto it = UncommittedWrites.find(txId);
-        Y_ABORT_UNLESS(it != UncommittedWrites.end());
+        Y_ENSURE(it != UncommittedWrites.end());
         it->second->WriteKeys.erase(k);
         if (it->second->WriteKeys.empty()) {
             UncommittedWrites.erase(it);
@@ -242,31 +242,31 @@ void TTableConflictsCache::OnCommitChanges() {
 }
 
 void TTableConflictsCache::OnRollbackChanges() {
-    Y_ABORT_UNLESS(RollbackAllowed, "Unexpected transaction rollback");
+    Y_ENSURE(RollbackAllowed, "Unexpected transaction rollback");
 
     struct TPerformRollback {
         TTableConflictsCache* Self;
 
         void operator()(TRollbackOpAddUncommittedWrite& op) const {
             auto it = Self->UncommittedWrites.find(op.TxId);
-            Y_ABORT_UNLESS(it != Self->UncommittedWrites.end());
+            Y_ENSURE(it != Self->UncommittedWrites.end());
             auto* p = it->second.get();
             auto* k = op.WriteKey;
             auto r1 = p->WriteKeys.insert(k);
-            Y_ABORT_UNLESS(r1.second);
+            Y_ENSURE(r1.second);
             auto r2 = k->UncommittedWrites.insert(op.TxId);
-            Y_ABORT_UNLESS(r2.second);
+            Y_ENSURE(r2.second);
         }
 
         void operator()(TRollbackOpRemoveUncommittedWrite& op) const {
             auto it = Self->UncommittedWrites.find(op.TxId);
-            Y_ABORT_UNLESS(it != Self->UncommittedWrites.end());
+            Y_ENSURE(it != Self->UncommittedWrites.end());
             auto* p = it->second.get();
             auto* k = op.WriteKey;
             auto r1 = p->WriteKeys.erase(k);
-            Y_ABORT_UNLESS(r1);
+            Y_ENSURE(r1);
             auto r2 = k->UncommittedWrites.erase(op.TxId);
-            Y_ABORT_UNLESS(r2);
+            Y_ENSURE(r2);
             if (p->WriteKeys.empty()) {
                 Self->UncommittedWrites.erase(it);
             }
@@ -274,11 +274,11 @@ void TTableConflictsCache::OnRollbackChanges() {
 
         void operator()(TRollbackOpRestoreUncommittedWrite& op) const {
             auto r1 = Self->UncommittedWrites.emplace(op.TxId, std::move(op.Data));
-            Y_ABORT_UNLESS(r1.second);
+            Y_ENSURE(r1.second);
             auto& p = r1.first->second;
             for (auto* k : p->WriteKeys) {
                 auto r2 = k->UncommittedWrites.insert(op.TxId);
-                Y_ABORT_UNLESS(r2.second);
+                Y_ENSURE(r2.second);
             }
         }
     };
@@ -309,7 +309,7 @@ public:
         }
 
         auto& writes = itWrites->second;
-        Y_ABORT_UNLESS(!writes.empty());
+        Y_ENSURE(!writes.empty());
 
         auto dst = writes.begin();
         for (auto it = writes.begin(); it != writes.end(); ++it) {
@@ -352,7 +352,7 @@ void TConflictsCache::RegisterDistributedWrites(ui64 txId, TPendingWrites&& writ
 
     if (!writes.empty()) {
         PendingWrites[txId] = std::move(writes);
-        Self->EnqueueExecute(new TTxFindWriteConflicts(Self, txId));
+        Self->Enqueue(new TTxFindWriteConflicts(Self, txId));
     }
 }
 

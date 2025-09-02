@@ -2,8 +2,9 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/base/memobserver.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -11,6 +12,8 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <ydb/core/protos/key.pb.h>
+
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 
 namespace NKikimr {
     struct TAppData;
@@ -36,7 +39,6 @@ namespace NActors {
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
             THolder<NActors::TMon> Mon;
-            TIntrusivePtr<NKikimr::TMemObserver> MemObserver = new NKikimr::TMemObserver;
         };
 
         struct TNodeFactory: public INodeFactory {
@@ -53,43 +55,55 @@ namespace NActors {
             std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
         };
 
+        struct TActorSystemSetupConfig {
+            TCpuManagerConfig CpuManagerConfig;
+            TSchedulerConfig SchedulerConfig;
+            bool MonitorStuckActors = false;
+        };
+
+        struct TActorSystemPools {
+            ui32 SystemPoolId = 0;
+            ui32 UserPoolId = 1;
+            ui32 IOPoolId = 2;
+            ui32 BatchPoolId = 3;
+            TMap<TString, ui32> ServicePools = {};
+        };
+
         TTestActorRuntime(THeSingleSystemEnv d);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
 
         ~TTestActorRuntime();
 
         void AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback);
         virtual void Initialize(TEgg);
+        void SetupStatsCollectors();
+        void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
-        void SimulateSleep(TDuration duration);
-
         template<class TResult>
-        inline TResult WaitFuture(NThreading::TFuture<TResult> f) {
+        inline TResult WaitFuture(NThreading::TFuture<TResult> f, TDuration simTimeout = TDuration::Max()) {
             if (!f.HasValue() && !f.HasException()) {
                 TDispatchOptions options;
                 options.CustomFinalCondition = [&]() {
                     return f.HasValue() || f.HasException();
                 };
-                options.FinalEvents.emplace_back([&](IEventHandle&) {
-                    return f.HasValue() || f.HasException();
-                });
+                // Quirk: non-empty FinalEvents enables full simulation
+                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
 
-                this->DispatchEvents(options);
+                this->DispatchEvents(options, simTimeout);
 
                 Y_ABORT_UNLESS(f.HasValue() || f.HasException());
             }
 
-            return f.ExtractValue();
-        }
-
-        TIntrusivePtr<NKikimr::TMemObserver> GetMemObserver(ui32 nodeIndex = 0) {
-            TGuard<TMutex> guard(Mutex);
-            auto node = GetNodeById(GetNodeId(nodeIndex));
-            return node->MemObserver;
+            if constexpr (!std::is_same_v<TResult, void>) {
+                return f.ExtractValue();
+            } else {
+                return f.GetValue();
+            }
         }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
@@ -108,10 +122,15 @@ namespace NActors {
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
 
+    public:
+        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
+    protected:
+        void AddAuditLogStuff();
+
     private:
         void Initialize() override;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const char* component) override;
-        void InitActorSystemSetup(TActorSystemSetup& setup) override;
+        void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) override;
 
         TNodeData* GetNodeById(size_t idx) override {
             return static_cast<TNodeData*>(TTestActorRuntimeBase::GetNodeById(idx));
@@ -127,7 +146,9 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
-        TActorId SleepEdgeActor;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
+        bool NeedStatsCollectors = false;
+        std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;
+        TActorSystemPools ActorSystemPools;
     };
 } // namespace NActors

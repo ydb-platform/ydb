@@ -2,7 +2,8 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/phoenix.h>
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
 
 namespace NYT {
 
@@ -33,7 +34,10 @@ struct IPersistentDigest
     : public IDigest
     , public NPhoenix::IPersistent
 {
-    void Persist(const NPhoenix::TPersistenceContext& context) override = 0;
+    using TLoadContext = NPhoenix::TLoadContext;
+    using TSaveContext = NPhoenix::TSaveContext;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(IPersistentDigest, 0x1ed99609);
 };
 
 DEFINE_REFCOUNTED_TYPE(IPersistentDigest)

@@ -10,13 +10,13 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
@@ -93,7 +93,7 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
+            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED, true);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
@@ -191,6 +191,7 @@ private:
 
 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
+        const TString scheduler = Settings->Scheduler.Get().GetOrElse({});
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,
@@ -204,6 +205,7 @@ private:
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
+        allocateRequest->Record.SetScheduler(scheduler);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
@@ -277,7 +279,7 @@ private:
         Send(ev->Sender, response.Release());
     }
 
-    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)
+    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode, bool timeout = false)
     {
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " with status=" << static_cast<int>(statusCode) << " issues=" << Issues.ToString();
         if (Finished) {
@@ -290,6 +292,7 @@ private:
             }
             IssuesToMessage(Issues, result.MutableIssues());
             result.SetStatusCode(statusCode);
+            result.SetTimeout(timeout);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
             Finished = true;
         }

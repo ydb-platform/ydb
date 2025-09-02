@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-import yatest
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
 
@@ -18,7 +17,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
     def create_queue_must_fail(self, is_fifo):
         try:
             self.create_queue(is_fifo)
-        except yatest.common.process.ExecutionError:
+        except RuntimeError:
             return
         assert False
 

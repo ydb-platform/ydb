@@ -66,6 +66,10 @@ LDAPMessage* FirstEntry(LDAP* ld, LDAPMessage* chain) {
     return ldap_first_entry(ld, chain);
 }
 
+LDAPMessage* NextEntry(LDAP* ld, LDAPMessage* entry) {
+    return ldap_next_entry(ld, entry);
+}
+
 char* FirstAttribute(LDAP* ld, LDAPMessage* entry, BerElement** berout) {
     return ldap_first_attribute(ld, entry, berout);
 }
@@ -143,6 +147,11 @@ NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
 bool IsRetryableError(int error) {
     switch (error) {
         case LDAP_SERVER_DOWN:
+        case LDAP_TIMEOUT:
+        case LDAP_CONNECT_ERROR:
+        case LDAP_BUSY:
+        case LDAP_UNAVAILABLE:
+        case LDAP_ADMIN_LIMIT_EXCEEDED:
             return true;
     }
     return false;

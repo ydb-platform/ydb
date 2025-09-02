@@ -1,12 +1,13 @@
 #pragma once
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/mind/hive/hive.h>
 
 #include <util/generic/utility.h>
 
@@ -104,7 +105,7 @@ public:
         const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
 
         auto unableToMakeABill = [&](const TStringBuf reason) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
                 << ": kind# " << TKind::Name()
                 << ", opId# " << operationId
                 << ", reason# " << reason
@@ -245,7 +246,7 @@ public:
             return false;
         }
 
-        TKind::FinishStats(OperationId, txState, context);
+        TKind::Finish(OperationId, txState, context);
         return true;
     }
 
@@ -285,7 +286,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 
@@ -361,7 +362,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 

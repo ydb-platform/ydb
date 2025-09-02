@@ -1,4 +1,4 @@
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>

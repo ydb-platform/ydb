@@ -4,9 +4,9 @@
 #include "unversioned_row.h"
 #include "versioned_row.h"
 
-#include <library/cpp/yt/memory/chunked_memory_pool.h>
-
 #include <yt/yt/core/misc/memory_usage_tracker.h>
+
+#include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 namespace NYT::NTableClient {
 
@@ -27,35 +27,38 @@ public:
         TRefCountedTypeCookie tagCookie,
         IMemoryChunkProviderPtr chunkProvider,
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr)
-        : Pool_(
-            tagCookie,
-            std::move(chunkProvider),
-            startChunkSize)
-        , MemoryTracker_(std::move(tracker))
-    { }
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false);
 
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
-        TTag = TDefaultRowBufferPoolTag(),
+        TTag /*tag*/ = TDefaultRowBufferPoolTag(),
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr)
-        : Pool_(
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
+        : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
+        , Pool_(
             TTag(),
             startChunkSize)
-        , MemoryTracker_(std::move(tracker))
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     template <class TTag>
     TRowBuffer(
-        TTag,
+        TTag /*tag*/,
         IMemoryChunkProviderPtr chunkProvider,
-        IMemoryUsageTrackerPtr tracker = nullptr)
-        : Pool_(
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
+        : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
+        , Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
-        , MemoryTracker_(std::move(tracker))
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     TChunkedMemoryPool* GetPool();
 
@@ -114,11 +117,13 @@ public:
     void Purge();
 
 private:
-    TChunkedMemoryPool Pool_;
-    IMemoryUsageTrackerPtr MemoryTracker_;
-    std::optional<TMemoryUsageTrackerGuard> MemoryGuard_;
+    const IMemoryUsageTrackerPtr MemoryTracker_;
+    const bool AllowMemoryOvercommit_;
 
-    void ValidateNoOverflow();
+    TChunkedMemoryPool Pool_;
+    TMemoryUsageTrackerGuard MemoryGuard_;
+
+    void UpdateMemoryUsage();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)

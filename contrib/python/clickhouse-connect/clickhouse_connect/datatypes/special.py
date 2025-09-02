@@ -1,8 +1,9 @@
-from typing import Union, Sequence, MutableSequence
+from typing import Union, Sequence, MutableSequence, Any
 from uuid import UUID as PYUUID
 
 from clickhouse_connect.datatypes.base import TypeDef, ClickHouseType, ArrayType, UnsupportedType
 from clickhouse_connect.datatypes.registry import get_from_name
+from clickhouse_connect.driver.common import first_value
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
@@ -19,7 +20,7 @@ class UUID(ClickHouseType):
     def python_null(self, ctx):
         return '' if self.read_format(ctx) == 'string' else PYUUID(int=0)
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if self.read_format(ctx) == 'string':
             return self._read_binary_str(source, num_rows)
         return data_conv.read_uuid_col(source, num_rows)
@@ -37,12 +38,12 @@ class UUID(ClickHouseType):
 
     # pylint: disable=too-many-branches
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         empty = empty_uuid_b
         if isinstance(first, str) or self.write_format(ctx) == 'string':
             for v in column:
                 if v:
-                    x = int(v, 16)
+                    x = int(v.replace('-', ''), 16)
                     dest += (x >> 64).to_bytes(8, 'little') + (x & 0xffffffffffffffff).to_bytes(8, 'little')
                 else:
                     dest += empty
@@ -88,18 +89,21 @@ class SimpleAggregateFunction(ClickHouseType):
         self.element_type: ClickHouseType = get_from_name(type_def.values[1])
         self._name_suffix = type_def.arg_str
         self.byte_size = self.element_type.byte_size
+        self.np_type = self.element_type.np_type
+        self.python_type = self.element_type.python_type
+        self.nano_divisor = self.element_type.nano_divisor
 
     def _data_size(self, sample: Sequence) -> int:
         return self.element_type.data_size(sample)
 
-    def read_column_prefix(self, source: ByteSource):
-        return self.element_type.read_column_prefix(source)
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
+        return self.element_type.read_column_prefix(source, ctx)
 
     def write_column_prefix(self, dest: bytearray):
         self.element_type.write_column_prefix(dest)
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
-        return self.element_type.read_column_data(source, num_rows, ctx)
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any):
+        return self.element_type.read_column_data(source, num_rows, ctx, read_state)
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         self.element_type.write_column_data(column, dest, ctx)

@@ -22,8 +22,13 @@ struct TStatisticsAggregator::TTxConfigure : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
+        bool needInitialize = !Self->Database;
         Self->Database = Record.GetDatabase();
         Self->PersistSysParam(db, Schema::SysParam_Database, Self->Database);
+
+        if (needInitialize) {
+            Self->InitializeStatisticsTable();
+        }
         return true;
     }
 

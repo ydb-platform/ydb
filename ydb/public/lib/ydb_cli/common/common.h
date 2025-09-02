@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/generic/string.h>
@@ -22,7 +23,20 @@ namespace NConsoleClient {
     const TString HomeDir = GetHomeDir();
 #endif
 
+// Print 'Try "--help" option for more info'
 class TMisuseException : public yexception {};
+
+// I.e. help was printed, just need to return EXIT_SUCCESS
+class TNeedToExitWithCode : public yexception {
+public:
+    TNeedToExitWithCode(int code)
+        : Code(code) {}
+    int GetCode() const {
+        return Code;
+    }
+private:
+    int Code;
+};
 
 class TProfileConfig {
 public:
@@ -41,6 +55,7 @@ bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& o
 bool ReadFromFileIfExists(const TString& filePath, const TString& fileName, TString& output, bool allowEmpty = false);
 TString ReadFromFile(TString& filePath, const TString& fileName, bool allowEmpty = false);
 TString ReadFromFile(const TString& filePath, const TString& fileName, bool allowEmpty = false);
+TFsPath GetExistingFsPath(TString& filePath, const TString& fileName);
 TString InputPassword();
 
 }

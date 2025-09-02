@@ -1,8 +1,12 @@
+from __future__ import print_function
 import os
 import sys
 import logging
 import argparse
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fetch_from
 
 
@@ -30,7 +34,7 @@ if __name__ == '__main__':
         main(args)
     except Exception as e:
         logging.exception(e)
-        print >> sys.stderr, open(args.abs_log_path).read()
+        print(open(args.abs_log_path).read(), file=sys.stderr)
         sys.stderr.flush()
 
         import error

@@ -12,8 +12,9 @@ import inspect
 import math
 import random
 from collections import defaultdict
+from collections.abc import Sequence
 from contextlib import contextmanager
-from typing import Any, NoReturn, Union
+from typing import Any, Callable, NoReturn, Optional, Union
 from weakref import WeakKeyDictionary
 
 from hypothesis import Verbosity, settings
@@ -26,7 +27,7 @@ from hypothesis.internal.reflection import get_pretty_function_description
 from hypothesis.internal.validation import check_type
 from hypothesis.reporting import report, verbose_report
 from hypothesis.utils.dynamicvariables import DynamicVariable
-from hypothesis.vendor.pretty import IDKey, pretty
+from hypothesis.vendor.pretty import IDKey, PrettyPrintFunction, pretty
 
 
 def _calling_function_location(what: str, frame: Any) -> str:
@@ -71,12 +72,12 @@ def assume(condition: object) -> bool:
     return True
 
 
-_current_build_context = DynamicVariable(None)
+_current_build_context = DynamicVariable[Optional["BuildContext"]](None)
 
 
 def currently_in_test_context() -> bool:
     """Return ``True`` if the calling code is currently running inside an
-    :func:`@given <hypothesis.given>` or :doc:`stateful <stateful>` test,
+    :func:`@given <hypothesis.given>` or :ref:`stateful <stateful>` test,
     ``False`` otherwise.
 
     This is useful for third-party integrations and assertion helpers which
@@ -126,25 +127,35 @@ def deprecate_random_in_strategy(fmt, *args):
 
 
 class BuildContext:
-    def __init__(self, data, *, is_final=False, close_on_capture=True):
-        assert isinstance(data, ConjectureData)
+    def __init__(
+        self,
+        data: ConjectureData,
+        *,
+        is_final: bool = False,
+    ) -> None:
         self.data = data
-        self.tasks = []
+        self.tasks: list[Callable[[], Any]] = []
         self.is_final = is_final
-        self.close_on_capture = close_on_capture
-        self.close_on_del = False
+
         # Use defaultdict(list) here to handle the possibility of having multiple
         # functions registered for the same object (due to caching, small ints, etc).
         # The printer will discard duplicates which return different representations.
-        self.known_object_printers = defaultdict(list)
+        self.known_object_printers: dict[IDKey, list[PrettyPrintFunction]] = (
+            defaultdict(list)
+        )
 
-    def record_call(self, obj, func, args, kwargs, arg_slices=None):
-        name = get_pretty_function_description(func)
+    def record_call(
+        self,
+        obj: object,
+        func: object,
+        args: Sequence[object],
+        kwargs: dict[str, object],
+    ) -> None:
         self.known_object_printers[IDKey(obj)].append(
-            lambda obj, p, cycle: (
-                p.text("<...>")
-                if cycle
-                else p.repr_call(name, args, kwargs, arg_slices=arg_slices)
+            # _func=func prevents mypy from inferring lambda type. Would need
+            # paramspec I think - not worth it.
+            lambda obj, p, cycle, *, _func=func: p.maybe_repr_known_object_as_call(  # type: ignore
+                obj, cycle, get_pretty_function_description(_func), args, kwargs
             )
         )
 
@@ -152,10 +163,10 @@ class BuildContext:
         arg_labels = {}
         kwargs = {}
         for k, s in kwarg_strategies.items():
-            start_idx = self.data.index
+            start_idx = len(self.data.nodes)
             with deprecate_random_in_strategy("from {}={!r}", k, s) as check:
                 obj = check(self.data.draw(s, observe_as=f"generate:{k}"))
-            end_idx = self.data.index
+            end_idx = len(self.data.nodes)
             kwargs[k] = obj
 
             # This high up the stack, we can't see or really do much with the conjecture
@@ -299,6 +310,11 @@ def target(observation: Union[int, float], *, label: str = "") -> Union[int, flo
             "Calling target() outside of a test is invalid.  "
             "Consider guarding this call with `if currently_in_test_context(): ...`"
         )
+    elif context.data.provider.avoid_realization:
+        # We could in principle realize this in the engine, but it seems more
+        # efficient to have our alternative backend optimize it for us.
+        # See e.g. https://github.com/pschanely/hypothesis-crosshair/issues/3
+        return observation  # pragma: no cover
     verbose_report(f"Saw target({observation!r}, {label=})")
 
     if label in context.data.target_observations:

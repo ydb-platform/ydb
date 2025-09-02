@@ -1,6 +1,6 @@
 /* Base bitset stuff.
 
-   Copyright (C) 2002-2004, 2006, 2009-2015, 2018-2019 Free Software
+   Copyright (C) 2002-2004, 2006, 2009-2015, 2018-2020 Free Software
    Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz).
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITSET_BASE_H
 #define _BITSET_BASE_H
@@ -25,15 +25,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "attribute.h"
 #include "xalloc.h"
-
-#ifndef __attribute__
-# if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 8)
-#  define __attribute__(x)
-# endif
-#endif
-
-#define ATTRIBUTE_UNUSED __attribute__ ((__unused__))
 
 /* Currently we support five flavours of bitsets:
    BITSET_ARRAY:  Array of bits (fixed size, fast for dense bitsets).
@@ -54,8 +47,6 @@ enum bitset_type {BITSET_ARRAY, BITSET_LIST, BITSET_TABLE, BITSET_VECTOR,
 #define BITSET_TYPE_NAMES {"abitset", "lbitset", "tbitset", "vbitset"}
 
 extern const char * const bitset_type_names[];
-
-enum bitset_alloc_type {BITSET_MALLOC, BITSET_OBALLOC};
 
 /* Data type used to store a word of bits.  */
 typedef unsigned long bitset_word;

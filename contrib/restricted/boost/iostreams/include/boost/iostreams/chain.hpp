@@ -250,6 +250,7 @@ private:
             
 #else
 
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
         std::unique_ptr<streambuf_t>
             buf(new streambuf_t(t, buffer_size, pback_size));
             

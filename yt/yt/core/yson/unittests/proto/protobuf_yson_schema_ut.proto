@@ -35,3 +35,27 @@ message TTestSchemaMessage
     map<string, int32> string_to_int32_map = 19[(NYT.NYson.NProto.yson_map) = true];
     map<int32, string> int32_to_string_map = 20[(NYT.NYson.NProto.yson_map) = true];
 }
+
+message TCamelCaseStyleTestSchemaMessage1
+{
+    enum EEnum
+    {
+        VALUE_NONE = 0;
+        VALUE_FIRST = 1;
+    }
+
+    optional int32 SomeField = 1;
+    optional EEnum EnumField = 2;
+}
+
+message TCamelCaseStyleTestSchemaMessage2
+{
+    enum EEnum
+    {
+        VALUE_NONE = 0;
+        VALUE_FIRST = 1;
+    }
+
+    optional int32 SomeField = 1;
+    optional EEnum EnumField = 2;
+}

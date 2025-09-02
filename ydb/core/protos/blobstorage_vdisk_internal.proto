@@ -72,6 +72,11 @@ message THullDbEntryPoint {
 
     optional TLevelIndex LevelIndex = 1;
     optional TDiskPartVec RemovedHugeBlobs = 2;
+    optional TDiskPartVec AllocatedHugeBlobs = 4;
+
+    // VDisk compaction settings
+    optional uint32 HullCompLevel0MaxSstsAtOnce = 5;
+    optional uint32 HullCompSortedPartsNum = 6;
 
     // obsolete field
     repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3;

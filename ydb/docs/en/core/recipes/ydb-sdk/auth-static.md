@@ -1,6 +1,6 @@
-# Username and password based authentication
+<!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
+# Username and password based authentication
 
 Below are examples of the code for authentication based on a username and token in different {{ ydb-short-name }} SDKs.
 
@@ -46,18 +46,36 @@ Below are examples of the code for authentication based on a username and token 
 
   ```java
   public void work(String connectionString, String username, String password) {
-      AuthProvider authProvider = new StaticCredentials(username, password);
+      StaticCredentials authProvider = new StaticCredentials(username, password);
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work(String username, String password) {
+      Properties props = new Properties();
+      props.setProperty("username", username);
+      props.setProperty("password", password);
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+        doWork(connection);
+      }
+
+      // Username and password can be passed via the special method of DriverManager
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
+        doWork(connection);
+      }
   }
   ```
 

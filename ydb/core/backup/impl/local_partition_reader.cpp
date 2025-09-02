@@ -1,17 +1,24 @@
 #include "local_partition_reader.h"
 #include "logging.h"
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/services/services.pb.h>
 
 using namespace NActors;
 using namespace NKikimr::NReplication::NService;
 
+namespace {
+
 constexpr static char OFFLOAD_ACTOR_CLIENT_ID[] = "__OFFLOAD_ACTOR__";
+constexpr static ui64 READ_TIMEOUT_MS = 1000;
+constexpr static ui64 READ_LIMIT_BYTES = 1_MB;
+
+} // anonymous namespace
 
 namespace NKikimr::NBackup::NImpl {
 
@@ -31,7 +38,7 @@ private:
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[LocalPartitionReader]"
-                << "[" << PQTablet << "]"
+                << PQTablet
                 << "[" << Partition << "]"
                 << SelfId() << " ";
         }
@@ -50,24 +57,28 @@ private:
         return request;
     }
 
+    void HandleInit() {
+        Send(PQTablet, CreateGetOffsetRequest().Release());
+    }
+
     void HandleInit(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("Handshake"
+        LOG_D("HandleInit TEvWorker::TEvHandshake"
             << ": worker# " << Worker);
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D("HandleInit " << ev->Get()->ToString());
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-            // TODO reschedule
-            Y_ABORT("Unimplemented!");
+            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
+            return;
         }
         Y_VERIFY_S(record.GetErrorCode() == NPersQueue::NErrorCode::OK, "Unimplemented!");
         Y_VERIFY_S(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdGetClientOffsetResult(), "Unimplemented!");
-        auto resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
+        const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();
         SentOffset = Offset;
 
@@ -85,8 +96,8 @@ private:
         auto& read = *req.MutableCmdRead();
         read.SetOffset(Offset);
         read.SetClientId(OFFLOAD_ACTOR_CLIENT_ID);
-        read.SetTimeoutMs(0);
-        read.SetBytes(1_MB);
+        read.SetTimeoutMs(READ_TIMEOUT_MS);
+        read.SetBytes(READ_LIMIT_BYTES);
 
         return request;
     }
@@ -112,10 +123,21 @@ private:
         auto& record = ev->Get()->Record;
         LOG_D("Handle " << ev->Get()->ToString());
 
+        TString error;
+        if (!NPQ::BasicCheck(record, error)) {
+            Y_ABORT_UNLESS(PQTablet);
+            Send(PQTablet, CreateReadRequest().Release());
+            return;
+        }
+
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
+        if (!readResult.ResultSize()) {
+            Send(Worker, new TEvWorker::TEvDataEnd(Partition, {}, {}));
+            return;
+        }
 
         auto gotOffset = Offset;
-        TVector<TEvWorker::TEvData::TRecord> records(::Reserve(readResult.ResultSize()));
+        TVector<NReplication::TTopicMessage> records(::Reserve(readResult.ResultSize()));
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
@@ -123,7 +145,7 @@ private:
         }
         SentOffset = gotOffset + 1;
 
-        Send(Worker, new TEvWorker::TEvData(ToString(Partition), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(Partition, ToString(Partition), std::move(records)));
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {
@@ -147,6 +169,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, HandleInit);
             hFunc(TEvPersQueue::TEvResponse, HandleInit);
+            sFunc(TEvents::TEvWakeup, HandleInit);
             sFunc(TEvents::TEvPoison, PassAway);
         default:
             Y_VERIFY_S(false, "Unhandled event type: " << ev->GetTypeRewrite()

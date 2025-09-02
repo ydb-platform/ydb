@@ -1,4 +1,5 @@
 #include "user_attributes.h"
+
 #include "schemeshard_user_attr_limits.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -53,6 +54,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(FILESTORE_SPACE_LIMIT_SSD);
                 HANDLE_ATTR(FILESTORE_SPACE_LIMIT_HDD);
+                HANDLE_ATTR(FILESTORE_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(EXTRA_PATH_SYMBOLS_ALLOWED);
                 HANDLE_ATTR(DOCUMENT_API_VERSION);
                 HANDLE_ATTR(ASYNC_REPLICATION);
@@ -130,6 +132,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::FILESTORE_SPACE_LIMIT_SSD:
             case EAttribute::FILESTORE_SPACE_LIMIT_HDD:
+            case EAttribute::FILESTORE_SPACE_LIMIT_SSD_SYSTEM:
                 return CheckValueUint64(name, value, errStr);
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                 return CheckValueStringWeak(name, value, errStr);
@@ -175,6 +178,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::FILESTORE_SPACE_LIMIT_SSD:
             case EAttribute::FILESTORE_SPACE_LIMIT_HDD:
+            case EAttribute::FILESTORE_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                 return true;
             case EAttribute::DOCUMENT_API_VERSION:

@@ -34,16 +34,17 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncNeighbors::TOldDes {
     public:
-        TOldDes(IInputStream &str)
-            : Str(str)
+        TOldDes(const TString& logPrefix, IInputStream &str)
+            : VDiskLogPrefix(logPrefix)
+            , Str(str)
         {}
 
         void operator() (TValue &val) {
             TVDiskID vdisk(Str);
             GroupId = vdisk.GroupID;
             GroupGeneration = vdisk.GroupGeneration;
-            Y_ABORT_UNLESS(val.VDiskIdShort == vdisk, "val.VDiskId# %s vdisk# %s",
-                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
+            Y_VERIFY_S(val.VDiskIdShort == vdisk, VDiskLogPrefix <<
+                    "val.VDiskId# " << val.VDiskIdShort.ToString() << " vdisk# " << vdisk.ToString());
             val.Get().ParseFromArcadiaStream(Str);
         }
 
@@ -57,6 +58,7 @@ namespace NKikimr {
         ui32 GetGroupGeneration() const { return GroupGeneration; }
 
     private:
+        const TString VDiskLogPrefix;
         IInputStream &Str;
         TGroupId GroupId = TGroupId::Zero();
         ui32 GroupGeneration = 0;
@@ -118,34 +120,36 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncNeighbors::TDes {
     public:
-        TDes(IInputStream &str)
-            : Proto(&LocalProto)
+        TDes(const TString logPrefix, IInputStream &str)
+            : VDiskLogPrefix(logPrefix)
+            , Proto(&LocalProto)
         {
             auto res = LocalProto.ParseFromArcadiaStream(&str);
             if (!res)
                 ythrow yexception() << "NKikimrVDiskData::TSyncerNeighbors parse error";
         }
 
-        TDes(const NKikimrVDiskData::TSyncerEntryPoint *pb)
-            : Proto(pb)
+        TDes(const TString logPrefix, const NKikimrVDiskData::TSyncerEntryPoint *pb)
+            : VDiskLogPrefix(logPrefix)
+            , Proto(pb)
         {}
 
         void operator() (TValue &val) {
             const auto &item = Proto->GetEntries(Counter);
             ++Counter;
             TVDiskID vdisk = VDiskIDFromVDiskID(item.GetVDiskID());
-            Y_ABORT_UNLESS(val.VDiskIdShort == TVDiskIdShort(vdisk),
-                     "val.VDiskId# %s vdisk# %s",
-                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
+            Y_VERIFY_S(val.VDiskIdShort == TVDiskIdShort(vdisk), VDiskLogPrefix <<
+                     "val.VDiskId# " << val.VDiskIdShort.ToString() << " vdisk# " << vdisk.ToString());
             val.Get().Parse(item);
         }
 
         void Finish() {
-            Y_ABORT_UNLESS(Counter == Proto->EntriesSize(), "Counter# %u size# %u",
-                     Counter, unsigned(Proto->EntriesSize()));
+            Y_VERIFY_S(Counter == Proto->EntriesSize(), VDiskLogPrefix <<
+                    "Counter# " << Counter << " size# " << unsigned(Proto->EntriesSize()));
         }
 
     private:
+        const TString VDiskLogPrefix;
         NKikimrVDiskData::TSyncerEntryPoint LocalProto;
         const NKikimrVDiskData::TSyncerEntryPoint *Proto = nullptr;
         unsigned Counter = 0;

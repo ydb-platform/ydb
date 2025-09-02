@@ -1,0 +1,71 @@
+{%- if with_kotlinc_plugin_allopen|length -%}
+{%-     set allopen_annotations = [] -%}
+{%-     if with_kotlinc_plugin_allopen|select('eq', 'preset=spring')|length -%}
+{%-         set allopen_annotations = allopen_annotations + ['org.springframework.stereotype.Component', 'org.springframework.transaction.annotation.Transactional', 'org.springframework.scheduling.annotation.Async', 'org.springframework.cache.annotation.Cacheable', 'org.springframework.boot.test.context.SpringBootTest', 'org.springframework.validation.annotation.Validated'] -%}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_allopen|select('eq', 'preset=quarkus')|length -%}
+{%-         set allopen_annotations = allopen_annotations + ['javax.enterprise.context.ApplicationScoped', 'javax.enterprise.context.RequestScoped'] -%}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_allopen|select('eq', 'preset=micronaut')|length -%}
+{%-         set allopen_annotations = allopen_annotations + ['io.micronaut.aop.Around', 'io.micronaut.aop.Introduction', 'io.micronaut.aop.InterceptorBinding', 'io.micronaut.aop.InterceptorBindingDefinitions'] -%}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_allopen|select('startsWith', 'annotation=')|length -%}
+{%-         set sannotations = with_kotlinc_plugin_allopen|select('startsWith', 'annotation=')|join('|')|replace('annotation=','') -%}
+{%-         set annotations = split(sannotations, '|') -%}
+{%-         set allopen_annotations = allopen_annotations + annotations -%}
+{%-     endif -%}
+{%-     set allopen_options = with_kotlinc_plugin_allopen|reject('startsWith', 'preset=')|reject('startsWith', 'annotation=')|reject('eq', 'default') %}
+
+allOpen {
+{%-     if allopen_options|length -%}
+{%-         for option in allopen_options|unique %}
+    {{ option }}
+{%-         endfor -%}
+{%-     endif %}
+{%-     if allopen_annotations|length -%}
+{%-         for annotation in allopen_annotations|unique %}
+    annotation("{{ annotation }}")
+{%-         endfor -%}
+{%-     endif %}
+}
+{%  endif -%}
+
+{%- if with_kotlinc_plugin_noarg|length -%}
+{%-     set noarg_annotations = [] -%}
+{%-     if with_kotlinc_plugin_noarg|select('eq', 'preset=jpa')|length -%}
+{%-          set noarg_annotations = noarg_annotations + ['javax.persistence.Entity', 'javax.persistence.Embeddable', 'javax.persistence.MappedSuperclass', 'jakarta.persistence.Entity', 'jakarta.persistence.Embeddable', 'jakarta.persistence.MappedSuperclass'] -%}
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_noarg|select('startsWith', 'annotation=')|length -%}
+{%-         set sannotations = with_kotlinc_plugin_noarg|select('startsWith', 'annotation=')|join('|')|replace('annotation=','') -%}
+{%-         set annotations = split(sannotations, '|') -%}
+{%-         set noarg_annotations = noarg_annotations + annotations -%}
+{%-     endif -%}
+{%-     set noarg_options = with_kotlinc_plugin_noarg|reject('startsWith', 'preset=')|reject('startsWith', 'annotation=')|reject('eq', 'default') %}
+
+noArg {
+{%-     if noarg_options|length -%}
+{%-         for option in noarg_options|unique %}
+    {{ option }}
+{%-         endfor -%}
+{%-     endif %}
+{%-     if noarg_annotations|length -%}
+{%-         for annotation in noarg_annotations|unique %}
+    annotation("{{ annotation }}")
+{%-         endfor -%}
+{%-     endif %}
+}
+{%  endif -%}
+
+{%- if with_kotlin and with_lombok_plugin %}
+
+tasks.withType<Delombok>().configureEach {
+    classpath = classpath + files(sourceSets.main.get().output)
+}
+{%  endif -%}
+
+{%- if with_kotlin %}
+
+kotlin {
+    jvmToolchain({{ jdk_version }})
+}
+{%  endif -%}

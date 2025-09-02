@@ -1,7 +1,7 @@
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from moto.core import CloudFormationModel
-from moto.core.utils import iso_8601_datetime_with_milliseconds
+from moto.core.utils import iso_8601_datetime_with_milliseconds, utcnow
 from .core import TaggedEC2Resource
 from ..utils import random_nat_gateway_id, random_private_ip
 
@@ -9,23 +9,22 @@ from ..utils import random_nat_gateway_id, random_private_ip
 class NatGateway(CloudFormationModel, TaggedEC2Resource):
     def __init__(
         self,
-        backend,
-        subnet_id,
-        allocation_id,
-        tags=None,
-        connectivity_type="public",
-        address_set=None,
+        backend: Any,
+        subnet_id: str,
+        allocation_id: str,
+        tags: Optional[Dict[str, str]] = None,
+        connectivity_type: str = "public",
     ):
         # public properties
         self.id = random_nat_gateway_id()
         self.subnet_id = subnet_id
-        self.address_set = address_set or []
+        self.address_set: List[Dict[str, Any]] = []
         self.state = "available"
         self.private_ip = random_private_ip()
         self.connectivity_type = connectivity_type
 
         # protected properties
-        self._created_at = datetime.utcnow()
+        self._created_at = utcnow()
         self.ec2_backend = backend
         # NOTE: this is the core of NAT Gateways creation
         self._eni = self.ec2_backend.create_network_interface(
@@ -41,39 +40,34 @@ class NatGateway(CloudFormationModel, TaggedEC2Resource):
         self.vpc_id = self.ec2_backend.get_subnet(subnet_id).vpc_id
 
     @property
-    def physical_resource_id(self):
+    def physical_resource_id(self) -> str:
         return self.id
 
     @property
-    def create_time(self):
+    def create_time(self) -> str:
         return iso_8601_datetime_with_milliseconds(self._created_at)
 
-    @property
-    def network_interface_id(self):
-        return self._eni.id
-
-    @property
-    def public_ip(self):
-        if self.allocation_id:
-            eips = self._backend.address_by_allocation([self.allocation_id])
-        return eips[0].public_ip if self.allocation_id else None
+    @staticmethod
+    def cloudformation_name_type() -> str:
+        return ""
 
     @staticmethod
-    def cloudformation_name_type():
-        return None
-
-    @staticmethod
-    def cloudformation_type():
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-natgateway.html
         return "AWS::EC2::NatGateway"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any
+    ) -> "NatGateway":
         from ..models import ec2_backends
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         nat_gateway = ec2_backend.create_nat_gateway(
             cloudformation_json["Properties"]["SubnetId"],
             cloudformation_json["Properties"]["AllocationId"],
@@ -82,10 +76,12 @@ class NatGateway(CloudFormationModel, TaggedEC2Resource):
 
 
 class NatGatewayBackend:
-    def __init__(self):
-        self.nat_gateways = {}
+    def __init__(self) -> None:
+        self.nat_gateways: Dict[str, NatGateway] = {}
 
-    def describe_nat_gateways(self, filters, nat_gateway_ids):
+    def describe_nat_gateways(
+        self, filters: Any, nat_gateway_ids: Optional[List[str]]
+    ) -> List[NatGateway]:
         nat_gateways = list(self.nat_gateways.values())
 
         if nat_gateway_ids:
@@ -120,25 +116,30 @@ class NatGatewayBackend:
         return nat_gateways
 
     def create_nat_gateway(
-        self, subnet_id, allocation_id, tags=None, connectivity_type="public"
-    ):
+        self,
+        subnet_id: str,
+        allocation_id: str,
+        tags: Optional[Dict[str, str]] = None,
+        connectivity_type: str = "public",
+    ) -> NatGateway:
         nat_gateway = NatGateway(
             self, subnet_id, allocation_id, tags, connectivity_type
         )
-        address_set = {}
+        address_set: Dict[str, Any] = {}
         if allocation_id:
-            eips = self.address_by_allocation([allocation_id])
+            eips = self.address_by_allocation([allocation_id])  # type: ignore[attr-defined]
             eip = eips[0] if len(eips) > 0 else None
             if eip:
                 address_set["allocationId"] = allocation_id
                 address_set["publicIp"] = eip.public_ip or None
+                address_set["associationId"] = eip.association_id or None
         address_set["networkInterfaceId"] = nat_gateway._eni.id
         address_set["privateIp"] = nat_gateway._eni.private_ip_address
         nat_gateway.address_set.append(address_set)
         self.nat_gateways[nat_gateway.id] = nat_gateway
         return nat_gateway
 
-    def delete_nat_gateway(self, nat_gateway_id):
-        nat_gw = self.nat_gateways.get(nat_gateway_id)
+    def delete_nat_gateway(self, nat_gateway_id: str) -> NatGateway:
+        nat_gw: NatGateway = self.nat_gateways.get(nat_gateway_id)  # type: ignore
         nat_gw.state = "deleted"
         return nat_gw

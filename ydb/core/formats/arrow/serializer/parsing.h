@@ -9,9 +9,9 @@
 namespace NKikimr::NArrow {
 
 std::string CompressionToString(const arrow::Compression::type compression);
+std::string CompressionToString(const NKikimrSchemeOp::EColumnCodec compression);
 std::optional<arrow::Compression::type> CompressionFromString(const std::string& compressionStr);
 
 NKikimrSchemeOp::EColumnCodec CompressionToProto(const arrow::Compression::type compression);
 std::optional<arrow::Compression::type> CompressionFromProto(const NKikimrSchemeOp::EColumnCodec compression);
-
 }

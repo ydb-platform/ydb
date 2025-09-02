@@ -88,9 +88,9 @@ namespace NPage {
             TArrayRef<const char> Page;
         };
 
-        TResult Read(TArrayRef<const char>, EPage type = EPage::Undef) const noexcept;
-        static TSharedData Wrap(TArrayRef<const char>, EPage, ui16 version) noexcept;
-        static TString WrapString(TArrayRef<const char>, EPage, ui16 version) noexcept;
+        TResult Read(TArrayRef<const char>, EPage type = EPage::Undef) const;
+        static TSharedData Wrap(TArrayRef<const char>, EPage, ui16 version);
+        static TString WrapString(TArrayRef<const char>, EPage, ui16 version);
     };
 
 }

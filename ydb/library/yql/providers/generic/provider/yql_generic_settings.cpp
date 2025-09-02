@@ -2,8 +2,8 @@
 #include "yql_generic_settings.h"
 #include "yql_generic_utils.h"
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -21,6 +21,10 @@ namespace NYql {
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
 
+        DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? 
+                               TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds()) :
+                               TDuration::Seconds(60);
+    
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
@@ -73,7 +77,7 @@ namespace NYql {
         ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
 
         // Add cluster to the list of valid clusters
-        this->ValidClusters.insert(clusterConfig.GetName());
+        this->AddValidCluster(clusterConfig.GetName());
     }
 
     // Structured tokens are used to access MDB API. They can be constructed either from IAM tokens, or from SA credentials.
@@ -101,7 +105,7 @@ namespace NYql {
     }
 
     bool TGenericConfiguration::HasCluster(TStringBuf cluster) const {
-        return ValidClusters.contains(cluster);
+        return GetValidClusters().contains(cluster);
     }
 
-}
+} // namespace NYql

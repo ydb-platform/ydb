@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
@@ -49,7 +50,7 @@ using IMockInvokerPoolPtr = TIntrusivePtr<IMockInvokerPool>;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMockInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     explicit TMockInvoker(IInvokerPtr underlyingInvoker)
@@ -57,13 +58,15 @@ public:
         , InvocationCount_(0)
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         ++InvocationCount_;
         if (Bounded_ ) {
             EXPECT_TRUE(Parent_.Lock());
         }
-        TInvokerWrapper::Invoke(std::move(callback));
+        UnderlyingInvoker_->Invoke(std::move(callback));
     }
 
     void Bound(const IMockInvokerPoolPtr& parent)

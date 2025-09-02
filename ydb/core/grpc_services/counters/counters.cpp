@@ -117,6 +117,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
     ::NMonitoring::THistogramPtr Histo;
+    ::NMonitoring::THistogramPtr ClientTimeoutHisto;
 
 
     std::function<void()> InitFn;
@@ -190,7 +191,7 @@ public:
         *YdbCounters.ResponseBytes += responseSize;
     }
 
-    void StartProcessing(ui32 requestSize) override {
+    void StartProcessing(ui32 requestSize, TInstant deadline) override {
         InitOnce();
         TotalCounter->Inc();
         InflyCounter->Inc();
@@ -201,6 +202,15 @@ public:
         YdbCounters.RequestInflight->Inc();
         *YdbCounters.RequestBytes += requestSize;
         *YdbCounters.RequestInflightBytes += requestSize;
+        if (deadline != TInstant::Zero() && deadline != TInstant::Max()) {
+            auto now = TInstant::Now();
+            if (deadline > now) {
+                auto timeout = deadline - now;
+                ClientTimeoutHisto->Collect(timeout.MilliSeconds());
+            } else {
+                ClientTimeoutHisto->Collect(0);
+            }
+        }
     }
 
     void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status,
@@ -222,7 +232,7 @@ public:
             *GetResponseCounterByStatus(status) += 1;
         }
 
-        Histo->Collect(requestDuration.MilliSeconds());
+        Histo->Collect(requestDuration.MillisecondsFloat());
     }
 
     NYdbGrpc::ICounterBlockPtr Clone() override {
@@ -330,9 +340,24 @@ TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& coun
         TotalCounter = subgroup->GetCounter("total", true);
         InflyCounter = subgroup->GetCounter("infly", false);
 
-        auto h = NMonitoring::ExplicitHistogram(
-            NMonitoring::TBucketBounds{5, 10, 50, 100, 500, 1000, 5000, 10000, 20000, 60000});
-        Histo = subgroup->GetHistogram("LatencyMs", std::move(h));
+        {
+            auto h = NMonitoring::ExplicitHistogram(
+                NMonitoring::TBucketBounds{
+                    0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                    16, 20, 24, 28, 32, 36,
+                    40, 50, 60, 70, 80, 90,
+                    100, 200, 300, 400, 500,
+                    1000, 5000, 10000, 20000, 60000});
+            Histo = subgroup->GetHistogram("LatencyMs", std::move(h));
+        }
+
+        {
+            auto h = NMonitoring::ExplicitHistogram(
+                NMonitoring::TBucketBounds{
+                    0, 5, 10, 50, 100, 250, 500,
+                    1000, 5000, 10000, 20000, 60000});
+            ClientTimeoutHisto = subgroup->GetHistogram("TimeoutMs", std::move(h));
+        }
     };
 }
 
@@ -610,9 +635,9 @@ public:
         Db->CountResponseBytes(responseSize);
     }
 
-    void StartProcessing(ui32 requestSize) override {
-        Common->StartProcessing(requestSize);
-        Db->StartProcessing(requestSize);
+    void StartProcessing(ui32 requestSize, TInstant deadline) override {
+        Common->StartProcessing(requestSize, deadline);
+        Db->StartProcessing(requestSize, deadline);
     }
 
     void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status,
@@ -653,7 +678,7 @@ NYdbGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName
     auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, streaming);
 
     NYdbGrpc::ICounterBlockPtr res(block);
-    if (ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
+    if (ActorSystem && HasAppData(ActorSystem) && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
         res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, streaming);
     }
 

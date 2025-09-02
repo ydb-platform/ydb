@@ -5,18 +5,16 @@ This could be a type information, but it seems easier to implement it that way
 """
 from pythran.passmanager import FunctionAnalysis
 from pythran.tables import MODULES
+from pythran.analyses import Aliases, Ancestors
+from pythran.analyses.use_def_chain import DefUseChains
+from pythran.analyses import ArgumentEffects
 
 import gast as ast
 
 
-class FixedSizeList(FunctionAnalysis):
+class FixedSizeList(FunctionAnalysis[Aliases, DefUseChains, Ancestors, ArgumentEffects]):
 
-    def __init__(self):
-        self.result = set()
-        from pythran.analyses import Aliases, DefUseChains, Ancestors
-        from pythran.analyses import ArgumentEffects
-        super(FixedSizeList, self).__init__(Aliases, DefUseChains, Ancestors,
-                                            ArgumentEffects)
+    ResultType = set
 
     def is_fixed_size_list_def(self, node):
         if isinstance(node, ast.List):
@@ -57,10 +55,13 @@ class FixedSizeList(FunctionAnalysis):
 
     def visit_Assign(self, node):
         self.generic_visit(node)
+        if not node.value:
+            return
         if not self.is_fixed_size_list_def(node.value):
             return
 
-        for target in node.targets:
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for target in targets:
             def_ = self.def_use_chains.chains[target]
             if any(not self.is_safe_use(u) for u in def_.users()):
                 break
@@ -71,6 +72,8 @@ class FixedSizeList(FunctionAnalysis):
                 break
         else:
             self.result.add(node.value)
+
+    visit_AnnAssign = visit_Assign
 
     def visit_Call(self, node):
         self.generic_visit(node)

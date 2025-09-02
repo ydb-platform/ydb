@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/scheme/scheme.h>
 #include <ydb/core/ymq/base/action.h>
 
 #include <util/generic/string.h>
@@ -17,6 +18,8 @@ struct TSqsHttpResponse {
     TString FolderId;
     TString ResourceId;
     bool    IsFifo = false;
+
+    NSc::TValue QueueTags;
 
     TSqsHttpResponse() = default;
     TSqsHttpResponse(const TString& body, int status, const TString& contentType = XML_CONTENT_TYPE);

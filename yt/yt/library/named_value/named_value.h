@@ -32,18 +32,25 @@ NTableClient::TUnversionedOwningRow MakeRow(
     const NTableClient::TNameTablePtr& nameTable,
     const std::vector<TNamedValue>& values);
 
+
+std::vector<TNamedValue> MakeNamedValueList(const NTableClient::TNameTablePtr& nameTable, NTableClient::TUnversionedRow row);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Slow but convenient analogue of TUnversionedValue
 class TNamedValue
 {
 public:
-    struct TAny {
+    struct TAny
+    {
         TString Value;
+        friend bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs) = default;
     };
 
-    struct TComposite {
+    struct TComposite
+    {
         TString Value;
+        friend bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs) = default;
     };
 
     using TValue = std::variant<std::nullptr_t, i64, ui64, double, bool, TString, TAny, TComposite>;
@@ -88,12 +95,11 @@ private:
 private:
     TString Name_;
     TValue Value_;
+
+    friend bool operator ==(const TNamedValue& lhs, const TNamedValue& rhs) = default;
+    friend void PrintTo(const TNamedValue& value, std::ostream* os);
+    friend void FormatValue(TStringBuilderBase* builder, const TNamedValue& value, TStringBuf spec);
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs);
-bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,7 +1,7 @@
 #include "file_tree_builder.h"
 #include "path_list_reader.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "name");
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "a///b");
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "root/name/");
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
         b.Save(&range);
 
         TPathList paths;
-        ReadPathsList({}, MakeParams(range), {}, paths);
+        ReadPathsList(MakeParams(range), {}, paths);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 3);
 

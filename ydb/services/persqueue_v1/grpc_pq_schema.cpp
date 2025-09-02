@@ -134,20 +134,18 @@ void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
 }
 
 void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
-    auto p = dynamic_cast<TEvAlterTopicRequest*>(ctx.release());
-
-    EnsureReq(p);
+    auto* p = ctx.release();
+    Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::AlterTopicRequest*>(p->GetRequest()));
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new alter topic request");
     f.RegisterActor(new NGRpcProxy::V1::TAlterTopicActor(p));
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-    auto p = dynamic_cast<TEvDescribeTopicRequest*>(ctx.release());
+    auto* p = ctx.release();
+    Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
-    EnsureReq(p);
-
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
 }
 

@@ -1,37 +1,32 @@
 import json
 
 from moto.core.responses import BaseResponse
-from .models import datapipeline_backends
+from .models import datapipeline_backends, DataPipelineBackend
 
 
 class DataPipelineResponse(BaseResponse):
-    @property
-    def parameters(self):
-        # TODO this should really be moved to core/responses.py
-        if self.body:
-            return json.loads(self.body)
-        else:
-            return self.querystring
+    def __init__(self) -> None:
+        super().__init__(service_name="datapipeline")
 
     @property
-    def datapipeline_backend(self):
-        return datapipeline_backends[self.region]
+    def datapipeline_backend(self) -> DataPipelineBackend:
+        return datapipeline_backends[self.current_account][self.region]
 
-    def create_pipeline(self):
-        name = self.parameters.get("name")
-        unique_id = self.parameters.get("uniqueId")
-        description = self.parameters.get("description", "")
-        tags = self.parameters.get("tags", [])
+    def create_pipeline(self) -> str:
+        name = self._get_param("name")
+        unique_id = self._get_param("uniqueId")
+        description = self._get_param("description", "")
+        tags = self._get_param("tags", [])
         pipeline = self.datapipeline_backend.create_pipeline(
             name, unique_id, description=description, tags=tags
         )
         return json.dumps({"pipelineId": pipeline.pipeline_id})
 
-    def list_pipelines(self):
+    def list_pipelines(self) -> str:
         pipelines = list(self.datapipeline_backend.list_pipelines())
         pipeline_ids = [pipeline.pipeline_id for pipeline in pipelines]
         max_pipelines = 50
-        marker = self.parameters.get("marker")
+        marker = self._get_param("marker")
         if marker:
             start = pipeline_ids.index(marker) + 1
         else:
@@ -52,28 +47,28 @@ class DataPipelineResponse(BaseResponse):
             }
         )
 
-    def describe_pipelines(self):
-        pipeline_ids = self.parameters["pipelineIds"]
+    def describe_pipelines(self) -> str:
+        pipeline_ids = self._get_param("pipelineIds")
         pipelines = self.datapipeline_backend.describe_pipelines(pipeline_ids)
 
         return json.dumps(
             {"pipelineDescriptionList": [pipeline.to_json() for pipeline in pipelines]}
         )
 
-    def delete_pipeline(self):
-        pipeline_id = self.parameters["pipelineId"]
+    def delete_pipeline(self) -> str:
+        pipeline_id = self._get_param("pipelineId")
         self.datapipeline_backend.delete_pipeline(pipeline_id)
         return json.dumps({})
 
-    def put_pipeline_definition(self):
-        pipeline_id = self.parameters["pipelineId"]
-        pipeline_objects = self.parameters["pipelineObjects"]
+    def put_pipeline_definition(self) -> str:
+        pipeline_id = self._get_param("pipelineId")
+        pipeline_objects = self._get_param("pipelineObjects")
 
         self.datapipeline_backend.put_pipeline_definition(pipeline_id, pipeline_objects)
         return json.dumps({"errored": False})
 
-    def get_pipeline_definition(self):
-        pipeline_id = self.parameters["pipelineId"]
+    def get_pipeline_definition(self) -> str:
+        pipeline_id = self._get_param("pipelineId")
         pipeline_definition = self.datapipeline_backend.get_pipeline_definition(
             pipeline_id
         )
@@ -85,9 +80,9 @@ class DataPipelineResponse(BaseResponse):
             }
         )
 
-    def describe_objects(self):
-        pipeline_id = self.parameters["pipelineId"]
-        object_ids = self.parameters["objectIds"]
+    def describe_objects(self) -> str:
+        pipeline_id = self._get_param("pipelineId")
+        object_ids = self._get_param("objectIds")
 
         pipeline_objects = self.datapipeline_backend.describe_objects(
             object_ids, pipeline_id
@@ -102,7 +97,7 @@ class DataPipelineResponse(BaseResponse):
             }
         )
 
-    def activate_pipeline(self):
-        pipeline_id = self.parameters["pipelineId"]
+    def activate_pipeline(self) -> str:
+        pipeline_id = self._get_param("pipelineId")
         self.datapipeline_backend.activate_pipeline(pipeline_id)
         return json.dumps({})

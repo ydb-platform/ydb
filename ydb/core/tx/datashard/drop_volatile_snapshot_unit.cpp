@@ -16,10 +16,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
-        Y_ABORT_UNLESS(op->IsSnapshotTx());
+        Y_ENSURE(op->IsSnapshotTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         const auto& record = tx->GetSnapshotTx();
         if (!record.HasDropVolatileSnapshot()) {

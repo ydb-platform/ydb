@@ -9,37 +9,37 @@
 namespace NKikimr {
 namespace NTable {
 
-TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
+TLoader::TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections,
         TString legacy,
         TString opaque,
         TVector<TString> deltas,
         TEpoch epoch)
-    : Packs(std::move(pageCollections))
+    : PageCollections(std::move(pageCollections))
     , Legacy(std::move(legacy))
     , Opaque(std::move(opaque))
     , Deltas(std::move(deltas))
     , Epoch(epoch)
 {
-    if (Packs.size() < 1) {
-        Y_Fail("Cannot load TPart from " << Packs.size() << " page collections");
+    if (PageCollections.size() < 1) {
+        Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
     }
-    LoaderEnv = MakeHolder<TLoaderEnv>(Packs[0]);
+    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
 }
 
 TLoader::~TLoader() { }
 
-void TLoader::StageParseMeta() noexcept
+void TLoader::StageParseMeta()
 {
-    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get());
+    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(PageCollections.at(0)->PageCollection.Get());
     if (!metaPacket) {
-        Y_Fail("Unexpected IPageCollection type " << TypeName(*Packs.at(0)->PageCollection));
+        Y_TABLET_ERROR("Unexpected IPageCollection type " << TypeName(*PageCollections.at(0)->PageCollection));
     }
 
     auto &meta = metaPacket->Meta;
 
     TPageId pageId = meta.TotalPages();
 
-    Y_ABORT_UNLESS(pageId > 0, "Got page collection without pages");
+    Y_ENSURE(pageId > 0, "Got page collection without pages");
 
     if (EPage(meta.Page(pageId - 1).Type) == EPage::Schem2) {
         /* New styled page collection with layout meta. Later root meta will
@@ -51,7 +51,7 @@ void TLoader::StageParseMeta() noexcept
 
         ParseMeta(meta.GetPageInplaceData(SchemeId));
 
-        Y_ABORT_UNLESS(Root.HasLayout(), "Rooted page collection has no layout");
+        Y_ENSURE(Root.HasLayout(), "Rooted page collection has no layout");
 
         if (auto *abi = Root.HasEvol() ? &Root.GetEvol() : nullptr)
             TAbi().Check(abi->GetTail(), abi->GetHead(), "part");
@@ -134,11 +134,11 @@ void TLoader::StageParseMeta() noexcept
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
-        || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != Packs.size())
+        || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size())
     {
-        Y_Fail("Part " << Packs[0]->PageCollection->Label() << " has"
+        Y_TABLET_ERROR("Part " << PageCollections[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
-            << " " << Packs.size() << "s " << meta.TotalPages() << "pg"
+            << " " << PageCollections.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId 
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
             << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].GetPageId() : Max<TPageId>())
@@ -149,10 +149,10 @@ void TLoader::StageParseMeta() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
+TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
 {
-    Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
-    Y_ABORT_UNLESS(Packs && Packs.front());
+    Y_ENSURE(!PartView, "PartView already initialized in CreatePartView stage");
+    Y_ENSURE(PageCollections && PageCollections.front());
 
     auto getPage = [&](TPageId pageId) {
         return pageId == Max<TPageId>() 
@@ -161,12 +161,14 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     };
 
     if (BTreeGroupIndexes) {
-        // Note: preload root nodes only because we don't want to have multiple restarts here
-        for (const auto& meta : BTreeGroupIndexes) {
-            if (meta.LevelCount) getPage(meta.GetPageId());
-        }
-        for (const auto& meta : BTreeHistoricIndexes) {
-            if (meta.LevelCount) getPage(meta.GetPageId());
+        if (preloadIndex) {
+            // Note: preload root nodes only because we don't want to have multiple restarts here
+            for (const auto& meta : BTreeGroupIndexes) {
+                if (meta.LevelCount) getPage(meta.GetPageId());
+            }
+            for (const auto& meta : BTreeHistoricIndexes) {
+                if (meta.LevelCount) getPage(meta.GetPageId());
+            }
         }
     } else if (FlatGroupIndexes) {
         for (auto indexPageId : FlatGroupIndexes) {
@@ -178,7 +180,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     }
 
     for (auto pageId: { SchemeId, GlobsId, SmallId, LargeId, ByKeyId, GarbageStatsId, TxIdStatsId }) {
-        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(Packs[0]->GetPageType(pageId)));
+        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(PageCollections[0]->GetPageType(pageId)));
         getPage(pageId);
     }
 
@@ -195,14 +197,14 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     auto *txIdStats = getPage(TxIdStatsId);
 
     if (scheme == nullptr) {
-        Y_ABORT("Scheme page is not loaded");
+        Y_TABLET_ERROR("Scheme page is not loaded");
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
-        Y_ABORT("Filter page must be loaded if it exists");
-    } else if (small && Packs.size() != (1 + Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()))) {
-        Y_Fail("TPart has small blobs, " << Packs.size() << " page collections");
+        Y_TABLET_ERROR("Filter page must be loaded if it exists");
+    } else if (small && PageCollections.size() != (1 + Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()))) {
+        Y_TABLET_ERROR("TPart has small blobs, " << PageCollections.size() << " page collections");
     }
 
-    const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label());
+    const auto extra = BlobsLabelFor(PageCollections[0]->PageCollection->Label());
 
     auto *stat = Root.HasStat() ? &Root.GetStat() : nullptr;
 
@@ -221,15 +223,15 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
         for (auto indexPage : FlatGroupIndexes) {
-            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
         }
         for (auto indexPage : FlatHistoricIndexes) {
-            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
         }
     }
 
     auto *partStore = new TPartStore(
-        Packs.front()->PageCollection->Label(),
+        PageCollections.front()->PageCollection->Label(),
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
@@ -256,12 +258,12 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         }
     );
 
-    partStore->PageCollections = std::move(Packs);
+    partStore->PageCollections = std::move(PageCollections);
 
     if (partStore->Blobs) {
-        Y_ABORT_UNLESS(partStore->Large, "Cannot use blobs without frames");
+        Y_ENSURE(partStore->Large, "Cannot use blobs without frames");
 
-        partStore->Pseudo = new TCache(partStore->Blobs);
+        partStore->Pseudo = new TPageCollection(partStore->Blobs);
     }
 
     auto overlay = TOverlay::Decode(Legacy, Opaque);
@@ -270,16 +272,16 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 
     LoaderEnv->ProvidePart(PartView.Part.Get());
 
-    return nullptr;
+    return {};
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
+TLoader::TFetch TLoader::StageSliceBounds()
 {
-    Y_ABORT_UNLESS(PartView, "Cannot generate bounds for a missing part");
+    Y_ENSURE(PartView, "Cannot generate bounds for a missing part");
 
     if (PartView.Slices) {
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
-        return nullptr;
+        return {};
     }
 
     LoaderEnv->EnsureNoNeedPages();
@@ -291,18 +293,18 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
         PartView.Slices = std::move(run);
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
 
-        return nullptr;
+        return {};
     } else if (auto fetches = LoaderEnv->GetFetch()) {
         return fetches;
     } else {
-        Y_ABORT("Screen keys loader stalled without result");
+        Y_TABLET_ERROR("Screen keys loader stalled without result");
     }
 }
 
-void TLoader::StageDeltas() noexcept
+void TLoader::StageDeltas()
 {
-    Y_ABORT_UNLESS(PartView, "Cannot apply deltas to a missing part");
-    Y_ABORT_UNLESS(PartView.Slices, "Missing slices in deltas stage");
+    Y_ENSURE(PartView, "Cannot apply deltas to a missing part");
+    Y_ENSURE(PartView.Slices, "Missing slices in deltas stage");
 
     for (const TString& rawDelta : Deltas) {
         TOverlay overlay{ std::move(PartView.Screen), std::move(PartView.Slices) };
@@ -314,12 +316,12 @@ void TLoader::StageDeltas() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData() noexcept
+TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
     // Note: preload works only for main group pages    
-    auto total = partStore->PageCollections[0]->Total();
+    auto total = partStore->PageCollections[0]->PageCollection->Total();
 
     TVector<TPageId> toLoad(::Reserve(total));
     for (TPageId pageId : xrange(total)) {
@@ -329,16 +331,14 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData() noexcept
     return LoaderEnv->GetFetch();
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages) noexcept
+void TLoader::Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages)
 {
-    Y_ABORT_UNLESS(cookie == 0, "Only the leader pack is used on load");
-
     if (Stage == EStage::PartView || Stage == EStage::Slice || Stage == EStage::PreloadData) {
-        for (auto& loaded : loadedPages) {
-            LoaderEnv->Save(cookie, std::move(loaded));
+        for (auto& page : pages) {
+            LoaderEnv->Save(std::move(page));
         }
     } else {
-        Y_Fail("Unexpected pages save on stage " << int(Stage));
+        Y_TABLET_ERROR("Unexpected pages save on stage " << int(Stage));
     }
 }
 

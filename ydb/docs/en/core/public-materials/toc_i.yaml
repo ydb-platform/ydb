@@ -1,5 +1,11 @@
 items:
 - name: Videos
   href: videos.md
+  include:
+    mode: link
+    path: videos/toc_i.yaml
 - name: Articles
   href: articles.md
+  include:
+    mode: link
+    path: publications/toc_i.yaml

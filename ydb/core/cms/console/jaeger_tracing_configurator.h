@@ -7,7 +7,7 @@
 
 namespace NKikimr::NConsole {
 
-IActor* CreateJaegerTracingConfigurator(NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
+IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<NJaegerTracing::TSamplingThrottlingConfigurator> tracingConfigurator,
                                                 NKikimrConfig::TTracingConfig cfg);
 
 } // namespace NKikimr::NConsole

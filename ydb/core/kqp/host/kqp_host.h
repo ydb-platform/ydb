@@ -45,7 +45,6 @@ public:
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
-        bool PerStatementResult;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"
@@ -90,7 +89,7 @@ public:
     virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Federated queries */
-    virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Scripting */
     virtual IAsyncQueryResultPtr ValidateYqlScript(const TKqpQueryRef& script) = 0;
@@ -108,22 +107,25 @@ public:
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
     /* Split */
-    struct TSplitResult {
-        THolder<NYql::TExprContext> Ctx;
+    struct TSplitResult : public NYql::NCommon::TOperationResult {
+        std::shared_ptr<NYql::TExprContext> Ctx;
         TVector<NYql::TExprNode::TPtr> Exprs;
         NYql::TExprNode::TPtr World;
     };
 
-    virtual TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    using IAsyncSplitResult = NYql::IKikimrAsyncResult<TSplitResult>;
+    using IAsyncSplitcResultPtr = TIntrusivePtr<IAsyncSplitResult>;
+
+    virtual IAsyncSplitcResultPtr SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
-    const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
-    NYql::TExprContext* ctx = nullptr);
+    NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

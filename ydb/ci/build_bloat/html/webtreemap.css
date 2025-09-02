@@ -18,15 +18,11 @@
 }
 
 /* Optional: Different background colors depending on type. */
-.webtreemap-type-h {
-  background: #66C2A5;
+{% for id_, name, color in types %}
+.webtreemap-type-{{ id_ }} {
+  background: {{ color }};
 }
-.webtreemap-type-cpp {
-  background: #FC8D62;
-}
-.webtreemap-type-dir {
-  background: #8DA0CB;
-}
+{% endfor %}
 
 #legend > * {
   border: solid 1px #444;

@@ -39,7 +39,7 @@ AWS_STATIC_IMPL bool aws_linked_list_empty(const struct aws_linked_list *list) {
  */
 AWS_STATIC_IMPL bool aws_linked_list_is_valid(const struct aws_linked_list *list) {
     if (list && list->head.next && list->head.prev == NULL && list->tail.prev && list->tail.next == NULL) {
-#if (AWS_DEEP_CHECKS == 1)
+#if defined(AWS_DEEP_CHECKS) && (AWS_DEEP_CHECKS == 1)
         return aws_linked_list_is_valid_deep(list);
 #else
         return true;
@@ -429,6 +429,10 @@ AWS_STATIC_IMPL void aws_linked_list_move_all_front(
 
     AWS_POSTCONDITION(aws_linked_list_is_valid(src));
     AWS_POSTCONDITION(aws_linked_list_is_valid(dst));
+}
+
+AWS_STATIC_IMPL bool aws_linked_list_node_is_in_list(struct aws_linked_list_node *node) {
+    return aws_linked_list_node_prev_is_valid(node) && aws_linked_list_node_next_is_valid(node);
 }
 
 AWS_EXTERN_C_END

@@ -13,25 +13,28 @@ void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResu
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 }
 
-void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev,
+void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
                                       const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(ev->Record.HasPartitionRequest());
 
     if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
-        SentRequests.push_back(ev->Record.GetPartitionRequest().GetCookie());
-        ctx.Send(Actor, ev.Release());
+        SentRequests.emplace_back(ev->Record.GetPartitionRequest().GetCookie());
+
+        ctx.Send(Actor, ev.Release(), 0, 0, std::move(traceId));
     } else {
-        QuotedRequests.push_back(std::move(ev));
+        QuotedRequests.emplace_back(std::move(ev));
     }
 }
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!SentRequests.empty());
-    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front());
+    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front().Cookie);
 
-    AcceptedRequests.push_back(SentRequests.front());
+    const TSentRequest& front = SentRequests.front();
+
+    AcceptedRequests.emplace_back(front.Cookie);
     SentRequests.pop_front();
 
     if (QuotedRequests.empty()) {
@@ -42,8 +45,9 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
         auto next = std::move(QuotedRequests.front());
         QuotedRequests.pop_front();
 
-        SentRequests.push_back(next->Record.GetPartitionRequest().GetCookie());
-        ctx.Send(Actor, next.Release());
+        SentRequests.emplace_back(next.Write->Record.GetPartitionRequest().GetCookie());
+
+        ctx.Send(Actor, next.Write.Release());
     }
 }
 
@@ -52,7 +56,7 @@ void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteRe
     Y_ABORT_UNLESS(ev.IsSuccess());
 
     Y_ABORT_UNLESS(!AcceptedRequests.empty());
-    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front());
+    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie);
 
     AcceptedRequests.pop_front();
 }

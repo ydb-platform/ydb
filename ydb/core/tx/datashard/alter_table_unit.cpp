@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -24,7 +25,7 @@ public:
         Y_UNUSED(ctx);
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         // Only applicable when ALTER TABLE is in the transaction
         auto& schemeTx = tx->GetSchemeTx();
@@ -43,12 +44,12 @@ public:
         ui64 tableId = alter.GetId_Deprecated();
         if (alter.HasPathId()) {
             auto& pathId = alter.GetPathId();
-            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+            Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
             tableId = pathId.GetLocalId();
         }
 
         // Only applicable when table has ShadowData enabled
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& table = *DataShard.GetUserTables().at(tableId);
         const ui32 localTid = table.LocalTid;
         const ui32 shadowTid = table.ShadowTid;
@@ -65,7 +66,7 @@ public:
             return EExecutionStatus::Continue;
         }
 
-        Y_ABORT_UNLESS(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
+        Y_ENSURE(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
         {
             auto& snapshot = op->InputSnapshots()[0];
             txc.Env.MoveSnapshot(*snapshot, /* src */ shadowTid, /* dst */ localTid);
@@ -128,7 +129,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                                           const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasAlterTable())
@@ -137,7 +138,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto& alterTableTx = schemeTx.GetAlterTable();
 
     const auto version = alterTableTx.GetTableSchemaVersion();
-    Y_ABORT_UNLESS(version);
+    Y_ENSURE(version);
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                "Trying to ALTER TABLE at " << DataShard.TabletID()
@@ -146,26 +147,71 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
         auto& pathId = alterTableTx.GetPathId();
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
         tableId.LocalPathId = pathId.GetLocalId();
     }
 
-    TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
-    DataShard.AddUserTable(tableId, info);
+    auto oldInfo = DataShard.FindUserTable(tableId);
+    auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    TDataShardLocksDb locksDb(DataShard, txc);
+    DataShard.AddUserTable(tableId, newInfo, &locksDb);
 
-    if (info->NeedSchemaSnapshots()) {
+    if (newInfo->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
+
+    bool schemaChanged = false;
+    if (alterTableTx.DropColumnsSize()) {
+        schemaChanged = true;
+    } else {
+        for (const auto& [tag, column] : newInfo->Columns) {
+            if (!oldInfo->Columns.contains(tag)) {
+                schemaChanged = true;
+                break;
+            }
+        }
+    }
+
+    if (schemaChanged) {
+        NIceDb::TNiceDb db(txc.DB);
+
+        for (const auto& streamPathId : newInfo->GetSchemaChangesCdcStreams()) {
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
+                .WithOrder(DataShard.AllocateChangeRecordOrder(db))
+                .WithGroup(0)
+                .WithStep(op->GetStep())
+                .WithTxId(op->GetTxId())
+                .WithPathId(streamPathId)
+                .WithTableId(tableId)
+                .WithSchemaVersion(newInfo->GetTableSchemaVersion())
+                .Build();
+
+            const auto& record = *recordPtr;
+            DataShard.PersistChangeRecord(db, record);
+
+            op->ChangeRecords().push_back(IDataShardChangeCollector::TChange{
+                .Order = record.GetOrder(),
+                .Group = record.GetGroup(),
+                .Step = record.GetStep(),
+                .TxId = record.GetTxId(),
+                .PathId = record.GetPathId(),
+                .BodySize = 0,
+                .TableId = record.GetTableId(),
+                .SchemaVersion = record.GetSchemaVersion(),
+            });
+        }
     }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    return EExecutionStatus::ExecutedNoMoreRestarts;
+    return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TAlterTableUnit::Complete(TOperation::TPtr,
+void TAlterTableUnit::Complete(TOperation::TPtr op,
                                const TActorContext &)
 {
+    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,

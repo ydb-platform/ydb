@@ -4,6 +4,8 @@ message TAuthentification {
     optional string UserName = 1; // Account or CloudId
     optional string FolderId = 2; // Cloud only
     optional string UserSID = 3;
+    optional string MaskedToken = 4;
+    optional string AuthType = 5;
 }
 
 message TCredentials {
@@ -37,6 +39,11 @@ message TMessageAttribute {
     optional string DataType = 2;
     optional string StringValue = 3;
     optional bytes  BinaryValue = 4;
+}
+
+message TQueueTag {
+    optional string Key = 1;
+    optional string Value = 2;
 }
 
 message TChangeMessageVisibilityRequest {
@@ -99,6 +106,11 @@ message TCreateQueueRequest {
     optional string CustomQueueName = 10;
     /// Created time of queue
     optional uint64 CreatedTimestamp = 11;
+
+    /// Queue's tags.
+    repeated TQueueTag Tags = 12;
+
+    optional string SourceAddress = 13;
 }
 
 message TCreateQueueResponse {
@@ -237,6 +249,7 @@ message TDeleteQueueRequest {
     optional string QueueName = 2;
     /// Batch Id. Available only in case of batch response.
     optional string Id = 3;
+    optional string SourceAddress = 4;
 }
 
 message TDeleteQueueResponse {
@@ -265,6 +278,7 @@ message TDeleteUserRequest {
     optional TAuthentification Auth = 1;
     /// Then user name we want to delete.
     optional string UserName = 2;
+    optional string SourceAddress = 3;
 }
 
 message TDeleteUserResponse {
@@ -555,4 +569,47 @@ message TCountQueuesResponse {
     optional string RequestId = 2;
 
     optional uint64 Count = 3;
+}
+
+message TListQueueTagsRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    optional string QueueName = 2;
+}
+
+message TListQueueTagsResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+    repeated TQueueTag Tags = 4;
+}
+
+message TTagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated TQueueTag Tags = 3;
+    optional string SourceAddress = 4;
+}
+
+message TTagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+}
+
+message TUntagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated string TagKeys = 3;
+    optional string SourceAddress = 4;
+}
+
+message TUntagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
 }

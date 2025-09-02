@@ -122,13 +122,18 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
     }
 
     if (descriptionProto.GetColumnShardCount() == 0) {
-        errors.AddError("trying to create OLAP store without zero shards");
+        errors.AddError("trying to create OLAP store with zero shards");
         return false;
     }
 
     for (auto& presetProto : descriptionProto.GetRESERVED_TtlSettingsPresets()) {
         Y_UNUSED(presetProto);
         errors.AddError("TTL presets are not supported");
+        return false;
+    }
+
+    if (descriptionProto.SchemaPresetsSize() > 1) {
+        errors.AddError("trying to create an OLAP store with multiple schema presets (not supported yet)");
         return false;
     }
 
@@ -153,7 +158,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         preset.SetProtoIndex(protoIndex++);
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(presetProto.GetSchema(), errors)) {
+        if (!schemaDiff.Parse(presetProto.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 

@@ -1,12 +1,36 @@
 #include "xz.h"
-
-#include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
-namespace NYql {
+#include <contrib/libs/lzma/liblzma/api/lzma.h>
 
-namespace NXz {
+#include <util/generic/size_literals.h>
+
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NXz {
+
+namespace {
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+
+    lzma_stream Strm_;
+
+    bool IsInFinished_ = false;
+    bool IsOutFinished_ = false;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source), Strm_(LZMA_STREAM_INIT)
@@ -18,11 +42,11 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
         case LZMA_OK:
             return;
         case LZMA_MEM_ERROR:
-            throw yexception() << "Memory allocation failed.";
+            throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Memory allocation failed.";
         case LZMA_OPTIONS_ERROR:
-            throw yexception() << "Unsupported decompressor flags.";
+            throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Unsupported decompressor flags.";
         default:
-            throw yexception() << "Unknown error << " << int(ret) << ", possibly a bug.";
+            throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unknown error << " << int(ret) << ", possibly a bug.";
     }
 }
 
@@ -70,22 +94,20 @@ bool TReadBuffer::nextImpl() {
             case LZMA_OK:
                 continue;
             case LZMA_MEM_ERROR:
-                throw yexception() << "Memory allocation failed.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Memory allocation failed.";
             case LZMA_FORMAT_ERROR:
-                throw yexception() << "The input is not in the .xz format.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "The input is not in the .xz format.";
             case LZMA_OPTIONS_ERROR:
-                throw yexception() << "Unsupported compression options.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Unsupported compression options.";
             case LZMA_DATA_ERROR:
-                throw yexception() << "Compressed file is corrupt.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Compressed file is corrupt.";
             case LZMA_BUF_ERROR:
-                throw yexception() << "Compressed file is truncated or otherwise corrupt.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Compressed file is truncated or otherwise corrupt.";
             default:
-                throw yexception() << "Unknown error " << int(ret) << ", possibly a bug.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unknown error " << int(ret) << ", possibly a bug.";
         }
     }
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -95,7 +117,7 @@ public:
     // options for further compression
     lzma_options_lzma opt_lzma2;
     if (lzma_lzma_preset(&opt_lzma2, level))
-        throw yexception() << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
+        throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
 
     lzma_filter filters[] = {
         {.id = LZMA_FILTER_X86, .options = nullptr},
@@ -107,11 +129,11 @@ public:
             case LZMA_OK:
                 return;
             case LZMA_MEM_ERROR:
-                throw yexception() << "Memory allocation failed.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Memory allocation failed.";
             case LZMA_OPTIONS_ERROR:
-                throw yexception() << "Unsupported decompressor flags.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Unsupported decompressor flags.";
             default:
-                throw yexception() << "Unknown error << " << int(ret) << ", possibly a bug.";
+                throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unknown error << " << int(ret) << ", possibly a bug.";
         }
     }
 
@@ -168,17 +190,17 @@ private:
                 case LZMA_STREAM_END:
                     return TOutputQueue::Seal();
                 case LZMA_MEM_ERROR:
-                    throw yexception() << "Memory allocation failed.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Memory allocation failed.";
                 case LZMA_FORMAT_ERROR:
-                    throw yexception() << "The input is not in the .xz format.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "The input is not in the .xz format.";
                 case LZMA_OPTIONS_ERROR:
-                    throw yexception() << "Unsupported compression options.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Unsupported compression options.";
                 case LZMA_DATA_ERROR:
-                    throw yexception() << "Compressed file is corrupt.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Compressed file is corrupt.";
                 case LZMA_BUF_ERROR:
-                    throw yexception() << "Compressed file is truncated or otherwise corrupt.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Compressed file is truncated or otherwise corrupt.";
                 default:
-                    throw yexception() << "Unknown error " << int(ret) << ", possibly a bug.";
+                    throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unknown error " << int(ret) << ", possibly a bug.";
             }
         };
     }
@@ -191,12 +213,14 @@ private:
     TOutputQueue<0> InputQueue;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZMA_PRESET_DEFAULT));
 }
 
-}
-
-}
+} // namespace NYql::NXz

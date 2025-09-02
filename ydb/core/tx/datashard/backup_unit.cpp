@@ -33,16 +33,16 @@ protected:
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_ABORT_UNLESS(tx->GetSchemeTx().HasBackup());
+        Y_ENSURE(tx->GetSchemeTx().HasBackup());
         const auto& backup = tx->GetSchemeTx().GetBackup();
 
         const ui64 tableId = backup.GetTableId();
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-        Y_ABORT_UNLESS(txc.DB.GetScheme().GetTableInfo(localTableId));
+        Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
         const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
@@ -115,7 +115,7 @@ protected:
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         bool done = true;
@@ -129,7 +129,7 @@ protected:
                 schemeOp->BytesProcessed = result->BytesRead;
                 schemeOp->RowsProcessed = result->RowsRead;
             } else {
-                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+                Y_ENSURE(false, "Cannot find schema tx: " << op->GetTxId());
             }
             break;
         case EExportOutcome::Aborted:
@@ -150,7 +150,7 @@ protected:
 
         const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
 
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
         DataShard.CancelScan(localTableId, tx->GetScanTask());

@@ -5,8 +5,6 @@ except ImportError:
     from six import iteritems, PY3, text_type, binary_type, string_types
     from six.moves import map as imap
 
-import yt.json_wrapper as json
-
 try:
     from library.python.prctl import prctl
 except ImportError:
@@ -31,6 +29,8 @@ import ctypes
 import errno
 import functools
 import inspect
+# Intentionally use python-native json module because custom JSONEncoder is required.
+import json
 import os
 import re
 import signal
@@ -38,6 +38,7 @@ import socket
 import sys
 import time
 import types
+import typing
 import string
 import warnings
 
@@ -46,6 +47,10 @@ import warnings
 YT_DATETIME_FORMAT_STRING = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 YT_NULL_TRANSACTION_ID = "0-0-0-0"
+
+_T = typing.TypeVar('_T')
+
+BYTES_PRINTABLE = set(bytes(string.printable, "ascii"))
 
 
 # Deprecation stuff.
@@ -223,6 +228,10 @@ class YtError(Exception):
         """Already exists."""
         return self.contains_code(501)
 
+    def is_authentication_error(self):
+        """Authentication error."""
+        return self.contains_code(900)
+
     def is_access_denied(self):
         """Access denied."""
         return self.contains_code(901)
@@ -259,6 +268,10 @@ class YtError(Exception):
     def is_rpc_unavailable(self):
         """Rpc unavailable."""
         return self.contains_code(105)
+
+    def is_rpc_response_memory_pressure(self):
+        """Rpc response memory pressure."""
+        return self.contains_code(122)
 
     def is_master_communication_error(self):
         """Master communication error."""
@@ -307,7 +320,7 @@ class YtError(Exception):
     def is_tablet_in_intermediate_state(self):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
-        return self._matches_regexp("Tablet .* is in state .*")
+        return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
 
     def is_no_such_tablet(self):
         """No such tablet."""
@@ -355,13 +368,25 @@ class YtError(Exception):
         """Member is already present in group."""
         return self.contains_code(908)
 
+    def is_prerequisite_check_failed(self):
+        """Prerequisite check failed."""
+        return self.contains_code(1000)
+
     def is_prohibited_cross_cell_copy(self):
         """Cross-cell "copy"/"move" command is explicitly disabled."""
         return self.contains_code(1002)
 
-    def is_sequoia_retriable_error(self):
-        """Probably lock conflict in Sequoia tables."""
-        return self.contains_code(6002)
+    def is_backup_checkpoint_rejected(self):
+        """Backup checkpoint rejected."""
+        return self.contains_code(1733)
+
+    def is_sorting_order_violated(self):
+        """Sort order violation."""
+        return self.contains_code(301)
+
+    def is_command_not_supported(self):
+        """Command is not supported/Command is not supported by api."""
+        return self.contains_text("is not supported")
 
 
 class YtResponseError(YtError):
@@ -432,10 +457,29 @@ def _pretty_format_escape(value):
         return "".join(imap(escape, value))
 
 
+def _pretty_format_bytes(value):
+    def escape(byte):
+        if byte in BYTES_PRINTABLE:
+            return chr(byte)
+        return "\\x{0:02x}".format(byte)
+
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return "".join(imap(escape, value))
+
+
 def _pretty_format_attribute(name, value, attribute_length_limit):
     name = to_native_str(name)
     if isinstance(value, PrettyPrintableDict):
-        value = json.dumps(value, indent=2)
+        class BytesEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, bytes):
+                    return _pretty_format_bytes(obj)
+                else:
+                    return super().default(obj)
+
+        value = json.dumps(value, indent=2, cls=BytesEncoder)
         value = value.replace("\n", "\n" + " " * (15 + 1 + 4))
     else:
         # YsonStringProxy attribute formatting.
@@ -604,7 +648,7 @@ def require(condition, exception_func):
         raise exception_func()
 
 
-def update_inplace(object, patch):
+def update_inplace(object: _T, patch) -> _T:
     """Apply patch to object inplace"""
     if isinstance(patch, Mapping) and isinstance(object, Mapping):
         for key, value in iteritems(patch):
@@ -623,7 +667,7 @@ def update_inplace(object, patch):
     return object
 
 
-def update(object, patch):
+def update(object: _T, patch) -> _T:
     """Apply patch to object without modifying original object or patch"""
     if patch is None:
         return copy.deepcopy(object)
@@ -641,7 +685,7 @@ def flatten(obj, list_types=(list, tuple, set, frozenset, types.GeneratorType)):
 
 
 def update_from_env(variables):
-    """Update variables dict from environment."""
+    """Update variables dict from environment (cuts name prefix "YT_")."""
     for key, value in iteritems(os.environ):
         prefix = "YT_"
         if not key.startswith(prefix):
@@ -834,30 +878,34 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if sleep_backoff is None:
         sleep_backoff = 0.3
 
+    last_exception = None
     if ignore_exceptions:
         def check_predicate():
             try:
-                return predicate()
+                return predicate(), None
             # Do not catch BaseException because pytest exceptions are inherited from it
             # pytest.fail raises exception inherited from BaseException.
-            except Exception:
-                return False
+            except Exception as ex:
+                return False, ex
     else:
-        check_predicate = predicate
+        def check_predicate():
+            return predicate(), None
 
     if timeout is None:
         if iter is None:
             iter = 100
         index = 0
         while index < iter:
-            if check_predicate():
+            result, last_exception = check_predicate()
+            if result:
                 return
             index += 1
             time.sleep(sleep_backoff)
     else:
         start_time = datetime.datetime.now()
         while datetime.datetime.now() - start_time < datetime.timedelta(seconds=timeout):
-            if check_predicate():
+            result, last_exception = check_predicate()
+            if result:
                 return
             time.sleep(sleep_backoff)
 
@@ -865,5 +913,9 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
         error_message = error_message()
     if error_message is None:
         error_message = "Wait failed"
-    error_message += " (timeout = {0})".format(timeout if timeout is not None else iter * sleep_backoff)
+
+    error_message += f" (timeout = {timeout if timeout is not None else iter * sleep_backoff}"
+    if last_exception is not None:
+        error_message += f", exception = {last_exception}"
+    error_message += ")"
     raise WaitFailed(error_message)

@@ -21,7 +21,8 @@ namespace NKikimr {
             StateNoComp = 0,        // default initial state
             StateCompPolicyAtWork,  // compaction policy is working
             StateCompInProgress,    // level compaction
-            StateWaitCommit         // wait for commit to disk
+            StateWaitCommit,        // wait for commit to disk
+            StateWaitPreCompact,    // wait for huge blob precompaction
         };
 
         static const char *LevelCompStateToStr(ELevelCompState s);
@@ -183,6 +184,7 @@ namespace NKikimr {
         ui64 CurEntryPointLsn = ui64(-1);
         ui64 PrevEntryPointLsn = ui64(-1);
 
+        TAtomic FreshCompReadsInFlight = 0;
         TAtomic FreshCompWritesInFlight = 0;
         TAtomic HullCompReadsInFlight = 0;
         TAtomic HullCompWritesInFlight = 0;
@@ -199,13 +201,15 @@ namespace NKikimr {
         // CompactedLsn. We use CompactedLsn at recovery to determine what logs records
         // have to be ignored
         TCompactedLsn CompactedLsn;
+        // DataInplaced aggregated from all levels
+        ui64 AllLevelsDataInplaced = 0;
         // Takes snapshot of the database, actorSystem must be provided, if actorSystem is null,
         // optimization applies;
         // This function is private and must not be called directly
         TLevelIndexSnapshot PrivateGetSnapshot(TActorSystem *actorSystemToNotifyLevelIndex) {
             Y_DEBUG_ABORT_UNLESS(Loaded);
             return TLevelIndexSnapshot(CurSlice, Fresh.GetSnapshot(), CurSlice->Level0CurSstsNum(),
-                    actorSystemToNotifyLevelIndex, DelayedCompactionDeleterInfo);
+                    AllLevelsDataInplaced, actorSystemToNotifyLevelIndex, DelayedCompactionDeleterInfo);
         }
 
     public:
@@ -462,78 +466,46 @@ namespace NKikimr {
             ui64 DataHuge = 0;
         };
 
-        TLevelGroupInfo level0, level1to8, level9to16, level17, level18;
+        TLevelGroupInfo levels[NMonGroup::TLsmAllLevelsStat::MaxCounterLevels];
 
-        auto process = [](TLevelGroupInfo *stat, TLevelSegment *seg) {
-            stat->SstNum += 1;
-            stat->NumItems += seg->Info.Items;
-            stat->NumItemsInplaced += seg->Info.ItemsWithInplacedData;
-            stat->NumItemsHuge += seg->Info.ItemsWithHugeData;
-            stat->DataInplaced += seg->Info.InplaceDataTotalSize;
-            stat->DataHuge += seg->Info.HugeDataTotalSize;
+        ui64 allLevelsDataInplaced = 0;
+
+        auto process = [&allLevelsDataInplaced](TLevelGroupInfo& info, TLevelSegment *seg) {
+            info.SstNum += 1;
+            info.NumItems += seg->Info.Items;
+            info.NumItemsInplaced += seg->Info.ItemsWithInplacedData;
+            info.NumItemsHuge += seg->Info.ItemsWithHugeData;
+            info.DataInplaced += seg->Info.InplaceDataTotalSize;
+            info.DataHuge += seg->Info.HugeDataTotalSize;
+
+            allLevelsDataInplaced += seg->Info.InplaceDataTotalSize;
         };
 
         for (const auto& seg : CurSlice->Level0.Segs->Segments) {
-            process(&level0, seg.Get());
+            process(levels[0], seg.Get());
         }
 
         ui32 levelIndex = 1;
         for (const auto& level : CurSlice->SortedLevels) {
-            TLevelGroupInfo *info = nullptr;
-            switch (levelIndex) {
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                case 8:
-                    info = &level1to8;
-                    break;
-
-                case 9:
-                case 10:
-                case 11:
-                case 12:
-                case 13:
-                case 14:
-                case 15:
-                case 16:
-                    info = &level9to16;
-                    break;
-
-                case 17:
-                    info = &level17;
-                    break;
-
-                case 18:
-                    info = &level18;
-                    break;
+            TLevelGroupInfo& info = levels[levelIndex];
+            for (const auto& seg : level.Segs->Segments) {
+                process(info, seg.Get());
             }
-
-            if (info) {
-                for (const auto& seg : level.Segs->Segments) {
-                    process(info, seg.Get());
-                }
-            }
-
             ++levelIndex;
         }
 
-        for (const auto& p : {std::make_pair(&level0, &stat.Level0),
-                std::make_pair(&level1to8, &stat.Level1to8),
-                std::make_pair(&level9to16, &stat.Level9to16),
-                std::make_pair(&level17, &stat.Level17),
-                std::make_pair(&level18, &stat.Level18)}) {
-            TLevelGroupInfo *from = p.first;
-            NMonGroup::TLsmLevelGroup *to = p.second;
-            to->SstNum() = from->SstNum;
-            to->NumItems() = from->NumItems;
-            to->NumItemsInplaced() = from->NumItemsInplaced;
-            to->NumItemsHuge() = from->NumItemsHuge;
-            to->DataInplaced() = from->DataInplaced;
-            to->DataHuge() = from->DataHuge;
+        AllLevelsDataInplaced = allLevelsDataInplaced;
+
+        for (ui32 level = 0; level < NMonGroup::TLsmAllLevelsStat::MaxCounterLevels; ++level) {
+            TLevelGroupInfo& from = levels[level];
+            auto& to = stat.Levels[level];
+
+            to->SstNum() = from.SstNum;
+            to->NumItems() = from.NumItems;
+            to->NumItemsInplaced() = from.NumItemsInplaced;
+            to->NumItemsHuge() = from.NumItemsHuge;
+            to->DataInplaced() = from.DataInplaced;
+            to->DataHuge() = from.DataHuge;
         }
     }
 
@@ -583,4 +555,3 @@ namespace NKikimr {
     extern template class TLevelIndex<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr
-

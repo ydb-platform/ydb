@@ -7,6 +7,6 @@ CREATE TABLE social_card (
     issue                Date,
     expiry               Date,
     issuing_authority    Text,
-    category             Text 
-); 
+    category             Text
+);
 ```

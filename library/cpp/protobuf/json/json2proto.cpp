@@ -7,6 +7,8 @@
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
+#include <google/protobuf/struct.pb.h>
+
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -85,7 +87,15 @@ static void JsonString2Duration(const NJson::TJsonValue& json,
                  const google::protobuf::FieldDescriptor& field,
                  const NProtobufJson::TJson2ProtoConfig& config) {
     using namespace google::protobuf;
-    if (!json.GetString() && !config.CastRobust) {
+    if (json.IsMap()) {
+        const auto& m = json.GetMap();
+        Duration duration;
+        duration.set_seconds(m.contains("Seconds") ? m.at("Seconds").GetInteger() : 0);
+        duration.set_nanos(m.contains("Nanos") ? m.at("Nanos").GetInteger() : 0);
+        proto.CopyFrom(duration);
+
+        return;
+    } else if (!json.GetString() && !config.CastRobust) {
         ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
                             << "IsString() failed while "
                             << "CPPTYPE_STRING is expected.";
@@ -509,6 +519,57 @@ namespace NProtobufJson {
 
         const google::protobuf::Descriptor* descriptor = proto.GetDescriptor();
         Y_ASSERT(!!descriptor);
+
+        if (descriptor->well_known_type() == google::protobuf::Descriptor::WELLKNOWNTYPE_STRUCT) {
+            Y_ENSURE(json.IsMap(), "Failed to merge json to proto for message: " << descriptor->full_name() << ", expected json map.");
+            google::protobuf::Struct msg;
+            for (const auto& [key, value] : json.GetMap()) {
+                google::protobuf::Value valueMsg;
+                MergeJson2Proto(value, valueMsg, config);
+                (*msg.mutable_fields())[key] = std::move(valueMsg);
+            }
+            proto.GetReflection()->Swap(&proto, &msg);
+            return;
+        } else if (descriptor->well_known_type() == google::protobuf::Descriptor::WELLKNOWNTYPE_VALUE) {
+            google::protobuf::Value msg;
+            switch (json.GetType()) {
+            case NJson::JSON_UNDEFINED:
+                break;
+            case NJson::JSON_NULL:
+                msg.set_null_value({});
+                break;
+            case NJson::JSON_BOOLEAN:
+                msg.set_bool_value(json.GetBoolean());
+                break;
+            case NJson::JSON_INTEGER:
+            case NJson::JSON_DOUBLE:
+            case NJson::JSON_UINTEGER:
+                msg.set_number_value(json.GetDouble());
+                break;
+            case NJson::JSON_STRING:
+                msg.set_string_value(json.GetString());
+                break;
+            case NJson::JSON_MAP:
+            {
+                auto* structValue = msg.mutable_struct_value();
+                MergeJson2Proto(json, *structValue, config);
+                break;
+            }
+            case NJson::JSON_ARRAY:
+            {
+                auto* arrayValue = msg.mutable_list_value();
+                const auto& jsonArray = json.GetArray();
+                arrayValue->mutable_values()->Reserve(jsonArray.size());
+                for (const auto& item : jsonArray) {
+                    MergeJson2Proto(item, *arrayValue->add_values(), config);
+                }
+                break;
+            }
+            }
+
+            proto.GetReflection()->Swap(&proto, &msg);
+            return;
+        }
         Y_ENSURE(json.IsMap(), "Failed to merge json to proto for message: " << descriptor->full_name() << ", expected json map.");
 
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {

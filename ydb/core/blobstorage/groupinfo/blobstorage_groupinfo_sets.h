@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_groupinfo_iter.h"
 
-#include <library/cpp/pop_count/popcount.h>
+#include <bit>
 
 namespace NKikimr {
 
@@ -219,7 +219,7 @@ namespace NKikimr {
 
         // calculate number of set bits
         ui32 GetNumSetItems() const {
-            return PopCount(Mask);
+            return std::popcount(Mask);
         }
 
         const TBlobStorageGroupInfo::TTopology *GetTopology() const {

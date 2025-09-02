@@ -1,4 +1,6 @@
 #include "schemeshard_path.h"
+
+#include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -8,10 +10,11 @@
 
 namespace NKikimr::NSchemeShard {
 
-TPath::TChecker::TChecker(const TPath& path)
+TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
+    , Location(location)
 {
 }
 
@@ -32,7 +35,14 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+    // this line included only in debug error
+    // because we do not want to forward information
+    // about our sources to db user
+#ifndef NDEBUG
+        << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
+#endif
+        ;
 
     return *this;
 }
@@ -309,6 +319,19 @@ const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsTransfer(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTransfer()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a transfer"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsCommonSensePath(EStatus status) const {
     if (Failed) {
         return *this;
@@ -388,6 +411,11 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) con
     }
 
     if (!Path.IsAsyncReplicaTable()) {
+        return *this;
+    }
+
+    // do not treat incr backup tables as async replica
+    if (Path->IsIncrementalBackupTable()) {
         return *this;
     }
 
@@ -552,6 +580,32 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a .sys directory"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsRtmrVolume()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a run time map-reduce volume"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, EStatus status) const {
     if (Failed) {
         return *this;
@@ -633,13 +687,13 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expe
     return FailOnExist(TSet<TPathElement::EPathType>{expectedType}, acceptAlreadyExist);
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidLeafName(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status) const {
     if (Failed) {
         return *this;
     }
 
     TString error;
-    if (Path.IsValidLeafName(error)) {
+    if (Path.IsValidLeafName(userToken, error)) {
         return *this;
     }
 
@@ -883,6 +937,40 @@ const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsBackupCollection()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a backup collection"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    // Warning: scheme objects using YQL backups should only be allowed to be exported
+    // when we can be certain that the database will never be downgraded to a version
+    // which does not support the YQL export process. Otherwise, they will be considered as tables,
+    // and we might cause the process to be aborted.
+    if (Path.Base()->IsTable()
+        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+        || Path.Base()->IsPQGroup()
+    )  {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path type is not supported in exports"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1067,6 +1155,20 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
     return *this;
 }
 
+const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsSysView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a system view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "
@@ -1097,8 +1199,8 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
-TPath::TChecker TPath::Check() const {
-    return TChecker(*this);
+TPath::TChecker TPath::Check(const NCompat::TSourceLocation location) const {
+    return TChecker(*this, location);
 }
 
 bool TPath::IsEmpty() const {
@@ -1281,6 +1383,17 @@ TPath TPath::Child(const TString& name) const {
     return result;
 }
 
+TPath TPath::Child(const TString& name, TSplitChildTag) const {
+    TPath result = *this;
+
+    auto pathParts = SplitPath(name);
+    for (const auto& part : pathParts) {
+        result.Dive(part);
+    }
+
+    return result;
+}
+
 TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 
@@ -1400,7 +1513,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderRestoring()
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
-            + (ui32)IsUnderMoving();
+            + (ui32)IsUnderMoving()
+            + (ui32)IsUnderOutgoingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1488,6 +1602,13 @@ bool TPath::IsUnderMoving() const {
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateMoving;
 }
 
+bool TPath::IsUnderOutgoingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
+        || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+}
+
 TPath& TPath::RiseUntilOlapStore() {
     size_t end = Elements.size();
     while (end > 0) {
@@ -1516,6 +1637,8 @@ bool TPath::IsCommonSensePath() const {
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        // Temporarily backup collections are treated like directories
+        ok = ok || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }
@@ -1538,8 +1661,12 @@ bool TPath::AtLocalSchemeShardPath() const {
     return !(*it)->IsMigrated();
 }
 
-bool TPath::IsInsideTableIndexPath() const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     // expected /<root>/.../<table>/<table_index>/<private_tables>
     if (Depth() < 3) {
@@ -1596,20 +1723,29 @@ bool TPath::IsInsideCdcStreamPath() const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 
-bool TPath::IsTableIndex() const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsTableIndex(
+    const TMaybe<NKikimrSchemeOp::EIndexType>& type,
+    bool failOnUnresolved) const
+{
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
-    return Base()->IsTableIndex();
+    if (!Base()->IsTableIndex()) {
+        return false;
+    }
+
+    if (!type.Defined()) {
+        return true;
+    }
+
+    Y_ABORT_UNLESS(SS->Indexes.contains(Base()->PathId));
+    return SS->Indexes.at(Base()->PathId)->Type == *type;
 }
 
 bool TPath::IsBackupTable() const {
@@ -1654,6 +1790,12 @@ bool TPath::IsReplication() const {
     return Base()->IsReplication();
 }
 
+bool TPath::IsTransfer() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTransfer();
+}
+
 ui32 TPath::Depth() const {
     return NameParts.size();
 }
@@ -1671,8 +1813,15 @@ const TString& TPath::LeafName() const {
     return NameParts.back();
 }
 
-bool TPath::IsValidLeafName(TString& explain) const {
+bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const {
     Y_ABORT_UNLESS(!IsEmpty());
+
+    if (!SS->IsSchemeShardConfigured()) {
+        explain += TStringBuilder()
+            << (SS->IsDomainSchemeShard ? "cluster" : "database")
+            << " schema root is not initialized yet";
+        return false;
+    }
 
     const auto& leaf = NameParts.back();
     if (leaf.empty()) {
@@ -1687,18 +1836,25 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (!SS->IsSchemeShardConfigured()) {
-        explain += "cluster don't have initialized root yet";
-        return false;
-    }
-
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
-        explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
-        return false;
-    }
-
-    if (IsPathPartContainsOnlyDots(leaf)) {
+    if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
+        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+            return false;
+        }
+    } else if (leaf == NSysView::SysPathName) {
+        // Compatibility case.
+        // If system names protection is disabled, only `.sys` remains forbidden to create,
+        // preserving behavior that existed before the introduction of system names protection.
+        if (!AppData()->FeatureFlags.GetEnableRealSystemViewPaths()
+            || !CheckReservedName(leaf, AppData(), userToken, explain))
+        {
+            explain += TStringBuilder()
+                << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";
+            return false;
+        }
+    } else if (IsPathPartContainsOnlyDots(leaf)) {
+        // Compatibility case.
+        // If system names protection is disabled, only-dots check should be executed explicitly.
+        // Generally only-dots check is covered by the reserved prefix check performed by CheckReservedName().
         explain += TStringBuilder()
             << "is not allowed path part contains only dots '" << leaf << "'";
         return false;
@@ -1762,6 +1918,10 @@ ui64 TPath::GetEffectiveACLVersion() const {
     }
 
     return version;
+}
+
+bool TPath::IsLocked() const {
+    return SS->LockedPaths.contains(Base()->PathId);
 }
 
 TTxId TPath::LockedBy() const {

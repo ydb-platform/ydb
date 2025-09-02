@@ -13,10 +13,18 @@
 
 #undef RWF_APPEND
 
+#if !defined(_musl_)
 #include <liburing.h>
+#endif
 #include <libaio.h>
+#if !defined(_musl_)
 #include <linux/fs.h>
+#endif
 #include <sys/ioctl.h>
+
+#if defined(_musl_)
+#define BLKDISCARD _IO(0x12,119)
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -146,23 +154,33 @@ public:
     }
 
     EIoResult Destroy() override {
+        EIoResult result = EIoResult::Ok;
+
         int ret = io_destroy(IoContext);
         if (ret < 0) {
             switch (-ret) {
-                case EFAULT: return EIoResult::BadAddress;
-                case EINVAL: return EIoResult::InvalidArgument;
-                case ENOSYS: return EIoResult::FunctionNotImplemented;
-                default: Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret
-                                 << " strerror# " << strerror(-ret));
+                case EFAULT: 
+                    result = EIoResult::BadAddress;
+                    break;
+                case EINVAL:
+                    result = EIoResult::InvalidArgument;
+                    break;
+                case ENOSYS:
+                    result = EIoResult::FunctionNotImplemented;
+                    break;
+                default: 
+                    Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret << " strerror# " << strerror(-ret));
             }
         }
+
         if (File) {
             ret = File->Flock(LOCK_UN);
             Y_VERIFY_S(ret == 0, "Error in Flock(LOCK_UN), errno# " << errno << " strerror# " << strerror(errno));
             bool isOk = File->Close();
             Y_VERIFY_S(isOk, PDiskInfo << " error on file close, errno# " << errno << " strerror# " << strerror(errno));
         }
-        return EIoResult::Ok;
+
+        return result;
     }
 
     i64 GetEvents(ui64 minEvents, ui64 maxEvents, TAsyncIoOperationResult *events, TDuration timeout) override {
@@ -212,6 +230,8 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case EREMOTEIO:   return EIoResult::RemoteIOError;
+                case ENODEV:    return EIoResult::NoDevice;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -379,6 +399,7 @@ public:
 /*
     TAsyncIoOperationLiburing
 */
+#if !defined(_musl_)
 struct TAsyncIoOperationLiburing : IAsyncIoOperation {
     void* Cookie = nullptr;
     ICallback *Callback = nullptr;
@@ -529,6 +550,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case ENOSPC:    return EIoResult::NoSpaceLeft;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }
@@ -546,7 +568,7 @@ public:
         tOp->IsReadOp = true;
         tOp->DataPtr = destination;
         tOp->DataSize = size;
-        tOp->DataOffset = offset; 
+        tOp->DataOffset = offset;
     }
 
     void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) override {
@@ -705,6 +727,7 @@ public:
     void OnAsyncIoOperationCompletion(IAsyncIoOperation *) override {
     }
 };
+#endif
 
 /*
     CreateAsyncIoContextReal

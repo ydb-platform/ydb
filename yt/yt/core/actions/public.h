@@ -31,6 +31,7 @@ class TFutureHolder;
 
 DECLARE_REFCOUNTED_STRUCT(IInvoker)
 DECLARE_REFCOUNTED_STRUCT(IPrioritizedInvoker)
+DECLARE_REFCOUNTED_STRUCT(IBoundedConcurrencyInvoker)
 DECLARE_REFCOUNTED_STRUCT(ISuspendableInvoker)
 
 template <class TInvoker>

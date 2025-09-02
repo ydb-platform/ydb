@@ -82,6 +82,7 @@ struct TTestContext {
     void SyncProxy(const TActorId& proxy, ui64 generation, bool useTransactions = false);
 
     // Registers a proxy/generation pair with the tablet
+    ui64 SendRegisterProxy(const TActorId& proxy, ui64 generation);
     NKikimrKesus::TEvRegisterProxyResult RegisterProxy(const TActorId& proxy, ui64 generation);
     void MustRegisterProxy(const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 

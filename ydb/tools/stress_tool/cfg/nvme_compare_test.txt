@@ -1,0 +1,111 @@
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 8 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 32 ReadProportion: 1.0 }
+
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 8 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 32 ReadProportion: 0.0 }
+
+AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.8 }
+
+AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 0.0 }
+
+TrimTestList: { DurationSeconds: 60 RequestSize: 2097152 }
+TrimTestList: { DurationSeconds: 60 RequestSize: 134217728 }
+
+PDiskTestList: {
+    PDiskTestList: {
+        PDiskReadLoad: {
+            Tag: 1
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightReads: 64
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+    PDiskTestList: {
+        PDiskWriteLoad: {
+            Tag: 7
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            Chunks: { Slots: 32768 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightWrites: 64
+            LogMode: LOG_SEQUENTIAL
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+    PDiskTestList: {
+        PDiskReadLoad: {
+            Tag: 3
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightReads: 16
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+    PDiskTestList: {
+        PDiskWriteLoad: {
+            Tag: 5
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId: { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            Chunks: { Slots: 64 Weight: 1 }
+            DurationSeconds: 120
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightWrites: 16
+            LogMode: LOG_SEQUENTIAL
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+    EnableTrim: true
+}

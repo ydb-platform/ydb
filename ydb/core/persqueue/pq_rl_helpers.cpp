@@ -40,24 +40,24 @@ bool TRlHelpers::IsQuotaRequired() const {
     return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS && Ctx;
 }
 
-void TRlHelpers::RequestInitQuota(ui64 amount, const TActorContext& ctx) {
-    RequestQuota(amount, EWakeupTag::RlInit, EWakeupTag::RlInitNoResource, ctx);
+void TRlHelpers::RequestInitQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId) {
+    RequestQuota(amount, EWakeupTag::RlInit, EWakeupTag::RlInitNoResource, ctx, std::move(traceId));
 }
 
-void TRlHelpers::RequestDataQuota(ui64 amount, const TActorContext& ctx) {
-    RequestQuota(amount, EWakeupTag::RlAllowed, EWakeupTag::RlNoResource, ctx);
+void TRlHelpers::RequestDataQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId) {
+    RequestQuota(amount, EWakeupTag::RlAllowed, EWakeupTag::RlNoResource, ctx, std::move(traceId));
 }
 
-bool TRlHelpers::MaybeRequestQuota(ui64 amount, EWakeupTag tag, const TActorContext& ctx) {
+bool TRlHelpers::MaybeRequestQuota(ui64 amount, EWakeupTag tag, const TActorContext& ctx, NWilson::TTraceId traceId) {
     if (IsQuotaInflight()) {
         return false;
     }
 
-    RequestQuota(amount, tag, EWakeupTag::RlNoResource, ctx);
+    RequestQuota(amount, tag, EWakeupTag::RlNoResource, ctx, std::move(traceId));
     return true;
 }
 
-void TRlHelpers::RequestQuota(ui64 amount, EWakeupTag success, EWakeupTag timeout, const TActorContext& ctx) {
+void TRlHelpers::RequestQuota(ui64 amount, EWakeupTag success, EWakeupTag timeout, const TActorContext& ctx, NWilson::TTraceId traceId) {
     const auto selfId = ctx.SelfID;
     const auto as = ctx.ActorSystem();
 
@@ -71,7 +71,7 @@ void TRlHelpers::RequestQuota(ui64 amount, EWakeupTag success, EWakeupTag timeou
 
     RlActor = NRpcService::RateLimiterAcquireUseSameMailbox(
         Ctx.GetPath(), amount, WaitDuration,
-        std::move(onSendAllowed), std::move(onSendTimeout), ctx);
+        std::move(onSendAllowed), std::move(onSendTimeout), ctx, std::move(traceId));
 }
 
 void TRlHelpers::OnWakeup(EWakeupTag tag) {

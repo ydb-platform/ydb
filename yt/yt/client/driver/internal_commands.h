@@ -175,4 +175,37 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TForsakeChaosCoordinator
+    : public TTypedCommand<NApi::TForsakeChaosCoordinatorOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TForsakeChaosCoordinator);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId ChaosCellId_;
+    NHydra::TCellId CoordinatorCellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetOrderedTabletSafeTrimRowCount
+    : public TTypedCommand<NApi::TGetOrderedTabletSafeTrimRowCountOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetOrderedTabletSafeTrimRowCount);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::vector<NApi::TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr> Requests_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

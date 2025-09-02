@@ -1,0 +1,86 @@
+{%- macro JavacFlags(task, target_javac_flags, has_errorprone) -%}
+{%-     set target_javac_flags = target_javac_flags|unique -%}
+{%-     set javac_flags = [] -%}
+{%-     set compiler_jvm_flags = [] -%}
+{%-     if target_javac_flags|length -%}
+{#-     skip errorprone options and JVM args -#}
+{%-         set javac_flags = target_javac_flags|reject('startsWith', '-Xep')|reject('startsWith', '-J') -%}
+{%-         if javac_flags|length -%}
+{%-             if (javac_flags|length == 1) and (javac_flags|first == '-parameters') -%}
+{%-                 set javac_flags = [] -%}
+{%-             endif -%}
+{%-         endif -%}
+{%-         set compiler_jvm_flags = target_javac_flags|select('startsWith', '-J') -%}
+{%-     endif -%}
+
+{%-     if javac_flags|length or compiler_jvm_flags|length or with_errorprone %}
+
+tasks.{{ task }}.configure {
+{%-         if javac_flags|length -%}
+{%-             for javac_flag in javac_flags %}
+    options.compilerArgs.add("{{ javac_flag }}")
+{%-             endfor -%}
+{%-         endif -%}
+
+{%-         if compiler_jvm_flags|length %}
+    options.isFork = true
+    options.forkOptions.jvmArgs = listOf(
+{%-             for compiler_jvm_flag in compiler_jvm_flags %}
+        "{{ compiler_jvm_flag|replace("-J", "") }}",
+{%-             endfor %}
+    )
+{%          endif -%}
+
+{%-         if has_errorprone -%}
+{%-             set ep_checks = target_javac_flags|select('startsWith', '-Xep:') -%}
+{%-             set ep_checkopts = target_javac_flags|select('startsWith', '-XepOpt:') -%}
+{%-             set ep_props = target_javac_flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:')|select('startsWith', '-Xep') -%}
+{%-             if ep_checks|length %}
+    options.errorprone.checks.set(
+        mapOf(
+{%-                 for ep_check in ep_checks -%}
+{%-                     set key_and_value = split(ep_check|replace('-Xep:', ''), ':', 2) %}
+            "{{ key_and_value[0] }}" to CheckSeverity.{{ key_and_value[1] }},
+{%-                 endfor %}
+        )
+    )
+{%              endif -%}
+{%-             if ep_checkopts|length -%}
+{%-                 for ep_checkopt in ep_checkopts -%}
+{#-                 TODO Support NullAway -#}
+{%-                     set key_and_value = split(ep_check|replace('-XepOpt:', '')|replace('NullAway:', ''), '=', 2) %}
+            options.errorprone.option("{{ key_and_value[0] }}", "{{ key_and_value[1] }}")
+{%-                 endfor -%}
+{%-             endif -%}
+{%-             if ep_props|length -%}
+{%-                 for ep_prop in ep_props -%}
+{%-                     set ep_prop = ep_prop|replace('-Xep', '') -%}
+{%-                     if ep_prop == 'DisableAllChecks' %}
+    options.errorprone.disableAllChecks.set(true)
+{%-                     elif ep_prop == 'DisableAllWarnings' %}
+    options.errorprone.disableAllWarnings.set(true)
+{%-                     elif ep_prop == 'AllErrorsAsWarnings' %}
+    options.errorprone.allErrorsAsWarnings.set(true)
+{%-                     elif ep_prop == 'DisabledChecksAsWarnings' %}
+    options.errorprone.disabledChecksAsWarnings.set(true)
+{%-                     elif ep_prop == 'DisableWarningsInGeneratedCode' %}
+    options.errorprone.disableWarningsInGeneratedCode.set(true)
+{%-                     elif ep_prop == 'IgnoreUnknownCheckNames' %}
+    options.errorprone.ignoreUnknownCheckNames.set(true)
+{%-                     elif ep_prop == 'IgnoreSuppressionAnnotations' %}
+    options.errorprone.ignoreSuppressionAnnotations.set(true)
+{%-                     elif ep_prop == 'CompilingTestOnlyCode' %}
+    options.errorprone.isCompilingTestOnlyCode.set(true)
+{%-                     elif ep_prop|replace('ExcludedPaths:', '') != ep_prop %}
+    options.errorprone.excludedPaths.set("{{ ep_prop|replace('ExcludedPaths:', '') }}")
+{%-                     endif -%}
+{%-                 endfor -%}
+{%-             endif -%}
+{%-         endif %}
+}
+{%      endif -%}
+{%  endmacro -%}
+{#- glue -#}
+{{ JavacFlags("compileJava", target.javac.flags, with_errorprone) }}
+{#- glue -#}
+{{ JavacFlags("compileTestJava", all_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_errorprone or with_test_errorprone) }}

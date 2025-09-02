@@ -16,6 +16,7 @@
 #include "grpc_server.h"
 #include "logger.h"
 
+#include <util/string/builder.h>
 #include <util/system/hp_timer.h>
 
 #include <grpc++/server.h>
@@ -73,12 +74,11 @@ public:
         , RequestLimiter_(std::move(limiter))
         , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
+        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
+        , AuthState_(server->NeedAuth())
     {
-        AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
-        Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
         Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
-        FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
     }
 
     TGRpcRequestImpl(TService* server,
@@ -101,13 +101,12 @@ public:
         , RequestLimiter_(std::move(limiter))
         , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
+        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
+        , AuthState_(server->NeedAuth())
+        , StreamAdaptor_(CreateStreamAdaptor())
     {
-        AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
-        Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
         Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, Name_);
-        FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
-        StreamAdaptor_ = CreateStreamAdaptor();
     }
 
     TAsyncFinishResult GetFinishFuture() override {
@@ -122,15 +121,12 @@ public:
         return bool(StreamAdaptor_);
     }
 
-    TString GetPeer() const override {
-        // Decode URL-encoded square brackets
-        auto ip = TString(this->Context.peer());
-        CGIUnescape(ip);
-        return ip;
-    }
-
     bool SslServer() const override {
         return Server_->SslServer();
+    }
+
+    TString GetRpcMethodName() const override {
+        return TStringBuilder() << TService::TCurrentGRpcService::service_full_name() << '/' << Name_;
     }
 
     void Run() {
@@ -170,6 +166,10 @@ public:
         UnRef();
     }
 
+    TString GetPeer() const override {
+        return TBaseAsyncContext<TService>::GetPeer();
+    }
+
     TInstant Deadline() const override {
         return TBaseAsyncContext<TService>::Deadline();
     }
@@ -190,15 +190,14 @@ public:
         return TBaseAsyncContext<TService>::GetCompressionLevel();
     }
 
+    TString GetEndpointId() const override {
+        return Server_->GetEndpointId();
+    }
+
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
         return Request_;
     }
-
-    NProtoBuf::Message* GetRequestMut() override {
-        return Request_;
-    }
-
 
     TAuthState& GetAuthState() override {
         return AuthState_;
@@ -257,10 +256,10 @@ private:
         if (!Server_->IsShuttingDown()) {
             if (RequestCallback_) {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             } else {
                 MakeIntrusive<TThis>(
-                    Server_, this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
+                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
             }
         }
     }
@@ -428,7 +427,7 @@ private:
         if (IncRequest()) {
             // Adjust counters.
             RequestSize = Request_->ByteSize();
-            Counters_->StartProcessing(RequestSize);
+            Counters_->StartProcessing(RequestSize, Deadline());
             RequestTimer.Reset();
 
             if (!SslServer()) {
@@ -549,7 +548,7 @@ private:
     }
 
     using TStateFunc = bool (TThis::*)(bool);
-    TService* Server_;
+    TGrpcServiceProtectiable* Server_ = nullptr;
     TOnRequest Cb_;
     TRequestCallback RequestCallback_;
     TStreamRequestCallback StreamRequestCallback_;
@@ -561,9 +560,9 @@ private:
     THolder<grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>> Writer_;
     THolder<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
     TStateFunc StateFunc_;
-    TIn* Request_;
 
     google::protobuf::Arena Arena_;
+    TIn* Request_ = nullptr;
     TOnNextReply NextReplyCb_;
     ui32 RequestSize = 0;
     ui32 ResponseSize = 0;
@@ -577,7 +576,7 @@ private:
 
     using TFixedEvent = TQueueFixedEvent<TGRpcRequestImpl>;
     TFixedEvent OnFinishTag = { this, &TGRpcRequestImpl::OnFinish };
-    NThreading::TPromise<EFinishStatus> FinishPromise_;
+    NThreading::TPromise<EFinishStatus> FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
     bool SkipUpdateCountersOnError = false;
     IStreamAdaptor::TPtr StreamAdaptor_;
     std::atomic<bool> ClientLost_ = false;
@@ -607,8 +606,9 @@ public:
                  typename TBase::TStreamRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters)
-        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), nullptr}
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter = nullptr)
+        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), std::move(limiter)}
     {
     }
 };

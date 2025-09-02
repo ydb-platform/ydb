@@ -8,7 +8,7 @@ from pythran.passmanager import Transformation
 import gast as ast
 
 
-class UnshadowParameters(Transformation):
+class UnshadowParameters(Transformation[Identifiers]):
     '''
     Prevents parameter shadowing by creating new variable.
 
@@ -22,9 +22,6 @@ class UnshadowParameters(Transformation):
         a_ = a
         a_ = 1
     '''
-
-    def __init__(self):
-        Transformation.__init__(self, Identifiers)
 
     def visit_FunctionDef(self, node):
         self.argsid = {arg.id for arg in node.args.args}
@@ -52,13 +49,15 @@ class UnshadowParameters(Transformation):
                 self.renaming[node.id] = new_name
 
     def visit_Assign(self, node):
-        for target in node.targets:
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for target in targets:
             self.update_name(target)
         try:
             self.generic_visit(node)
         except AttributeError:
             pass
         return node
+    visit_AnnAssign = visit_Assign
 
     def visit_AugAssign(self, node):
         self.update_name(node.target)

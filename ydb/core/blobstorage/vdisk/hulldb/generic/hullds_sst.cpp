@@ -8,7 +8,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TLevelSegment<TKey, TMemRec>::OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
         HTML(str) {
-                if (IsLoaded()) {
+                if (this->IsLoaded()) {
                     TABLER() {
                         TABLED() {SMALL() {str << index;}}
                         TABLED() {SMALL() {str << level;}}
@@ -22,6 +22,9 @@ namespace NKikimr {
                         TABLED() {SMALL() {str << StorageRatio.MonSummary();}}
                         TABLED() {SMALL() {str << (Info.IsCreatedByRepl() ? "REPL" : "COMP");}}
                         TABLED() {SMALL() {str << ToStringLocalTimeUpToSeconds(Info.CTime);}}
+                        TABLED() {SMALL() {
+                            str << AssignedSstId << '/' << VolatileOrderId << '@' << FormatList(AllChunks);
+                        }}
                         ++index;
                     }
                 }
@@ -31,7 +34,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TLevelSegment<TKey, TMemRec>::OutputProto(ui32 level, google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
-        if (IsLoaded()) {
+        if (this->IsLoaded()) {
             NKikimrVDisk::LevelStat *row = rows->Add();
             row->set_level(level);
             row->set_first_lsn(Info.FirstLsn);

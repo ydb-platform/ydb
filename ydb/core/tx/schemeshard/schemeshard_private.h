@@ -1,12 +1,20 @@
 #pragma once
-#include "defs.h"
-
 #include "schemeshard_identificators.h"
+
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/login/login.h>
+
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvPrivate {
+namespace TEvPrivate {
     enum EEv {
         EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvOperationPlanStep,
@@ -15,6 +23,10 @@ struct TEvPrivate {
         EvRunConditionalErase,
         EvIndexBuildBilling,
         EvImportSchemeReady,
+        EvImportSchemaMappingReady,
+        EvImportSchemeQueryResult,
+        EvExportSchemeUploadResult,
+        EvExportUploadMetadataResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -27,10 +39,19 @@ struct TEvPrivate {
         EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
+        EvRunIncrementalRestore,
+        EvProgressIncrementalRestore,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvRunShred,
+        EvRunTenantShred,
+        EvAddNewShardToShred,
+        EvVerifyPassword,
+        EvLoginFinalize,
+        EvContinuousBackupCleanerResult,
+        EvTestNotifySubdomainCleanup,
         EvEnd
     };
 
@@ -95,6 +116,67 @@ struct TEvPrivate {
         {}
     };
 
+    struct TEvImportSchemaMappingReady: public TEventLocal<TEvImportSchemaMappingReady, EvImportSchemaMappingReady> {
+        const ui64 ImportId;
+        const bool Success;
+        const TString Error;
+
+        TEvImportSchemaMappingReady(ui64 id, bool success, const TString& error)
+            : ImportId(id)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvImportSchemeQueryResult: public TEventLocal<TEvImportSchemeQueryResult, EvImportSchemeQueryResult> {
+        const ui64 ImportId;
+        const ui32 ItemIdx;
+        const Ydb::StatusIds::StatusCode Status;
+        const std::variant<TString, NKikimrSchemeOp::TModifyScheme> Result;
+
+        // failed query
+        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, TString&& error)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Status(status)
+            , Result(error)
+        {}
+
+        // successful query
+        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, NKikimrSchemeOp::TModifyScheme&& preparedQuery)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Status(status)
+            , Result(preparedQuery)
+        {}
+    };
+
+    struct TEvExportSchemeUploadResult: public TEventLocal<TEvExportSchemeUploadResult, EvExportSchemeUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+
+        TEvExportSchemeUploadResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {
+        const ui64 ExportId;
+        const bool Success;
+        const TString Error;
+
+        TEvExportUploadMetadataResult(ui64 id, bool success, const TString& error)
+            : ExportId(id)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
         TEvServerlessStorageBilling()
         {}
@@ -121,6 +203,14 @@ struct TEvPrivate {
 
         explicit TEvNotifyShardDeleted(const TShardIdx& shardIdx)
             : ShardIdx(shardIdx)
+        { }
+    };
+
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
         { }
     };
 
@@ -182,6 +272,33 @@ struct TEvPrivate {
         {}
     };
 
+    struct TEvRunIncrementalRestore: public TEventLocal<TEvRunIncrementalRestore, EvRunIncrementalRestore> {
+        const TPathId BackupCollectionPathId;
+        const TOperationId OperationId;
+        const TVector<TString> IncrementalBackupNames;
+
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId, const TOperationId& operationId, const TVector<TString>& incrementalBackupNames)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(operationId)
+            , IncrementalBackupNames(incrementalBackupNames)
+        {}
+
+        // Backward compatibility constructor
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(0, 0)
+            , IncrementalBackupNames()
+        {}
+    };
+
+    struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
+        ui64 OperationId;
+
+        explicit TEvProgressIncrementalRestore(ui64 operationId)
+            : OperationId(operationId)
+        {}
+    };
+
     struct TEvSendBaseStatsToSA: public TEventLocal<TEvSendBaseStatsToSA, EvSendBaseStatsToSA> {
     };
 
@@ -192,6 +309,75 @@ struct TEvPrivate {
             : NodeId(nodeId)
         { }
     };
+
+    struct TEvAddNewShardToShred : public TEventLocal<TEvAddNewShardToShred, EvAddNewShardToShred> {
+        const std::vector<TShardIdx> Shards;
+
+        TEvAddNewShardToShred(std::vector<TShardIdx>&& shards)
+            : Shards(std::move(shards))
+        {}
+    };
+
+    struct TEvVerifyPassword : public NActors::TEventLocal<TEvVerifyPassword, EvVerifyPassword> {
+    public:
+        TEvVerifyPassword(
+            const NLogin::TLoginProvider::TLoginUserRequest& request,
+            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
+            const NActors::TActorId source,
+            const TString& passwordHash
+        )
+            : Request(request)
+            , CheckResult(checkResult)
+            , Source(source)
+            , PasswordHash(passwordHash)
+        {}
+
+    public:
+        const NLogin::TLoginProvider::TLoginUserRequest Request;
+        NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
+        const TString PasswordHash;
+    };
+
+    struct TEvLoginFinalize : public NActors::TEventLocal<TEvLoginFinalize, EvLoginFinalize> {
+    public:
+        TEvLoginFinalize(
+            const NLogin::TLoginProvider::TLoginUserRequest& request,
+            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
+            const NActors::TActorId source,
+            const TString& passwordHash,
+            const bool needUpdateCache
+        )
+            : Request(request)
+            , CheckResult(checkResult)
+            , Source(source)
+            , PasswordHash(passwordHash)
+            , NeedUpdateCache(needUpdateCache)
+        {}
+
+    public:
+        const NLogin::TLoginProvider::TLoginUserRequest Request;
+        const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
+        const TString PasswordHash;
+        const bool NeedUpdateCache;
+    };
+
+    struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
+    public:
+        TEvContinuousBackupCleanerResult(ui64 backupId, TPathId item, bool success, const TString& error = "")
+            : BackupId(backupId)
+            , Item(item)
+            , Success(success)
+            , Error(error)
+        {}
+
+        const ui64 BackupId = 0;
+        const TPathId Item;
+        const bool Success = false;
+        const TString Error;
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

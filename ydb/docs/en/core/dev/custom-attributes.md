@@ -12,7 +12,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 ## Set a custom attribute when creating a table {#create}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -35,7 +35,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 ## Set a custom attribute for an existing table {#add}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -63,7 +63,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 ## Update the custom attribute {#alter}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -92,7 +92,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 ## View your custom attributes {#view}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -138,7 +138,7 @@ When you use custom attributes, you no longer need to store scheme versions in a
 
 ## Delete the custom attribute {#drop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 

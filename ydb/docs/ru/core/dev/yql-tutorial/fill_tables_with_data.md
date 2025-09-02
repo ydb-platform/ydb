@@ -1,13 +1,13 @@
-# Добавление данных в таблицу
+# Добавление данных в таблицы
 
-Наполните данными [созданные](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
+Наполните данными [созданные ранее](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
-```sql
+```yql
 REPLACE INTO series (series_id, title, release_date, series_info)
 
 VALUES
 
-    -- По умолчанию числовые литералы имеют тип Int32, 
+    -- По умолчанию числовые литералы имеют тип Int32,
     -- если значение соответствует диапазону.
     -- Иначе тип преобразуется в Int64.
     (
@@ -113,6 +113,4 @@ VALUES
     (2, 5, 6, "Artificial Emotional Intelligence", CAST(Date("2018-04-29") AS Uint64)),
     (2, 5, 7, "Initial Coin Offering", CAST(Date("2018-05-06") AS Uint64)),
     (2, 5, 8, "Fifty-One Percent", CAST(Date("2018-05-13") AS Uint64));
-
-COMMIT;
 ```

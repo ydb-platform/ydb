@@ -1,4 +1,5 @@
 
+from sqlalchemy import text
 from sqlalchemy.engine.default import DefaultDialect
 
 from clickhouse_connect import dbapi
@@ -8,7 +9,7 @@ from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ChDDLCompiler
 from clickhouse_connect.cc_sqlalchemy import ischema_names, dialect_name
 from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
-from clickhouse_connect.driver.query import quote_identifier, format_str
+from clickhouse_connect.driver.binding import quote_identifier, format_str
 
 
 # pylint: disable=too-many-public-methods,no-self-use,unused-argument
@@ -46,8 +47,8 @@ class ClickHouseDialect(DefaultDialect):
 
     @staticmethod
     def has_database(connection, db_name):
-        return (connection.execute('SELECT name FROM system.databases ' +
-                                   f'WHERE name = {format_str(db_name)}')).rowcount > 0
+        return (connection.execute(text('SELECT name FROM system.databases ' +
+                                   f'WHERE name = {format_str(db_name)}'))).rowcount > 0
 
     def get_table_names(self, connection, schema=None, **kw):
         cmd = 'SHOW TABLES'
@@ -87,7 +88,7 @@ class ClickHouseDialect(DefaultDialect):
         return []
 
     def has_table(self, connection, table_name, schema=None, **_kw):
-        result = connection.execute(f'EXISTS TABLE {full_table(table_name, schema)}')
+        result = connection.execute(text(f'EXISTS TABLE {full_table(table_name, schema)}'))
         row = result.fetchone()
         return row[0] == 1
 

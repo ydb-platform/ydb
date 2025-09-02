@@ -3,6 +3,8 @@
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
 
+#include <cstdlib>
+
 #include <ydb/library/yql/utils/simd/simd.h>
 
 struct TPerfomancer {

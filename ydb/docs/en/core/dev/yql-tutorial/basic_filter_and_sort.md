@@ -4,12 +4,12 @@ Select the first three episodes from every season of "IT Crowd", except the firs
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
    series_id,
    season_id,
    episode_id,
-   CAST(air_date AS Date) AS air_date, 
+   CAST(air_date AS Date) AS air_date,
    title
 
 FROM episodes

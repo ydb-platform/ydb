@@ -2076,6 +2076,11 @@ void grpc_chttp2_cancel_stream(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
       grpc_http2_error_code http_error;
       grpc_error_get_status(due_to_error, s->deadline, nullptr, nullptr,
                             &http_error, nullptr);
+      // Do not send RST_STREAM from the client for a stream that hasn't
+      // sent headers yet (still in "idle" state). Note that since we have
+      // marked the stream closed above, we won't be writing to it
+      // anymore.
+      if (t->is_client && !s->sent_initial_metadata) return;
       grpc_chttp2_add_rst_stream_to_next_write(
           t, s->id, static_cast<uint32_t>(http_error), &s->stats.outgoing);
       grpc_chttp2_initiate_write(t, GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM);

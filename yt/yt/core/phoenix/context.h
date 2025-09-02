@@ -6,7 +6,7 @@
 #include <yt/yt/core/misc/serialize.h>
 #include <yt/yt/core/misc/id_generator.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -74,17 +74,18 @@ private:
 
 template <class TSaveContext, class TLoadContext>
 struct ICustomPersistent
-    : public TPolymorphicBase
+    : public virtual TPolymorphicBase
 {
     virtual void Save(TSaveContext& context) const = 0;
     virtual void Load(TLoadContext& context) = 0;
 };
 
 using IPersistent = ICustomPersistent<TSaveContext, TLoadContext>;
+using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 
 #define CONTEXT_INL_H_
 #include "context-inl.h"

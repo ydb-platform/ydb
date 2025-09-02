@@ -3,10 +3,11 @@
 using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void CreateSeriesTable(TTableClient& client, const TString& prefix) {
+static void CreateSeriesTable(TTableClient& client, const std::string& prefix) {
     ThrowOnError(client.RetryOperationSync([prefix](TSession session) {
         auto desc = TTableBuilder()
             .AddNullableColumn("series_id", EPrimitiveType::Uint64)
@@ -21,7 +22,7 @@ static void CreateSeriesTable(TTableClient& client, const TString& prefix) {
     }));
 }
 
-static void CreateSeriesIndexTable(TTableClient& client, const TString& prefix) {
+static void CreateSeriesIndexTable(TTableClient& client, const std::string& prefix) {
     ThrowOnError(client.RetryOperationSync([prefix](TSession session) {
         auto desc = TTableBuilder()
             .AddNullableColumn("rev_views", EPrimitiveType::Uint64)
@@ -33,9 +34,9 @@ static void CreateSeriesIndexTable(TTableClient& client, const TString& prefix) 
     }));
 }
 
-int RunCreateTables(TDriver& driver, const TString& prefix, int argc, char**) {
+int RunCreateTables(TDriver& driver, const std::string& prefix, int argc, char**) {
     if (argc > 1) {
-        Cerr << "Unexpected arguments after create_tables" << Endl;
+        std::cerr << "Unexpected arguments after create_tables" << std::endl;
         return 1;
     }
 

@@ -1,20 +1,24 @@
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_part.h"
 
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
-
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_side_effects.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_operation_factory.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -34,6 +38,14 @@ std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& token
     }
 
     return std::make_tuple(result, parseError);
+}
+
+TString FormatSourceLocationInfo(const NKikimr::NCompat::TSourceLocation& location) {
+    TString locationInfo = "";
+    if (const char* fileName = location.file_name(); fileName && *fileName && location.line() > 0) {
+        locationInfo = TStringBuilder() << " (GetDB first called at " << fileName << ":" << location.line() << ")";
+    }
+    return locationInfo;
 }
 
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -79,15 +91,104 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     }
 };
 
-NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    auto recordForPrint = record;
-    if (record.HasUserToken()) {
-        recordForPrint.SetUserToken("***hide token***");
+bool TSchemeShard::ProcessOperationParts(
+    const TVector<ISubOperation::TPtr>& parts,
+    const TTxId& txId,
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    bool prevProposeUndoSafe,
+    TOperation::TPtr& operation,
+    THolder<TProposeResponse>& response,
+    TOperationContext& context)
+{
+    auto selfId = SelfTabletId();
+    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+
+    if (parts.size() > 1) {
+        // allow altering impl index tables as part of consistent operation
+        context.IsAllowedPrivateTables = true;
     }
-    return recordForPrint;
+
+    for (auto& part : parts) {
+        TString errStr;
+        if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else {
+            response = part->Propose(owner, context);
+        }
+
+        Y_ABORT_UNLESS(response);
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "IgniteOperation"
+                            << ", opId: " << operation->NextPartId()
+                            << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", reason: " << response->Record.GetReason()
+                            << ", at schemeshard: " << selfId);
+
+        if (response->IsDone()) {
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsConditionalAccepted()) {
+            //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsAccepted()) {
+            operation->AddPart(part);
+            //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
+        } else {
+            if (!operation->Parts.empty()) {
+                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Abort operation: IgniteOperation fail to propose a part"
+                                << ", opId: " << part->GetOperationId()
+                                << ", at schemeshard:  " << selfId
+                                << ", already accepted parts: " << operation->Parts.size()
+                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                                << ", with reason: " << response->Record.GetReason()
+                                << ", tx message: " << SecureDebugString(record));
+            }
+
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
+
+            Y_VERIFY_S(context.IsUndoChangesSafe(),
+                        "Operation is aborted and all changes should be reverted"
+                            << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                            << ", opId: " << part->GetOperationId()
+                            << ", at schemeshard:  " << selfId
+                            << ", already accepted parts: " << operation->Parts.size()
+                            << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", with reason: " << response->Record.GetReason()
+                            << ", first GetDB called at: " << locationInfo
+                            << ", tx message: " << SecureDebugString(record));
+
+            AbortOperationPropose(txId, context);
+
+            return false;
+        }
+
+        // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+            prevProposeUndoSafe = false;
+
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
+
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Operation part proposed ok, but propose itself is undo unsafe"
+                    << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
+                    << ", opId: " << part->GetOperationId()
+                    << ", at schemeshard:  " << selfId
+                    << ", first GetDB called at: " << locationInfo
+            );
+        }
+    }
+
+    return true;
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
+    using namespace NGenerated;
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();
@@ -104,14 +205,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     TOperation::TPtr operation = new TOperation(txId);
-    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
 
     for (const auto& transaction : record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
-            Operations.erase(txId);
             return std::move(response);
         }
     }
@@ -125,96 +224,128 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    //
+
+    TVector<TTxTransaction> rewrittenTransactions;
+
+    // # Phase Zero
+    // Rewrites transactions.
+    // It may fill or clear particular fields based on some runtime SS state.
+
+    for (auto tx : record.GetTransaction()) {
+        if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !Rewrite(traits, tx); })) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
+            return std::move(response);
+        }
+
+        rewrittenTransactions.push_back(std::move(tx));
+    }
+
+    //
+
     TVector<TTxTransaction> transactions;
-    for (const auto& transaction : record.GetTransaction()) {
+    TVector<TTxTransaction> generatedTransactions;
+
+    // # Phase One
+    // Generate MkDir transactions based on object name.
+
+    for (const auto& transaction : rewrittenTransactions) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
-            Operations.erase(txId);
             return std::move(response);
         }
 
-        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(transactions));
+        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(generatedTransactions));
+        if (splitResult.Transaction) {
+            transactions.push_back(*splitResult.Transaction);
+        }
     }
 
-    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+    //
+
+    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+    bool prevProposeUndoSafe = true;
+
+    // # Phase Two
+    // For generated MkDirs parts are constructed and proposed.
+    // It is done to simplify checks in dependent (splitted) transactions
+
+    for (const auto& transaction : generatedTransactions) {
+        auto parts = operation->ConstructParts(transaction, context);
+        operation->PreparedParts += parts.size();
+
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
+            return std::move(response);
+        }
+    }
+
+    // # Phase Three
+    // For all initial transactions parts are constructed and proposed
 
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
+        operation->PreparedParts += parts.size();
 
-        if (parts.size() > 1) {
-            // les't allow altering impl index tables as part of consistent operation
-            context.IsAllowedPrivateTables = true;
-        }
-
-        for (auto& part : parts) {
-            TString errStr;
-            if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
-                response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-                response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            } else {
-                response = part->Propose(owner, context);
-            }
-
-            Y_ABORT_UNLESS(response);
-
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "IgniteOperation"
-                             << ", opId: " << operation->NextPartId()
-                             << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                             << ", reason: " << response->Record.GetReason()
-                             << ", at schemeshard: " << selfId);
-
-            if (response->IsDone()) {
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsConditionalAccepted()) {
-                //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsAccepted()) {
-                operation->AddPart(part);
-                //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
-            } else {
-                if (!operation->Parts.empty()) {
-                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "Abort operation: IgniteOperation fail to propose a part"
-                                    << ", opId: " << part->GetOperationId()
-                                    << ", at schemeshard:  " << selfId
-                                    << ", already accepted parts: " << operation->Parts.size()
-                                    << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                                    << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << SecureDebugString(record));
-                }
-
-                Y_VERIFY_S(context.IsUndoChangesSafe(),
-                           "Operation is aborted and all changes should be reverted"
-                               << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                               << ", opId: " << part->GetOperationId()
-                               << ", at schemeshard:  " << selfId
-                               << ", already accepted parts: " << operation->Parts.size()
-                               << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                               << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << SecureDebugString(record));
-
-                context.OnComplete = {}; // recreate
-                context.DbChanges = {};
-
-                for (auto& toAbort : operation->Parts) {
-                    toAbort->AbortPropose(context);
-                }
-
-                context.MemChanges.UnDo(context.SS);
-                context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
-                Operations.erase(txId);
-
-                return std::move(response);
-            }
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
+            return std::move(response);
         }
     }
 
+    //
+
     return std::move(response);
+}
+
+void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& context) {
+    Y_ABORT_UNLESS(Operations.contains(txId));
+    TOperation::TPtr operation = Operations.at(txId);
+
+    // Drop operation side effects, undo memory changes
+    // (Local db changes were already applied)
+    context.OnComplete = {};
+    context.DbChanges = {};
+
+    for (auto& i : operation->Parts) {
+        i->AbortPropose(context);
+    }
+
+    context.MemChanges.UnDo(context.SS);
+
+    // And remove aborted operation from existence
+    Operations.erase(txId);
+}
+
+void AbortOperation(TOperationContext& context, const TTxId txId, const TString& reason) {
+    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+        << ", txId: " << txId
+        << ", operation is rejected and all changes reverted"
+        << ", " << reason
+        << ", at schemeshard: " << context.SS->SelfTabletId()
+    );
+
+    context.GetTxc().DB.RollbackChanges();
+    context.SS->AbortOperationPropose(txId, context);
+}
+
+bool IsCommitRedoSizeOverLimit(TString* reason, TOperationContext& context) {
+    // MaxCommitRedoMB is the ICB control shared with NTabletFlatExecutor::TExecutor.
+    // We subtract from MaxCommitRedoMB additional 1MB for anything extra
+    // that executor/tablet may (or may not) add under the hood
+    const ui64 limitBytes = (context.SS->MaxCommitRedoMB - 1) << 20;  // MB to bytes
+    const ui64 commitRedoBytes = context.GetTxc().DB.GetCommitRedoBytes();
+    if (commitRedoBytes >= limitBytes) {
+        *reason = TStringBuilder()
+            << "local tx commit redo size generated by IgniteOperation() is more than allowed limit: "
+            << "commit redo size " << commitRedoBytes
+            << ", limit " << limitBytes
+            << ", excess " << (commitRedoBytes - limitBytes)
+        ;
+        return true;
+    }
+    return false;
 }
 
 struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -223,7 +354,9 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     TProposeRequest::TPtr Request;
     THolder<TProposeResponse> Response = nullptr;
 
+    TString PeerName;
     TString UserSID;
+    TString SanitizedToken;
 
     TSideEffects OnComplete;
 
@@ -236,6 +369,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         TTabletId selfId = Self->SelfTabletId();
+        auto txId = TTxId(Request->Get()->Record.GetTxId());
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationPropose Execute"
@@ -246,22 +380,66 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         auto [userToken, tokenParseError] = ParseUserToken(Request->Get()->Record.GetUserToken());
         if (tokenParseError) {
-            auto txId = Request->Get()->Record.GetTxId();
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
         if (userToken) {
             UserSID = userToken->GetUserSID();
+            SanitizedToken = userToken->GetSanitizedToken();
         }
+        PeerName = Request->Get()->Record.GetPeerName();
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
+        context.PeerName = PeerName;
 
+        //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
+        // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
         Response = Self->IgniteOperation(*Request->Get(), context);
 
-        OnComplete.ApplyOnExecute(Self, txc, ctx);
+        //NOTE: Successfully created operation also must be checked for the size of this local tx.
+        //
+        // Limitation on a commit redo size of local transactions is imposed at the tablet executor level
+        // (See ydb/core/tablet_flat/flat_executor.cpp, NTabletFlatExecutor::TExecutor::ExecuteTransaction()).
+        // And a tablet violating that limit is considered broken and will be stopped unconditionally and immediately.
+        //
+        // So even if operation was ignited successfully, it's local tx size still must be checked
+        // as a precaution measure to avoid infinite loop of schemeshard restarting, attempting to propose
+        // persisted operation again, hitting commit redo size limit and restarting again.
+        //
+        // On unsuccessful check, local tx should be rolled back, operation should be rejected and
+        // all accumulated changes dropped or reverted.
+        //
+
+        // Actually build commit redo (dbChanges could be empty)
         dbChanges.Apply(Self, txc, ctx);
+
+        if (Self->Operations.contains(txId)) {
+            Y_ABORT_UNLESS(Response->IsDone() || Response->IsAccepted() || Response->IsConditionalAccepted());
+
+            // Check local tx commit redo size
+            TString reason;
+            if (IsCommitRedoSizeOverLimit(&reason, context)) {
+                Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
+
+                AbortOperation(context, txId, reason);
+
+                if (!context.IsUndoChangesSafe()) {
+                    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+                        << ", opId: " << txId
+                        << ", operation should be rejected and all changes be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
+                        << ", at schemeshard: " << context.SS->SelfTabletId()
+                    );
+                }
+            }
+        }
+
+        // Apply accumulated changes (changes could be empty)
+        OnComplete.ApplyOnExecute(Self, txc, ctx);
+
         return true;
     }
 
@@ -277,7 +455,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID);
+        AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.
@@ -393,9 +571,9 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
 template <class TEvType>
 struct TTxTypeFrom;
 
-#define DefineTxTypeFromSpecialization(TEvType, TxTypeValue)  \
+#define DefineTxTypeFromSpecialization(NS, TEvType, TxTypeValue) \
     template <> \
-    struct TTxTypeFrom<TEvType> { \
+    struct TTxTypeFrom<::NKikimr::NS::TEvType> { \
         static constexpr TTxType TxType = TxTypeValue; \
     };
 
@@ -582,15 +760,15 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperati
     return new TTxOperationReply<TEvType>(this, id, ev);
 }
 
-#define DefineCreateTxOperationReplyFunc(TEvType, ...) \
-    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
+#define DefineCreateTxOperationReplyFunc(NS, TEvType, ...) \
+    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, ::NKikimr::NS::TEvType ## __HandlePtr& ev);
 
     SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReplyFunc)
 #undef DefineCreateTxOperationReplyFunc
 
 
 TString JoinPath(const TString& workingDir, const TString& name) {
-    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'));
+    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'), "%s", name.c_str());
     return TStringBuilder()
                << workingDir
                << (workingDir.EndsWith('/') ? "" : "/")
@@ -646,188 +824,15 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
-TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
-    TSplitTransactionsResult result;
-
-    const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    {
-        TPath::TChecker checks = parentPath.Check();
-        checks
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .NotUnderDeleting()
-            .IsCommonSensePath()
-            .IsLikeDirectory();
-
-        if (!checks) {
-            result.Transactions.push_back(tx);
-            return result;
-        }
-    }
-
-    TString targetName;
-
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        targetName = tx.GetMkDir().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx);
-            return result;
-        }
-        targetName = tx.GetCreateTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        targetName = tx.GetCreatePersQueueGroup().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        targetName = tx.GetSubDomain().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-        targetName = tx.GetCreateRtmrVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        targetName = tx.GetCreateBlockStoreVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        targetName = tx.GetCreateFileStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-        targetName = tx.GetKesus().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        targetName = tx.GetCreateSolomonVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        targetName = tx.GetCreateIndexedTable().GetTableDescription().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        targetName = tx.GetCreateColumnStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        targetName = tx.GetCreateColumnTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        targetName = tx.GetCreateExternalTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        targetName = tx.GetCreateExternalDataSource().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-        targetName = tx.GetCreateView().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        targetName = tx.GetCreateResourcePool().GetName();
-        break;
-    default:
-        result.Transactions.push_back(tx);
-        return result;
-    }
-
-    if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
-        result.Transactions.push_back(tx);
-        return result;
-    }
-
-    TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
-    {
-        TPath::TChecker checks = path.Check();
-        checks.IsAtLocalSchemeShard();
-
-        bool exists = false;
-        if (path.IsResolved()) {
-            checks.IsResolved();
-            exists = !path.IsDeleted();
-        } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
-        }
-
-        if (checks && !exists) {
-            checks.IsValidLeafName();
-        }
-
-        if (!checks) {
-            result.Status = checks.GetStatus();
-            result.Reason = checks.GetError();
-            result.Transactions.push_back(tx);
-            return result;
-        }
-
-        const TString name = path.LeafName();
-        path.Rise();
-
-        TTxTransaction create(tx);
-        create.SetWorkingDir(path.PathString());
-        create.SetFailOnExist(tx.GetFailOnExist());
-
-        switch (tx.GetOperationType()) {
-        case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-            create.MutableMkDir()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-            create.MutableCreateTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-            create.MutableCreatePersQueueGroup()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-            create.MutableSubDomain()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-            create.MutableCreateRtmrVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-            create.MutableCreateBlockStoreVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-            create.MutableCreateFileStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-            create.MutableKesus()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-            create.MutableCreateSolomonVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-            create.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-            create.MutableCreateColumnStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-            create.MutableCreateColumnTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-            create.MutableCreateExternalTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-            create.MutableCreateExternalDataSource()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-            create.MutableCreateView()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-            create.MutableCreateResourcePool()->SetName(name);
-            break;
-        default:
-            Y_UNREACHABLE();
-        }
-
-        result.Transactions.push_back(create);
-
-        if (exists) {
-            return result;
-        }
-    }
+bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result) {
+    auto initialSize = result.Transactions.size();
 
     while (path != parentPath) {
+        if (createdPaths.contains(path.PathString())) {
+            path.Rise();
+            continue;
+        }
+
         TPath::TChecker checks = path.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -855,18 +860,15 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
                 .NotResolved();
         }
 
-        if (checks) {
-            checks.IsValidLeafName();
-        }
-
         if (!checks) {
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
             result.Transactions.clear();
-            result.Transactions.push_back(tx);
-            return result;
+            result.Transaction = tx;
+            return false;
         }
 
+        createdPaths.emplace(path.PathString());
         const TString name = path.LeafName();
         path.Rise();
 
@@ -879,11 +881,151 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         result.Transactions.push_back(mkdir);
     }
 
-    Reverse(result.Transactions.begin(), result.Transactions.end());
+    Reverse(result.Transactions.begin() + initialSize, result.Transactions.end());
+
+    return true;
+}
+
+// # Generates additional MkDirs for transactions
+TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
+    TSplitTransactionsResult result;
+    THashSet<TString> createdPaths;
+
+    // # Generates MkDirs based on WorkingDir and path
+    //     WorkingDir  |        TxType.ObjectName
+    //  /Root/some_dir | other_dir/another_dir/object_name
+    //                  ^---------^----------^
+    // MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
+    // tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
+    // tx.TxType.ObjectName will be changed to 'object_name'
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateDirsFromName; })) {
+        TString targetName;
+
+        if (!DispatchOp(tx, [&](auto traits) {
+                auto name = GetTargetName(traits, tx);
+                if (name) {
+                    targetName = *name;
+                    return true;
+                }
+                return false;
+            }))
+        {
+            result.Transaction = tx;
+            return result;
+        }
+
+        if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
+            result.Transaction = tx;
+            return result;
+        }
+
+        const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+        {
+            TPath::TChecker checks = parentPath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsLikeDirectory();
+
+            if (!checks) {
+                result.Transaction = tx;
+                return result;
+            }
+        }
+
+        TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
+        {
+            TPath::TChecker checks = path.Check();
+            checks.IsAtLocalSchemeShard();
+
+            bool exists = false;
+            if (path.IsResolved()) {
+                checks.IsResolved();
+                exists = !path.IsDeleted();
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
+
+            if (!checks) {
+                result.Status = checks.GetStatus();
+                result.Reason = checks.GetError();
+                result.Transaction = tx;
+                return result;
+            }
+
+            const TString name = path.LeafName();
+            path.Rise();
+
+            TTxTransaction create(tx);
+            create.SetWorkingDir(path.PathString());
+            create.SetFailOnExist(tx.GetFailOnExist());
+
+            if (!DispatchOp(tx, [&](auto traits) {
+                    return SetName(traits, create, name);
+                }))
+            {
+                Y_ABORT("Invariant violation");
+            }
+
+            result.Transaction = create;
+
+            if (exists) {
+                return result;
+            }
+        }
+
+        if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+            return result;
+        }
+    }
+
+    // # Generates MkDirs based on transaction-specific requirements
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
+        if (auto requiredPaths = DispatchOp(tx, [&](auto traits) { return GetRequiredPaths(traits, tx, context); }); requiredPaths) {
+            for (const auto& [parentPathStr, pathStrs] : *requiredPaths) {
+                const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+                {
+                    TPath::TChecker checks = parentPath.Check();
+                    checks
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .NotUnderDeleting()
+                        .IsCommonSensePath()
+                        .IsLikeDirectory();
+
+                    if (!checks) {
+                        result.Transaction = tx;
+                        return result;
+                    }
+                }
+
+                for (const auto& pathStr : pathStrs) {
+                    TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
+                    if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                        return result;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!result.Transaction) {
+        result.Transaction = tx;
+    }
+
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
+    TTxState* state = context.SS->FindTx(NextPartId());
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -896,7 +1038,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateTable:
         return CreateNewTable(NextPartId(), txState);
     case TTxState::ETxType::TxCopyTable:
-        return CreateCopyTable(NextPartId(), txState);
+        return CreateCopyTable(NextPartId(), txState, state);
     case TTxState::ETxType::TxAlterTable:
         return CreateAlterTable(NextPartId(), txState);
     case TTxState::ETxType::TxSplitTablePartition:
@@ -1022,6 +1164,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropCdcStreamAtTable(NextPartId(), txState, false);
     case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
         return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxRotateCdcStream:
+        return CreateRotateCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxRotateCdcStreamAtTable:
+        return CreateRotateCdcStreamAtTable(NextPartId(), txState);
 
     // Sequences
     case TTxState::ETxType::TxCreateSequence:
@@ -1032,6 +1178,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
         return CreateCopySequence(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveSequence:
+        return CreateMoveSequence(NextPartId(), txState);
 
     case TTxState::ETxType::TxFillIndex:
         Y_ABORT("deprecated");
@@ -1050,6 +1198,16 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropReplication(NextPartId(), txState, false);
     case TTxState::ETxType::TxDropReplicationCascade:
         return CreateDropReplication(NextPartId(), txState, true);
+
+    // Transfer
+    case TTxState::ETxType::TxCreateTransfer:
+        return CreateNewTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterTransfer:
+        return CreateAlterTransfer(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTransfer:
+        return CreateDropTransfer(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropTransferCascade:
+        return CreateDropTransfer(NextPartId(), txState, true);
 
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
@@ -1079,7 +1237,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
     // Continuous Backup
-    // Now these functions won't be called because we presist only cdc function internally
+    // Now these txs won't be called because we presist only cdc txs internally
     case TTxState::ETxType::TxCreateContinuousBackup:
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxAlterContinuousBackup:
@@ -1095,152 +1253,205 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterResourcePool:
         return CreateAlterResourcePool(NextPartId(), txState);
 
+    case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
+
+    // BackupCollection
+    case TTxState::ETxType::TxCreateBackupCollection:
+        return CreateNewBackupCollection(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxDropBackupCollection:
+        return CreateDropBackupCollection(NextPartId(), txState);
+
+    // SysView
+    case TTxState::ETxType::TxCreateSysView:
+        return CreateNewSysView(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSysView:
+        return CreateDropSysView(NextPartId(), txState);
+
+    // ChangePathState
+    case TTxState::ETxType::TxChangePathState:
+        return CreateChangePathState(NextPartId(), txState);
+
+    // Incremental Restore Finalization
+    case TTxState::ETxType::TxIncrementalRestoreFinalize:
+        return CreateIncrementalRestoreFinalize(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
+        return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
+        return CreateLongIncrementalBackupOp(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
 
+    Y_UNUSED(context); // TODO(Enjection): will be used by complex operations later
+
     Y_UNREACHABLE();
 }
 
-TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
+class TDefaultOperationFactory: public IOperationFactory {
+public:
+    TVector<ISubOperation::TPtr> MakeOperationParts(
+        const TOperation& op,
+        const TTxTransaction& tx,
+        TOperationContext& context) const override;
+};
+
+IOperationFactory* DefaultOperationFactory() {
+    return new TDefaultOperationFactory();
+}
+
+TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
+        const TOperation& op,
+        const TTxTransaction& tx,
+        TOperationContext& context) const
+{
     const auto& opType = tx.GetOperationType();
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        return {CreateMkDir(NextPartId(), tx)};
+        return {CreateMkDir(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpRmDir:
-        return {CreateRmDir(NextPartId(), tx)};
+        return {CreateRmDir(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
-        return {CreateModifyACL(NextPartId(), tx)};
+        return {CreateModifyACL(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
-        return {CreateAlterUserAttrs(NextPartId(), tx)};
+        return {CreateAlterUserAttrs(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
-        return {CreateForceDropUnsafe(NextPartId(), tx)};
+        return {CreateForceDropUnsafe(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         if (tx.GetCreateTable().HasCopyFromTable()) {
-            return CreateCopyTable(NextPartId(), tx, context); // Copy indexes table as well as common table
+            return CreateCopyTable(op.NextPartId(), tx, context); // Copy indexes table as well as common table
         }
-        return {CreateNewTable(NextPartId(), tx)};
+        return {CreateNewTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        return CreateConsistentAlterTable(NextPartId(), tx, context);
+        return CreateConsistentAlterTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
-        return {CreateSplitMerge(NextPartId(), tx)};
+        return {CreateSplitMerge(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
-        return {CreateBackup(NextPartId(), tx)};
+        return {CreateBackup(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
-        return {CreateRestore(NextPartId(), tx)};
+        return {CreateRestore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        return CreateDropIndexedTable(NextPartId(), tx, context);
+        return CreateDropIndexedTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        return CreateIndexedTable(NextPartId(), tx, context);
+        return CreateIndexedTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
         Y_ABORT("is handled as part of ESchemeOpCreateIndexedTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
         Y_ABORT("is handled as part of ESchemeOpDropTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
-        return CreateConsistentCopyTables(NextPartId(), tx, context);
+        return CreateConsistentCopyTables(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-        return {CreateNewRTMR(NextPartId(), tx)};
+        return {CreateNewRTMR(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        return {CreateNewOlapStore(NextPartId(), tx)};
+        return {CreateNewOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
-        return {CreateAlterOlapStore(NextPartId(), tx)};
+        return {CreateAlterOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
-        return {CreateDropOlapStore(NextPartId(), tx)};
+        return {CreateDropOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        return {CreateNewColumnTable(NextPartId(), tx)};
+        return {CreateNewColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return {CreateAlterColumnTable(NextPartId(), tx)};
+        return {CreateAlterColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
-        return {CreateDropColumnTable(NextPartId(), tx)};
+        return {CreateDropColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        return {CreateNewPQ(NextPartId(), tx)};
+        return {CreateNewPQ(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
-        return {CreateAlterPQ(NextPartId(), tx)};
+        return {CreateAlterPQ(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
-        return {CreateDropPQ(NextPartId(), tx)};
+        return {CreateDropPQ(op.NextPartId(), tx)};
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        return {CreateNewSolomon(NextPartId(), tx)};
+        return {CreateNewSolomon(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:
-        return {CreateAlterSolomon(NextPartId(), tx)};
+        return {CreateAlterSolomon(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume:
-        return {CreateDropSolomon(NextPartId(), tx)};
+        return {CreateDropSolomon(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-        return {CreateSubDomain(NextPartId(), tx)};
+        return {CreateSubDomain(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        return {CreateCompatibleSubdomainAlter(context.SS, NextPartId(), tx)};
+        return CreateCompatibleSubdomainAlter(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
-        return {CreateDropSubdomain(NextPartId(), tx)};
+        return {CreateDropSubdomain(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
-        return {CreateCompatibleSubdomainDrop(context.SS, NextPartId(), tx)};
+        return {CreateCompatibleSubdomainDrop(context.SS, op.NextPartId(), tx)};
 
     // ExtSubDomain
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        return {CreateExtSubDomain(NextPartId(), tx)};
+        return {CreateExtSubDomain(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
-        return CreateCompatibleAlterExtSubDomain(NextPartId(), tx, context);
+        return CreateCompatibleAlterExtSubDomain(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
-        return {CreateForceDropExtSubDomain(NextPartId(), tx)};
+        return {CreateForceDropExtSubDomain(op.NextPartId(), tx)};
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-        return {CreateNewKesus(NextPartId(), tx)};
+        return {CreateNewKesus(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus:
-        return {CreateAlterKesus(NextPartId(), tx)};
+        return {CreateAlterKesus(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus:
-        return {CreateDropKesus(NextPartId(), tx)};
+        return {CreateDropKesus(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain:
-        return {CreateUpgradeSubDomain(NextPartId(), tx)};
+        return {CreateUpgradeSubDomain(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
-        return {CreateUpgradeSubDomainDecision(NextPartId(), tx)};
+        return {CreateUpgradeSubDomainDecision(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
-        return CreateBuildColumn(NextPartId(), tx, context);
+        return CreateBuildColumn(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return {DropBuildColumn(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+        return CreateSetConstraintInitiate(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
-        return CreateBuildIndex(NextPartId(), tx, context);
+        return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
-        return {CreateLock(NextPartId(), tx)};
+        return {CreateLock(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
-        return {DropLock(NextPartId(), tx)};
+        return {DropLock(op.NextPartId(), tx)};
 
     // BlockStore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        return {CreateNewBSV(NextPartId(), tx)};
+        return {CreateNewBSV(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAssignBlockStoreVolume:
-        return {CreateAssignBSV(NextPartId(), tx)};
+        return {CreateAssignBSV(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
-        return {CreateAlterBSV(NextPartId(), tx)};
+        return {CreateAlterBSV(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume:
-        return {CreateDropBSV(NextPartId(), tx)};
+        return {CreateDropBSV(op.NextPartId(), tx)};
 
     // FileStore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        return {CreateNewFileStore(NextPartId(), tx)};
+        return {CreateNewFileStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore:
-        return {CreateAlterFileStore(NextPartId(), tx)};
+        return {CreateAlterFileStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
-        return {CreateDropFileStore(NextPartId(), tx)};
+        return {CreateDropFileStore(op.NextPartId(), tx)};
 
     // Login
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
-        return {CreateAlterLogin(NextPartId(), tx)};
+        return {CreateAlterLogin(op.NextPartId(), tx)};
 
     // Sequence
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
-        return {CreateNewSequence(NextPartId(), tx)};
+        return {CreateNewSequence(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        return {CreateAlterSequence(NextPartId(), tx)};
+        return {CreateAlterSequence(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
-        return {CreateDropSequence(NextPartId(), tx)};
+        return {CreateDropSequence(op.NextPartId(), tx)};
 
     // Index
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
-        return ApplyBuildIndex(NextPartId(), tx, context);
+        return ApplyBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        Y_ABORT("multipart operations are handled before, also they require transaction details");
+        return {CreateInitializeBuildIndexImplTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1250,28 +1461,33 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
-        return CancelBuildIndex(NextPartId(), tx, context);
+        return CancelBuildIndex(op.NextPartId(), tx, context);
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex:
-        return CreateDropIndex(NextPartId(), tx, context);
+        return CreateDropIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     // CDC
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream:
-        return CreateNewCdcStream(NextPartId(), tx, context);
+        return CreateNewCdcStream(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream:
-        return CreateAlterCdcStream(NextPartId(), tx, context);
+        return CreateAlterCdcStream(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        return CreateDropCdcStream(NextPartId(), tx, context);
+        return CreateDropCdcStream(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        return CreateRotateCdcStream(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
@@ -1279,73 +1495,127 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
 
     // Move
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
-        return CreateConsistentMoveTable(NextPartId(), tx, context);
+        return CreateConsistentMoveTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
-        return {CreateMoveTableIndex(NextPartId(), tx)};
+        return {CreateMoveTableIndex(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
-        return CreateConsistentMoveIndex(NextPartId(), tx, context);
+        return CreateConsistentMoveIndex(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return {CreateMoveSequence(op.NextPartId(), tx)};
 
     // Replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
-        return {CreateNewReplication(NextPartId(), tx)};
+        return {CreateNewReplication(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-        return {CreateAlterReplication(NextPartId(), tx)};
+        return {CreateAlterReplication(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
-        return {CreateDropReplication(NextPartId(), tx, false)};
+        return {CreateDropReplication(op.NextPartId(), tx, false)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
-        return {CreateDropReplication(NextPartId(), tx, true)};
+        return {CreateDropReplication(op.NextPartId(), tx, true)};
+
+    // Transfer
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+        return {CreateNewTransfer(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        return {CreateAlterTransfer(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
+        return {CreateDropTransfer(op.NextPartId(), tx, false)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
+        return {CreateDropTransfer(op.NextPartId(), tx, true)};
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
-        return {CreateNewBlobDepot(NextPartId(), tx)};
+        return {CreateNewBlobDepot(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlobDepot:
-        return {CreateAlterBlobDepot(NextPartId(), tx)};
+        return {CreateAlterBlobDepot(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
-        return {CreateDropBlobDepot(NextPartId(), tx)};
+        return {CreateDropBlobDepot(op.NextPartId(), tx)};
 
     // ExternalTable
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        return CreateNewExternalTable(NextPartId(), tx, context);
+        return CreateNewExternalTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
-        return {CreateDropExternalTable(NextPartId(), tx)};
+        return {CreateDropExternalTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         Y_ABORT("TODO: implement");
 
     // ExternalDataSource
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        return CreateNewExternalDataSource(NextPartId(), tx, context);
+        return CreateNewExternalDataSource(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
-        return {CreateDropExternalDataSource(NextPartId(), tx)};
+        return {CreateDropExternalDataSource(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
         Y_ABORT("TODO: implement");
 
     // View
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-        return {CreateNewView(NextPartId(), tx)};
+        return {CreateNewView(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
-        return {CreateDropView(NextPartId(), tx)};
+        return {CreateDropView(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
 
     // CDC
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
-        return CreateNewContinuousBackup(NextPartId(), tx, context);
+        return CreateNewContinuousBackup(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
-        return CreateAlterContinuousBackup(NextPartId(), tx, context);
+        return CreateAlterContinuousBackup(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
-        return CreateDropContinuousBackup(NextPartId(), tx, context);
+        return CreateDropContinuousBackup(op.NextPartId(), tx, context);
 
     // ResourcePool
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        return {CreateNewResourcePool(NextPartId(), tx)};
+        return {CreateNewResourcePool(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
-        return {CreateDropResourcePool(NextPartId(), tx)};
+        return {CreateDropResourcePool(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
-        return {CreateAlterResourcePool(NextPartId(), tx)};
+        return {CreateAlterResourcePool(op.NextPartId(), tx)};
 
+    // IncrementalBackup
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return CreateRestoreMultipleIncrementalBackups(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // BackupCollection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return {CreateNewBackupCollection(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        return CreateDropBackupCollectionCascade(op.NextPartId(), tx, context);
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return CreateBackupBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return {CreateLongIncrementalRestoreOpControlPlane(op.NextPartId(), tx)};
+
+    // SysView
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        return {CreateNewSysView(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        return {CreateDropSysView(op.NextPartId(), tx)};
+
+    // ChangePathState
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return CreateChangePathState(op.NextPartId(), tx, context);
+
+    // Incremental Restore Finalization
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();
+}
+
+TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
+    return AppData()->SchemeOperationFactory->MakeOperationParts(*this, tx, context);
 }
 
 void TOperation::AddPart(ISubOperation::TPtr part) {
@@ -1493,13 +1763,18 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
     if (RelationsByTabletId.contains(tablet)) {
         if (RelationsByTabletId.at(tablet) != partId) {
             // it is Ok if Hive otherwise it is error
+            TSubTxId prevPartId = RelationsByTabletId.at(tablet);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TOperation RegisterRelationByTabletId"
                             << " collision in routes has found"
-                            << ", TxId: " << TxId
-                            << ", partId: " << partId
-                            << ", prev tablet: " << RelationsByTabletId.at(tablet)
-                            << ", new tablet: " << tablet);
+                            << ", TxId# " << TxId
+                            << ", partId# " << partId
+                            << ", prevPartId# " << prevPartId
+                            << ", tablet# " << tablet
+                            << ", guessDefaultRootHive# " << (tablet == TTabletId(72057594037968897) ? "yes" : "no")
+                            << ", prevTx# " << (prevPartId < Parts.size() ? Parts[prevPartId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            << ", newTx# " << (partId < Parts.size() ? Parts[partId]->GetTransaction().ShortDebugString() : TString("unknown"))
+                            );
 
             RelationsByTabletId.erase(tablet);
         }

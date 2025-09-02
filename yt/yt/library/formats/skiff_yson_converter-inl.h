@@ -2,6 +2,8 @@
 #error "Direct inclusion of this file is not allowed; include skiff_yson_converter.h"
 #endif
 
+#include <yt/yt/library/tz_types/tz_types.h>
+
 #include <util/system/byteorder.h>
 
 namespace NYT::NFormats {
@@ -44,6 +46,75 @@ Y_FORCE_INLINE auto TSimpleSkiffParser<wireType>::operator () (NSkiff::TCheckedI
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <NSkiff::EWireType internalWireType>
+TTzSkiffParser<internalWireType>::TTzSkiffParser()
+{
+    Buffer_.resize(NTzTypes::GetMaxPossibleTzStringSize());
+}
+
+template <NSkiff::EWireType internalWireType>
+Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator () (NSkiff::TCheckedInDebugSkiffParser* parser)
+{
+    using namespace NSkiff;
+    using namespace NTzTypes;
+
+    if constexpr (internalWireType == EWireType::Int32) {
+        auto value = parser->ParseInt32();
+        return MakeTzString<i32>(value, GetTzName(parser->ParseUint16()), Buffer_.data(), Buffer_.size());
+    } else if constexpr (internalWireType == EWireType::Int64) {
+        auto value = parser->ParseInt64();
+        return MakeTzString<i64>(value, GetTzName(parser->ParseUint16()), Buffer_.data(), Buffer_.size());
+    } else if constexpr (internalWireType == EWireType::Uint16) {
+        auto value = parser->ParseUint16();
+        return MakeTzString<ui16>(value, GetTzName(parser->ParseUint16()), Buffer_.data(), Buffer_.size());
+    } else if constexpr (internalWireType == EWireType::Uint32) {
+        auto value = parser->ParseUint32();
+        return MakeTzString<ui32>(value, GetTzName(parser->ParseUint16()), Buffer_.data(), Buffer_.size());
+    } else if constexpr (internalWireType == EWireType::Uint64) {
+        auto value = parser->ParseUint64();
+        return MakeTzString<ui64>(value, GetTzName(parser->ParseUint16()), Buffer_.data(), Buffer_.size());
+    } else {
+        static_assert(internalWireType == EWireType::Int64);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NSkiff::EWireType internalWireType>
+void TTzSkiffWriter<internalWireType>::operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+{
+    using namespace NSkiff;
+    using namespace NTzTypes;
+
+    std::string_view resultTzName;
+    if constexpr (internalWireType == EWireType::Int32) {
+        const auto& [timestamp, tzName] = ParseTzValue<i32>(value);
+        writer->WriteInt32(timestamp);
+        resultTzName = tzName;
+    } else if constexpr (internalWireType == EWireType::Int64) {
+        const auto& [timestamp, tzName] = ParseTzValue<i64>(value);
+        writer->WriteInt64(timestamp);
+        resultTzName = tzName;
+    } else if constexpr (internalWireType == EWireType::Uint16) {
+        const auto& [timestamp, tzName] = ParseTzValue<ui16>(value);
+        writer->WriteUint16(timestamp);
+        resultTzName = tzName;
+    } else if constexpr (internalWireType == EWireType::Uint32) {
+        const auto& [timestamp, tzName] = ParseTzValue<ui32>(value);
+        writer->WriteUint32(timestamp);
+        resultTzName = tzName;
+    } else if constexpr (internalWireType == EWireType::Uint64) {
+        const auto& [timestamp, tzName] = ParseTzValue<ui64>(value);
+        writer->WriteUint64(timestamp);
+        resultTzName = tzName;
+    } else {
+        static_assert(internalWireType == EWireType::Int64);
+    }
+    writer->WriteUint16(static_cast<ui16>(GetTzIndex(resultTzName)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <NSkiff::EWireType SkiffWireType>
 TDecimalSkiffParser<SkiffWireType>::TDecimalSkiffParser(int precision)
     : Precision_(precision)
@@ -70,8 +141,18 @@ Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator() (NSkiff
             TDecimal::TValue128{skiffValue.Low, skiffValue.High},
             Buffer_,
             sizeof(Buffer_));
+    } else if constexpr (SkiffWireType == EWireType::Int256) {
+        const auto skiffValue = parser->ParseInt256();
+        TDecimal::TValue256 decimalValue;
+        static_assert(sizeof(decimalValue) == sizeof(skiffValue));
+        std::memcpy(&decimalValue, &skiffValue, sizeof(decimalValue));
+        return TDecimal::WriteBinary256(
+            Precision_,
+            std::move(decimalValue),
+            Buffer_,
+            sizeof(Buffer_));
     } else {
-        static_assert(SkiffWireType == EWireType::Int128);
+        static_assert(SkiffWireType == EWireType::Int256);
     }
 }
 
@@ -99,9 +180,15 @@ void TDecimalSkiffWriter<SkiffWireType>::operator()(TStringBuf value, NSkiff::TC
     } else if constexpr (SkiffWireType == EWireType::Int128) {
         auto intValue = TDecimal::ParseBinary128(Precision_, value);
         writer->WriteInt128(TInt128{intValue.Low, intValue.High});
+    } else if constexpr (SkiffWireType == EWireType::Int256) {
+        auto intValue = TDecimal::ParseBinary256(Precision_, value);
+        TInt256 skiffValue;
+        static_assert(sizeof(skiffValue) == sizeof(intValue));
+        std::memcpy(&skiffValue, &intValue, sizeof(skiffValue));
+        writer->WriteInt256(std::move(skiffValue));
     } else {
         // poor man's static_assert(false)
-        static_assert(SkiffWireType == EWireType::Int128);
+        static_assert(SkiffWireType == EWireType::Int256);
     }
 }
 
@@ -127,7 +214,7 @@ void TUuidWriter::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWrite
             ExpectedSize,
             value.size());
     }
-    const ui64* array = reinterpret_cast<const ui64*>(value.Data());
+    const ui64* array = reinterpret_cast<const ui64*>(value.data());
     writer->WriteUint128(NSkiff::TUint128{InetToHost(array[1]), InetToHost(array[0])});
 }
 

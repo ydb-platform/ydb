@@ -17,7 +17,7 @@ void TCleanupTablesColumnEngineChanges::DoDebugString(TStringOutput& out) const 
 void TCleanupTablesColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     if (self && context.DB) {
         for (auto&& t : TablesToDrop) {
-            self->TablesManager.TryFinalizeDropPathOnExecute(*context.DB, t);
+            AFL_VERIFY(self->TablesManager.TryFinalizeDropPathOnExecute(*context.DB, t));
         }
     }
 }

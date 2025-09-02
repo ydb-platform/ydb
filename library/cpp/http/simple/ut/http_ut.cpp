@@ -6,6 +6,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
+#include <library/cpp/threading/future/async.h>
+#include <util/thread/pool.h>
+
 #include <util/system/event.h>
 #include <util/system/thread.h>
 
@@ -260,6 +263,45 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
             UNIT_ASSERT_NO_EXCEPTION(cl.DoPost("/ping", "", &s));
             UNIT_ASSERT_VALUES_EQUAL("pong", s.Str());
             Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+        }
+    }
+
+    Y_UNIT_TEST(simpleCancel) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+        NMock::TMockServer server(createOptions(port, false), []() { return new TPong(TDuration::Seconds(1)); });
+
+        TSimpleHttpClient cl("localhost", port);
+        UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+
+        auto tp = CreateThreadPool(3);
+
+        {
+            TStringStream s;
+            NThreading::TCancellationTokenSource cancel;
+            UNIT_ASSERT_NO_EXCEPTION(cl.DoGet("/ping", &s, TKeepAliveHttpClient::THeaders(), nullptr, cancel.Token()));
+            cancel.Cancel();
+            UNIT_ASSERT_VALUES_EQUAL("pong", s.Str());
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+        }
+
+        {
+            TStringStream s;
+            NThreading::TCancellationTokenSource cancel;
+            auto reqFuture = NThreading::Async([&] {
+                // Если DoGet() при отмене кидает исключение — оно “переедет” в future.
+                return cl.DoGet("/ping",
+                                &s,
+                                TKeepAliveHttpClient::THeaders(),
+                                nullptr,
+                                cancel.Token());
+            }, *tp);
+            Sleep(TDuration::MilliSeconds(50));
+            cancel.Cancel();
+            UNIT_ASSERT_EXCEPTION(reqFuture.GetValueSync(), NThreading::TOperationCancelledException);
+            Sleep(TDuration::MilliSeconds(1000));
             UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
         }
     }

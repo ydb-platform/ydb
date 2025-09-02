@@ -1,20 +1,21 @@
 #pragma once
 #include "defs.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/tx.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/protos/tx_scheme.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/tx.h>
+
 #include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <library/cpp/object_factory/object_factory.h>
-
-#include "schemeshard_identificators.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -51,7 +52,7 @@ public:
     }
 };
 
-struct TEvSchemeShard {
+namespace TEvSchemeShard {
     enum EEv {
         EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,
@@ -94,6 +95,19 @@ struct TEvSchemeShard {
         EvProcessingResponse,
 
         EvOwnerActorAck,
+
+        EvListUsers,
+        EvListUsersResult,
+
+        EvTenantShredRequest,
+        EvTenantShredResponse,
+        EvWakeupToRunShred,
+        EvMeasureShredBSC,
+        EvWakeupToRunShredBSC,
+        EvCompleteShred,
+        EvShredInfoRequest,
+        EvShredInfoResponse,
+        EvShredManualStartupRequest,
 
         EvEnd
     };
@@ -397,6 +411,12 @@ struct TEvSchemeShard {
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
 
+    struct TEvWakeupToRunShred : public TEventLocal<TEvWakeupToRunShred, EvWakeupToRunShred> {
+    };
+
+    struct TEvWakeupToRunShredBSC : public TEventLocal<TEvWakeupToRunShredBSC, EvWakeupToRunShredBSC> {
+    };
+
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
                                                             NKikimrScheme::TEvInitTenantSchemeShard,
                                                             EvInitTenantSchemeShard> {
@@ -661,6 +681,50 @@ struct TEvSchemeShard {
     struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
         TEvOwnerActorAck() = default;
     };
+
+    struct TEvListUsers : TEventPB<TEvListUsers, NKikimrScheme::TEvListUsers, EvListUsers> {
+        TEvListUsers() = default;
+    };
+
+    struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
+        TEvListUsersResult() = default;
+    };
+
+    struct TEvTenantShredRequest : TEventPB<TEvTenantShredRequest, NKikimrScheme::TEvTenantShredRequest, EvTenantShredRequest> {
+        TEvTenantShredRequest() = default;
+
+        TEvTenantShredRequest(ui64 generation) {
+            Record.SetGeneration(generation);
+        }
+    };
+
+    struct TEvTenantShredResponse : TEventPB<TEvTenantShredResponse, NKikimrScheme::TEvTenantShredResponse, EvTenantShredResponse> {
+
+        TEvTenantShredResponse() = default;
+        TEvTenantShredResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status) {
+            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
+            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
+            Record.SetGeneration(generation);
+            Record.SetStatus(status);
+        }
+
+        TEvTenantShredResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status)
+            : TEvTenantShredResponse(TPathId(ownerId, localPathId), generation, status)
+        {}
+    };
+
+    struct TEvShredInfoRequest : TEventPB<TEvShredInfoRequest, NKikimrScheme::TEvShredInfoRequest, EvShredInfoRequest> {};
+
+    struct TEvShredInfoResponse : TEventPB<TEvShredInfoResponse, NKikimrScheme::TEvShredInfoResponse, EvShredInfoResponse> {
+
+        TEvShredInfoResponse() = default;
+        TEvShredInfoResponse(ui64 generation, const NKikimrScheme::TEvShredInfoResponse::EStatus& status) {
+            Record.SetGeneration(generation);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvShredManualStartupRequest : TEventPB<TEvShredManualStartupRequest, NKikimrScheme::TEvShredManualStartupRequest, EvShredManualStartupRequest> {};
 };
 
 }

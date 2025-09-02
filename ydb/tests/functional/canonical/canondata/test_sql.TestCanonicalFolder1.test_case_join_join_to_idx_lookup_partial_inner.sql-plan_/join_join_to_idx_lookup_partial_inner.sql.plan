@@ -28,7 +28,10 @@
                         "Key1",
                         "Value"
                     ],
-                    "type": "Scan"
+                    "lookup_by": [
+                        "Key1"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -39,6 +42,9 @@
                     "columns": [
                         "Key",
                         "Value"
+                    ],
+                    "lookup_by": [
+                        "Key"
                     ],
                     "type": "Lookup"
                 }

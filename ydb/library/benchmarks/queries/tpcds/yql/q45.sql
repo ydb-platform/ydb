@@ -2,7 +2,7 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query45.tpl and seed 2031708268
-select  customer_address.ca_zip, customer_address.ca_county, sum(ws_sales_price)
+select  customer_address.ca_zip, customer_address.ca_city, sum(ws_sales_price)
  from {{web_sales}} as web_sales
  cross join {{customer}} as customer
  cross join {{customer_address}} as customer_address
@@ -19,9 +19,9 @@ select  customer_address.ca_zip, customer_address.ca_county, sum(ws_sales_price)
                              )
  	    )
  	and ws_sold_date_sk = d_date_sk
- 	and d_qoy = 1 and d_year = 1998
- group by customer_address.ca_zip, customer_address.ca_county
- order by customer_address.ca_zip, customer_address.ca_county
+ 	and d_qoy = 2 and d_year = 2001
+ group by customer_address.ca_zip, customer_address.ca_city
+ order by customer_address.ca_zip, customer_address.ca_city
  limit 100;
 
 -- end query 1 in stream 0 using template query45.tpl

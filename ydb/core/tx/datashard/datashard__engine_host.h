@@ -60,13 +60,13 @@ public:
     EResult Validate() {
         if (KeyValidator.GetInfo().Loaded)
             return EResult::Ok;
-        Y_ABORT_UNLESS(Engine);
+        Y_ENSURE(Engine);
         return Engine->Validate(KeyValidator.GetInfo());
     }
 
     EResult ReValidateKeys() {
-        Y_ABORT_UNLESS(KeyValidator.GetInfo().Loaded);
-        Y_ABORT_UNLESS(Engine);
+        Y_ENSURE(KeyValidator.GetInfo().Loaded);
+        Y_ENSURE(Engine);
         return Engine->ValidateKeys(KeyValidator.GetInfo());
     }
 
@@ -97,8 +97,7 @@ public:
     const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
-    void SetWriteVersion(TRowVersion writeVersion);
-    void SetReadVersion(TRowVersion readVersion);
+    void SetMvccVersion(TRowVersion mvccVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetUsesMvccSnapshot();

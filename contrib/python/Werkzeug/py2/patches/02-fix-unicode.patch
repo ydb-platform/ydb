@@ -1,0 +1,11 @@
+--- contrib/python/Werkzeug/py2/werkzeug/routing.py	(index)
++++ contrib/python/Werkzeug/py2/werkzeug/routing.py	(working tree)
+@@ -2027,7 +2027,7 @@ class MapAdapter(object):
+             (self.map.host_matching and host == self.server_name)
+             or (not self.map.host_matching and domain_part == self.subdomain)
+         ):
+-            return "%s/%s" % (self.script_name.rstrip("/"), path.lstrip("/"))
++            return str("%s/%s" % (self.script_name.rstrip("/"), path.lstrip("/")))
+         return str(
+             "%s//%s%s/%s"
+             % (

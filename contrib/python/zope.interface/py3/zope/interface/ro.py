@@ -28,37 +28,45 @@ Compute a resolution order for an object and its bases.
 
 .. rubric:: Environment Variables
 
-Due to the change in 5.0, certain environment variables can be used to control errors
-and warnings about inconsistent resolution orders. They are listed in priority order, with
-variables at the bottom generally overriding variables above them.
+Due to the change in 5.0, certain environment variables can be used to control
+errors and warnings about inconsistent resolution orders. They are listed in
+priority order, with variables at the bottom generally overriding variables
+above them.
 
 ZOPE_INTERFACE_WARN_BAD_IRO
-    If this is set to "1", then if there is at least one inconsistent resolution
-    order discovered, a warning (:class:`InconsistentResolutionOrderWarning`) will
-    be issued. Use the usual warning mechanisms to control this behaviour. The warning
-    text will contain additional information on debugging.
+    If this is set to "1", then if there is at least one inconsistent
+    resolution order discovered, a warning
+    (:class:`InconsistentResolutionOrderWarning`) will be issued. Use the
+    usual warning mechanisms to control this behaviour. The warning text will
+    contain additional information on debugging.
+
 ZOPE_INTERFACE_TRACK_BAD_IRO
     If this is set to "1", then zope.interface will log information about each
-    inconsistent resolution order discovered, and keep those details in memory in this module
-    for later inspection.
+    inconsistent resolution order discovered, and keep those details in memory
+    in this module for later inspection.
+
 ZOPE_INTERFACE_STRICT_IRO
-    If this is set to "1", any attempt to use :func:`ro` that would produce a non-C3
-    ordering will fail by raising :class:`InconsistentResolutionOrderError`.
+    If this is set to "1", any attempt to use :func:`ro` that would produce a
+    non-C3 ordering will fail by raising
+    :class:`InconsistentResolutionOrderError`.
 
 .. important::
 
-   ``ZOPE_INTERFACE_STRICT_IRO`` is intended to become the default in the future.
+   ``ZOPE_INTERFACE_STRICT_IRO`` is intended to become the default in the
+   future.
 
 There are two environment variables that are independent.
 
 ZOPE_INTERFACE_LOG_CHANGED_IRO
     If this is set to "1", then if the C3 resolution order is different from
-    the legacy resolution order for any given object, a message explaining the differences
-    will be logged. This is intended to be used for debugging complicated IROs.
+    the legacy resolution order for any given object, a message explaining the
+    differences will be logged. This is intended to be used for debugging
+    complicated IROs.
+
 ZOPE_INTERFACE_USE_LEGACY_IRO
-    If this is set to "1", then the C3 resolution order will *not* be used. The
-    legacy IRO will be used instead. This is a temporary measure and will be removed in the
-    future. It is intended to help during the transition.
+    If this is set to "1", then the C3 resolution order will *not* be used.
+    The legacy IRO will be used instead. This is a temporary measure and will
+    be removed in the future. It is intended to help during the transition.
     It implies ``ZOPE_INTERFACE_LOG_CHANGED_IRO``.
 
 .. rubric:: Debugging Behaviour Changes in zope.interface 5
@@ -82,6 +90,9 @@ positions of interfaces for which there are registered adapters.
 """
 __docformat__ = 'restructuredtext'
 
+import warnings
+
+
 __all__ = [
     'ro',
     'InconsistentResolutionOrderError',
@@ -90,12 +101,14 @@ __all__ = [
 
 __logger = None
 
+
 def _logger():
-    global __logger # pylint:disable=global-statement
+    global __logger  # pylint:disable=global-statement
     if __logger is None:
         import logging
         __logger = logging.getLogger(__name__)
     return __logger
+
 
 def _legacy_mergeOrderings(orderings):
     """Merge multiple orderings so that within-ordering order is preserved
@@ -106,7 +119,7 @@ def _legacy_mergeOrderings(orderings):
 
     For example:
 
-    >>> _mergeOrderings([
+    >>> _legacy_mergeOrderings([
     ... ['x', 'y', 'z'],
     ... ['q', 'z'],
     ... [1, 3, 5],
@@ -126,6 +139,7 @@ def _legacy_mergeOrderings(orderings):
 
     return result
 
+
 def _legacy_flatten(begin):
     result = [begin]
     i = 0
@@ -138,6 +152,7 @@ def _legacy_flatten(begin):
         # by definition.
         result[i:i] = ob.__bases__
     return result
+
 
 def _legacy_ro(ob):
     return _legacy_mergeOrderings([_legacy_flatten(ob)])
@@ -155,6 +170,7 @@ class InconsistentResolutionOrderWarning(PendingDeprecationWarning):
     """
     The warning issued when an invalid IRO is requested.
     """
+
 
 class InconsistentResolutionOrderError(TypeError):
     """
@@ -177,7 +193,9 @@ class InconsistentResolutionOrderError(TypeError):
 
     def __str__(self):
         import pprint
-        return "{}: For object {!r}.\nBase ROs:\n{}\nConflict Location:\n{}".format(
+        return (
+            "{}: For object {!r}.\nBase ROs:\n{}\nConflict Location:\n{}"
+        ).format(
             self.__class__.__name__,
             self.C,
             pprint.pformat(self.base_ros),
@@ -185,7 +203,7 @@ class InconsistentResolutionOrderError(TypeError):
         )
 
 
-class _NamedBool(int): # cannot actually inherit bool
+class _NamedBool(int):  # cannot actually inherit bool
 
     def __new__(cls, val, name):
         inst = super(cls, _NamedBool).__new__(cls, val)
@@ -209,7 +227,7 @@ class _ClassBoolFromEnv:
                     break
             if my_name is not None:
                 break
-        else: # pragma: no cover
+        else:  # pragma: no cover
             raise RuntimeError("Unable to find self")
 
         env_name = 'ZOPE_INTERFACE_' + my_name
@@ -224,7 +242,7 @@ class _StaticMRO:
     # A previously resolved MRO, supplied by the caller.
     # Used in place of calculating it.
 
-    had_inconsistency = None # We don't know...
+    had_inconsistency = None  # We don't know...
 
     def __init__(self, C, mro):
         self.leaf = C
@@ -232,6 +250,16 @@ class _StaticMRO:
 
     def mro(self):
         return list(self.__mro)
+
+
+_INCONSISTENT_RESOLUTION_ORDER = """\
+An inconsistent resolution order is being requested.  (Interfaces should
+follow the Python class rules known as C3.) For backwards compatibility,
+zope.interface will allow this, making the best guess it can to produce as
+meaningful an order as possible.  In the future this might be an error. Set
+the warning filter to error, or set the environment variable
+'ZOPE_INTERFACE_TRACK_BAD_IRO' to '1' and examine ro.C3.BAD_IROS to debug, or
+set 'ZOPE_INTERFACE_STRICT_IRO' to raise exceptions."""
 
 
 class C3:
@@ -278,7 +306,9 @@ class C3:
             list(C.__bases__)
         ]
 
-        self.bases_had_inconsistency = any(base.had_inconsistency for base in base_resolvers)
+        self.bases_had_inconsistency = any(
+            base.had_inconsistency for base in base_resolvers
+        )
 
         if len(C.__bases__) == 1:
             self.__mro = [C] + memo[C.__bases__[0]].mro()
@@ -306,15 +336,8 @@ class C3:
             # In the future (2021?) seeing at least the first warning will
             # be the default
             return
-        import warnings
         warnings.warn(
-            "An inconsistent resolution order is being requested. "
-            "(Interfaces should follow the Python class rules known as C3.) "
-            "For backwards compatibility, zope.interface will allow this, "
-            "making the best guess it can to produce as meaningful an order as possible. "
-            "In the future this might be an error. Set the warning filter to error, or set "
-            "the environment variable 'ZOPE_INTERFACE_TRACK_BAD_IRO' to '1' and examine "
-            "ro.C3.BAD_IROS to debug, or set 'ZOPE_INTERFACE_STRICT_IRO' to raise exceptions.",
+            _INCONSISTENT_RESOLUTION_ORDER,
             InconsistentResolutionOrderWarning,
         )
 
@@ -344,7 +367,8 @@ class C3:
         Return the next base.
 
         The return value will either fit the C3 constraints or be our best
-        guess about what to do. If we cannot guess, this may raise an exception.
+        guess about what to do. If we cannot guess, this may raise an
+        exception.
         """
         base = self._find_next_C3_base(base_tree_remaining)
         if base is not None:
@@ -352,8 +376,9 @@ class C3:
         return self._guess_next_base(base_tree_remaining)
 
     def _find_next_C3_base(self, base_tree_remaining):
-        """
-        Return the next base that fits the constraints, or ``None`` if there isn't one.
+        """Return the next base that fits the constraints
+
+        Return ``None`` if there isn't one.
         """
         for bases in base_tree_remaining:
             base = bases[0]
@@ -379,11 +404,12 @@ class C3:
         # However, older versions of zope.interface were fine with this order.
         # A good example is ``providedBy(IOError())``. Because of the way
         # ``classImplements`` works, it winds up with ``__bases__`` ==
-        # ``[IEnvironmentError, IIOError, IOSError, <implementedBy Exception>]``
-        # (on Python 3). But ``IEnvironmentError`` is a base of both ``IIOError``
-        # and ``IOSError``. Previously, we would get a resolution order of
-        # ``[IIOError, IOSError, IEnvironmentError, IStandardError, IException, Interface]``
-        # but the standard Python algorithm would forbid creating that order entirely.
+        # ``[IEnvironmentError, IIOError, IOSError, <implementedBy
+        # Exception>]`` (on Python 3). But ``IEnvironmentError`` is a base of
+        # both ``IIOError`` and ``IOSError``. Previously, we would get a
+        # resolution order of ``[IIOError, IOSError, IEnvironmentError,
+        # IStandardError, IException, Interface]`` but the standard Python
+        # algorithm would forbid creating that order entirely.
 
         # Unlike Python's MRO, we attempt to resolve the issue. A few
         # heuristics have been tried. One was:
@@ -409,7 +435,9 @@ class C3:
         #
         # So now, we fall back to the old linearization (fast to compute).
         self._warn_iro()
-        self.direct_inconsistency = InconsistentResolutionOrderError(self, base_tree_remaining)
+        self.direct_inconsistency = InconsistentResolutionOrderError(
+            self, base_tree_remaining,
+        )
         raise self._UseLegacyRO
 
     def _merge(self):
@@ -422,7 +450,9 @@ class C3:
             # This differs slightly from the standard Python MRO and is needed
             # because we have no other step that prevents duplicates
             # from coming in (e.g., in the inconsistent fallback path)
-            base_tree_remaining = self._nonempty_bases_ignoring(base_tree_remaining, base)
+            base_tree_remaining = self._nonempty_bases_ignoring(
+                base_tree_remaining, base
+            )
 
             if not base_tree_remaining:
                 return result
@@ -442,12 +472,14 @@ class C3:
 
 class _StrictC3(C3):
     __slots__ = ()
+
     def _guess_next_base(self, base_tree_remaining):
         raise InconsistentResolutionOrderError(self, base_tree_remaining)
 
 
 class _TrackingC3(C3):
     __slots__ = ()
+
     def _guess_next_base(self, base_tree_remaining):
         import traceback
         bad_iros = C3.BAD_IROS
@@ -474,8 +506,10 @@ class _ROComparison:
     # Components we use to build up the comparison report
     class Item:
         prefix = '  '
+
         def __init__(self, item):
             self.item = item
+
         def __str__(self):
             return "{}{}".format(
                 self.prefix,
@@ -490,9 +524,10 @@ class _ROComparison:
 
     Empty = str
 
-    class ReplacedBy: # pragma: no cover
+    class ReplacedBy:  # pragma: no cover
         prefix = '- '
         suffix = ''
+
         def __init__(self, chunk, total_count):
             self.chunk = chunk
             self.total_count = total_count
@@ -510,7 +545,6 @@ class _ROComparison:
     class Replacing(ReplacedBy):
         prefix = "+ "
         suffix = ''
-
 
     _c3_report = None
     _legacy_report = None
@@ -547,16 +581,23 @@ class _ROComparison:
                 if opcode == 'delete':
                     # Guaranteed same length
                     assert not c3_chunk
-                    self.__move(c3_report, legacy_report, legacy_chunk, self.Deleted)
+                    self.__move(
+                        c3_report, legacy_report, legacy_chunk, self.Deleted,
+                    )
                 if opcode == 'insert':
                     # Guaranteed same length
                     assert not legacy_chunk
-                    self.__move(legacy_report, c3_report, c3_chunk, self.Inserted)
-                if opcode == 'replace': # pragma: no cover (How do you make it output this?)
+                    self.__move(
+                        legacy_report, c3_report, c3_chunk, self.Inserted,
+                    )
+                if opcode == 'replace':  # pragma: no cover
+                    # (How do you make it output this?)
                     # Either side could be longer.
                     chunk_size = max(len(c3_chunk), len(legacy_chunk))
                     c3_report.extend(self.Replacing(c3_chunk, chunk_size))
-                    legacy_report.extend(self.ReplacedBy(legacy_chunk, chunk_size))
+                    legacy_report.extend(
+                        self.ReplacedBy(legacy_chunk, chunk_size),
+                    )
 
         return self._c3_report, self._legacy_report
 
@@ -584,14 +625,19 @@ class _ROComparison:
         max_left = max(len(x) for x in left_lines)
         max_right = max(len(x) for x in right_lines)
 
-        left_title = 'Legacy RO (len={})'.format(len(self.legacy_ro))
+        left_title = f'Legacy RO (len={len(self.legacy_ro)})'
 
         right_title = 'C3 RO (len={}; inconsistent={})'.format(
             len(self.c3_ro),
             self._inconsistent_label,
         )
         lines = [
-            (padding + left_title.ljust(max_left) + padding + right_title.ljust(max_right)),
+            (
+                padding +
+                left_title.ljust(max_left) +
+                padding +
+                right_title.ljust(max_right)
+            ),
             padding + '=' * (max_left + len(padding) + max_right)
         ]
         lines += [
@@ -606,7 +652,10 @@ class _ROComparison:
 # avoid logging false positives about changed ROs.
 _ROOT = None
 
-def ro(C, strict=None, base_mros=None, log_changed_ro=None, use_legacy_ro=None):
+
+def ro(
+    C, strict=None, base_mros=None, log_changed_ro=None, use_legacy_ro=None,
+):
     """
     ro(C) -> list
 
@@ -624,8 +673,14 @@ def ro(C, strict=None, base_mros=None, log_changed_ro=None, use_legacy_ro=None):
     resolver = C3.resolver(C, strict, base_mros)
     mro = resolver.mro()
 
-    log_changed = log_changed_ro if log_changed_ro is not None else resolver.LOG_CHANGED_IRO
-    use_legacy = use_legacy_ro if use_legacy_ro is not None else resolver.USE_LEGACY_IRO
+    log_changed = (
+        log_changed_ro if log_changed_ro is not None
+        else resolver.LOG_CHANGED_IRO
+    )
+    use_legacy = (
+        use_legacy_ro if use_legacy_ro is not None
+        else resolver.USE_LEGACY_IRO
+    )
 
     if log_changed or use_legacy:
         legacy_ro = resolver.legacy_ro
@@ -660,8 +715,8 @@ def ro(C, strict=None, base_mros=None, log_changed_ro=None, use_legacy_ro=None):
 
 
 def is_consistent(C):
-    """
-    Check if the resolution order for *C*, as computed by :func:`ro`, is consistent
-    according to C3.
+    """Is the resolution order for *C*, consistent according to C3.
+
+    Order as computed by :func:`ro`.
     """
     return not C3.resolver(C, False, None).had_inconsistency

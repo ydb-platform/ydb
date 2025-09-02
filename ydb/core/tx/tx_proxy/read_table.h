@@ -2,8 +2,8 @@
 #include "defs.h"
 
 #include <ydb/core/base/row_version.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -21,7 +21,7 @@ namespace NTxProxy {
         TString DatabaseName;
         TString TablePath;
         TVector<TString> Columns;
-        NKikimrTxUserProxy::TKeyRange KeyRange;
+        Ydb::Table::KeyRange KeyRange;
         ui64 MaxRows = Max<ui64>();
         TRowVersion ReadVersion = TRowVersion::Max();
         TString UserToken;

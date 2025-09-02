@@ -29,6 +29,7 @@ message SelfCheckRequest {
     uint32 maximum_level = 4; // maximum level of issues to return
     bool do_not_cache = 5; // by default database health state is taken from metadata cache; this option can be used to force bypassing that cache
     bool merge_records = 6; // combine similar records with similar status, message and level into one issue
+    bool return_hints = 7; // return hints for common problems
 }
 
 message SelfCheckResponse {
@@ -106,19 +107,12 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
-message TimeDifferenceStatus {
-    StatusFlag.Status overall = 1;
-    int64 difference_ms = 2;
-    string peer = 3;
-}
-
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
-    TimeDifferenceStatus max_time_difference = 6;
 }
 
 message ComputeStatus {
@@ -133,6 +127,7 @@ message LocationNode {
     uint32 id = 1;
     string host = 2;
     uint32 port = 3;
+    LocationBridgePile pile = 4;
 }
 
 message LocationStoragePDisk {
@@ -148,6 +143,7 @@ message LocationStorageVDisk {
 message LocationStorageGroup {
     repeated string id = 1;
     LocationStorageVDisk vdisk = 2;
+    LocationBridgePile pile = 3;
 }
 
 message LocationStoragePool {
@@ -170,11 +166,21 @@ message LocationComputeTablet {
     uint32 count = 3;
 }
 
+message LocationComputeSchema {
+    string type = 1;
+    string path = 2;
+}
+
+message LocationBridgePile {
+    string name = 1;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
-    LocationNode peer = 4;
+    LocationComputeSchema schema = 4;
+    LocationBridgePile pile = 5;
 }
 
 message LocationDatabase {

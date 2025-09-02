@@ -1,13 +1,19 @@
 import json
 
 from moto import settings
+from moto.core import DEFAULT_ACCOUNT_ID
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import ActionAuthenticatorMixin, BaseResponse
+from typing import Any, Dict, List
 
 
 class MotoAPIResponse(BaseResponse):
     def reset_response(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,  # pylint: disable=unused-argument
+    ) -> TYPE_RESPONSE:
         if request.method == "POST":
             from .models import moto_api_backend
 
@@ -16,8 +22,11 @@ class MotoAPIResponse(BaseResponse):
         return 400, {}, json.dumps({"Error": "Need to POST to reset Moto"})
 
     def reset_auth_response(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,  # pylint: disable=unused-argument
+    ) -> TYPE_RESPONSE:
         if request.method == "POST":
             previous_initial_no_auth_action_count = (
                 settings.INITIAL_NO_AUTH_ACTION_COUNT
@@ -38,37 +47,50 @@ class MotoAPIResponse(BaseResponse):
             )
         return 400, {}, json.dumps({"Error": "Need to POST to reset Moto Auth"})
 
-    def model_data(self, request, full_url, headers):  # pylint: disable=unused-argument
-        from moto.core.base_backend import model_data
+    def model_data(
+        self,
+        request: Any,  # pylint: disable=unused-argument
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,  # pylint: disable=unused-argument
+    ) -> TYPE_RESPONSE:
+        from moto.core.model_instances import model_data
 
-        results = {}
+        results: Dict[str, Dict[str, List[Any]]] = {}
         for service in sorted(model_data):
             models = model_data[service]
             results[service] = {}
             for name in sorted(models):
                 model = models[name]
                 results[service][name] = []
-                for instance in model.instances:
+                for instance in model.instances:  # type: ignore[attr-defined]
                     inst_result = {}
                     for attr in dir(instance):
                         if not attr.startswith("_"):
                             try:
                                 json.dumps(getattr(instance, attr))
-                            except TypeError:
+                            except (TypeError, AttributeError, ValueError):
                                 pass
                             else:
                                 inst_result[attr] = getattr(instance, attr)
                     results[service][name].append(inst_result)
         return 200, {"Content-Type": "application/javascript"}, json.dumps(results)
 
-    def dashboard(self, request, full_url, headers):  # pylint: disable=unused-argument
+    def dashboard(
+        self,
+        request: Any,  # pylint: disable=unused-argument
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,  # pylint: disable=unused-argument
+    ) -> str:
         from flask import render_template
 
         return render_template("dashboard.html")
 
     def get_transition(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,  # pylint: disable=unused-argument
+    ) -> TYPE_RESPONSE:
         from .models import moto_api_backend
 
         qs_dict = dict(
@@ -81,8 +103,11 @@ class MotoAPIResponse(BaseResponse):
         return 200, {}, json.dumps(resp)
 
     def set_transition(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
         from .models import moto_api_backend
 
         request_body_size = int(headers["Content-Length"])
@@ -95,8 +120,11 @@ class MotoAPIResponse(BaseResponse):
         return 201, {}, ""
 
     def unset_transition(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
         from .models import moto_api_backend
 
         request_body_size = int(headers["Content-Length"])
@@ -105,4 +133,119 @@ class MotoAPIResponse(BaseResponse):
         model_name = body["model_name"]
 
         moto_api_backend.unset_transition(model_name)
+        return 201, {}, ""
+
+    def seed(self, req: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:
+        self.setup_class(req, full_url, headers)
+        from . import mock_random
+
+        a = self._get_param("a")
+        mock_random.seed(int(a))
+        return 200, {}, ""
+
+    def set_athena_result(
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
+        from .models import moto_api_backend
+
+        request_body_size = int(headers["Content-Length"])
+        body = request.environ["wsgi.input"].read(request_body_size).decode("utf-8")
+        body = json.loads(body)
+        account_id = body.get("account_id", DEFAULT_ACCOUNT_ID)
+        region = body.get("region", "us-east-1")
+
+        for result in body.get("results", []):
+            rows = result["rows"]
+            column_info = result.get("column_info", [])
+            moto_api_backend.set_athena_result(
+                rows=rows,
+                column_info=column_info,
+                account_id=account_id,
+                region=region,
+            )
+        return 201, {}, ""
+
+    def set_sagemaker_result(
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
+        from .models import moto_api_backend
+
+        request_body_size = int(headers["Content-Length"])
+        body = request.environ["wsgi.input"].read(request_body_size).decode("utf-8")
+        body = json.loads(body)
+        account_id = body.get("account_id", DEFAULT_ACCOUNT_ID)
+        region = body.get("region", "us-east-1")
+
+        for result in body.get("results", []):
+            body = result["Body"]
+            content_type = result.get("ContentType")
+            prod_variant = result.get("InvokedProductionVariant")
+            custom_attrs = result.get("CustomAttributes")
+            moto_api_backend.set_sagemaker_result(
+                body=body,
+                content_type=content_type,
+                prod_variant=prod_variant,
+                custom_attrs=custom_attrs,
+                account_id=account_id,
+                region=region,
+            )
+        return 201, {}, ""
+
+    def set_rds_data_result(
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
+        from .models import moto_api_backend
+
+        request_body_size = int(headers["Content-Length"])
+        body = request.environ["wsgi.input"].read(request_body_size).decode("utf-8")
+        body = json.loads(body)
+        account_id = body.get("account_id", DEFAULT_ACCOUNT_ID)
+        region = body.get("region", "us-east-1")
+
+        for result in body.get("results", []):
+            records = result.get("records")
+            column_metadata = result.get("columnMetadata")
+            nr_of_records_updated = result.get("numberOfRecordsUpdated")
+            generated_fields = result.get("generatedFields")
+            formatted_records = result.get("formattedRecords")
+            moto_api_backend.set_rds_data_result(
+                records=records,
+                column_metadata=column_metadata,
+                nr_of_records_updated=nr_of_records_updated,
+                generated_fields=generated_fields,
+                formatted_records=formatted_records,
+                account_id=account_id,
+                region=region,
+            )
+        return 201, {}, ""
+
+    def set_inspector2_findings_result(
+        self,
+        request: Any,
+        full_url: str,  # pylint: disable=unused-argument
+        headers: Any,
+    ) -> TYPE_RESPONSE:
+        from .models import moto_api_backend
+
+        request_body_size = int(headers["Content-Length"])
+        body = request.environ["wsgi.input"].read(request_body_size).decode("utf-8")
+        body = json.loads(body)
+        account_id = body.get("account_id", DEFAULT_ACCOUNT_ID)
+        region = body.get("region", "us-east-1")
+
+        for result in body.get("results", []):
+            moto_api_backend.set_inspector2_findings_result(
+                results=result,
+                account_id=account_id,
+                region=region,
+            )
         return 201, {}, ""

@@ -82,6 +82,7 @@ namespace NActors {
             EPriority DefSamplingPriority;
             ui32 DefSamplingRate;
             bool UseLocalTimestamps;
+            bool LogSourceLocation = true;
 
             enum ELogFormat {
                 PLAIN_FULL_FORMAT,
@@ -91,7 +92,9 @@ namespace NActors {
             ELogFormat Format;
             TString ShortHostName;
             TString ClusterName;
+            TString TenantName;
             TString MessagePrefix;
+            ui32 NodeId;
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc

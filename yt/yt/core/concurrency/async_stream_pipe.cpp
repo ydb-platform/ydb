@@ -52,4 +52,73 @@ TFuture<void> TAsyncStreamPipe::Abort(const TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TBoundedAsyncStreamPipe::TBoundedAsyncStreamPipe(i64 sizeLimit)
+    : Queue_(sizeLimit)
+{ }
+
+TFuture<void> TBoundedAsyncStreamPipe::Write(const TSharedRef& buffer)
+{
+    if (!buffer) {
+        // Empty buffer has special meaning in our queue, so we don't write it.
+        return VoidFuture;
+    }
+
+    if (Aborted_.load()) {
+        return MakeFuture(Error_);
+    }
+
+    auto result = Queue_.Enqueue(TSharedRef::MakeCopy<TAsyncStreamPipeTag>(buffer));
+
+    if (Aborted_.load()) {
+        Queue_.Drain(Error_);
+        return MakeFuture(Error_);
+    }
+
+    return result.Apply(BIND([this, this_ = MakeStrong(this)] () -> TFuture<void> {
+        if (Aborted_.load()) {
+            return MakeFuture(Error_);
+        }
+        return VoidFuture;
+    }));
+}
+
+TFuture<TSharedRef> TBoundedAsyncStreamPipe::Read()
+{
+    if (Aborted_.load()) {
+        return MakeFuture<TSharedRef>(Error_);
+    }
+
+    auto result = Queue_.Dequeue();
+
+    if (Aborted_.load()) {
+        Queue_.Drain(Error_);
+        return MakeFuture<TSharedRef>(Error_);
+    }
+
+    return result.ApplyUnique(BIND([this, this_ = MakeStrong(this)] (TSharedRef&& data) -> TFuture<TSharedRef> {
+        if (Aborted_.load()) {
+            return MakeFuture<TSharedRef>(Error_);
+        }
+        return MakeFuture(std::move(data));
+    }));
+}
+
+TFuture<void> TBoundedAsyncStreamPipe::Close()
+{
+    return Queue_.Enqueue(TSharedRef());
+}
+
+void TBoundedAsyncStreamPipe::Abort(const TError& error)
+{
+    if (Aborting_.exchange(true)) {
+        return;
+    }
+    Error_ = error;
+    Aborted_.store(true);
+
+    Queue_.Drain(Error_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NConcurrency

@@ -1,14 +1,12 @@
 from moto.core.exceptions import RESTError
-from moto.core.utils import amzn_request_id
 from moto.core.responses import BaseResponse
-from .models import elbv2_backends
+from moto.utilities.aws_headers import amzn_request_id
+from .models import elbv2_backends, ELBv2Backend
 from .exceptions import TargetGroupNotFoundError
 from .exceptions import ListenerOrBalancerMissingError
 
 SSL_POLICIES = [
     {
-        "name": "ELBSecurityPolicy-2016-08",
-        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
         "ciphers": [
             {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
             {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
@@ -29,10 +27,151 @@ SSL_POLICIES = [
             {"name": "AES256-SHA256", "priority": 17},
             {"name": "AES256-SHA", "priority": 18},
         ],
+        "name": "ELBSecurityPolicy-2016-08",
+        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
     },
     {
-        "name": "ELBSecurityPolicy-TLS-1-2-2017-01",
-        "ssl_protocols": ["TLSv1.2"],
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 6},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 7},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 9},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 11},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "ssl_protocols": ["TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 6},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 7},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-2-Res-2021-06",
+        "ssl_protocols": ["TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 6},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 7},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 9},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 11},
+            {"name": "AES128-GCM-SHA256", "priority": 12},
+            {"name": "AES128-SHA256", "priority": 13},
+            {"name": "AES256-GCM-SHA384", "priority": 14},
+            {"name": "AES256-SHA256", "priority": 15},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-2-Ext1-2021-06",
+        "ssl_protocols": ["TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 6},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 7},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 8},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 9},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 12},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 13},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 14},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 15},
+            {"name": "AES128-GCM-SHA256", "priority": 16},
+            {"name": "AES128-SHA256", "priority": 17},
+            {"name": "AES128-SHA", "priority": 18},
+            {"name": "AES256-GCM-SHA384", "priority": 19},
+            {"name": "AES256-SHA256", "priority": 20},
+            {"name": "AES256-SHA", "priority": 21},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-2-Ext2-2021-06",
+        "ssl_protocols": ["TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 6},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 7},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 8},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 9},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 12},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 13},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 14},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 15},
+            {"name": "AES128-GCM-SHA256", "priority": 16},
+            {"name": "AES128-SHA256", "priority": 17},
+            {"name": "AES128-SHA", "priority": 18},
+            {"name": "AES256-GCM-SHA384", "priority": 19},
+            {"name": "AES256-SHA256", "priority": 20},
+            {"name": "AES256-SHA", "priority": 21},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-1-2021-06",
+        "ssl_protocols": ["TLSv1.1", "TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 4},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 5},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 6},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 7},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 8},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 9},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 12},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 13},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 14},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 15},
+            {"name": "AES128-GCM-SHA256", "priority": 16},
+            {"name": "AES128-SHA256", "priority": 17},
+            {"name": "AES128-SHA", "priority": 18},
+            {"name": "AES256-GCM-SHA384", "priority": 19},
+            {"name": "AES256-SHA256", "priority": 20},
+            {"name": "AES256-SHA", "priority": 21},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-0-2021-06",
+        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"],
+    },
+    {
+        "ciphers": [
+            {"name": "TLS_AES_128_GCM_SHA256", "priority": 1},
+            {"name": "TLS_AES_256_GCM_SHA384", "priority": 2},
+            {"name": "TLS_CHACHA20_POLY1305_SHA256", "priority": 3},
+        ],
+        "name": "ELBSecurityPolicy-TLS13-1-3-2021-06",
+        "ssl_protocols": ["TLSv1.3"],
+    },
+    {
         "ciphers": [
             {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
             {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
@@ -47,10 +186,34 @@ SSL_POLICIES = [
             {"name": "AES256-GCM-SHA384", "priority": 11},
             {"name": "AES256-SHA256", "priority": 12},
         ],
+        "name": "ELBSecurityPolicy-TLS-1-2-2017-01",
+        "ssl_protocols": ["TLSv1.2"],
     },
     {
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
+            {"name": "AES128-GCM-SHA256", "priority": 13},
+            {"name": "AES128-SHA256", "priority": 14},
+            {"name": "AES128-SHA", "priority": 15},
+            {"name": "AES256-GCM-SHA384", "priority": 16},
+            {"name": "AES256-SHA256", "priority": 17},
+            {"name": "AES256-SHA", "priority": 18},
+        ],
         "name": "ELBSecurityPolicy-TLS-1-1-2017-01",
         "ssl_protocols": ["TLSv1.1", "TLSv1.2"],
+    },
+    {
         "ciphers": [
             {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
             {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
@@ -71,34 +234,52 @@ SSL_POLICIES = [
             {"name": "AES256-SHA256", "priority": 17},
             {"name": "AES256-SHA", "priority": 18},
         ],
+        "name": "ELBSecurityPolicy-TLS-1-2-Ext-2018-06",
+        "ssl_protocols": ["TLSv1.2"],
     },
     {
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
+        ],
+        "name": "ELBSecurityPolicy-FS-2018-06",
+        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
+    },
+    {
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
+            {"name": "AES128-GCM-SHA256", "priority": 13},
+            {"name": "AES128-SHA256", "priority": 14},
+            {"name": "AES128-SHA", "priority": 15},
+            {"name": "AES256-GCM-SHA384", "priority": 16},
+            {"name": "AES256-SHA256", "priority": 17},
+            {"name": "AES256-SHA", "priority": 18},
+        ],
         "name": "ELBSecurityPolicy-2015-05",
         "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
-        "ciphers": [
-            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
-            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
-            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
-            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
-            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
-            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
-            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
-            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
-            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
-            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
-            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
-            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
-            {"name": "AES128-GCM-SHA256", "priority": 13},
-            {"name": "AES128-SHA256", "priority": 14},
-            {"name": "AES128-SHA", "priority": 15},
-            {"name": "AES256-GCM-SHA384", "priority": 16},
-            {"name": "AES256-SHA256", "priority": 17},
-            {"name": "AES256-SHA", "priority": 18},
-        ],
     },
     {
-        "name": "ELBSecurityPolicy-TLS-1-0-2015-04",
-        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
         "ciphers": [
             {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
             {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
@@ -120,27 +301,82 @@ SSL_POLICIES = [
             {"name": "AES256-SHA", "priority": 18},
             {"name": "DES-CBC3-SHA", "priority": 19},
         ],
+        "name": "ELBSecurityPolicy-TLS-1-0-2015-04",
+        "ssl_protocols": ["TLSv1", "TLSv1.1", "TLSv1.2"],
     },
     {
-        "name": "ELBSecurityPolicy-FS-1-2-Res-2020-10",
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 5},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 8},
+        ],
+        "name": "ELBSecurityPolicy-FS-1-2-Res-2019-08",
         "ssl_protocols": ["TLSv1.2"],
+    },
+    {
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
+        ],
+        "name": "ELBSecurityPolicy-FS-1-1-2019-08",
+        "ssl_protocols": ["TLSv1.1", "TLSv1.2"],
+    },
+    {
+        "ciphers": [
+            {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
+            {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
+            {"name": "ECDHE-ECDSA-AES128-SHA256", "priority": 3},
+            {"name": "ECDHE-RSA-AES128-SHA256", "priority": 4},
+            {"name": "ECDHE-ECDSA-AES128-SHA", "priority": 5},
+            {"name": "ECDHE-RSA-AES128-SHA", "priority": 6},
+            {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 7},
+            {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 8},
+            {"name": "ECDHE-ECDSA-AES256-SHA384", "priority": 9},
+            {"name": "ECDHE-RSA-AES256-SHA384", "priority": 10},
+            {"name": "ECDHE-RSA-AES256-SHA", "priority": 11},
+            {"name": "ECDHE-ECDSA-AES256-SHA", "priority": 12},
+        ],
+        "name": "ELBSecurityPolicy-FS-1-2-2019-08",
+        "ssl_protocols": ["TLSv1.2"],
+    },
+    {
         "ciphers": [
             {"name": "ECDHE-ECDSA-AES128-GCM-SHA256", "priority": 1},
             {"name": "ECDHE-RSA-AES128-GCM-SHA256", "priority": 2},
             {"name": "ECDHE-ECDSA-AES256-GCM-SHA384", "priority": 3},
             {"name": "ECDHE-RSA-AES256-GCM-SHA384", "priority": 4},
         ],
+        "name": "ELBSecurityPolicy-FS-1-2-Res-2020-10",
+        "ssl_protocols": ["TLSv1.2"],
     },
 ]
 
 
 class ELBV2Response(BaseResponse):
+    def __init__(self) -> None:
+        super().__init__(service_name="elbv2")
+
     @property
-    def elbv2_backend(self):
-        return elbv2_backends[self.region]
+    def elbv2_backend(self) -> ELBv2Backend:
+        return elbv2_backends[self.current_account][self.region]
 
     @amzn_request_id
-    def create_load_balancer(self):
+    def create_load_balancer(self) -> str:
         params = self._get_params()
         load_balancer_name = params.get("Name")
         subnet_ids = self._get_multi_param("Subnets.member")
@@ -151,11 +387,11 @@ class ELBV2Response(BaseResponse):
         tags = params.get("Tags")
 
         load_balancer = self.elbv2_backend.create_load_balancer(
-            name=load_balancer_name,
+            name=load_balancer_name,  # type: ignore
             security_groups=security_groups,
             subnet_ids=subnet_ids,
             subnet_mappings=subnet_mappings,
-            scheme=scheme,
+            scheme=scheme,  # type: ignore
             loadbalancer_type=loadbalancer_type,
             tags=tags,
         )
@@ -163,7 +399,7 @@ class ELBV2Response(BaseResponse):
         return template.render(load_balancer=load_balancer)
 
     @amzn_request_id
-    def create_rule(self):
+    def create_rule(self) -> str:
         params = self._get_params()
         rules = self.elbv2_backend.create_rule(
             listener_arn=params["ListenerArn"],
@@ -177,12 +413,12 @@ class ELBV2Response(BaseResponse):
         return template.render(rules=rules)
 
     @amzn_request_id
-    def create_target_group(self):
+    def create_target_group(self) -> str:
         params = self._get_params()
         name = params.get("Name")
         vpc_id = params.get("VpcId")
         protocol = params.get("Protocol")
-        protocol_version = params.get("ProtocolVersion", "HTTP1")
+        protocol_version = params.get("ProtocolVersion")
         port = params.get("Port")
         healthcheck_protocol = self._get_param("HealthCheckProtocol")
         healthcheck_port = self._get_param("HealthCheckPort")
@@ -193,11 +429,12 @@ class ELBV2Response(BaseResponse):
         healthy_threshold_count = self._get_param("HealthyThresholdCount")
         unhealthy_threshold_count = self._get_param("UnhealthyThresholdCount")
         matcher = params.get("Matcher")
-        target_type = params.get("TargetType")
+        target_type = params.get("TargetType", "instance")
+        ip_address_type = params.get("IpAddressType")
         tags = params.get("Tags")
 
         target_group = self.elbv2_backend.create_target_group(
-            name,
+            name,  # type: ignore
             vpc_id=vpc_id,
             protocol=protocol,
             protocol_version=protocol_version,
@@ -211,6 +448,7 @@ class ELBV2Response(BaseResponse):
             healthy_threshold_count=healthy_threshold_count,
             unhealthy_threshold_count=unhealthy_threshold_count,
             matcher=matcher,
+            ip_address_type=ip_address_type,
             target_type=target_type,
             tags=tags,
         )
@@ -219,7 +457,7 @@ class ELBV2Response(BaseResponse):
         return template.render(target_group=target_group)
 
     @amzn_request_id
-    def create_listener(self):
+    def create_listener(self) -> str:
         params = self._get_params()
         load_balancer_arn = self._get_param("LoadBalancerArn")
         protocol = self._get_param("Protocol")
@@ -240,7 +478,7 @@ class ELBV2Response(BaseResponse):
             port=port,
             ssl_policy=ssl_policy,
             certificate=certificate,
-            default_actions=default_actions,
+            actions=default_actions,
             alpn_policy=alpn_policy,
             tags=tags,
         )
@@ -249,7 +487,7 @@ class ELBV2Response(BaseResponse):
         return template.render(listener=listener)
 
     @amzn_request_id
-    def describe_load_balancers(self):
+    def describe_load_balancers(self) -> str:
         arns = self._get_multi_param("LoadBalancerArns.member")
         names = self._get_multi_param("Names.member")
         all_load_balancers = list(
@@ -273,7 +511,7 @@ class ELBV2Response(BaseResponse):
         return template.render(load_balancers=load_balancers_resp, marker=next_marker)
 
     @amzn_request_id
-    def describe_rules(self):
+    def describe_rules(self) -> str:
         listener_arn = self._get_param("ListenerArn")
         rule_arns = (
             self._get_multi_param("RuleArns.member")
@@ -302,7 +540,7 @@ class ELBV2Response(BaseResponse):
         return template.render(rules=rules_resp, marker=next_marker)
 
     @amzn_request_id
-    def describe_target_groups(self):
+    def describe_target_groups(self) -> str:
         load_balancer_arn = self._get_param("LoadBalancerArn")
         target_group_arns = self._get_multi_param("TargetGroupArns.member")
         names = self._get_multi_param("Names.member")
@@ -314,7 +552,7 @@ class ELBV2Response(BaseResponse):
         return template.render(target_groups=target_groups)
 
     @amzn_request_id
-    def describe_target_group_attributes(self):
+    def describe_target_group_attributes(self) -> str:
         target_group_arn = self._get_param("TargetGroupArn")
         target_group = self.elbv2_backend.target_groups.get(target_group_arn)
         if not target_group:
@@ -323,7 +561,7 @@ class ELBV2Response(BaseResponse):
         return template.render(attributes=target_group.attributes)
 
     @amzn_request_id
-    def describe_listeners(self):
+    def describe_listeners(self) -> str:
         load_balancer_arn = self._get_param("LoadBalancerArn")
         listener_arns = self._get_multi_param("ListenerArns.member")
         if not load_balancer_arn and not listener_arns:
@@ -336,35 +574,35 @@ class ELBV2Response(BaseResponse):
         return template.render(listeners=listeners)
 
     @amzn_request_id
-    def delete_load_balancer(self):
+    def delete_load_balancer(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         self.elbv2_backend.delete_load_balancer(arn)
         template = self.response_template(DELETE_LOAD_BALANCER_TEMPLATE)
         return template.render()
 
     @amzn_request_id
-    def delete_rule(self):
+    def delete_rule(self) -> str:
         arn = self._get_param("RuleArn")
         self.elbv2_backend.delete_rule(arn)
         template = self.response_template(DELETE_RULE_TEMPLATE)
         return template.render()
 
     @amzn_request_id
-    def delete_target_group(self):
+    def delete_target_group(self) -> str:
         arn = self._get_param("TargetGroupArn")
         self.elbv2_backend.delete_target_group(arn)
         template = self.response_template(DELETE_TARGET_GROUP_TEMPLATE)
         return template.render()
 
     @amzn_request_id
-    def delete_listener(self):
+    def delete_listener(self) -> str:
         arn = self._get_param("ListenerArn")
         self.elbv2_backend.delete_listener(arn)
         template = self.response_template(DELETE_LISTENER_TEMPLATE)
         return template.render()
 
     @amzn_request_id
-    def modify_rule(self):
+    def modify_rule(self) -> str:
         rule_arn = self._get_param("RuleArn")
         params = self._get_params()
         conditions = params.get("Conditions", [])
@@ -376,17 +614,17 @@ class ELBV2Response(BaseResponse):
         return template.render(rules=rules)
 
     @amzn_request_id
-    def modify_target_group_attributes(self):
+    def modify_target_group_attributes(self) -> str:
         target_group_arn = self._get_param("TargetGroupArn")
-        attributes = self._get_list_prefix("Attributes.member")
-        attributes = {attr["key"]: attr["value"] for attr in attributes}
+        attrs = self._get_list_prefix("Attributes.member")
+        attributes = {attr["key"]: attr["value"] for attr in attrs}
         self.elbv2_backend.modify_target_group_attributes(target_group_arn, attributes)
 
         template = self.response_template(MODIFY_TARGET_GROUP_ATTRIBUTES_TEMPLATE)
         return template.render(attributes=attributes)
 
     @amzn_request_id
-    def register_targets(self):
+    def register_targets(self) -> str:
         target_group_arn = self._get_param("TargetGroupArn")
         targets = self._get_list_prefix("Targets.member")
         self.elbv2_backend.register_targets(target_group_arn, targets)
@@ -395,7 +633,7 @@ class ELBV2Response(BaseResponse):
         return template.render()
 
     @amzn_request_id
-    def deregister_targets(self):
+    def deregister_targets(self) -> str:
         target_group_arn = self._get_param("TargetGroupArn")
         targets = self._get_list_prefix("Targets.member")
         self.elbv2_backend.deregister_targets(target_group_arn, targets)
@@ -404,7 +642,7 @@ class ELBV2Response(BaseResponse):
         return template.render()
 
     @amzn_request_id
-    def describe_target_health(self):
+    def describe_target_health(self) -> str:
         target_group_arn = self._get_param("TargetGroupArn")
         targets = self._get_list_prefix("Targets.member")
         target_health_descriptions = self.elbv2_backend.describe_target_health(
@@ -415,7 +653,7 @@ class ELBV2Response(BaseResponse):
         return template.render(target_health_descriptions=target_health_descriptions)
 
     @amzn_request_id
-    def set_rule_priorities(self):
+    def set_rule_priorities(self) -> str:
         rule_priorities = self._get_list_prefix("RulePriorities.member")
         for rule_priority in rule_priorities:
             rule_priority["priority"] = int(rule_priority["priority"])
@@ -424,18 +662,17 @@ class ELBV2Response(BaseResponse):
         return template.render(rules=rules)
 
     @amzn_request_id
-    def add_tags(self):
+    def add_tags(self) -> str:
         resource_arns = self._get_multi_param("ResourceArns.member")
         tags = self._get_params().get("Tags")
-        tags = self._get_params().get("Tags")
 
-        self.elbv2_backend.add_tags(resource_arns, tags)
+        self.elbv2_backend.add_tags(resource_arns, tags)  # type: ignore
 
         template = self.response_template(ADD_TAGS_TEMPLATE)
         return template.render()
 
     @amzn_request_id
-    def remove_tags(self):
+    def remove_tags(self) -> str:
         resource_arns = self._get_multi_param("ResourceArns.member")
         tag_keys = self._get_multi_param("TagKeys.member")
 
@@ -445,7 +682,7 @@ class ELBV2Response(BaseResponse):
         return template.render()
 
     @amzn_request_id
-    def describe_tags(self):
+    def describe_tags(self) -> str:
         resource_arns = self._get_multi_param("ResourceArns.member")
         resource_tags = self.elbv2_backend.describe_tags(resource_arns)
 
@@ -453,7 +690,7 @@ class ELBV2Response(BaseResponse):
         return template.render(resource_tags=resource_tags)
 
     @amzn_request_id
-    def describe_account_limits(self):
+    def describe_account_limits(self) -> str:
         # Supports paging but not worth implementing yet
         # marker = self._get_param('Marker')
         # page_size = self._get_int_param('PageSize')
@@ -473,7 +710,7 @@ class ELBV2Response(BaseResponse):
         return template.render(limits=limits)
 
     @amzn_request_id
-    def describe_ssl_policies(self):
+    def describe_ssl_policies(self) -> str:
         names = self._get_multi_param("Names.member.")
         # Supports paging but not worth implementing yet
         # marker = self._get_param('Marker')
@@ -481,13 +718,13 @@ class ELBV2Response(BaseResponse):
 
         policies = SSL_POLICIES
         if names:
-            policies = filter(lambda policy: policy["name"] in names, policies)
+            policies = filter(lambda policy: policy["name"] in names, policies)  # type: ignore
 
         template = self.response_template(DESCRIBE_SSL_POLICIES_TEMPLATE)
         return template.render(policies=policies)
 
     @amzn_request_id
-    def set_ip_address_type(self):
+    def set_ip_address_type(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         ip_type = self._get_param("IpAddressType")
 
@@ -497,7 +734,7 @@ class ELBV2Response(BaseResponse):
         return template.render(ip_type=ip_type)
 
     @amzn_request_id
-    def set_security_groups(self):
+    def set_security_groups(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         sec_groups = self._get_multi_param("SecurityGroups.member.")
 
@@ -507,7 +744,7 @@ class ELBV2Response(BaseResponse):
         return template.render(sec_groups=sec_groups)
 
     @amzn_request_id
-    def set_subnets(self):
+    def set_subnets(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         subnets = self._get_multi_param("Subnets.member.")
         subnet_mappings = self._get_params().get("SubnetMappings", [])
@@ -518,7 +755,7 @@ class ELBV2Response(BaseResponse):
         return template.render(subnets=subnet_zone_list)
 
     @amzn_request_id
-    def modify_load_balancer_attributes(self):
+    def modify_load_balancer_attributes(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         attrs = self._get_map_prefix(
             "Attributes.member", key_end="Key", value_end="Value"
@@ -530,7 +767,7 @@ class ELBV2Response(BaseResponse):
         return template.render(attrs=all_attrs)
 
     @amzn_request_id
-    def describe_load_balancer_attributes(self):
+    def describe_load_balancer_attributes(self) -> str:
         arn = self._get_param("LoadBalancerArn")
         attrs = self.elbv2_backend.describe_load_balancer_attributes(arn)
 
@@ -538,7 +775,7 @@ class ELBV2Response(BaseResponse):
         return template.render(attrs=attrs)
 
     @amzn_request_id
-    def modify_target_group(self):
+    def modify_target_group(self) -> str:
         arn = self._get_param("TargetGroupArn")
 
         health_check_proto = self._get_param(
@@ -570,7 +807,7 @@ class ELBV2Response(BaseResponse):
         return template.render(target_group=target_group)
 
     @amzn_request_id
-    def modify_listener(self):
+    def modify_listener(self) -> str:
         arn = self._get_param("ListenerArn")
         port = self._get_param("Port")
         protocol = self._get_param("Protocol")
@@ -582,9 +819,7 @@ class ELBV2Response(BaseResponse):
         if ssl_policy is not None and ssl_policy not in [
             item["name"] for item in SSL_POLICIES
         ]:
-            raise RESTError(
-                "SSLPolicyNotFound", "Policy {0} not found".format(ssl_policy)
-            )
+            raise RESTError("SSLPolicyNotFound", f"Policy {ssl_policy} not found")
 
         listener = self.elbv2_backend.modify_listener(
             arn, port, protocol, ssl_policy, certificates, default_actions
@@ -594,16 +829,18 @@ class ELBV2Response(BaseResponse):
         return template.render(listener=listener)
 
     @amzn_request_id
-    def add_listener_certificates(self):
+    def add_listener_certificates(self) -> str:
         arn = self._get_param("ListenerArn")
         certificates = self._get_list_prefix("Certificates.member")
-        certificates = self.elbv2_backend.add_listener_certificates(arn, certificates)
+        certificate_arns = self.elbv2_backend.add_listener_certificates(
+            arn, certificates
+        )
 
         template = self.response_template(ADD_LISTENER_CERTIFICATES_TEMPLATE)
-        return template.render(certificates=certificates)
+        return template.render(certificates=certificate_arns)
 
     @amzn_request_id
-    def describe_listener_certificates(self):
+    def describe_listener_certificates(self) -> str:
         arn = self._get_param("ListenerArn")
         certificates = self.elbv2_backend.describe_listener_certificates(arn)
 
@@ -611,15 +848,13 @@ class ELBV2Response(BaseResponse):
         return template.render(certificates=certificates)
 
     @amzn_request_id
-    def remove_listener_certificates(self):
+    def remove_listener_certificates(self) -> str:
         arn = self._get_param("ListenerArn")
         certificates = self._get_list_prefix("Certificates.member")
-        certificates = self.elbv2_backend.remove_listener_certificates(
-            arn, certificates
-        )
+        self.elbv2_backend.remove_listener_certificates(arn, certificates)
 
         template = self.response_template(REMOVE_LISTENER_CERTIFICATES_TEMPLATE)
-        return template.render(certificates=certificates)
+        return template.render()
 
 
 ADD_TAGS_TEMPLATE = """<AddTagsResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
@@ -797,6 +1032,9 @@ CREATE_TARGET_GROUP_TEMPLATE = """<CreateTargetGroupResponse xmlns="http://elast
         <TargetGroupName>{{ target_group.name }}</TargetGroupName>
         {% if target_group.protocol %}
         <Protocol>{{ target_group.protocol }}</Protocol>
+        {% if target_group.protocol_version %}
+        <ProtocolVersion>{{ target_group.protocol_version }}</ProtocolVersion>
+        {% endif %}
         {% endif %}
         {% if target_group.port %}
         <Port>{{ target_group.port }}</Port>
@@ -804,21 +1042,33 @@ CREATE_TARGET_GROUP_TEMPLATE = """<CreateTargetGroupResponse xmlns="http://elast
         {% if target_group.vpc_id %}
         <VpcId>{{ target_group.vpc_id }}</VpcId>
         {% endif %}
-        <HealthCheckProtocol>{{ target_group.healthcheck_protocol }}</HealthCheckProtocol>
-        {% if target_group.healthcheck_port %}<HealthCheckPort>{{ target_group.healthcheck_port }}</HealthCheckPort>{% endif %}
+        {% if target_group.healthcheck_enabled %}
+        {% if target_group.healthcheck_port %}
+        <HealthCheckPort>{{ target_group.healthcheck_port }}</HealthCheckPort>
+        {% endif %}
+        {% if target_group.healthcheck_protocol %}
+        <HealthCheckProtocol>{{ target_group.healthcheck_protocol or "None" }}</HealthCheckProtocol>
+        {% endif %}
+        {% endif %}
+        {% if target_group.healthcheck_path %}
         <HealthCheckPath>{{ target_group.healthcheck_path or '' }}</HealthCheckPath>
+        {% endif %}
         <HealthCheckIntervalSeconds>{{ target_group.healthcheck_interval_seconds }}</HealthCheckIntervalSeconds>
         <HealthCheckTimeoutSeconds>{{ target_group.healthcheck_timeout_seconds }}</HealthCheckTimeoutSeconds>
-        <HealthCheckEnabled>{{ target_group.healthcheck_enabled and 'true' or 'false' }}</HealthCheckEnabled>
         <HealthyThresholdCount>{{ target_group.healthy_threshold_count }}</HealthyThresholdCount>
         <UnhealthyThresholdCount>{{ target_group.unhealthy_threshold_count }}</UnhealthyThresholdCount>
+        <HealthCheckEnabled>{{ target_group.healthcheck_enabled and 'true' or 'false' }}</HealthCheckEnabled>
         {% if target_group.matcher %}
         <Matcher>
-          <HttpCode>{{ target_group.matcher['HttpCode'] }}</HttpCode>
+          {% if target_group.matcher.get("HttpCode") %}<HttpCode>{{ target_group.matcher['HttpCode'] }}</HttpCode>{% endif %}
+          {% if target_group.matcher.get("GrpcCode") %}<GrpcCode>{{ target_group.matcher['GrpcCode'] }}</GrpcCode>{% endif %}
         </Matcher>
         {% endif %}
         {% if target_group.target_type %}
         <TargetType>{{ target_group.target_type }}</TargetType>
+        {% endif %}
+        {% if target_group.ip_address_type %}
+        <IpAddressType>{{ target_group.ip_address_type }}</IpAddressType>
         {% endif %}
       </member>
     </TargetGroups>
@@ -1054,6 +1304,7 @@ DESCRIBE_TARGET_GROUPS_TEMPLATE = """<DescribeTargetGroupsResponse xmlns="http:/
         {% if target_group.vpc_id %}
         <VpcId>{{ target_group.vpc_id }}</VpcId>
         {% endif %}
+        <IpAddressType>{{ target_group.ip_address_type }}</IpAddressType>
         <HealthCheckProtocol>{{ target_group.healthcheck_protocol }}</HealthCheckProtocol>
         {% if target_group.healthcheck_port %}<HealthCheckPort>{{ target_group.healthcheck_port }}</HealthCheckPort>{% endif %}
         <HealthCheckPath>{{ target_group.healthcheck_path or '' }}</HealthCheckPath>
@@ -1064,7 +1315,8 @@ DESCRIBE_TARGET_GROUPS_TEMPLATE = """<DescribeTargetGroupsResponse xmlns="http:/
         <UnhealthyThresholdCount>{{ target_group.unhealthy_threshold_count }}</UnhealthyThresholdCount>
         {% if target_group.matcher %}
         <Matcher>
-          <HttpCode>{{ target_group.matcher['HttpCode'] }}</HttpCode>
+            {% if target_group.matcher.get("HttpCode") %}<HttpCode>{{ target_group.matcher['HttpCode'] }}</HttpCode>{% endif %}
+            {% if target_group.matcher.get("GrpcCode") %}<GrpcCode>{{ target_group.matcher['GrpcCode'] }}</GrpcCode>{% endif %}
         </Matcher>
         {% endif %}
         {% if target_group.target_type %}
@@ -1579,7 +1831,7 @@ SET_SECURITY_GROUPS_TEMPLATE = """<SetSecurityGroupsResponse xmlns="http://elast
 SET_SUBNETS_TEMPLATE = """<SetSubnetsResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
   <SetSubnetsResult>
     <AvailabilityZones>
-      {% for zone_id, subnet_id in subnets %}
+      {% for zone_id, subnet_id in subnets.items() %}
       <member>
         <SubnetId>{{ subnet_id }}</SubnetId>
         <ZoneName>{{ zone_id }}</ZoneName>

@@ -33,7 +33,7 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     LicenseRef-scancode-unknown-license-reference 27ff83b6d7e95b709c1a8b94532ebef1
+KEEP     BSD-3-Clause         27ff83b6d7e95b709c1a8b94532ebef1
 BELONGS ya.make
     License text:
         Please read the file [COPYING](https://github.com/cubicdaiya/dtl/blob/master/COPYING).
@@ -45,7 +45,7 @@ BELONGS ya.make
     Files with this license:
         README.md [685:685]
 
-KEEP     LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause 3d436eacb955b50a8f94435e0ba12145
+KEEP     BSD-3-Clause         3d436eacb955b50a8f94435e0ba12145
 BELONGS ya.make
     License text:
            In short, Diff Template Library is distributed under so called "BSD license",
@@ -90,7 +90,7 @@ FILE_INCLUDE CONTRIBUTORS found in files: COPYING at line 20, COPYING at line 24
     Files with this license:
         COPYING [6:30]
 
-KEEP     LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause d9ebc19a46340bfaf128a098aade97ed
+KEEP     BSD-3-Clause         d9ebc19a46340bfaf128a098aade97ed
 BELONGS ya.make
     License text:
         In short, Diff Template Library is distributed under so called "BSD license",

@@ -1,0 +1,252 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              49af97cadb10453f2b05003f793e4adc
+BELONGS ya.make
+    License text:
+        Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 88.89
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [28:28]
+
+KEEP     BSL-1.0              8a8e0b18cc05e7bc28034b7fb1c69575
+BELONGS ya.make
+    License text:
+        //  Distributed under the Boost Software License, Version 1.0.
+        //  See accompanying file LICENSE_1_0.txt or copy at
+        //  http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/atomic.hpp [7:9]
+        include/boost/atomic/detail/interlocked.hpp [7:9]
+        include/boost/memory_order.hpp [8:10]
+
+KEEP     BSL-1.0              a5006bb276a0e8fcc0c080cd5a14814e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 55.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [17:17]
+
+KEEP     BSL-1.0              bb6c4a594a57e74611676fda9449a7e3
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+         *          http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/atomic/detail/footer.hpp [3:5]
+        include/boost/atomic/detail/header.hpp [3:5]
+        include/boost/atomic/detail/pause.hpp [2:4]
+
+KEEP     BSL-1.0              c01de0902348b7c9494d50eaacc721eb
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+         * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/atomic/atomic.hpp [2:4]
+        include/boost/atomic/atomic_flag.hpp [2:4]
+        include/boost/atomic/atomic_ref.hpp [2:4]
+        include/boost/atomic/capabilities.hpp [2:4]
+        include/boost/atomic/detail/addressof.hpp [2:4]
+        include/boost/atomic/detail/aligned_variable.hpp [2:4]
+        include/boost/atomic/detail/atomic_flag_impl.hpp [2:4]
+        include/boost/atomic/detail/atomic_impl.hpp [2:4]
+        include/boost/atomic/detail/atomic_ref_impl.hpp [2:4]
+        include/boost/atomic/detail/bitwise_cast.hpp [2:4]
+        include/boost/atomic/detail/bitwise_fp_cast.hpp [2:4]
+        include/boost/atomic/detail/capabilities.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_aarch32.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_aarch64.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_alpha.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_arm.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_ppc.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_sparc.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_gcc_x86.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_msvc_arm.hpp [2:4]
+        include/boost/atomic/detail/caps_arch_msvc_x86.hpp [2:4]
+        include/boost/atomic/detail/caps_gcc_atomic.hpp [2:4]
+        include/boost/atomic/detail/caps_gcc_sync.hpp [2:4]
+        include/boost/atomic/detail/caps_linux_arm.hpp [2:4]
+        include/boost/atomic/detail/caps_windows.hpp [2:4]
+        include/boost/atomic/detail/cas_based_exchange.hpp [2:4]
+        include/boost/atomic/detail/classify.hpp [2:4]
+        include/boost/atomic/detail/config.hpp [2:4]
+        include/boost/atomic/detail/core_arch_operations.hpp [2:4]
+        include/boost/atomic/detail/core_arch_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_aarch32.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_aarch64.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_alpha.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_arm.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_ppc.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_sparc.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_gcc_x86.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_msvc_arm.hpp [2:4]
+        include/boost/atomic/detail/core_arch_ops_msvc_x86.hpp [2:4]
+        include/boost/atomic/detail/core_operations.hpp [2:4]
+        include/boost/atomic/detail/core_operations_emulated.hpp [2:4]
+        include/boost/atomic/detail/core_operations_emulated_fwd.hpp [2:4]
+        include/boost/atomic/detail/core_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/core_ops_cas_based.hpp [2:4]
+        include/boost/atomic/detail/core_ops_gcc_atomic.hpp [2:4]
+        include/boost/atomic/detail/core_ops_gcc_sync.hpp [2:4]
+        include/boost/atomic/detail/core_ops_linux_arm.hpp [2:4]
+        include/boost/atomic/detail/core_ops_windows.hpp [2:4]
+        include/boost/atomic/detail/extending_cas_based_arithmetic.hpp [2:4]
+        include/boost/atomic/detail/extra_fp_operations.hpp [2:4]
+        include/boost/atomic/detail/extra_fp_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/extra_fp_ops_emulated.hpp [2:4]
+        include/boost/atomic/detail/extra_fp_ops_generic.hpp [2:4]
+        include/boost/atomic/detail/extra_operations.hpp [2:4]
+        include/boost/atomic/detail/extra_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_emulated.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_gcc_aarch32.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_gcc_aarch64.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_gcc_arm.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_gcc_ppc.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_gcc_x86.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_generic.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_msvc_arm.hpp [2:4]
+        include/boost/atomic/detail/extra_ops_msvc_x86.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_operations.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_aarch32.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_aarch64.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_alpha.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_arm.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_ppc.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_sparc.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_gcc_x86.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_msvc_arm.hpp [2:4]
+        include/boost/atomic/detail/fence_arch_ops_msvc_x86.hpp [2:4]
+        include/boost/atomic/detail/fence_operations.hpp [2:4]
+        include/boost/atomic/detail/fence_operations_emulated.hpp [2:4]
+        include/boost/atomic/detail/fence_ops_gcc_atomic.hpp [2:4]
+        include/boost/atomic/detail/fence_ops_gcc_sync.hpp [2:4]
+        include/boost/atomic/detail/fence_ops_linux_arm.hpp [2:4]
+        include/boost/atomic/detail/fence_ops_windows.hpp [2:4]
+        include/boost/atomic/detail/float_sizes.hpp [2:4]
+        include/boost/atomic/detail/fp_operations.hpp [2:4]
+        include/boost/atomic/detail/fp_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/fp_ops_emulated.hpp [2:4]
+        include/boost/atomic/detail/fp_ops_generic.hpp [2:4]
+        include/boost/atomic/detail/futex.hpp [2:4]
+        include/boost/atomic/detail/gcc_arm_asm_common.hpp [2:4]
+        include/boost/atomic/detail/gcc_atomic_memory_order_utils.hpp [2:4]
+        include/boost/atomic/detail/gcc_ppc_asm_common.hpp [2:4]
+        include/boost/atomic/detail/int_sizes.hpp [2:4]
+        include/boost/atomic/detail/integral_conversions.hpp [2:4]
+        include/boost/atomic/detail/intptr.hpp [2:4]
+        include/boost/atomic/detail/link.hpp [2:4]
+        include/boost/atomic/detail/lock_pool.hpp [2:4]
+        include/boost/atomic/detail/memory_order_utils.hpp [2:4]
+        include/boost/atomic/detail/once_flag.hpp [2:4]
+        include/boost/atomic/detail/ops_gcc_aarch32_common.hpp [2:4]
+        include/boost/atomic/detail/ops_gcc_aarch64_common.hpp [2:4]
+        include/boost/atomic/detail/ops_gcc_arm_common.hpp [2:4]
+        include/boost/atomic/detail/ops_gcc_ppc_common.hpp [2:4]
+        include/boost/atomic/detail/ops_msvc_common.hpp [2:4]
+        include/boost/atomic/detail/platform.hpp [2:4]
+        include/boost/atomic/detail/storage_traits.hpp [2:4]
+        include/boost/atomic/detail/string_ops.hpp [2:4]
+        include/boost/atomic/detail/type_traits/alignment_of.hpp [2:4]
+        include/boost/atomic/detail/type_traits/conditional.hpp [2:4]
+        include/boost/atomic/detail/type_traits/has_unique_object_representations.hpp [2:4]
+        include/boost/atomic/detail/type_traits/integral_constant.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_enum.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_floating_point.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_function.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_iec559.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_integral.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_nothrow_default_constructible.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_signed.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_trivially_copyable.hpp [2:4]
+        include/boost/atomic/detail/type_traits/is_trivially_default_constructible.hpp [2:4]
+        include/boost/atomic/detail/type_traits/make_signed.hpp [2:4]
+        include/boost/atomic/detail/type_traits/make_unsigned.hpp [2:4]
+        include/boost/atomic/detail/type_traits/remove_cv.hpp [2:4]
+        include/boost/atomic/detail/wait_capabilities.hpp [2:4]
+        include/boost/atomic/detail/wait_caps_darwin_ulock.hpp [2:4]
+        include/boost/atomic/detail/wait_caps_dragonfly_umtx.hpp [2:4]
+        include/boost/atomic/detail/wait_caps_freebsd_umtx.hpp [2:4]
+        include/boost/atomic/detail/wait_caps_futex.hpp [2:4]
+        include/boost/atomic/detail/wait_caps_windows.hpp [2:4]
+        include/boost/atomic/detail/wait_on_address.hpp [2:4]
+        include/boost/atomic/detail/wait_operations.hpp [2:4]
+        include/boost/atomic/detail/wait_operations_fwd.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_darwin_ulock.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_dragonfly_umtx.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_emulated.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_freebsd_umtx.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_futex.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_generic.hpp [2:4]
+        include/boost/atomic/detail/wait_ops_windows.hpp [2:4]
+        include/boost/atomic/fences.hpp [2:4]
+        include/boost/atomic/ipc_atomic.hpp [2:4]
+        include/boost/atomic/ipc_atomic_flag.hpp [2:4]
+        include/boost/atomic/ipc_atomic_ref.hpp [2:4]
+        src/bit_operation_tools.hpp [2:4]
+        src/cpuid.hpp [2:4]
+        src/find_address.hpp [2:4]
+        src/find_address_sse2.cpp [2:4]
+        src/find_address_sse41.cpp [2:4]
+        src/lock_pool.cpp [2:4]
+        src/lock_pool_init1.ipp [2:4]
+        src/lock_pool_init256.ipp [2:4]
+        src/wait_on_address.cpp [2:4]
+        src/x86_vector_tools.hpp [2:4]

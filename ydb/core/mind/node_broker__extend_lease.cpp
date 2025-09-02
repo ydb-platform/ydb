@@ -2,6 +2,7 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/counters_node_broker.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -16,6 +17,8 @@ public:
         , Update(false)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_EXTEND_LEASE; }
 
     bool Error(TStatus::ECode code,
                const TString &reason,
@@ -43,28 +46,29 @@ public:
         Response = new TEvNodeBroker::TEvExtendLeaseResponse;
         Response->Record.SetNodeId(nodeId);
 
-        auto it = Self->Nodes.find(nodeId);
-        if (it == Self->Nodes.end()) {
-            if (Self->ExpiredNodes.contains(nodeId))
+        auto it = Self->Dirty.Nodes.find(nodeId);
+        if (it == Self->Dirty.Nodes.end()) {
+            if (Self->Dirty.ExpiredNodes.contains(nodeId))
                 return Error(TStatus::WRONG_REQUEST, "Node has expired", ctx);
             else
                 return Error(TStatus::WRONG_REQUEST, "Unknown node", ctx);
         }
 
-        if (Self->IsBannedId(nodeId))
+        if (Self->Dirty.IsBannedId(nodeId))
             return Error(TStatus::WRONG_REQUEST, "Node ID is banned", ctx);
 
         auto &node = it->second;
-        if (!node.IsFixed()) {
-            Self->DbUpdateNodeLease(node, txc);
-            Response->Record.SetExpire(Self->Epoch.NextEnd.GetValue());
+        if (node.Expire < Self->Dirty.Epoch.NextEnd) {
+            Self->Dirty.ExtendLease(node);
+            Self->Dirty.DbAddNode(node, txc);
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Update = true;
-        } else {
-            Response->Record.SetExpire(TInstant::Max().GetValue());
         }
 
+        Response->Record.SetExpire(node.Expire.GetValue());
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
-        Self->Epoch.Serialize(*Response->Record.MutableEpoch());
+        Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 
         return true;
     }
@@ -78,10 +82,16 @@ public:
                     "TTxExtendLease reply with: " << Response->ToString());
         ctx.Send(Event->Sender, Response.Release());
 
-        if (Update)
-            Self->ExtendLease(Self->Nodes.at(Event->Get()->Record.GetNodeId()));
+        if (Update) {
+            auto& node = Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId());
+            Self->Committed.ExtendLease(node);
+            Self->Committed.UpdateEpochVersion();
+            Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
+        }
 
-        Self->TxCompleted(Event->Get()->Record.GetNodeId(), this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

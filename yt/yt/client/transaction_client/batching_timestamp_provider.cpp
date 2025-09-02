@@ -30,7 +30,7 @@ public:
 
     TFuture<TTimestamp> GenerateTimestamps(int count)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         TFuture<TTimestamp> result;
 
@@ -74,7 +74,7 @@ private:
 
     void MaybeScheduleSendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (PendingRequests_.empty() || GenerateInProgress_) {
             return;
@@ -101,7 +101,7 @@ private:
 
     void SendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(!GenerateInProgress_);
         LastRequestTime_ = GetInstant();
@@ -132,7 +132,7 @@ private:
         std::vector<TRequest> requests,
         const TErrorOr<TTimestamp>& firstTimestampOrError)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         {
             auto guard = Guard(SpinLock_);
@@ -176,7 +176,7 @@ public:
 
     TFuture<TTimestamp> GenerateTimestamps(int count, TCellTag clockClusterTag) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         if (clockClusterTag == InvalidCellTag) {
             return NativeRequestBatcher_->GenerateTimestamps(count);
@@ -201,7 +201,7 @@ public:
 
     TTimestamp GetLatestTimestamp(TCellTag clockClusterTag) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return Underlying_->GetLatestTimestamp(clockClusterTag);
     }

@@ -22,7 +22,7 @@
 
 #ifdef GPR_SUPPORT_BINDER_TRANSPORT
 
-#error #include <jni.h>
+#include <jni.h>
 
 #include "src/core/ext/transport/binder/wire_format/binder_android.h"
 

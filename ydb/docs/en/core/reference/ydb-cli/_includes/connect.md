@@ -1,8 +1,10 @@
 # Connecting the CLI to and authenticating with a database
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 Most of the {{ ydb-short-name }} CLI commands relate to operations on a {{ ydb-short-name }} database and require establishing a connection to it to be executed.
 
-The {{ ydb-short-name }} CLI uses the following sources to determine the database to connect to and the [authentication mode](../../../concepts/auth.md) to use with it (listed in descending priority):
+The {{ ydb-short-name }} CLI uses the following sources to determine the database to connect to and the [authentication mode](../../../security/authentication.md) to use with it (listed in descending priority):
 
 1. The command line.
 2. The profile set in the `--profile` command-line option.
@@ -25,6 +27,7 @@ DB connection options in the command line are specified before defining the comm
 
 - `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
 - `-d, --database <database>` is the [database path](../../../concepts/connect.md#database).
+- `--no-discovery` means do not perform discovery (client balancing) for ydb cluster connection. If this option is set the user provided endpoint (by `-e` option) will be used to setup a connections.
 
 {% include [auth/options.md](auth/options.md) %}
 

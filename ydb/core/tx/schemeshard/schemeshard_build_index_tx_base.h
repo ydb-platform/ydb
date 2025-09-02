@@ -11,6 +11,9 @@ namespace NSchemeShard {
 class TSchemeShard::TIndexBuilder::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 private:
     TSideEffects SideEffects;
+protected:
+    TIndexBuildId BuildId;
+private:
     const NKikimr::NSchemeShard::ETxTypes TxType;
 public:
     const TString LogPrefix;
@@ -26,29 +29,31 @@ private:
     void ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void ApplyOnComplete(const TActorContext& ctx);
     void ApplySchedule(const TActorContext& ctx);
-    ui64 RequestUnits(const TBillingStats& stats);
     void RoundPeriod(TInstant& start, TInstant& end);
     void ApplyBill(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
+    bool OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& exc);
 
 protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
+    void AllocateTxId(TIndexBuildId buildId);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
     void Progress(TIndexBuildId id);
-    void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo::TPtr indexInfo);
-    void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo::TPtr indexInfo);
+    void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
+    void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);
     void AddIssue(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* issues,
                   const TString& message,
                   NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR);
-    void SendNotificationsIfFinished(TIndexBuildInfo::TPtr indexInfo);
-    void EraseBuildInfo(const TIndexBuildInfo::TPtr indexBuildInfo);
+    void SendNotificationsIfFinished(TIndexBuildInfo& indexInfo);
+    void EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo);
     Ydb::StatusIds::StatusCode TranslateStatusCode(NKikimrScheme::EStatus status);
-    void Bill(const TIndexBuildInfo::TPtr& indexBuildInfo, TInstant startPeriod = TInstant::Zero(), TInstant endPeriod = TInstant::Zero());
-    void AskToScheduleBilling(const TIndexBuildInfo::TPtr& indexBuildInfo);
-    bool GotScheduledBilling(const TIndexBuildInfo::TPtr& indexBuildInfo);
+    void Bill(const TIndexBuildInfo& indexBuildInfo, TInstant startPeriod = TInstant::Zero(), TInstant endPeriod = TInstant::Zero());
+    void AskToScheduleBilling(TIndexBuildInfo& indexBuildInfo);
+    bool GotScheduledBilling(TIndexBuildInfo& indexBuildInfo);
 
 public:
-    explicit TTxBase(TSelf* self, NKikimr::NSchemeShard::ETxTypes txType)
+    explicit TTxBase(TSelf* self, TIndexBuildId buildId, NKikimr::NSchemeShard::ETxTypes txType)
         : TBase(self)
+        , BuildId(buildId)
         , TxType(txType)
         , LogPrefix(TStringBuilder() << "TIndexBuilder::" << NKikimr::NSchemeShard::ETxTypes_Name(txType) << ": ")
     { }
@@ -59,6 +64,7 @@ public:
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) = 0;
     virtual void DoComplete(const TActorContext& ctx) = 0;
+    virtual void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) = 0;
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
@@ -71,11 +77,16 @@ public:
     THolder<TResponse> Response;
     const bool IsMutableOperation;
 
-    explicit TTxSimple(TSelf* self, typename TRequest::TPtr& ev, NKikimr::NSchemeShard::ETxTypes txType, bool isMutableOperation = true)
-        : TTxBase(self, txType)
+    explicit TTxSimple(TSelf* self, TIndexBuildId buildId, typename TRequest::TPtr& ev, NKikimr::NSchemeShard::ETxTypes txType, bool isMutableOperation = true)
+        : TTxBase(self, buildId, txType)
         , Request(ev)
         , IsMutableOperation(isMutableOperation)
     { }
+
+    void OnUnhandledException(TTransactionContext&, const TActorContext&, TIndexBuildInfo*, const std::exception& exc) override {
+        Reply(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+            << "Unhandled exception " << exc.what());
+    }
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
     {

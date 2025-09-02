@@ -1,9 +1,10 @@
 #pragma once
 
 #include "error.h"
-#include "error_helpers.h"
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/error/error_helpers.h>
 
 #ifdef _unix_
     #include <string.h>

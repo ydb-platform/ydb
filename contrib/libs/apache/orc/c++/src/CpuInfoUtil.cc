@@ -74,7 +74,7 @@ namespace orc {
 
 #if defined(_WIN32)
     //------------------------------ WINDOWS ------------------------------//
-    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cache_sizes) {
+    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cacheSizes) {
       PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer = nullptr;
       PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer_position = nullptr;
       DWORD buffer_size = 0;
@@ -108,8 +108,8 @@ namespace orc {
         if (RelationCache == buffer_position->Relationship) {
           PCACHE_DESCRIPTOR cache = &buffer_position->Cache;
           if (cache->Level >= 1 && cache->Level <= kCacheLevels) {
-            const int64_t current = (*cache_sizes)[cache->Level - 1];
-            (*cache_sizes)[cache->Level - 1] = std::max<int64_t>(current, cache->Size);
+            const int64_t current = (*cacheSizes)[cache->Level - 1];
+            (*cacheSizes)[cache->Level - 1] = std::max<int64_t>(current, cache->Size);
           }
         }
         offset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
@@ -136,23 +136,22 @@ namespace orc {
     }
 #endif  // MINGW
 
-    void OsRetrieveCpuInfo(int64_t* hardware_flags, CpuInfo::Vendor* vendor,
-                           std::string* model_name) {
+    void OsRetrieveCpuInfo(int64_t* hardwareFlags, CpuInfo::Vendor* vendor,
+                           std::string* modelName) {
       int register_EAX_id = 1;
       int highest_valid_id = 0;
       int highest_extended_valid_id = 0;
       std::bitset<32> features_ECX;
-      std::array<int, 4> cpu_info;
+      std::array<int, 4> cpuInfo;
 
       // Get highest valid id
-      __cpuid(cpu_info.data(), 0);
-      highest_valid_id = cpu_info[0];
+      __cpuid(cpuInfo.data(), 0);
+      highest_valid_id = cpuInfo[0];
       // HEX of "GenuineIntel": 47656E75 696E6549 6E74656C
       // HEX of "AuthenticAMD": 41757468 656E7469 63414D44
-      if (cpu_info[1] == 0x756e6547 && cpu_info[3] == 0x49656e69 && cpu_info[2] == 0x6c65746e) {
+      if (cpuInfo[1] == 0x756e6547 && cpuInfo[3] == 0x49656e69 && cpuInfo[2] == 0x6c65746e) {
         *vendor = CpuInfo::Vendor::Intel;
-      } else if (cpu_info[1] == 0x68747541 && cpu_info[3] == 0x69746e65 &&
-                 cpu_info[2] == 0x444d4163) {
+      } else if (cpuInfo[1] == 0x68747541 && cpuInfo[3] == 0x69746e65 && cpuInfo[2] == 0x444d4163) {
         *vendor = CpuInfo::Vendor::AMD;
       }
 
@@ -161,19 +160,19 @@ namespace orc {
       }
 
       // EAX=1: Processor Info and Feature Bits
-      __cpuidex(cpu_info.data(), register_EAX_id, 0);
-      features_ECX = cpu_info[2];
+      __cpuidex(cpuInfo.data(), register_EAX_id, 0);
+      features_ECX = cpuInfo[2];
 
       // Get highest extended id
-      __cpuid(cpu_info.data(), 0x80000000);
-      highest_extended_valid_id = cpu_info[0];
+      __cpuid(cpuInfo.data(), 0x80000000);
+      highest_extended_valid_id = cpuInfo[0];
 
       // Retrieve CPU model name
       if (highest_extended_valid_id >= static_cast<int>(0x80000004)) {
-        model_name->clear();
+        modelName->clear();
         for (int i = 0x80000002; i <= static_cast<int>(0x80000004); ++i) {
-          __cpuidex(cpu_info.data(), i, 0);
-          *model_name += std::string(reinterpret_cast<char*>(cpu_info.data()), sizeof(cpu_info));
+          __cpuidex(cpuInfo.data(), i, 0);
+          *modelName += std::string(reinterpret_cast<char*>(cpuInfo.data()), sizeof(cpuInfo));
         }
       }
 
@@ -184,37 +183,37 @@ namespace orc {
         zmm_enabled = (xcr0 & 0xE0) == 0xE0;
       }
 
-      if (features_ECX[9]) *hardware_flags |= CpuInfo::SSSE3;
-      if (features_ECX[19]) *hardware_flags |= CpuInfo::SSE4_1;
-      if (features_ECX[20]) *hardware_flags |= CpuInfo::SSE4_2;
-      if (features_ECX[23]) *hardware_flags |= CpuInfo::POPCNT;
-      if (features_ECX[28]) *hardware_flags |= CpuInfo::AVX;
+      if (features_ECX[9]) *hardwareFlags |= CpuInfo::SSSE3;
+      if (features_ECX[19]) *hardwareFlags |= CpuInfo::SSE4_1;
+      if (features_ECX[20]) *hardwareFlags |= CpuInfo::SSE4_2;
+      if (features_ECX[23]) *hardwareFlags |= CpuInfo::POPCNT;
+      if (features_ECX[28]) *hardwareFlags |= CpuInfo::AVX;
 
       // cpuid with EAX=7, ECX=0: Extended Features
       register_EAX_id = 7;
       if (highest_valid_id > register_EAX_id) {
-        __cpuidex(cpu_info.data(), register_EAX_id, 0);
-        std::bitset<32> features_EBX = cpu_info[1];
+        __cpuidex(cpuInfo.data(), register_EAX_id, 0);
+        std::bitset<32> features_EBX = cpuInfo[1];
 
-        if (features_EBX[3]) *hardware_flags |= CpuInfo::BMI1;
-        if (features_EBX[5]) *hardware_flags |= CpuInfo::AVX2;
-        if (features_EBX[8]) *hardware_flags |= CpuInfo::BMI2;
+        if (features_EBX[3]) *hardwareFlags |= CpuInfo::BMI1;
+        if (features_EBX[5]) *hardwareFlags |= CpuInfo::AVX2;
+        if (features_EBX[8]) *hardwareFlags |= CpuInfo::BMI2;
         if (zmm_enabled) {
-          if (features_EBX[16]) *hardware_flags |= CpuInfo::AVX512F;
-          if (features_EBX[17]) *hardware_flags |= CpuInfo::AVX512DQ;
-          if (features_EBX[28]) *hardware_flags |= CpuInfo::AVX512CD;
-          if (features_EBX[30]) *hardware_flags |= CpuInfo::AVX512BW;
-          if (features_EBX[31]) *hardware_flags |= CpuInfo::AVX512VL;
+          if (features_EBX[16]) *hardwareFlags |= CpuInfo::AVX512F;
+          if (features_EBX[17]) *hardwareFlags |= CpuInfo::AVX512DQ;
+          if (features_EBX[28]) *hardwareFlags |= CpuInfo::AVX512CD;
+          if (features_EBX[30]) *hardwareFlags |= CpuInfo::AVX512BW;
+          if (features_EBX[31]) *hardwareFlags |= CpuInfo::AVX512VL;
         }
       }
     }
 
 #elif defined(CPUINFO_ARCH_ARM)
     // Windows on Arm
-    void OsRetrieveCpuInfo(int64_t* hardware_flags, CpuInfo::Vendor* vendor,
-                           std::string* model_name) {
-      *hardware_flags |= CpuInfo::ASIMD;
-      // TODO: vendor, model_name
+    void OsRetrieveCpuInfo(int64_t* hardwareFlags, CpuInfo::Vendor* vendor,
+                           std::string* modelName) {
+      *hardwareFlags |= CpuInfo::ASIMD;
+      // TODO: vendor, modelName
     }
 #endif
 
@@ -236,25 +235,25 @@ namespace orc {
       return std::nullopt;
     }
 
-    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cache_sizes) {
+    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cacheSizes) {
       static_assert(kCacheLevels >= 3, "");
       auto c = IntegerSysCtlByName("hw.l1dcachesize");
       if (c.has_value()) {
-        (*cache_sizes)[0] = *c;
+        (*cacheSizes)[0] = *c;
       }
       c = IntegerSysCtlByName("hw.l2cachesize");
       if (c.has_value()) {
-        (*cache_sizes)[1] = *c;
+        (*cacheSizes)[1] = *c;
       }
       c = IntegerSysCtlByName("hw.l3cachesize");
       if (c.has_value()) {
-        (*cache_sizes)[2] = *c;
+        (*cacheSizes)[2] = *c;
       }
     }
 
-    void OsRetrieveCpuInfo(int64_t* hardware_flags, CpuInfo::Vendor* vendor,
-                           std::string* model_name) {
-      // hardware_flags
+    void OsRetrieveCpuInfo(int64_t* hardwareFlags, CpuInfo::Vendor* vendor,
+                           std::string* modelName) {
+      // hardwareFlags
       struct SysCtlCpuFeature {
         const char* name;
         int64_t flag;
@@ -280,13 +279,13 @@ namespace orc {
       for (const auto& feature : features) {
         auto v = IntegerSysCtlByName(feature.name);
         if (v.value_or(0)) {
-          *hardware_flags |= feature.flag;
+          *hardwareFlags |= feature.flag;
         }
       }
 
-      // TODO: vendor, model_name
+      // TODO: vendor, modelName
       *vendor = CpuInfo::Vendor::Unknown;
-      *model_name = "Unknown";
+      *modelName = "Unknown";
     }
 
 #else
@@ -345,7 +344,7 @@ namespace orc {
       const struct {
         std::string name;
         int64_t flag;
-      } flag_mappings[] = {
+      } flagMappings[] = {
 #if defined(CPUINFO_ARCH_X86)
         {"ssse3", CpuInfo::SSSE3},
         {"sse4_1", CpuInfo::SSE4_1},
@@ -364,22 +363,22 @@ namespace orc {
         {"asimd", CpuInfo::ASIMD},
 #endif
       };
-      const int64_t num_flags = sizeof(flag_mappings) / sizeof(flag_mappings[0]);
+      const int64_t num_flags = sizeof(flagMappings) / sizeof(flagMappings[0]);
 
       int64_t flags = 0;
       for (int i = 0; i < num_flags; ++i) {
-        if (values.find(flag_mappings[i].name) != std::string::npos) {
-          flags |= flag_mappings[i].flag;
+        if (values.find(flagMappings[i].name) != std::string::npos) {
+          flags |= flagMappings[i].flag;
         }
       }
       return flags;
     }
 
-    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cache_sizes) {
+    void OsRetrieveCacheSize(std::array<int64_t, kCacheLevels>* cacheSizes) {
       for (int i = 0; i < kCacheLevels; ++i) {
         const int64_t cache_size = LinuxGetCacheSize(i);
         if (cache_size > 0) {
-          (*cache_sizes)[i] = cache_size;
+          (*cacheSizes)[i] = cache_size;
         }
       }
     }
@@ -403,8 +402,8 @@ namespace orc {
     }
 
     // Read from /proc/cpuinfo
-    void OsRetrieveCpuInfo(int64_t* hardware_flags, CpuInfo::Vendor* vendor,
-                           std::string* model_name) {
+    void OsRetrieveCpuInfo(int64_t* hardwareFlags, CpuInfo::Vendor* vendor,
+                           std::string* modelName) {
       std::ifstream cpuinfo("/proc/cpuinfo", std::ios::in);
       while (cpuinfo) {
         std::string line;
@@ -414,9 +413,9 @@ namespace orc {
           const std::string name = TrimString(line.substr(0, colon - 1));
           const std::string value = TrimString(line.substr(colon + 1, std::string::npos));
           if (name.compare("flags") == 0 || name.compare("Features") == 0) {
-            *hardware_flags |= LinuxParseCpuFlags(value);
+            *hardwareFlags |= LinuxParseCpuFlags(value);
           } else if (name.compare("model name") == 0) {
-            *model_name = value;
+            *modelName = value;
           } else if (name.compare("vendor_id") == 0) {
             if (value.compare("GenuineIntel") == 0) {
               *vendor = CpuInfo::Vendor::Intel;
@@ -433,7 +432,7 @@ namespace orc {
 
 #if defined(CPUINFO_ARCH_X86)
     //------------------------------ X86_64 ------------------------------//
-    bool ArchParseUserSimdLevel(const std::string& simd_level, int64_t* hardware_flags) {
+    bool ArchParseUserSimdLevel(const std::string& simdLevel, int64_t* hardwareFlags) {
       enum {
         USER_SIMD_NONE,
         USER_SIMD_AVX512,
@@ -442,9 +441,9 @@ namespace orc {
 
       int level = USER_SIMD_MAX;
       // Parse the level
-      if (simd_level == "AVX512") {
+      if (simdLevel == "AVX512") {
         level = USER_SIMD_AVX512;
-      } else if (simd_level == "NONE") {
+      } else if (simdLevel == "NONE") {
         level = USER_SIMD_NONE;
       } else {
         return false;
@@ -452,7 +451,7 @@ namespace orc {
 
       // Disable feature as the level
       if (level < USER_SIMD_AVX512) {
-        *hardware_flags &= ~CpuInfo::AVX512;
+        *hardwareFlags &= ~CpuInfo::AVX512;
       }
       return true;
     }
@@ -469,9 +468,9 @@ namespace orc {
 
 #elif defined(CPUINFO_ARCH_ARM)
     //------------------------------ AARCH64 ------------------------------//
-    bool ArchParseUserSimdLevel(const std::string& simd_level, int64_t* hardware_flags) {
-      if (simd_level == "NONE") {
-        *hardware_flags &= ~CpuInfo::ASIMD;
+    bool ArchParseUserSimdLevel(const std::string& simdLevel, int64_t* hardwareFlags) {
+      if (simdLevel == "NONE") {
+        *hardwareFlags &= ~CpuInfo::ASIMD;
         return true;
       }
       return false;
@@ -485,7 +484,7 @@ namespace orc {
 
 #else
     //------------------------------ PPC, ... ------------------------------//
-    bool ArchParseUserSimdLevel(const std::string& simd_level, int64_t* hardware_flags) {
+    bool ArchParseUserSimdLevel(const std::string& simdLevel, int64_t* hardwareFlags) {
       return true;
     }
 
@@ -496,17 +495,17 @@ namespace orc {
   }  // namespace
 
   struct CpuInfo::Impl {
-    int64_t hardware_flags = 0;
+    int64_t hardwareFlags = 0;
     int numCores = 0;
-    int64_t original_hardware_flags = 0;
+    int64_t originalHardwareFlags = 0;
     Vendor vendor = Vendor::Unknown;
-    std::string model_name = "Unknown";
-    std::array<int64_t, kCacheLevels> cache_sizes{};
+    std::string modelName = "Unknown";
+    std::array<int64_t, kCacheLevels> cacheSizes{};
 
     Impl() {
-      OsRetrieveCacheSize(&cache_sizes);
-      OsRetrieveCpuInfo(&hardware_flags, &vendor, &model_name);
-      original_hardware_flags = hardware_flags;
+      OsRetrieveCacheSize(&cacheSizes);
+      OsRetrieveCpuInfo(&hardwareFlags, &vendor, &modelName);
+      originalHardwareFlags = hardwareFlags;
       numCores = std::max(static_cast<int>(std::thread::hardware_concurrency()), 1);
 
       // parse user simd level
@@ -514,7 +513,7 @@ namespace orc {
       std::string userSimdLevel = maybe_env_var == nullptr ? "NONE" : std::string(maybe_env_var);
       std::transform(userSimdLevel.begin(), userSimdLevel.end(), userSimdLevel.begin(),
                      [](unsigned char c) { return std::toupper(c); });
-      if (!ArchParseUserSimdLevel(userSimdLevel, &hardware_flags)) {
+      if (!ArchParseUserSimdLevel(userSimdLevel, &hardwareFlags)) {
         throw ParseError("Invalid value for ORC_USER_SIMD_LEVEL: " + userSimdLevel);
       }
     }
@@ -530,8 +529,8 @@ namespace orc {
 #endif
 
   const CpuInfo* CpuInfo::getInstance() {
-    static CpuInfo cpu_info;
-    return &cpu_info;
+    static CpuInfo cpuInfo;
+    return &cpuInfo;
   }
 
 #ifdef __clang__
@@ -539,7 +538,7 @@ namespace orc {
 #endif
 
   int64_t CpuInfo::hardwareFlags() const {
-    return impl_->hardware_flags;
+    return impl_->hardwareFlags;
   }
 
   int CpuInfo::numCores() const {
@@ -551,7 +550,7 @@ namespace orc {
   }
 
   const std::string& CpuInfo::modelName() const {
-    return impl_->model_name;
+    return impl_->modelName;
   }
 
   int64_t CpuInfo::cacheSize(CacheLevel level) const {
@@ -564,18 +563,18 @@ namespace orc {
 
     static_assert(static_cast<int>(CacheLevel::L1) == 0, "");
     const int i = static_cast<int>(level);
-    if (impl_->cache_sizes[i] > 0) return impl_->cache_sizes[i];
+    if (impl_->cacheSizes[i] > 0) return impl_->cacheSizes[i];
     if (i == 0) return kDefaultCacheSizes[0];
     // l3 may be not available, return maximum of l2 or default size
-    return std::max(kDefaultCacheSizes[i], impl_->cache_sizes[i - 1]);
+    return std::max(kDefaultCacheSizes[i], impl_->cacheSizes[i - 1]);
   }
 
   bool CpuInfo::isSupported(int64_t flags) const {
-    return (impl_->hardware_flags & flags) == flags;
+    return (impl_->hardwareFlags & flags) == flags;
   }
 
   bool CpuInfo::isDetected(int64_t flags) const {
-    return (impl_->original_hardware_flags & flags) == flags;
+    return (impl_->originalHardwareFlags & flags) == flags;
   }
 
   void CpuInfo::verifyCpuRequirements() const {

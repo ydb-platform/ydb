@@ -25,9 +25,44 @@
 #include <sstream>
 
 namespace orc {
+  NO_SANITIZE_ATTR
+  Int128& Int128::operator<<=(uint32_t bits) {
+    if (bits != 0) {
+      if (bits < 64) {
+        highbits_ <<= bits;
+        highbits_ |= (lowbits_ >> (64 - bits));
+        lowbits_ <<= bits;
+      } else if (bits < 128) {
+        highbits_ = static_cast<int64_t>(lowbits_) << (bits - 64);
+        lowbits_ = 0;
+      } else {
+        highbits_ = 0;
+        lowbits_ = 0;
+      }
+    }
+    return *this;
+  }
+
+  NO_SANITIZE_ATTR
+  Int128& Int128::operator>>=(uint32_t bits) {
+    if (bits != 0) {
+      if (bits < 64) {
+        lowbits_ >>= bits;
+        lowbits_ |= static_cast<uint64_t>(highbits_ << (64 - bits));
+        highbits_ = static_cast<int64_t>(static_cast<uint64_t>(highbits_) >> bits);
+      } else if (bits < 128) {
+        lowbits_ = static_cast<uint64_t>(highbits_ >> (bits - 64));
+        highbits_ = highbits_ >= 0 ? 0 : -1l;
+      } else {
+        highbits_ = highbits_ >= 0 ? 0 : -1l;
+        lowbits_ = static_cast<uint64_t>(highbits_);
+      }
+    }
+    return *this;
+  }
 
   Int128 Int128::maximumValue() {
-    return Int128(0x7fffffffffffffff, 0xfffffffffffffff);
+    return Int128(0x7fffffffffffffff, 0xffffffffffffffff);
   }
 
   Int128 Int128::minimumValue() {
@@ -35,8 +70,8 @@ namespace orc {
   }
 
   Int128::Int128(const std::string& str) {
-    lowbits = 0;
-    highbits = 0;
+    lowbits_ = 0;
+    highbits_ = 0;
     size_t length = str.length();
     if (length > 0) {
       bool isNegative = str[0] == '-';
@@ -64,30 +99,30 @@ namespace orc {
 
     // Break the left and right numbers into 32 bit chunks
     // so that we can multiply them without overflow.
-    uint64_t L0 = static_cast<uint64_t>(highbits) >> 32;
-    uint64_t L1 = static_cast<uint64_t>(highbits) & INT_MASK;
-    uint64_t L2 = lowbits >> 32;
-    uint64_t L3 = lowbits & INT_MASK;
-    uint64_t R0 = static_cast<uint64_t>(right.highbits) >> 32;
-    uint64_t R1 = static_cast<uint64_t>(right.highbits) & INT_MASK;
-    uint64_t R2 = right.lowbits >> 32;
-    uint64_t R3 = right.lowbits & INT_MASK;
+    uint64_t L0 = static_cast<uint64_t>(highbits_) >> 32;
+    uint64_t L1 = static_cast<uint64_t>(highbits_) & INT_MASK;
+    uint64_t L2 = lowbits_ >> 32;
+    uint64_t L3 = lowbits_ & INT_MASK;
+    uint64_t R0 = static_cast<uint64_t>(right.highbits_) >> 32;
+    uint64_t R1 = static_cast<uint64_t>(right.highbits_) & INT_MASK;
+    uint64_t R2 = right.lowbits_ >> 32;
+    uint64_t R3 = right.lowbits_ & INT_MASK;
 
     uint64_t product = L3 * R3;
-    lowbits = product & INT_MASK;
+    lowbits_ = product & INT_MASK;
     uint64_t sum = product >> 32;
     product = L2 * R3;
     sum += product;
-    highbits = sum < product ? CARRY_BIT : 0;
+    highbits_ = sum < product ? CARRY_BIT : 0;
     product = L3 * R2;
     sum += product;
     if (sum < product) {
-      highbits += CARRY_BIT;
+      highbits_ += CARRY_BIT;
     }
-    lowbits += sum << 32;
-    highbits += static_cast<int64_t>(sum >> 32);
-    highbits += L1 * R3 + L2 * R2 + L3 * R1;
-    highbits += (L0 * R3 + L1 * R2 + L2 * R1 + L3 * R0) << 32;
+    lowbits_ += sum << 32;
+    highbits_ += static_cast<int64_t>(sum >> 32);
+    highbits_ += L1 * R3 + L2 * R2 + L3 * R1;
+    highbits_ += (L0 * R3 + L1 * R2 + L2 * R1 + L3 * R0) << 32;
     return *this;
   }
 
@@ -103,16 +138,16 @@ namespace orc {
   int64_t Int128::fillInArray(uint32_t* array, bool& wasNegative) const {
     uint64_t high;
     uint64_t low;
-    if (highbits < 0) {
-      low = ~lowbits + 1;
-      high = static_cast<uint64_t>(~highbits);
+    if (highbits_ < 0) {
+      low = ~lowbits_ + 1;
+      high = static_cast<uint64_t>(~highbits_);
       if (low == 0) {
         high += 1;
       }
       wasNegative = true;
     } else {
-      low = lowbits;
-      high = static_cast<uint64_t>(highbits);
+      low = lowbits_;
+      high = static_cast<uint64_t>(highbits_);
       wasNegative = false;
     }
     if (high != 0) {
@@ -430,8 +465,8 @@ namespace orc {
 
   std::string Int128::toHexString() const {
     std::stringstream buf;
-    buf << std::hex << "0x" << std::setw(16) << std::setfill('0') << highbits << std::setw(16)
-        << std::setfill('0') << lowbits;
+    buf << std::hex << "0x" << std::setw(16) << std::setfill('0') << highbits_ << std::setw(16)
+        << std::setfill('0') << lowbits_;
     return buf.str();
   }
 
@@ -439,7 +474,7 @@ namespace orc {
     if (fitsInLong()) {
       return static_cast<double>(toLong());
     }
-    return static_cast<double>(lowbits) + std::ldexp(static_cast<double>(highbits), 64);
+    return static_cast<double>(lowbits_) + std::ldexp(static_cast<double>(highbits_), 64);
   }
 
   const static int32_t MAX_PRECISION_64 = 18;

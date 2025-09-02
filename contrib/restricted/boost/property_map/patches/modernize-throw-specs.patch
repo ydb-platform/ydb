@@ -1,0 +1,25 @@
+--- a/include/boost/property_map/dynamic_property_map.hpp	(index)
++++ b/include/boost/property_map/dynamic_property_map.hpp	(working tree)
+@@ -70,2 +70,2 @@ public:
+-  ~dynamic_property_exception() throw() BOOST_OVERRIDE {}
+-  const char* what() const throw() BOOST_OVERRIDE = 0;
++  ~dynamic_property_exception() BOOST_OVERRIDE {}
++  const char* what() const noexcept BOOST_OVERRIDE = 0;
+@@ -80,3 +80,3 @@ public:
+-  ~property_not_found() throw() BOOST_OVERRIDE {}
++  ~property_not_found() BOOST_OVERRIDE {}
+ 
+-  const char* what() const throw() BOOST_OVERRIDE {
++  const char* what() const noexcept BOOST_OVERRIDE {
+@@ -93,3 +93,3 @@ struct dynamic_get_failure : public dynamic_property_exception {
+-  ~dynamic_get_failure() throw() BOOST_OVERRIDE {}
++  ~dynamic_get_failure() BOOST_OVERRIDE {}
+ 
+-  const char* what() const throw() BOOST_OVERRIDE {
++  const char* what() const noexcept BOOST_OVERRIDE {
+@@ -107,3 +107,3 @@ struct dynamic_get_failure : public dynamic_property_exception {
+-  ~dynamic_const_put_error() throw() BOOST_OVERRIDE {}
++  ~dynamic_const_put_error() BOOST_OVERRIDE {}
+ 
+-  const char* what() const throw() BOOST_OVERRIDE {
++  const char* what() const noexcept BOOST_OVERRIDE {

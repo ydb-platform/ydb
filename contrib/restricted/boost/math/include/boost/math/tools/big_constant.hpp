@@ -8,6 +8,12 @@
 #define BOOST_MATH_TOOLS_BIG_CONSTANT_HPP
 
 #include <boost/math/tools/config.hpp>
+
+// On NVRTC we don't need any of this
+// We just have a simple definition of the macro since the largest float
+// type on the platform is a 64-bit double
+#ifndef BOOST_MATH_HAS_NVRTC 
+
 #ifndef BOOST_MATH_STANDALONE
 #include <boost/lexical_cast.hpp>
 #endif
@@ -43,12 +49,12 @@ typedef double largest_float;
 #endif
 
 template <class T>
-inline constexpr T make_big_value(largest_float v, const char*, std::true_type const&, std::false_type const&) BOOST_MATH_NOEXCEPT(T)
+BOOST_MATH_GPU_ENABLED constexpr T make_big_value(largest_float v, const char*, std::true_type const&, std::false_type const&) BOOST_MATH_NOEXCEPT(T)
 {
    return static_cast<T>(v);
 }
 template <class T>
-inline constexpr T make_big_value(largest_float v, const char*, std::true_type const&, std::true_type const&) BOOST_MATH_NOEXCEPT(T)
+BOOST_MATH_GPU_ENABLED constexpr T make_big_value(largest_float v, const char*, std::true_type const&, std::true_type const&) BOOST_MATH_NOEXCEPT(T)
 {
    return static_cast<T>(v);
 }
@@ -74,11 +80,15 @@ inline constexpr T make_big_value(largest_float, const char* s, std::false_type 
 //
 // For constants which might fit in a long double (if it's big enough):
 //
+// Note that gcc-13 has std::is_convertible<long double, std::float64_t>::value false, likewise
+// std::is_constructible<std::float64_t, long double>::value, even though the conversions do
+// actually work.  Workaround is the || std::is_floating_point<T>::value part which thankfully is true.
+//
 #define BOOST_MATH_BIG_CONSTANT(T, D, x)\
    boost::math::tools::make_big_value<T>(\
       BOOST_MATH_LARGEST_FLOAT_C(x), \
       BOOST_MATH_STRINGIZE(x), \
-      std::integral_constant<bool, (std::is_convertible<boost::math::tools::largest_float, T>::value) && \
+      std::integral_constant<bool, (std::is_convertible<boost::math::tools::largest_float, T>::value || std::is_floating_point<T>::value) && \
       ((D <= boost::math::tools::numeric_traits<boost::math::tools::largest_float>::digits) \
           || std::is_floating_point<T>::value \
           || (boost::math::tools::numeric_traits<T>::is_specialized && \
@@ -93,6 +103,8 @@ inline constexpr T make_big_value(largest_float, const char* s, std::false_type 
    std::is_constructible<T, const char*>())
 
 }}} // namespaces
+
+#endif // BOOST_MATH_HAS_NVRTC
 
 #endif
 

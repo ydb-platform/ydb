@@ -11,7 +11,6 @@
 namespace NHyperscan {
     using TCPUFeatures = decltype(hs_platform_info_t::cpu_features);
     constexpr TCPUFeatures CPU_FEATURES_AVX2 = HS_CPU_FEATURES_AVX2;
-    constexpr TCPUFeatures CPU_FEATURES_AVX512 = HS_CPU_FEATURES_AVX512 | HS_CPU_FEATURES_AVX2;
 
     template<typename TNativeDeleter, TNativeDeleter NativeDeleter>
     class TDeleter {
@@ -35,7 +34,6 @@ namespace NHyperscan {
             Core2 = 0,
             Corei7 = 1,
             AVX2 = 2,
-            AVX512 = 3
         };
 
         ERuntime DetectCurrentRuntime();
@@ -62,12 +60,21 @@ namespace NHyperscan {
 
         TDatabase Compile(const TStringBuf& regex, unsigned int flags, hs_platform_info_t* platform);
 
+        TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags, hs_platform_info_t* platform);
+
         TDatabase CompileMulti(
             const TVector<const char*>& regexs,
             const TVector<unsigned int>& flags,
             const TVector<unsigned int>& ids,
             hs_platform_info_t* platform,
             const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
+
+        TDatabase CompileMultiLiteral(
+            const TVector<const char*>& literals,
+            const TVector<unsigned int>& flags,
+            const TVector<unsigned int>& ids,
+            const TVector<size_t>& lens,
+            hs_platform_info_t* platform);
 
         // We need to parametrize Scan and Matches functions for testing purposes
         template<typename TCallback>
@@ -120,6 +127,10 @@ namespace NHyperscan {
 
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures);
 
+    TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags);
+
+    TDatabase CompileLiteral(const TStringBuf& literal, unsigned int flags, TCPUFeatures cpuFeatures);
+
     TDatabase CompileMulti(
         const TVector<const char*>& regexs,
         const TVector<unsigned int>& flags,
@@ -132,6 +143,19 @@ namespace NHyperscan {
         const TVector<unsigned int>& ids,
         TCPUFeatures cpuFeatures,
         const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
+
+    TDatabase CompileMultiLiteral(
+        const TVector<const char*>& literals,
+        const TVector<unsigned int>& flags,
+        const TVector<unsigned int>& ids,
+        const TVector<size_t>& lens);
+
+    TDatabase CompileMultiLiteral(
+        const TVector<const char*>& literals,
+        const TVector<unsigned int>& flags,
+        const TVector<unsigned int>& ids,
+        const TVector<size_t>& lens,
+        TCPUFeatures cpuFeatures);
 
     TScratch MakeScratch(const TDatabase& db);
 

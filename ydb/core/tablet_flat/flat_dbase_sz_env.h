@@ -9,19 +9,19 @@ namespace NKikimr {
 namespace NTable {
 
     struct TSizeEnv : public IPages {
-        using TInfo = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
         TSizeEnv(IPages* env)
             : Env(env)
         {
         }
 
-        TResult Locate(const TMemTable*, ui64, ui32) noexcept override
+        TResult Locate(const TMemTable*, ui64, ui32) override
         {
-            Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+            Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
@@ -55,7 +55,7 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(TInfo *info, TPageId pageId) noexcept
+        void AddPageSize(TPageCollection *info, TPageId pageId)
         {
             if (Touched[info].insert(pageId).second) {
                 Pages++;

@@ -383,6 +383,11 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 ## Release Notes
 
+### Version 1.4.6, 2025-07-05
+
+- Drop support for Python 3.8, and add support for 3.13
+
+
 ### Version 1.4.5, 2024-04-13
 
 - Drop support for Python 3.7, which means we're not dependent on `importlib-metadata` anymore.

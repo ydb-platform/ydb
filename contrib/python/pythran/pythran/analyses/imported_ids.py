@@ -8,23 +8,44 @@ import pythran.metadata as md
 import gast as ast
 
 
-class ImportedIds(NodeAnalysis):
+class ImportedIds(NodeAnalysis[Globals, Locals]):
 
-    """Gather ids referenced by a node and not declared locally."""
+    """
+    Gather ids referenced by a node and not declared locally.
+
+    >>> import gast as ast
+    >>> from pythran import passmanager
+    >>> from pythran.analyses import ImportedIds
+    >>> node = ast.parse('''
+    ... def foo():
+    ...   def t():
+    ...     nonlocal g
+    ...     g = k
+    ...   t()''')
+    >>> pm = passmanager.PassManager("test")
+    >>> sorted(pm.gather(ImportedIds, node))
+    ['g', 'k']
+    """
+
+    ResultType = set
 
     def __init__(self):
-        self.result = set()
+        super().__init__()
         self.current_locals = set()
-        self.is_list = False
+        self.current_nonlocals = set()
         self.in_augassign = False
-        super(ImportedIds, self).__init__(Globals, Locals)
 
     def visit_Name(self, node):
-        if isinstance(node.ctx, ast.Store) and not self.in_augassign:
+        if node.id in self.current_nonlocals:
+            self.result.add(node.id)
+        elif isinstance(node.ctx, ast.Store) and not self.in_augassign:
             self.current_locals.add(node.id)
         elif (node.id not in self.visible_globals and
               node.id not in self.current_locals):
             self.result.add(node.id)
+
+    def visit_Nonlocal(self, node):
+        self.current_nonlocals.update(node.names)
 
     def visit_FunctionDef(self, node):
         self.current_locals.add(node.name)
@@ -50,9 +71,13 @@ class ImportedIds(NodeAnalysis):
         # order matter as an assignation
         # is evaluated before being assigned
         md.visit(self, node)
-        self.visit(node.value)
-        for target in node.targets:
+        if node.value:
+            self.visit(node.value)
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for target in targets:
             self.visit(target)
+
+    visit_AnnAssign = visit_Assign
 
     def visit_AugAssign(self, node):
         self.in_augassign = True
@@ -94,12 +119,4 @@ class ImportedIds(NodeAnalysis):
 
     def prepare(self, node):
         super(ImportedIds, self).prepare(node)
-        if self.is_list:  # so that this pass can be called on list
-            node = node.body[0]
         self.visible_globals = set(self.globals) - self.locals[node]
-
-    def run(self, node):
-        if isinstance(node, list):  # so that this pass can be called on list
-            self.is_list = True
-            node = ast.If(ast.Constant(1, None), node, [])
-        return super(ImportedIds, self).run(node)

@@ -11,6 +11,8 @@
 #pragma once
 #endif
 
+#ifndef __CUDACC_RTC__
+
 #include <boost/math/tools/is_standalone.hpp>
 
 // Minimum language standard transition
@@ -90,14 +92,14 @@
 // Since Boost.Multiprecision is in active development some tests do not fully cooperate yet.
 #define BOOST_MATH_NO_MP_TESTS
 
-#if (__cplusplus > 201400L || _MSVC_LANG > 201400L)
+#if ((__cplusplus > 201400L) || (defined(_MSVC_LANG) && (_MSVC_LANG > 201400L)))
 #define BOOST_MATH_CXX14_CONSTEXPR constexpr
 #else
 #define BOOST_MATH_CXX14_CONSTEXPR
 #define BOOST_MATH_NO_CXX14_CONSTEXPR
 #endif // BOOST_MATH_CXX14_CONSTEXPR
 
-#if (__cplusplus > 201700L || _MSVC_LANG > 201700L)
+#if ((__cplusplus > 201700L) || (defined(_MSVC_LANG) && (_MSVC_LANG > 201700L)))
 #define BOOST_MATH_IF_CONSTEXPR if constexpr
 
 // Clang on mac provides the execution header with none of the functionality. TODO: Check back on this
@@ -111,7 +113,7 @@
 #  define BOOST_MATH_NO_CXX17_HDR_EXECUTION
 #endif
 
-#if __cpp_lib_gcd_lcm >= 201606L
+#if (defined(__cpp_lib_gcd_lcm) && (__cpp_lib_gcd_lcm >= 201606L))
 #define BOOST_MATH_HAS_CXX17_NUMERIC
 #endif
 
@@ -197,8 +199,8 @@
 #endif
 
 // C++23
-#if __cplusplus > 202002L || _MSVC_LANG > 202002L
-#  if __GNUC__ >= 13
+#if __cplusplus > 202002L || (defined(_MSVC_LANG) &&_MSVC_LANG > 202002L)
+#  if defined(__GNUC__) && __GNUC__ >= 13
      // libstdc++3 only defines to/from_chars for std::float128_t when one of these defines are set
      // otherwise we're right out of luck...
 #    if defined(_GLIBCXX_LDOUBLE_IS_IEEE_BINARY128) || defined(_GLIBCXX_HAVE_FLOAT128_MATH)
@@ -218,10 +220,14 @@
 
 #include <boost/math/tools/user.hpp>
 
-#if (defined(__NetBSD__) || defined(__EMSCRIPTEN__)\
+#if (defined(__NetBSD__)\
    || (defined(__hppa) && !defined(__OpenBSD__)) || (defined(__NO_LONG_DOUBLE_MATH) && (DBL_MANT_DIG != LDBL_MANT_DIG))) \
    && !defined(BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS)
 //#  define BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS
+#endif
+
+#if defined(__EMSCRIPTEN__) && !defined(BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS)
+#  define BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS
 #endif
 
 #ifdef __IBMCPP__
@@ -365,42 +371,62 @@ struct non_type {};
 #endif
 
 //
-// Tune performance options for specific compilers:
+// Tune performance options for specific compilers,
+// but check at each step that nothing has been previously defined by the user first
 //
 #ifdef _MSC_VER
-#  define BOOST_MATH_POLY_METHOD 2
+#  ifndef BOOST_MATH_POLY_METHOD
+#    define BOOST_MATH_POLY_METHOD 2
+#  endif
 #if _MSC_VER <= 1900
-#  define BOOST_MATH_RATIONAL_METHOD 1
+#  ifndef BOOST_MATH_POLY_METHOD
+#    define BOOST_MATH_RATIONAL_METHOD 1
+#  endif
 #else
-#  define BOOST_MATH_RATIONAL_METHOD 2
+#  ifndef BOOST_MATH_RATIONAL_METHOD
+#    define BOOST_MATH_RATIONAL_METHOD 2
+#  endif
 #endif
 #if _MSC_VER > 1900
-#  define BOOST_MATH_INT_TABLE_TYPE(RT, IT) RT
-#  define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##.0L
+#  ifndef BOOST_MATH_INT_TABLE_TYPE
+#    define BOOST_MATH_INT_TABLE_TYPE(RT, IT) RT
+#  endif
+#  ifndef BOOST_MATH_INT_VALUE_SUFFIX
+#    define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##.0L
+#  endif
 #endif
 
 #elif defined(__INTEL_COMPILER)
-#  define BOOST_MATH_POLY_METHOD 2
-#  define BOOST_MATH_RATIONAL_METHOD 1
+#  ifndef BOOST_MATH_POLY_METHOD
+#    define BOOST_MATH_POLY_METHOD 2
+#  endif
+#  ifndef BOOST_MATH_RATIONAL_METHOD
+#    define BOOST_MATH_RATIONAL_METHOD 1
+#  endif
 
 #elif defined(__GNUC__)
-#if __GNUC__ < 4
-#  define BOOST_MATH_POLY_METHOD 3
-#  define BOOST_MATH_RATIONAL_METHOD 3
-#  define BOOST_MATH_INT_TABLE_TYPE(RT, IT) RT
-#  define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##.0L
-#else
-#  define BOOST_MATH_POLY_METHOD 3
-#  define BOOST_MATH_RATIONAL_METHOD 3
-#endif
+#  ifndef BOOST_MATH_POLY_METHOD
+#    define BOOST_MATH_POLY_METHOD 3
+#  endif
+#  ifndef BOOST_MATH_RATIONAL_METHOD
+#    define BOOST_MATH_RATIONAL_METHOD 3
+#  endif
 
 #elif defined(__clang__)
 
 #if __clang__ > 6
-#  define BOOST_MATH_POLY_METHOD 3
-#  define BOOST_MATH_RATIONAL_METHOD 3
-#  define BOOST_MATH_INT_TABLE_TYPE(RT, IT) RT
-#  define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##.0L
+#  ifndef BOOST_MATH_POLY_METHOD
+#    define BOOST_MATH_POLY_METHOD 3
+#  endif
+#  ifndef BOOST_MATH_RATIONAL_METHOD
+#    define BOOST_MATH_RATIONAL_METHOD 3
+#  endif
+#  ifndef BOOST_MATH_INT_TABLE_TYPE
+#    define BOOST_MATH_INT_TABLE_TYPE(RT, IT) RT
+#  endif
+#  ifndef BOOST_MATH_INT_VALUE_SUFFIX
+#    define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##.0L
+#  endif
 #endif
 
 #endif
@@ -443,7 +469,7 @@ struct non_type {};
 #if defined(BOOST_MATH_STANDALONE) && defined(_GLIBCXX_USE_FLOAT128) && defined(__GNUC__) && defined(__GNUC_MINOR__) && defined(__GNUC_PATCHLEVEL__) && !defined(__STRICT_ANSI__) \
    && !defined(BOOST_MATH_DISABLE_FLOAT128) && !defined(BOOST_MATH_USE_FLOAT128)
 #  define BOOST_MATH_USE_FLOAT128
-#elif defined(BOOST_HAS_FLOAT128) && !defined(BOOST_MATH_USE_FLOAT128)
+#elif defined(BOOST_HAS_FLOAT128) && !defined(BOOST_MATH_USE_FLOAT128) && !defined(BOOST_MATH_DISABLE_FLOAT128)
 #  define BOOST_MATH_USE_FLOAT128
 #endif
 #ifdef BOOST_MATH_USE_FLOAT128
@@ -502,7 +528,9 @@ struct non_type {};
    using std::ceil;\
    using std::floor;\
    using std::log10;\
-   using std::sqrt;
+   using std::sqrt;\
+   using std::log2;\
+   using std::ilogb;
 
 #define BOOST_MATH_STD_USING BOOST_MATH_STD_USING_CORE
 
@@ -625,7 +653,9 @@ namespace boost{ namespace math{
 // Some mingw flavours have issues with thread_local and types with non-trivial destructors
 // See https://sourceforge.net/p/mingw-w64/bugs/527/
 //
-#if (defined(__MINGW32__) && (__GNUC__ < 9) && !defined(__clang__))
+// When running windows-2022 or 2025 we see this issue again with GCC 12 and 14
+//
+#if (defined(__MINGW32__) && ((__GNUC__ < 9) || (__GNUC__ >= 12)) && !defined(__clang__))
 #  define BOOST_MATH_NO_THREAD_LOCAL_WITH_NON_TRIVIAL_TYPES
 #endif
 
@@ -640,6 +670,184 @@ namespace boost{ namespace math{
 #define BOOST_MATH_CONSTEXPR_TABLE_FUNCTION
 #endif
 
+//
+// CUDA support:
+//
+
+#ifdef __CUDACC__
+
+// We have to get our include order correct otherwise you get compilation failures
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda/std/type_traits>
+#include <cuda/std/utility>
+#include <cuda/std/cstdint>
+#include <cuda/std/array>
+#include <cuda/std/tuple>
+#include <cuda/std/complex>
+
+#  define BOOST_MATH_CUDA_ENABLED __host__ __device__
+#  define BOOST_MATH_HAS_GPU_SUPPORT
+
+#  ifndef BOOST_MATH_ENABLE_CUDA
+#    define BOOST_MATH_ENABLE_CUDA
+#  endif
+
+// Device code can not handle exceptions
+#  ifndef BOOST_MATH_NO_EXCEPTIONS
+#    define BOOST_MATH_NO_EXCEPTIONS
+#  endif
+
+// We want to use force inline from CUDA instead of the host compiler
+#  undef BOOST_MATH_FORCEINLINE
+#  define BOOST_MATH_FORCEINLINE __forceinline__
+
+#elif defined(SYCL_LANGUAGE_VERSION)
+
+#  define BOOST_MATH_SYCL_ENABLED SYCL_EXTERNAL
+#  define BOOST_MATH_HAS_GPU_SUPPORT
+
+#  ifndef BOOST_MATH_ENABLE_SYCL
+#    define BOOST_MATH_ENABLE_SYCL
+#  endif
+
+#  ifndef BOOST_MATH_NO_EXCEPTIONS
+#    define BOOST_MATH_NO_EXCEPTIONS
+#  endif
+
+// spir64 does not support long double
+#  define BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS
+#  define BOOST_MATH_NO_REAL_CONCEPT_TESTS
+
+#  undef BOOST_MATH_FORCEINLINE
+#  define BOOST_MATH_FORCEINLINE inline
+
+#endif
+
+#ifndef BOOST_MATH_CUDA_ENABLED
+#  define BOOST_MATH_CUDA_ENABLED
+#endif
+
+#ifndef BOOST_MATH_SYCL_ENABLED
+#  define BOOST_MATH_SYCL_ENABLED
+#endif
+
+// Not all functions that allow CUDA allow SYCL (e.g. Recursion is disallowed by SYCL)
+#  define BOOST_MATH_GPU_ENABLED BOOST_MATH_CUDA_ENABLED BOOST_MATH_SYCL_ENABLED
+
+// Additional functions that need replaced/marked up
+#ifdef BOOST_MATH_HAS_GPU_SUPPORT
+template <class T>
+BOOST_MATH_GPU_ENABLED constexpr void gpu_safe_swap(T& a, T& b) { T t(a); a = b; b = t; }
+template <class T>
+BOOST_MATH_GPU_ENABLED constexpr T gpu_safe_min(const T& a, const T& b) { return a < b ? a : b; }
+template <class T>
+BOOST_MATH_GPU_ENABLED constexpr T gpu_safe_max(const T& a, const T& b) { return a > b ? a : b; }
+
+#define BOOST_MATH_GPU_SAFE_SWAP(a, b) gpu_safe_swap(a, b)
+#define BOOST_MATH_GPU_SAFE_MIN(a, b) gpu_safe_min(a, b)
+#define BOOST_MATH_GPU_SAFE_MAX(a, b) gpu_safe_max(a, b)
+
+#else
+
+#define BOOST_MATH_GPU_SAFE_SWAP(a, b) std::swap(a, b)
+#define BOOST_MATH_GPU_SAFE_MIN(a, b) (std::min)(a, b)
+#define BOOST_MATH_GPU_SAFE_MAX(a, b) (std::max)(a, b)
+
+#endif
+
+// Static variables are not allowed with CUDA or C++20 modules
+// See if we can inline them instead
+
+#if defined(__cpp_inline_variables) && __cpp_inline_variables >= 201606L
+#  define BOOST_MATH_INLINE_CONSTEXPR inline constexpr
+#  define BOOST_MATH_STATIC static
+#  ifndef BOOST_MATH_HAS_GPU_SUPPORT
+#    define BOOST_MATH_STATIC_LOCAL_VARIABLE static
+#  else
+#    define BOOST_MATH_STATIC_LOCAL_VARIABLE
+#  endif
+#else
+#  ifndef BOOST_MATH_HAS_GPU_SUPPORT
+#    define BOOST_MATH_INLINE_CONSTEXPR static constexpr
+#    define BOOST_MATH_STATIC static
+#    define BOOST_MATH_STATIC_LOCAL_VARIABLE
+#  else
+#    define BOOST_MATH_INLINE_CONSTEXPR constexpr
+#    define BOOST_MATH_STATIC constexpr
+#    define BOOST_MATH_STATIC_LOCAL_VARIABLE static
+#  endif
+#endif
+
+#define BOOST_MATH_FP_NAN FP_NAN
+#define BOOST_MATH_FP_INFINITE FP_INFINITE
+#define BOOST_MATH_FP_ZERO FP_ZERO
+#define BOOST_MATH_FP_SUBNORMAL FP_SUBNORMAL
+#define BOOST_MATH_FP_NORMAL FP_NORMAL
+
+#else // Special section for CUDA NVRTC to ensure we consume no STL headers
+
+#ifndef BOOST_MATH_STANDALONE
+#  define BOOST_MATH_STANDALONE
+#endif
+
+#define BOOST_MATH_HAS_NVRTC
+#define BOOST_MATH_ENABLE_CUDA
+#define BOOST_MATH_HAS_GPU_SUPPORT
+
+#define BOOST_MATH_GPU_ENABLED __host__ __device__
+#define BOOST_MATH_CUDA_ENABLED __host__ __device__
+
+#define BOOST_MATH_STATIC static
+#define BOOST_MATH_STATIC_LOCAL_VARIABLE
+
+#define BOOST_MATH_NOEXCEPT(T) noexcept(boost::math::is_floating_point_v<T>)
+#define BOOST_MATH_EXPLICIT_TEMPLATE_TYPE(T) 
+#define BOOST_MATH_EXPLICIT_TEMPLATE_TYPE_SPEC(T) 
+#define BOOST_MATH_APPEND_EXPLICIT_TEMPLATE_TYPE_SPEC(T) 
+#define BOOST_MATH_BIG_CONSTANT(T, N, V) static_cast<T>(V)
+#define BOOST_MATH_FORCEINLINE __forceinline__
+#define BOOST_MATH_STD_USING  
+#define BOOST_MATH_IF_CONSTEXPR if
+#define BOOST_MATH_IS_FLOAT(T) (boost::math::is_floating_point<T>::value)
+#define BOOST_MATH_CONSTEXPR_TABLE_FUNCTION constexpr
+#define BOOST_MATH_NO_EXCEPTIONS
+#define BOOST_MATH_PREVENT_MACRO_SUBSTITUTION 
+
+// This should be defined to nothing but since it is not specifically a math macro
+// we need to undef before proceeding
+#ifdef BOOST_FPU_EXCEPTION_GUARD
+#  undef BOOST_FPU_EXCEPTION_GUARD
+#endif
+
+#define BOOST_FPU_EXCEPTION_GUARD
+
+template <class T>
+BOOST_MATH_GPU_ENABLED constexpr void gpu_safe_swap(T& a, T& b) { T t(a); a = b; b = t; }
+
+#define BOOST_MATH_GPU_SAFE_SWAP(a, b) gpu_safe_swap(a, b)
+#define BOOST_MATH_GPU_SAFE_MIN(a, b) (::min)(a, b)
+#define BOOST_MATH_GPU_SAFE_MAX(a, b) (::max)(a, b)
+
+#define BOOST_MATH_FP_NAN 0
+#define BOOST_MATH_FP_INFINITE 1
+#define BOOST_MATH_FP_ZERO 2
+#define BOOST_MATH_FP_SUBNORMAL 3
+#define BOOST_MATH_FP_NORMAL 4
+
+#define BOOST_MATH_INT_VALUE_SUFFIX(RV, SUF) RV##SUF
+#define BOOST_MATH_INT_TABLE_TYPE(RT, IT) IT
+
+#if defined(__cpp_inline_variables) && __cpp_inline_variables >= 201606L
+#  define BOOST_MATH_INLINE_CONSTEXPR inline constexpr
+#else
+#  define BOOST_MATH_INLINE_CONSTEXPR constexpr
+#endif
+
+#define BOOST_MATH_INSTRUMENT_VARIABLE(x)
+#define BOOST_MATH_INSTRUMENT_CODE(x) 
+
+#endif // NVRTC
 
 #endif // BOOST_MATH_TOOLS_CONFIG_HPP
 

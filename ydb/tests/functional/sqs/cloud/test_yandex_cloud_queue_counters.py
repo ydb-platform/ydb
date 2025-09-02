@@ -4,7 +4,7 @@ import random
 import logging
 import uuid
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
 
@@ -19,12 +19,12 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 40}
         config_generator.yaml_config['sqs_config']['background_metrics_update_time_ms'] = 1000
 
-        cls.event_output_file = yatest_common.output_path("events-%s.txt" % random.randint(1, 10000000))
+        cls.event_output_file = yatest.common.output_path("events-%s.txt" % random.randint(1, 10000000))
         config_generator.yaml_config['sqs_config']['yc_search_events_config'] = {
             'enable_yc_search': True,
             'output_file_name': cls.event_output_file,
         }
-        temp_token_file = yatest_common.work_path("tokenfile")
+        temp_token_file = yatest.common.work_path("tokenfile")
         with open(temp_token_file, "w") as fl:
             fl.write("root@builtin")
 

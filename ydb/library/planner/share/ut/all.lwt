@@ -1,0 +1,14 @@
+Blocks {
+    ProbeDesc { Group: "SCHEDULING_SHAREPLANNER_PROVIDER" }
+    Action {
+        LogAction { LogTimestamp: true }
+        PrintToStderrAction {}
+    }
+}
+Blocks {
+    ProbeDesc { Group: "SHAREPLANNER_UT_PROVIDER" }
+    Action {
+        LogAction { LogTimestamp: true }
+        PrintToStderrAction {}
+    }
+}

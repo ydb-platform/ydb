@@ -1,0 +1,250 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  178f58efa679b1d5b43b2315588d204a
+BELONGS ya.make
+    License text:
+        Lua is
+        <A HREF="#license">free software</A>
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/readme.html [57:58]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 3622b709b8364f9bac5a8bd542a55a7b
+BELONGS ya.make
+    # not a license
+    License text:
+        <IMG SRC="osi-certified-72x60.png" ALIGN="right" BORDER="0" ALT="[osi certified]" STYLE="padding-left: 30px ;">
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        lua-5.2.0/doc/readme.html [365:365]
+
+KEEP     MIT                  3ccf26f7b1e808b6b3f9c36f64ada9cf
+BELONGS ya.make
+FILE_IGNORE lua-5.2.0/src/lua.h found in files: lua-5.2.0/src/lapi.c at line 4, lua-5.2.0/src/lapi.h at line 4, lua-5.2.0/src/lauxlib.c at line 4, lua-5.2.0/src/lauxlib.h at line 4, lua-5.2.0/src/lbaselib.c at line 4, lua-5.2.0/src/lbitlib.c at line 4, lua-5.2.0/src/lcode.c at line 4, lua-5.2.0/src/lcode.h at line 4, lua-5.2.0/src/lcorolib.c at line 4, lua-5.2.0/src/lctype.c at line 4, lua-5.2.0/src/lctype.h at line 4, lua-5.2.0/src/ldblib.c at line 4, lua-5.2.0/src/ldebug.c at line 4, lua-5.2.0/src/ldebug.h at line 4, lua-5.2.0/src/ldo.c at line 4, lua-5.2.0/src/ldo.h at line 4, lua-5.2.0/src/ldump.c at line 4, lua-5.2.0/src/lfunc.c at line 4, lua-5.2.0/src/lfunc.h at line 4, lua-5.2.0/src/lgc.c at line 4, lua-5.2.0/src/lgc.h at line 4, lua-5.2.0/src/linit.c at line 4, lua-5.2.0/src/liolib.c at line 4, lua-5.2.0/src/llex.c at line 4, lua-5.2.0/src/llex.h at line 4, lua-5.2.0/src/llimits.h at line 4, lua-5.2.0/src/lmathlib.c at line 4, lua-5.2.0/src/lmem.c at line 4, lua-5.2.0/src/lmem.h at line 4, lua-5.2.0/src/loadlib.c at line 4, lua-5.2.0/src/lobject.c at line 4, lua-5.2.0/src/lobject.h at line 4, lua-5.2.0/src/lopcodes.c at line 4, lua-5.2.0/src/lopcodes.h at line 4, lua-5.2.0/src/loslib.c at line 4, lua-5.2.0/src/lparser.c at line 4, lua-5.2.0/src/lparser.h at line 4, lua-5.2.0/src/lstate.c at line 4, lua-5.2.0/src/lstate.h at line 4, lua-5.2.0/src/lstring.c at line 4, lua-5.2.0/src/lstring.h at line 4, lua-5.2.0/src/lstrlib.c at line 4, lua-5.2.0/src/ltable.c at line 4, lua-5.2.0/src/ltable.h at line 4, lua-5.2.0/src/ltablib.c at line 4, lua-5.2.0/src/ltm.c at line 4, lua-5.2.0/src/ltm.h at line 4, lua-5.2.0/src/lua.c at line 4, lua-5.2.0/src/luac.c at line 208, lua-5.2.0/src/luac.c at line 4, lua-5.2.0/src/luaconf.h at line 4, lua-5.2.0/src/lundump.c at line 4, lua-5.2.0/src/lundump.h at line 4, lua-5.2.0/src/lutf8lib.c at line 4, lua-5.2.0/src/lvm.c at line 4, lua-5.2.0/src/lvm.h at line 4, lua-5.2.0/src/lzio.c at line 4, lua-5.2.0/src/lzio.h at line 4
+FILE_IGNORE lua.h found in files: lua-5.2.0/src/lapi.c at line 4, lua-5.2.0/src/lapi.h at line 4, lua-5.2.0/src/lauxlib.c at line 4, lua-5.2.0/src/lauxlib.h at line 4, lua-5.2.0/src/lbaselib.c at line 4, lua-5.2.0/src/lbitlib.c at line 4, lua-5.2.0/src/lcode.c at line 4, lua-5.2.0/src/lcode.h at line 4, lua-5.2.0/src/lcorolib.c at line 4, lua-5.2.0/src/lctype.c at line 4, lua-5.2.0/src/lctype.h at line 4, lua-5.2.0/src/ldblib.c at line 4, lua-5.2.0/src/ldebug.c at line 4, lua-5.2.0/src/ldebug.h at line 4, lua-5.2.0/src/ldo.c at line 4, lua-5.2.0/src/ldo.h at line 4, lua-5.2.0/src/ldump.c at line 4, lua-5.2.0/src/lfunc.c at line 4, lua-5.2.0/src/lfunc.h at line 4, lua-5.2.0/src/lgc.c at line 4, lua-5.2.0/src/lgc.h at line 4, lua-5.2.0/src/linit.c at line 4, lua-5.2.0/src/liolib.c at line 4, lua-5.2.0/src/llex.c at line 4, lua-5.2.0/src/llex.h at line 4, lua-5.2.0/src/llimits.h at line 4, lua-5.2.0/src/lmathlib.c at line 4, lua-5.2.0/src/lmem.c at line 4, lua-5.2.0/src/lmem.h at line 4, lua-5.2.0/src/loadlib.c at line 4, lua-5.2.0/src/lobject.c at line 4, lua-5.2.0/src/lobject.h at line 4, lua-5.2.0/src/lopcodes.c at line 4, lua-5.2.0/src/lopcodes.h at line 4, lua-5.2.0/src/loslib.c at line 4, lua-5.2.0/src/lparser.c at line 4, lua-5.2.0/src/lparser.h at line 4, lua-5.2.0/src/lstate.c at line 4, lua-5.2.0/src/lstate.h at line 4, lua-5.2.0/src/lstring.c at line 4, lua-5.2.0/src/lstring.h at line 4, lua-5.2.0/src/lstrlib.c at line 4, lua-5.2.0/src/ltable.c at line 4, lua-5.2.0/src/ltable.h at line 4, lua-5.2.0/src/ltablib.c at line 4, lua-5.2.0/src/ltm.c at line 4, lua-5.2.0/src/ltm.h at line 4, lua-5.2.0/src/lua.c at line 4, lua-5.2.0/src/luac.c at line 208, lua-5.2.0/src/luac.c at line 4, lua-5.2.0/src/luaconf.h at line 4, lua-5.2.0/src/lundump.c at line 4, lua-5.2.0/src/lundump.h at line 4, lua-5.2.0/src/lutf8lib.c at line 4, lua-5.2.0/src/lvm.c at line 4, lua-5.2.0/src/lvm.h at line 4, lua-5.2.0/src/lzio.c at line 4, lua-5.2.0/src/lzio.h at line 4
+    License text:
+        ** See Copyright Notice in lua.h
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/src/lapi.c [4:4]
+        lua-5.2.0/src/lapi.h [4:4]
+        lua-5.2.0/src/lauxlib.c [4:4]
+        lua-5.2.0/src/lauxlib.h [4:4]
+        lua-5.2.0/src/lbaselib.c [4:4]
+        lua-5.2.0/src/lbitlib.c [4:4]
+        lua-5.2.0/src/lcode.c [4:4]
+        lua-5.2.0/src/lcode.h [4:4]
+        lua-5.2.0/src/lcorolib.c [4:4]
+        lua-5.2.0/src/lctype.c [4:4]
+        lua-5.2.0/src/lctype.h [4:4]
+        lua-5.2.0/src/ldblib.c [4:4]
+        lua-5.2.0/src/ldebug.c [4:4]
+        lua-5.2.0/src/ldebug.h [4:4]
+        lua-5.2.0/src/ldo.c [4:4]
+        lua-5.2.0/src/ldo.h [4:4]
+        lua-5.2.0/src/ldump.c [4:4]
+        lua-5.2.0/src/lfunc.c [4:4]
+        lua-5.2.0/src/lfunc.h [4:4]
+        lua-5.2.0/src/lgc.c [4:4]
+        lua-5.2.0/src/lgc.h [4:4]
+        lua-5.2.0/src/linit.c [4:4]
+        lua-5.2.0/src/liolib.c [4:4]
+        lua-5.2.0/src/llex.c [4:4]
+        lua-5.2.0/src/llex.h [4:4]
+        lua-5.2.0/src/llimits.h [4:4]
+        lua-5.2.0/src/lmathlib.c [4:4]
+        lua-5.2.0/src/lmem.c [4:4]
+        lua-5.2.0/src/lmem.h [4:4]
+        lua-5.2.0/src/loadlib.c [4:4]
+        lua-5.2.0/src/lobject.c [4:4]
+        lua-5.2.0/src/lobject.h [4:4]
+        lua-5.2.0/src/lopcodes.c [4:4]
+        lua-5.2.0/src/lopcodes.h [4:4]
+        lua-5.2.0/src/loslib.c [4:4]
+        lua-5.2.0/src/lparser.c [4:4]
+        lua-5.2.0/src/lparser.h [4:4]
+        lua-5.2.0/src/lstate.c [4:4]
+        lua-5.2.0/src/lstate.h [4:4]
+        lua-5.2.0/src/lstring.c [4:4]
+        lua-5.2.0/src/lstring.h [4:4]
+        lua-5.2.0/src/lstrlib.c [4:4]
+        lua-5.2.0/src/ltable.c [4:4]
+        lua-5.2.0/src/ltable.h [4:4]
+        lua-5.2.0/src/ltablib.c [4:4]
+        lua-5.2.0/src/ltm.c [4:4]
+        lua-5.2.0/src/ltm.h [4:4]
+        lua-5.2.0/src/lua.c [4:4]
+        lua-5.2.0/src/luac.c [4:4]
+        lua-5.2.0/src/luac.c [208:208]
+        lua-5.2.0/src/luaconf.h [4:4]
+        lua-5.2.0/src/lundump.c [4:4]
+        lua-5.2.0/src/lundump.h [4:4]
+        lua-5.2.0/src/lutf8lib.c [4:4]
+        lua-5.2.0/src/lvm.c [4:4]
+        lua-5.2.0/src/lvm.h [4:4]
+        lua-5.2.0/src/lzio.c [4:4]
+        lua-5.2.0/src/lzio.h [4:4]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 5fca0be52b19ca57b172a56d17a1fafc
+BELONGS ya.make
+    # not a license
+    License text:
+        <A HREF="http://www.opensource.org/docs/definition.php">
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        lua-5.2.0/doc/readme.html [364:364]
+
+KEEP     MIT                  857c44f83a94afb51b28ae745834278e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/readme.html [385:403]
+
+KEEP     MIT                  85901c0e58d18670dbf1f83e76b0a8c7
+BELONGS ya.make
+FILE_IGNORE lua-5.2.0/src/lua.h found in files: lua-5.2.0/src/lualib.h at line 4
+FILE_IGNORE lua.h found in files: lua-5.2.0/src/lualib.h at line 4
+    License text:
+        ** Lua standard libraries
+        ** See Copyright Notice in lua.h
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/src/lualib.h [3:4]
+
+KEEP     MIT                  8742753ca3ff55a76054a3dbf854bf7a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/src/lua.h [423:440]
+
+KEEP     MIT                  8caadb3f701288ab80dddcef4d522f71
+BELONGS ya.make
+    License text:
+        <A HREF="http://www.lua.org/license.html">this</A>.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/readme.html [379:379]
+
+KEEP     MIT                  98ad2aed23fb501e23e2c7197a9e1f25
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/readme.html [369:376]
+
+KEEP     MIT                  9b414f959dd4de259fb968f4f92572ad
+BELONGS ya.make
+    License text:
+        -- This module is released under the MIT License (MIT).
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        common/json.lua [7:7]
+
+KEEP     MIT                  9c3e1a971dd07bcb2468ab845273dc93
+BELONGS ya.make
+    License text:
+        -- Please see LICENCE.txt for details.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        common/json.lua [8:8]
+
+KEEP     MIT                  d9a255c21ae547dbbbcf33737b80f3aa
+BELONGS ya.make
+    License text:
+        Freely available under the terms of the
+        <a href="http://www.lua.org/license.html">Lua license</a>.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/manual.html [23:24]
+
+KEEP     MIT                  fd271e9a7cb4acfcb0aa846aa0f03803
+BELONGS ya.make
+    License text:
+        Freely available under the terms of the
+        <A HREF="http://www.lua.org/license.html">Lua license</A>.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lua-5.2.0/doc/contents.html [36:37]

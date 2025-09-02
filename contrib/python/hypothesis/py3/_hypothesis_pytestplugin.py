@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import warnings
+from fnmatch import fnmatch
 from inspect import signature
 
 import _hypothesis_globals
@@ -309,7 +310,7 @@ else:
                     with current_pytest_item.with_value(item):
                         yield
             if store.results:
-                item.hypothesis_report_information = list(store.results)
+                item.hypothesis_report_information = "\n".join(store.results)
 
     def _stash_get(config, key, default):
         if hasattr(config, "stash"):
@@ -325,9 +326,7 @@ else:
     def pytest_runtest_makereport(item, call):
         report = (yield).get_result()
         if hasattr(item, "hypothesis_report_information"):
-            report.sections.append(
-                ("Hypothesis", "\n".join(item.hypothesis_report_information))
-            )
+            report.sections.append(("Hypothesis", item.hypothesis_report_information))
         if report.when != "teardown":
             return
 
@@ -445,6 +444,26 @@ else:
 
     _orig_call = fixtures.FixtureFunctionMarker.__call__
     fixtures.FixtureFunctionMarker.__call__ = _ban_given_call  # type: ignore
+
+    if int(pytest.__version__.split(".")[0]) >= 7:  # pragma: no branch
+        # Hook has had this signature since Pytest 7.0, so skip on older versions
+
+        def pytest_ignore_collect(collection_path, config):
+            # Detect, warn about, and mititgate certain misconfigurations;
+            # this is mostly educational but can also speed up collection.
+            if (
+                (name := collection_path.name) == ".hypothesis"
+                and collection_path.is_dir()
+                and not any(fnmatch(name, p) for p in config.getini("norecursedirs"))
+            ):
+                warnings.warn(
+                    "Skipping collection of '.hypothesis' directory - this usually "
+                    "means you've explicitly set the `norecursedirs` pytest config "
+                    "option, replacing rather than extending the default ignores.",
+                    stacklevel=1,
+                )
+                return True
+            return None  # let other hooks decide
 
 
 def load():

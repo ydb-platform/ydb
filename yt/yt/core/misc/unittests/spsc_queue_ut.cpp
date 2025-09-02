@@ -16,7 +16,7 @@ protected:
     TSpscQueue<int> A;
     TSpscQueue<int> B;
 
-    std::atomic<bool> Stopped = {false};
+    std::atomic<bool> Stopped = false;
 
     TSpscQueueTest()
     { }

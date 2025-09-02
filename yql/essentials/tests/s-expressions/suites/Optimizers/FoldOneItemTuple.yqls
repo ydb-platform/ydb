@@ -1,0 +1,17 @@
+(
+(let config (DataSource 'config))
+
+(let list (AsList (String 'a) (String 'b) (String 'c)))
+(let s (String '""))
+(let data (Fold list '(s)
+   (lambda '(item state) (block '(
+      (let state (Concat (Nth state '0) item))
+      (return '(state)))))))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink
+    (Key)
+    data '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

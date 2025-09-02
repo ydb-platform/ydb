@@ -33,9 +33,9 @@ void TKafkaListOffsetsActor::SendOffsetsRequests(const NActors::TActorContext& c
     for (size_t i = 0; i < ListOffsetsRequestData->Topics.size(); ++i) {
         auto &requestTopic = ListOffsetsRequestData->Topics[i];
         auto &responseTopic = ListOffsetsResponseData->Topics[i];
-        
+
         responseTopic = TListOffsetsResponseData::TListOffsetsTopicResponse{};
-        
+
         if (!requestTopic.Name.has_value()) {
             HandleMissingTopicName(requestTopic, responseTopic);
             continue;
@@ -44,7 +44,7 @@ void TKafkaListOffsetsActor::SendOffsetsRequests(const NActors::TActorContext& c
         responseTopic.Name = requestTopic.Name;
         TTopicRequestInfo topicRequestInfo;
         topicRequestInfo.TopicIndex = i;
-        
+
         for (auto& partition: requestTopic.Partitions) {
             topicRequestInfo.Partitions.push_back(TPartitionRequestInfo{.PartitionId = partition.PartitionIndex, .Timestamp = partition.Timestamp});
         }
@@ -64,11 +64,11 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 }
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
-    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
-    
+    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user " << GetUsernameOrAnonymous(Context));
+
     TEvKafka::TGetOffsetsRequest offsetsRequest;
     offsetsRequest.Topic = NormalizePath(Context->DatabasePath, topic.Name.value());
-    offsetsRequest.Token = Context->UserToken->GetSerializedToken();
+    offsetsRequest.Token = GetUserSerializedToken(Context);
     offsetsRequest.Database = Context->DatabasePath;
 
     for (const auto& partitionRequest: topic.Partitions) {
@@ -83,7 +83,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     --PendingResponses;
     auto it = TopicsRequestsInfo.find(ev->Sender);
 
-    Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end()); 
+    Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end());
     if (it == TopicsRequestsInfo.end()) {
         KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
         return RespondIfRequired(ctx);
@@ -109,16 +109,19 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
             }
             auto& responseFromPQPartition = it->second;
             responsePartition.LeaderEpoch = responseFromPQPartition.Generation;
-            responsePartition.Timestamp = TIMESTAMP_DEFAULT_RESPONSE_VALUE;
-            
+            responsePartition.Timestamp = partitionRequestInfo.Timestamp;
+
             if (partitionRequestInfo.Timestamp == TIMESTAMP_START_OFFSET) {
                 responsePartition.Offset = responseFromPQPartition.StartOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else if (partitionRequestInfo.Timestamp == TIMESTAMP_END_OFFSET) {
                 responsePartition.Offset = responseFromPQPartition.EndOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
+            } else if (partitionRequestInfo.Timestamp == 0) {
+                responsePartition.Offset = responseFromPQPartition.StartOffset;
+                responsePartition.ErrorCode = NONE_ERROR;
             } else {
-                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle it
+                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle
                 ErrorCode = INVALID_REQUEST;
             }
         } else {

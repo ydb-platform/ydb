@@ -110,14 +110,7 @@ namespace NKikimr {
                 // scan through the index until we have enough blobs to recover or the time is out
                 const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
 
-                if (StartKey == TLogoBlobID()) {
-                    it.SeekToFirst();
-                } else {
-                    it.Seek(StartKey);
-                    if (it.Valid() && it.GetCurKey() == StartKey) {
-                        it.Next();
-                    }
-                }
+                it.Seek(StartKey);
 
                 auto checkRestart = [&] {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
@@ -131,11 +124,11 @@ namespace NKikimr {
 
                 if (AddingTasks) {
                     for (; it.Valid(); it.Next()) {
+                        StartKey = it.GetCurKey().LogoBlobID();
+
                         if (checkRestart()) {
                             return;
                         }
-
-                        StartKey = it.GetCurKey().LogoBlobID();
 
                         // we still have some space in recovery machine logic, so we can add new item
                         ProcessItem(it, *barriers, allowKeepFlags);
@@ -143,7 +136,7 @@ namespace NKikimr {
 
                         if (!AddingTasks) { // we have finished adding tasks after this key, remember it
                             it.Next();
-                            Y_ABORT_UNLESS(!KeyToResumeNextTime);
+                            Y_VERIFY_S(!KeyToResumeNextTime, ReplCtx->VCtx->VDiskLogPrefix);
                             if (it.Valid()) {
                                 KeyToResumeNextTime.emplace(it.GetCurKey().LogoBlobID());
                             }
@@ -154,11 +147,11 @@ namespace NKikimr {
                 }
 
                 for (; it.Valid(); it.Next()) {
+                    StartKey = it.GetCurKey().LogoBlobID();
+
                     if (checkRestart()) {
                         return;
                     }
-
-                    StartKey = it.GetCurKey().LogoBlobID();
 
                     // check the milestone queue, if we have requested blob
                     if (MilestoneQueue.Match(StartKey, &ReplInfo->ItemsTotal, &ReplInfo->WorkUnitsTotal)) {
@@ -333,6 +326,18 @@ namespace NKikimr {
         std::optional<TRecoveryMachine::TPartSet> CurrentItem;
         TLogoBlobID LastProcessedKey;
 
+        // OOS handling
+        constexpr static TDuration OOSRecoveryRetryDelay = TDuration::Seconds(60);
+        enum class EStatus {
+            Working,
+            WaitingForRetry,
+        };
+        EStatus Status;
+
+        // TODO: postpone replication on CYAN flag with possibilty of manual force continuation
+        NKikimrBlobStorage::EStatusFlags PostponeReplicationThreshold = NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+
+    private:
         void Finish() {
             STLOG(PRI_DEBUG, BS_REPL, BSVR01, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished replication job"),
                 (LastKey, LastKey), (Eof, Eof));
@@ -348,10 +353,12 @@ namespace NKikimr {
 
         void HandleDetectedPhantomBlobCommitted() {
             bool dropDonor = true;
+            bool bsQueueNotReady = true;
             for (const auto& proxy : DiskProxySet) {
                 dropDonor = dropDonor && proxy && proxy->NoTransientErrors();
+                bsQueueNotReady = bsQueueNotReady && proxy && proxy->IsBSQueueNotReady();
             }
-            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
+            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, Donor && bsQueueNotReady, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
 
             TProxyStat stat;
             for (const TVDiskProxyPtr& p : DiskProxySet) {
@@ -426,7 +433,7 @@ namespace NKikimr {
 
             // run proxies
             SetupDiskProxies();
-            Y_ABORT_UNLESS(!NumRunningProxies);
+            Y_VERIFY_S(!NumRunningProxies, ReplCtx->VCtx->VDiskLogPrefix);
             for (const TVDiskProxyPtr& p : DiskProxySet) {
                 if (p) {
                     ActiveActors.Insert(p->Run(SelfId()), __FILE__, __LINE__, TActivationContext::AsActorContext(),
@@ -480,7 +487,7 @@ namespace NKikimr {
                         TVDiskProxyPtr &ptr = DiskProxySet.at(orderNum);
                         if (!ptr) {
                             auto queueIt = QueueActorMapPtr->find(vdisk);
-                            Y_ABORT_UNLESS(queueIt != QueueActorMapPtr->end());
+                            Y_VERIFY_S(queueIt != QueueActorMapPtr->end(), ReplCtx->VCtx->VDiskLogPrefix);
                             ptr = MakeIntrusive<TVDiskProxy>(ReplCtx, vdisk, queueIt->second);
                         }
 
@@ -499,8 +506,7 @@ namespace NKikimr {
         }
 
         void Merge() {
-            while (MergeIteration())
-                ;
+            while (Status == EStatus::Working && MergeIteration()) {}
         }
 
         bool MergeIteration() {
@@ -508,7 +514,7 @@ namespace NKikimr {
                 const TReplSstStreamWriter::EState state = Writer.GetState();
                 const bool noWorkForWriter = RecoveryQueue.empty() || RecoveryQueue.front().IsHugeBlob;
                 if (state == TReplSstStreamWriter::EState::COLLECT) {
-                    Y_ABORT_UNLESS(!WriterFinished);
+                    Y_VERIFY_S(!WriterFinished, ReplCtx->VCtx->VDiskLogPrefix);
                     break;
                 } else if (state == TReplSstStreamWriter::EState::STOPPED && noWorkForWriter) {
                     break;
@@ -516,7 +522,8 @@ namespace NKikimr {
 
                 switch (state) {
                     case TReplSstStreamWriter::EState::STOPPED:
-                        Y_ABORT_UNLESS(RecoveryQueue && !RecoveryQueue.front().IsHugeBlob && !WriterFinished);
+                        Y_VERIFY_S(RecoveryQueue && !RecoveryQueue.front().IsHugeBlob && !WriterFinished,
+                            ReplCtx->VCtx->VDiskLogPrefix);
                         Writer.Begin();
                         break;
 
@@ -598,7 +605,7 @@ namespace NKikimr {
                 if (!CurrentItem) {
                     const TLogoBlobID id = MergeHeap.front()->GenLogoBlobId();
                     CurrentItem.emplace(id, ReplCtx->VCtx->Top->GType);
-                    Y_ABORT_UNLESS(std::exchange(LastProcessedKey, id) < id);
+                    Y_VERIFY_S(std::exchange(LastProcessedKey, id) < id, ReplCtx->VCtx->VDiskLogPrefix);
                 }
                 auto& item = *CurrentItem;
 
@@ -681,9 +688,10 @@ namespace NKikimr {
                 TimeAccount.SetState(ETimeState::PHANTOM);
                 return false; // still waiting for proxy response about phantom validation
             }
-            Y_ABORT_UNLESS(PhantomChecksPending.empty());
+            Y_VERIFY_S(PhantomChecksPending.empty(), ReplCtx->VCtx->VDiskLogPrefix);
 
-            Y_ABORT_UNLESS(!NumRunningProxies && MergeHeap.empty() && RecoveryQueue.empty());
+            Y_VERIFY_S(!NumRunningProxies && MergeHeap.empty() && RecoveryQueue.empty(),
+                ReplCtx->VCtx->VDiskLogPrefix);
             TimeAccount.SetState(ETimeState::OTHER);
 
             if (!RecoveryMachineFinished) {
@@ -712,12 +720,12 @@ namespace NKikimr {
             }
 
             if (Writer.GetState() == TReplSstStreamWriter::EState::STOPPED) {
-                Y_ABORT_UNLESS(RecoveryQueue.empty());
+                Y_VERIFY_S(RecoveryQueue.empty(), ReplCtx->VCtx->VDiskLogPrefix);
                 Finish();
                 return false;
             }
 
-            Y_ABORT("incorrect merger state State# %" PRIu32, ui32(Writer.GetState()));
+            Y_ABORT_S(ReplCtx->VCtx->VDiskLogPrefix << "incorrect merger state State# " << ui32(Writer.GetState()));
         }
 
         void RunPhantomChecks() {
@@ -750,7 +758,7 @@ namespace NKikimr {
                 (Msg, ev->Get()->ToString()));
 
             auto [begin, end] = PhantomChecksInFlight.equal_range(ev->Cookie);
-            Y_ABORT_UNLESS(begin != end);
+            Y_VERIFY_S(begin != end, ReplCtx->VCtx->VDiskLogPrefix);
 
             std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> isPhantom;
             auto *msg = ev->Get();
@@ -759,7 +767,8 @@ namespace NKikimr {
                 auto looksLikePhantom = r.LooksLikePhantom;
                 bool isNoData = r.Status == NKikimrProto::NODATA;
                 if (!looksLikePhantom) {
-                    Y_VERIFY_DEBUG_S(r.Status == NKikimrProto::ERROR, "LooksLikePhantom undefined r.Status# " << r.Status
+                    Y_VERIFY_DEBUG_S(r.Status == NKikimrProto::ERROR, ReplCtx->VCtx->VDiskLogPrefix
+                        << "LooksLikePhantom undefined r.Status# " << r.Status
                         << " msg.Status# " << msg->Status);
                     looksLikePhantom = isNoData = false;
                 }
@@ -770,7 +779,7 @@ namespace NKikimr {
                 const auto& [_, item] = *it;
                 const auto& [id, parts, partSet, ingress] = item;
                 auto node = isPhantom.extract(id);
-                Y_ABORT_UNLESS(node);
+                Y_VERIFY_S(node, ReplCtx->VCtx->VDiskLogPrefix);
                 auto [phantom, looksLikePhantom] = node.mapped();
                 RecoveryMachine->ProcessPhantomBlob(partSet, parts, phantom, looksLikePhantom, ingress, *this);
                 if (phantom) {
@@ -779,7 +788,7 @@ namespace NKikimr {
             }
 
             PhantomChecksInFlight.erase(begin, end);
-            Y_ABORT_UNLESS(isPhantom.empty());
+            Y_VERIFY_S(isPhantom.empty(), ReplCtx->VCtx->VDiskLogPrefix);
 
             Merge();
         }
@@ -833,7 +842,7 @@ namespace NKikimr {
                         // we are already at in flight limit, do not accept more messages
                         return EProcessQueueAction::Exit;
                     }
-                    Y_ABORT_UNLESS(HugeBlobsInFlight < HugeBlobsInFlightMax);
+                    Y_VERIFY_S(HugeBlobsInFlight < HugeBlobsInFlightMax, ReplCtx->VCtx->VDiskLogPrefix);
                     ++HugeBlobsInFlight;
 
                     ++ReplCtx->MonGroup.ReplHugeBlobsRecovered();
@@ -875,6 +884,7 @@ namespace NKikimr {
         void HandleYard(NPDisk::TEvChunkWriteResult::TPtr& ev) {
             CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, ActorContext());
             Writer.Apply(ev->Get());
+            CheckSpace(ev);
             Merge();
         }
 
@@ -883,6 +893,7 @@ namespace NKikimr {
             STLOG(PRI_INFO, BS_REPL, BSVR10, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "reserved chunks"),
                 (ChunkIds, FormatList(ev->Get()->ChunkIds)));
             Writer.Apply(ev->Get());
+            CheckSpace(ev);
             Merge();
         }
 
@@ -898,7 +909,7 @@ namespace NKikimr {
                     (VDiskId, msg->VDiskId.ToString()));
                 --NumRunningProxies;
             } else {
-                Y_ABORT_UNLESS(proxy->Valid());
+                Y_VERIFY_S(proxy->Valid(), ReplCtx->VCtx->VDiskLogPrefix);
                 MergeHeap.push_back(proxy);
                 PushHeap(MergeHeap.begin(), MergeHeap.end(), TVDiskProxy::TPtrGreater());
             }
@@ -919,12 +930,73 @@ namespace NKikimr {
             Merge();
         }
 
-        void Handle(TEvBlobStorage::TEvVPutResult::TPtr& /*ev*/) {
-            // FIXME: Handle NotOK
+        void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev) {
             // this message is received when huge blob is written by Skeleton
-            Y_ABORT_UNLESS(HugeBlobsInFlight != 0);
+            Y_VERIFY_S(HugeBlobsInFlight != 0, ReplCtx->VCtx->VDiskLogPrefix);
             --HugeBlobsInFlight;
-            Merge();
+            const auto& record = ev->Get()->Record;
+            TStorageStatusFlags flags(record.GetStatusFlags());
+            switch (record.GetStatus()) {
+                case NKikimrProto::OUT_OF_SPACE:
+                    STLOG(PRI_ERROR, BS_REPL, BSVR43, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                            "PDisk out of space, delaying replication"),
+                            (StatusFlags, flags.ToString()));
+                    SwitchToRetriableErrorState();
+                    break;
+                case NKikimrProto::OK:
+                default: {  // TODO: Handle other reply statuses
+                    if (flags.Check(PostponeReplicationThreshold)) {
+                        STLOG(PRI_ERROR, BS_REPL, BSVR41, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                                "Available space is running low, delaying replication"),
+                                (StatusFlags, flags.ToString()));
+                        SwitchToRetriableErrorState();
+                    }
+                    Merge();
+                    break;
+                }
+            }
+        }
+
+        void SwitchToRetriableErrorState() {
+            if (std::exchange(Status, EStatus::WaitingForRetry) == EStatus::Working) {
+                ScheduleSpaceCheck();
+                TimeAccount.SetState(ETimeState::OUT_OF_SPACE_DELAY);
+                // we don't have to relinquish replication token here, because other VDisks
+                // on this PDisk also lack space
+            }
+        }
+
+        void ScheduleSpaceCheck() {
+            ui8 owner = ReplCtx->PDiskCtx->Dsk->Owner;
+            ui64 ownerRound = ReplCtx->PDiskCtx->Dsk->OwnerRound;
+            std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(
+                    ReplCtx->PDiskCtx->PDiskId, SelfId(), new NPDisk::TEvCheckSpace(owner, ownerRound));
+
+            TActivationContext::Schedule(OOSRecoveryRetryDelay, ev.release());
+        }
+
+        template <class TYardEventPtr>
+        void CheckSpace(const TYardEventPtr& ev) {
+            TStorageStatusFlags flags(ev->Get()->StatusFlags);
+            if (flags.Check(PostponeReplicationThreshold)) {
+                STLOG(PRI_ERROR, BS_REPL, BSVR40, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        "Available space is running low, delaying replication"),
+                        (StatusFlags, flags.ToString()));
+                SwitchToRetriableErrorState();
+            }
+        }
+
+        void Handle(NPDisk::TEvCheckSpaceResult::TPtr& ev) {
+            TStorageStatusFlags flags(ev->Get()->StatusFlags);
+            if (!flags.Check(PostponeReplicationThreshold)) {
+                STLOG(PRI_NOTICE, BS_REPL, BSVR42, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        "Enough space on PDisk, continuing replication"));
+                EStatus prevStatus = std::exchange(Status, EStatus::Working);
+                Y_DEBUG_ABORT_UNLESS(prevStatus == EStatus::WaitingForRetry);
+                Merge();
+            } else {
+                ScheduleSpaceCheck();
+            }
         }
 
         void PassAway() override {
@@ -948,12 +1020,14 @@ namespace NKikimr {
             // yard messages coming to Writer
             hFunc(NPDisk::TEvChunkWriteResult, HandleYard)
             hFunc(NPDisk::TEvChunkReserveResult, HandleYard)
+
             hFunc(TEvBlobStorage::TEvGetResult, Handle)
             hFunc(TEvAddBulkSstResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             cFunc(TEvBlobStorage::EvDetectedPhantomBlobCommitted, HandleDetectedPhantomBlobCommitted)
             cFunc(TEvents::TSystem::Poison, PassAway)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(NPDisk::TEvCheckSpaceResult, Handle)
         )
 
         STRICT_STFUNC(StateInit,
@@ -1007,6 +1081,7 @@ namespace NKikimr {
             , UnreplicatedBlobRecords(std::move(ubr))
             , MilestoneQueue(std::move(milestoneQueue))
             , Donor(donor)
+            , Status(EStatus::Working)
         {
             if (Donor) {
                 ReplInfo->DonorVDiskId = Donor->first;
@@ -1046,4 +1121,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

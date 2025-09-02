@@ -14,7 +14,7 @@ import gast as ast
 import sys
 
 
-class LazynessAnalysis(FunctionAnalysis):
+class LazynessAnalysis(FunctionAnalysis[ArgumentEffects, Aliases, PureExpressions]):
 
     """
     Returns number of time a name is used.
@@ -88,9 +88,11 @@ class LazynessAnalysis(FunctionAnalysis):
     INF = float('inf')
     MANY = sys.maxsize
 
+    # map variable with maximum count of use in the programm
+    ResultType = dict
+
     def __init__(self):
-        # map variable with maximum count of use in the programm
-        self.result = dict()
+        super().__init__()
         # map variable with current count of use
         self.name_count = dict()
         # map variable to variables needed to compute it
@@ -104,8 +106,6 @@ class LazynessAnalysis(FunctionAnalysis):
         # prevent any form of Forward Substitution at omp frontier
         self.in_omp = set()
         self.name_to_nodes = dict()
-        super(LazynessAnalysis, self).__init__(ArgumentEffects, Aliases,
-                                               PureExpressions)
 
     def modify(self, name):
         # if we modify a variable, all variables that needed it
@@ -157,11 +157,20 @@ class LazynessAnalysis(FunctionAnalysis):
         self.ids = self.gather(Identifiers, node)
         self.generic_visit(node)
 
+        # update result with last name_count values
+        for name, val in self.name_count.items():
+            old_val = self.result.get(name, 0)
+            self.result[name] = max(old_val, val)
+
     def visit_Assign(self, node):
         md.visit(self, node)
-        self.visit(node.value)
-        ids = self.gather(Identifiers, node.value)
-        for target in node.targets:
+        if node.value:
+            self.visit(node.value)
+            ids = self.gather(Identifiers, node.value)
+        else:
+            ids = set()
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for target in targets:
             if isinstance(target, ast.Name):
                 self.assign_to(target, ids)
                 if node.value not in self.pure_expressions:
@@ -176,6 +185,8 @@ class LazynessAnalysis(FunctionAnalysis):
                     self.result[var_name.id] = LazynessAnalysis.INF
             else:
                 raise PythranSyntaxError("Assign to unknown node", node)
+
+    visit_AnnAssign = visit_Assign
 
     def visit_AugAssign(self, node):
         md.visit(self, node)
@@ -365,13 +376,3 @@ class LazynessAnalysis(FunctionAnalysis):
             self.visit(arg)
         self.func_args_lazyness(node.func, node.args, node)
         self.visit(node.func)
-
-    def run(self, node):
-        result = super(LazynessAnalysis, self).run(node)
-
-        # update result with last name_count values
-        for name, val in self.name_count.items():
-            old_val = result.get(name, 0)
-            result[name] = max(old_val, val)
-        self.result = result
-        return self.result

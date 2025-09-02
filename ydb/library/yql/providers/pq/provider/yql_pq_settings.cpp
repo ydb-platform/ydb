@@ -30,6 +30,26 @@ void TPqConfiguration::Init(
     Dispatch(config.GetDefaultSettings());
 
     for (auto& cluster: config.GetClusterMapping()) {
+        AddCluster(cluster, databaseIds, typeCtx->Credentials, dbResolver, {});
+    }
+    FreezeDefaults();
+}
+
+TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
+    if (TMaybe<TString> explicitDb = Database.Get()) {
+        return *explicitDb;
+    }
+    const auto clusterSetting = ClustersConfigurationSettings.FindPtr(cluster);
+    YQL_ENSURE(clusterSetting, "Unknown cluster " << cluster);
+    return clusterSetting->Database;
+}
+
+void TPqConfiguration::AddCluster(
+    const NYql::TPqClusterConfig& cluster,
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds,
+    const TCredentials::TPtr& credentials,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
+    const THashMap<TString, TString>& properties) {
         Dispatch(cluster.GetName(), cluster.GetSettings());
         TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[cluster.GetName()];
 
@@ -42,10 +62,25 @@ void TPqConfiguration::Init(
         clusterSettings.TvmId = cluster.GetTvmId();
         clusterSettings.UseSsl = cluster.GetUseSsl();
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
+        clusterSettings.SharedReading = cluster.GetSharedReading();
+        clusterSettings.ReadGroup = cluster.GetReadGroup();
 
-        const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
+        const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;
-        const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+
+        TString structuredTokenJson;
+        auto authMethod = properties.Value("authMethod", "");
+        if (authMethod == "TOKEN") {
+            const TString& token = properties.Value("token", "");
+            structuredTokenJson = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        } else if (authMethod == "BASIC") {
+            const TString& login = properties.Value("login", "");
+            const TString& password = properties.Value("password", "");
+            const TString& passwordReference = properties.Value("passwordReference", "");
+            structuredTokenJson = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
+        } else {
+            structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        }
         Tokens[clusterSettings.ClusterName] = structuredTokenJson;
 
         if (dbResolver) {
@@ -58,17 +93,6 @@ void TPqConfiguration::Init(
                 YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";
             }
         }
-    }
-    FreezeDefaults();
-}
-
-TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
-    if (TMaybe<TString> explicitDb = Database.Get()) {
-        return *explicitDb;
-    }
-    const auto clusterSetting = ClustersConfigurationSettings.FindPtr(cluster);
-    YQL_ENSURE(clusterSetting, "Unknown cluster " << cluster);
-    return clusterSetting->Database;
 }
 
 } // NYql

@@ -14,7 +14,7 @@
 
 namespace NKikimr {
 
-struct TEvPersQueue {
+namespace TEvPersQueue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_PQ),
         EvUpdateConfig, //change config for all partitions and count of partitions
@@ -34,14 +34,14 @@ struct TEvPersQueue {
         EvLockPartition,
         EvReleasePartition,
         EvPartitionReleased,
-        EvDescribe,
-        EvDescribeResponse,
+        EvDescribe, // deprecated
+        EvDescribeResponse, // deprecated
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
         EvWakeupClient, // deprecated
-        EvUpdateACL,
-        EvCheckACL,
-        EvCheckACLResponse,
+        EvUpdateACL, // deprecated
+        EvCheckACL, // deprecated
+        EvCheckACLResponse, // deprecated
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
@@ -54,6 +54,7 @@ struct TEvPersQueue {
         EvGetPartitionsLocationResponse,
         EvReadingPartitionFinished,
         EvReadingPartitionStarted,
+        EvOffloadStatus,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -73,9 +74,13 @@ struct TEvPersQueue {
         TEvResponse() {}
     };
 
-    struct TEvUpdateConfig: public TEventPB<TEvUpdateConfig,
+    struct TEvUpdateConfig: public TEventPreSerializedPB<TEvUpdateConfig,
             NKikimrPQ::TUpdateConfig, EvUpdateConfig> {
             TEvUpdateConfig() {}
+    };
+
+    struct TEvUpdateConfigBuilder: public TEvUpdateConfig {
+        using TBase::Record;
     };
 
     struct TEvUpdateBalancerConfig: public TEventPB<TEvUpdateBalancerConfig,
@@ -200,31 +205,6 @@ struct TEvPersQueue {
         TEvPartitionClientInfoResponse() = default;
     };
 
-    struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
-        TEvDescribe()
-        {}
-    };
-
-    struct TEvDescribeResponse : public TEventPB<TEvDescribeResponse, NKikimrPQ::TDescribeResponse, EvDescribeResponse> {
-        TEvDescribeResponse()
-        {}
-    };
-
-    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> {
-        TEvUpdateACL()
-        {}
-    };
-
-    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> {
-        TEvCheckACL()
-        {}
-    };
-
-    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> {
-        TEvCheckACLResponse()
-        {};
-    };
-
     struct TEvError : public TEventPB<TEvError,
             NPersQueueCommon::TError, EvError> {
             TEvError() {}
@@ -245,7 +225,12 @@ struct TEvPersQueue {
         {}
     };
 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+    struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        NWilson::TSpan ExecuteSpan;
+    };
+
+    struct TEvProposeTransactionBuilder: public TEvProposeTransaction {
+        using TBase::Record;
     };
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrPQ::TEvProposeTransactionResult, EvProposeTransactionResult> {
@@ -284,6 +269,8 @@ struct TEvPersQueue {
             Record.SetPartitionId(partitionId);
         }
     };
+
+    struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
 
 };
 } //NKikimr

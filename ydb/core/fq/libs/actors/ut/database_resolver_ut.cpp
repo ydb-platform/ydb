@@ -1,7 +1,6 @@
-#include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -33,7 +32,6 @@ TString MakeErrorPrefix(
 TString NoPermissionStr = "you have no permission to resolve database id into database endpoint.";
 
 struct TTestBootstrap : public TTestActorRuntime {
-    NConfig::TCheckpointCoordinatorConfig Settings;
     NActors::TActorId DatabaseResolver;
     NActors::TActorId HttpProxy;
     NActors::TActorId AsyncResolver;
@@ -124,7 +122,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
     void Test(
         NYql::EDatabaseType databaseType,
-        NYql::NConnector::NApi::EProtocol protocol,
+        NYql::EGenericProtocol protocol,
         const TString& getUrl,
         const TString& status,
         const TString& responseBody,
@@ -186,7 +184,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(Ydb_Serverless) {
         Test(
             NYql::EDatabaseType::Ydb,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
@@ -218,7 +216,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         Test(
             NYql::EDatabaseType::Ydb,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "",
             "",           
@@ -237,13 +235,13 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(Ydb_Dedicated) {
         Test(
             NYql::EDatabaseType::Ydb,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
                 {
                     "endpoint":"grpcs://lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1gtl2kg13him37quoo6/etn021us5r9rhld1vgbh", 
-                    "dedicatedDatabase":{"resuorcePresetId": "medium"}
+                    "storageConfig":{"storageSizeLimit":107374182400}
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135"},
@@ -259,7 +257,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(DataStreams_Serverless) {
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
@@ -280,13 +278,13 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(DataStreams_Dedicated) {
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "200",
             R"(
                 {
                     "endpoint":"grpcs://lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh",
-                    "dedicatedDatabase":{"resourcePresetId": "medium"}
+                    "storageConfig":{"storageSizeLimit":107374182400}
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135"},
@@ -302,7 +300,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouseNative) {
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -336,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouseHttp) {
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::HTTP,
+            NYql::EGenericProtocol::HTTP,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -381,7 +379,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         Test(
             NYql::EDatabaseType::ClickHouse,
-            NYql::NConnector::NApi::EProtocol::HTTP,
+            NYql::EGenericProtocol::HTTP,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "403",
             R"(
@@ -405,7 +403,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL) {
         Test(
             NYql::EDatabaseType::PostgreSQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -454,7 +452,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         Test(
             NYql::EDatabaseType::PostgreSQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "403",
             R"(
@@ -478,7 +476,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(Greenplum_MasterNode) {
         Test(
             NYql::EDatabaseType::Greenplum,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
             "200",
             R"({
@@ -520,7 +518,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
             Test(
                 NYql::EDatabaseType::Greenplum,
-                NYql::NConnector::NApi::EProtocol::NATIVE,
+                NYql::EGenericProtocol::NATIVE,
                 "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
                 "403",
                 R"(
@@ -542,7 +540,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(MySQL) {
         Test(
             NYql::EDatabaseType::MySQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "200",
             R"({
@@ -590,7 +588,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         Test(
             NYql::EDatabaseType::MySQL,
-            NYql::NConnector::NApi::EProtocol::NATIVE,
+            NYql::EGenericProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-mysql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
             "403",
             R"(
@@ -624,7 +622,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
         };
         Test(
             NYql::EDatabaseType::DataStreams,
-            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
             "403",
             R"(
@@ -642,7 +640,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
 
         NYql::TDatabaseAuth databaseAuth;
         databaseAuth.UseTls = true;
-        databaseAuth.Protocol = NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
+        databaseAuth.Protocol = NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED;
 
         TString databaseId1{"etn021us5r9rhld1vgb1"};
         TString databaseId2{"etn021us5r9rhld1vgb2"};

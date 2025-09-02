@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
 
@@ -18,10 +19,6 @@ public:
         NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger);
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter);
-
-    bool IncRequest();
-    void DecRequest();
 protected:
     virtual void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) = 0;
 
@@ -30,7 +27,6 @@ protected:
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
-    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 class TGrpcTableOverFqService
@@ -42,9 +38,6 @@ class TGrpcTableOverFqService
 public:
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override {
         TBase::InitService(cq, std::move(logger));
-    }
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override {
-        TBase::SetGlobalLimiterHandle(limiter);
     }
 
 private:
@@ -60,9 +53,6 @@ class TGrpcSchemeOverFqService
 public:
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override {
         TBase::InitService(cq, std::move(logger));
-    }
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override {
-        TBase::SetGlobalLimiterHandle(limiter);
     }
 
 private:

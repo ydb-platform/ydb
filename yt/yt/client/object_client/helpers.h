@@ -8,8 +8,9 @@
 
 #include <yt/yt/client/ypath/public.h>
 
-#include <yt/yt/core/rpc/public.h>
+#include <yt/yt/client/hydra/public.h>
 
+#include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NObjectClient {
 
@@ -17,6 +18,9 @@ namespace NYT::NObjectClient {
 
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
+
+//! Checks if the given type is a Sequoia node.
+bool IsSequoiaNode(NObjectClient::EObjectType type);
 
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
@@ -63,6 +67,12 @@ bool IsTableReplicaType(EObjectType type);
 //! Checks if the given type is a chaos replica.
 bool IsChaosTableReplicaType(EObjectType type);
 
+//! Checks if the given type is a replication card.
+bool IsReplicationCardType(EObjectType type);
+
+//! Checks if the given type is a chaos lease.
+bool IsChaosLeaseType(EObjectType type);
+
 //! Checks if the given type is a collocation.
 bool IsCollocationType(EObjectType type);
 
@@ -78,8 +88,14 @@ bool IsSystemTransactionType(EObjectType type);
 //! Checks if the given type if an upload transaction.
 bool IsUploadTransactionType(EObjectType type);
 
+//! Checks if the given type is an externalized Cypress transaction.
+bool IsExternalizedTransactionType(EObjectType type);
+
 //! Checks if node with the given type can contain other nodes.
 bool IsCompositeNodeType(EObjectType type);
+
+//! Checks if the given type is either Link or SequoiaLink.
+bool IsLinkType(EObjectType);
 
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);
@@ -89,6 +105,9 @@ TCellTag CellTagFromId(TObjectId id);
 
 //! Extracts the counter component from #id.
 ui64 CounterFromId(TObjectId id);
+
+//! Extracts Hydra revision from #id.
+NHydra::TRevision RevisionFromId(TObjectId id);
 
 //! Extracts the entropy component from #id.
 ui32 EntropyFromId(TObjectId id);
@@ -110,6 +129,9 @@ EObjectType SchemaTypeFromType(EObjectType type);
 
 //! Returns the regular type for a given schema #type.
 EObjectType TypeFromSchemaType(EObjectType type);
+
+//! Formats object type into string (taking schemas into account).
+std::string FormatObjectType(EObjectType type);
 
 //! Constructs the id from its parts.
 TObjectId MakeId(
@@ -134,6 +156,9 @@ bool IsWellKnownId(TObjectId id);
  *  This method checks the second highest bit of counter part.
  */
 bool IsSequoiaId(TObjectId id);
+
+//! Returns |true| if a given #id corresponds to cypress transaction that is mirrored to Sequoia.
+bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId);
 
 //! Constructs the id for a regular object.
 TObjectId MakeRegularId(

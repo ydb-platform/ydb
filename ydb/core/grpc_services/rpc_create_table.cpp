@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
@@ -109,7 +110,6 @@ private:
         tableDesc->SetName(tableName);
 
         auto schema = tableDesc->MutableSchema();
-        schema->SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
         TString error;
         if (!FillColumnDescription(*tableDesc, req.columns(), code, error)) {
@@ -136,7 +136,6 @@ private:
                 return false;
             }
         }
-        tableDesc->MutableTtlSettings()->SetUseTiering(req.tiering());
 
         return true;
     }
@@ -181,8 +180,28 @@ private:
             return;
         }
 
+        StatusIds::StatusCode code = StatusIds::SUCCESS;
+        TString error;
+
+        bool hasSerial = false;
+        for (const auto& column : req->columns()) {
+            switch (column.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromSequence: {
+                    auto* seqDesc = modifyScheme->MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
+                    if (!FillSequenceDescription(*seqDesc, column.from_sequence(), code, error)) {
+                        NYql::TIssues issues;
+                        issues.AddIssue(NYql::TIssue(error));
+                        return Reply(code, issues, ctx);
+                    }
+                    hasSerial = true;
+                    break;
+                }
+                default: break;
+            }
+        }
+
         NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-        if (req->indexesSize()) {
+        if (req->indexesSize() || hasSerial) {
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
             tableDesc = modifyScheme->MutableCreateIndexedTable()->MutableTableDescription();
         } else {
@@ -191,9 +210,6 @@ private:
         }
 
         tableDesc->SetName(name);
-
-        StatusIds::StatusCode code = StatusIds::SUCCESS;
-        TString error;
 
         if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) {
             NYql::TIssues issues;

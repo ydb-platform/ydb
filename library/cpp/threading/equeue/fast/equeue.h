@@ -5,6 +5,7 @@
 #include <util/datetime/base.h>
 #include <util/thread/lfqueue.h>
 #include <util/system/thread.h>
+#include <util/generic/bitops.h>
 #include <util/generic/vector.h>
 #include <util/generic/scope.h>
 #include <util/stream/str.h>

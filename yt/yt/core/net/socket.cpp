@@ -420,7 +420,7 @@ void CloseSocket(SOCKET socket)
 int GetSocketError(SOCKET socket)
 {
     int error;
-    socklen_t errorLen = sizeof (error);
+    socklen_t errorLen = sizeof(error);
     getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorLen);
     return error;
 }

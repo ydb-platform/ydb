@@ -1,22 +1,21 @@
 import hashlib
 import json
 import re
-import uuid
 from collections import namedtuple
 from datetime import datetime, timezone
-from random import random
-from typing import Dict, List
+from typing import Any, Dict, List, Iterable, Optional, Tuple
 
 from botocore.exceptions import ParamValidationError
 
-from moto.core import BaseBackend, BaseModel, CloudFormationModel, get_account_id
-from moto.core.utils import iso_8601_datetime_without_milliseconds, BackendDict
+from moto.core import BaseBackend, BackendDict, BaseModel, CloudFormationModel
+from moto.core.utils import iso_8601_datetime_without_milliseconds, utcnow
 from moto.ecr.exceptions import (
     ImageNotFoundException,
     RepositoryNotFoundException,
     RepositoryAlreadyExistsException,
     RepositoryNotEmptyException,
     InvalidParameterException,
+    ImageAlreadyExistsException,
     RepositoryPolicyNotFoundException,
     LifecyclePolicyNotFoundException,
     RegistryPolicyNotFoundException,
@@ -27,10 +26,13 @@ from moto.ecr.exceptions import (
 from moto.ecr.policy_validation import EcrLifecyclePolicyValidator
 from moto.iam.exceptions import MalformedPolicyDocument
 from moto.iam.policy_validation import IAMPolicyDocumentValidator
+from moto.moto_api._internal import mock_random as random
 from moto.utilities.tagging_service import TaggingService
 
-DEFAULT_REGISTRY_ID = get_account_id()
 ECR_REPOSITORY_ARN_PATTERN = "^arn:(?P<partition>[^:]+):ecr:(?P<region>[^:]+):(?P<account_id>[^:]+):repository/(?P<repo_name>.*)$"
+ECR_REPOSITORY_NAME_PATTERN = (
+    "(?:[a-z0-9]+(?:[._-][a-z0-9]+)*/)*[a-z0-9]+(?:[._-][a-z0-9]+)*"
+)
 
 EcrRepositoryArn = namedtuple(
     "EcrRepositoryArn", ["partition", "region", "account_id", "repo_name"]
@@ -38,7 +40,7 @@ EcrRepositoryArn = namedtuple(
 
 
 class BaseObject(BaseModel):
-    def camelCase(self, key):
+    def camelCase(self, key: str) -> str:
         words = []
         for i, word in enumerate(key.split("_")):
             if i > 0:
@@ -47,7 +49,7 @@ class BaseObject(BaseModel):
                 words.append(word)
         return "".join(words)
 
-    def gen_response_object(self):
+    def gen_response_object(self) -> Dict[str, Any]:
         response_object = dict()
         for key, value in self.__dict__.items():
             if "_" in key:
@@ -57,27 +59,29 @@ class BaseObject(BaseModel):
         return response_object
 
     @property
-    def response_object(self):
+    def response_object(self) -> Dict[str, Any]:  # type: ignore[misc]
         return self.gen_response_object()
 
 
 class Repository(BaseObject, CloudFormationModel):
     def __init__(
         self,
-        region_name,
-        repository_name,
-        registry_id,
-        encryption_config,
-        image_scan_config,
-        image_tag_mutablility,
+        account_id: str,
+        region_name: str,
+        repository_name: str,
+        registry_id: str,
+        encryption_config: Optional[Dict[str, str]],
+        image_scan_config: str,
+        image_tag_mutablility: str,
     ):
+        self.account_id = account_id
         self.region_name = region_name
-        self.registry_id = registry_id or DEFAULT_REGISTRY_ID
+        self.registry_id = registry_id or account_id
         self.arn = (
             f"arn:aws:ecr:{region_name}:{self.registry_id}:repository/{repository_name}"
         )
         self.name = repository_name
-        self.created_at = datetime.utcnow()
+        self.created_at = utcnow()
         self.uri = (
             f"{self.registry_id}.dkr.ecr.{region_name}.amazonaws.com/{repository_name}"
         )
@@ -86,20 +90,31 @@ class Repository(BaseObject, CloudFormationModel):
         self.encryption_configuration = self._determine_encryption_config(
             encryption_config
         )
-        self.policy = None
-        self.lifecycle_policy = None
+        self.policy: Optional[str] = None
+        self.lifecycle_policy: Optional[str] = None
         self.images: List[Image] = []
+        self.scanning_config = {
+            "repositoryArn": self.arn,
+            "repositoryName": self.name,
+            "scanOnPush": False,
+            "scanFrequency": "MANUAL",
+            "appliedScanFilters": [],
+        }
 
-    def _determine_encryption_config(self, encryption_config):
+    def _determine_encryption_config(
+        self, encryption_config: Optional[Dict[str, str]]
+    ) -> Dict[str, str]:
         if not encryption_config:
             return {"encryptionType": "AES256"}
         if encryption_config == {"encryptionType": "KMS"}:
             encryption_config[
                 "kmsKey"
-            ] = f"arn:aws:kms:{self.region_name}:{get_account_id()}:key/{uuid.uuid4()}"
+            ] = f"arn:aws:kms:{self.region_name}:{self.account_id}:key/{random.uuid4()}"
         return encryption_config
 
-    def _get_image(self, image_tag, image_digest):
+    def _get_image(
+        self, image_tag: Optional[str], image_digest: Optional[str]
+    ) -> "Image":
         # you can either search for one or both
         image = next(
             (
@@ -112,9 +127,9 @@ class Repository(BaseObject, CloudFormationModel):
         )
 
         if not image:
-            image_id_rep = "{{imageDigest:'{0}', imageTag:'{1}'}}".format(
-                image_digest or "null", image_tag or "null"
-            )
+            idigest = image_digest or "null"
+            itag = image_tag or "null"
+            image_id_rep = f"{{imageDigest:'{idigest}', imageTag:'{itag}'}}"
 
             raise ImageNotFoundException(
                 image_id=image_id_rep,
@@ -125,11 +140,11 @@ class Repository(BaseObject, CloudFormationModel):
         return image
 
     @property
-    def physical_resource_id(self):
+    def physical_resource_id(self) -> str:
         return self.name
 
     @property
-    def response_object(self):
+    def response_object(self) -> Dict[str, Any]:  # type: ignore[misc]
         response_object = self.gen_response_object()
 
         response_object["registryId"] = self.registry_id
@@ -142,21 +157,25 @@ class Repository(BaseObject, CloudFormationModel):
         del response_object["arn"], response_object["name"], response_object["images"]
         return response_object
 
-    def update(self, image_scan_config=None, image_tag_mutability=None):
+    def update(
+        self,
+        image_scan_config: Optional[Dict[str, Any]] = None,
+        image_tag_mutability: Optional[str] = None,
+    ) -> None:
         if image_scan_config:
             self.image_scanning_configuration = image_scan_config
         if image_tag_mutability:
             self.image_tag_mutability = image_tag_mutability
 
-    def delete(self, region_name):
-        ecr_backend = ecr_backends[region_name]
+    def delete(self, account_id: str, region_name: str) -> None:
+        ecr_backend = ecr_backends[account_id][region_name]
         ecr_backend.delete_repository(self.name)
 
     @classmethod
-    def has_cfn_attr(cls, attr):
+    def has_cfn_attr(cls, attr: str) -> bool:
         return attr in ["Arn", "RepositoryUri"]
 
-    def get_cfn_attribute(self, attribute_name):
+    def get_cfn_attribute(self, attribute_name: str) -> str:
         from moto.cloudformation.exceptions import UnformattedGetAttTemplateException
 
         if attribute_name == "Arn":
@@ -167,19 +186,24 @@ class Repository(BaseObject, CloudFormationModel):
         raise UnformattedGetAttTemplateException()
 
     @staticmethod
-    def cloudformation_name_type():
+    def cloudformation_name_type() -> str:
         return "RepositoryName"
 
     @staticmethod
-    def cloudformation_type():
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ecr-repository.html
         return "AWS::ECR::Repository"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
-        ecr_backend = ecr_backends[region_name]
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any,
+    ) -> "Repository":
+        ecr_backend = ecr_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
 
         encryption_config = properties.get("EncryptionConfiguration")
@@ -199,10 +223,15 @@ class Repository(BaseObject, CloudFormationModel):
         )
 
     @classmethod
-    def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
-    ):
-        ecr_backend = ecr_backends[region_name]
+    def update_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        original_resource: Any,
+        new_resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> "Repository":
+        ecr_backend = ecr_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
         encryption_configuration = properties.get(
             "EncryptionConfiguration", {"encryptionType": "AES256"}
@@ -223,58 +252,84 @@ class Repository(BaseObject, CloudFormationModel):
 
             return original_resource
         else:
-            original_resource.delete(region_name)
+            original_resource.delete(account_id, region_name)
             return cls.create_from_cloudformation_json(
-                new_resource_name, cloudformation_json, region_name
+                new_resource_name, cloudformation_json, account_id, region_name
             )
 
 
 class Image(BaseObject):
     def __init__(
-        self, tag, manifest, repository, digest=None, registry_id=DEFAULT_REGISTRY_ID
+        self,
+        account_id: str,
+        tag: str,
+        manifest: str,
+        repository: str,
+        image_manifest_mediatype: Optional[str] = None,
+        digest: Optional[str] = None,
+        registry_id: Optional[str] = None,
     ):
         self.image_tag = tag
         self.image_tags = [tag] if tag is not None else []
         self.image_manifest = manifest
-        self.image_size_in_bytes = 50 * 1024 * 1024
+        self.image_manifest_mediatype = image_manifest_mediatype
         self.repository = repository
-        self.registry_id = registry_id
+        self.registry_id = registry_id or account_id
         self.image_digest = digest
         self.image_pushed_at = str(datetime.now(timezone.utc).isoformat())
-        self.last_scan = None
+        self.last_scan: Optional[datetime] = None
 
-    def _create_digest(self):
-        image_contents = "docker_image{0}".format(int(random() * 10**6))
-        self.image_digest = (
-            "sha256:%s" % hashlib.sha256(image_contents.encode("utf-8")).hexdigest()
-        )
+    def _create_digest(self) -> None:
+        image_manifest = json.loads(self.image_manifest)
+        if "layers" in image_manifest:
+            layer_digests = [layer["digest"] for layer in image_manifest["layers"]]
+            self.image_digest = (
+                "sha256:"
+                + hashlib.sha256("".join(layer_digests).encode("utf-8")).hexdigest()
+            )
+        else:
+            random_sha = hashlib.sha256(
+                f"{random.randint(0,100)}".encode("utf-8")
+            ).hexdigest()
+            self.image_digest = f"sha256:{random_sha}"
 
-    def get_image_digest(self):
+    def get_image_digest(self) -> str:
         if not self.image_digest:
             self._create_digest()
-        return self.image_digest
+        return self.image_digest  # type: ignore[return-value]
 
-    def get_image_manifest(self):
+    def get_image_size_in_bytes(self) -> Optional[int]:
+        image_manifest = json.loads(self.image_manifest)
+        if "layers" in image_manifest:
+            try:
+                return image_manifest["config"]["size"]
+            except KeyError:
+                return 50 * 1024 * 1024
+        else:
+            return None
+
+    def get_image_manifest(self) -> str:
         return self.image_manifest
 
-    def remove_tag(self, tag):
+    def remove_tag(self, tag: str) -> None:
         if tag is not None and tag in self.image_tags:
             self.image_tags.remove(tag)
             if self.image_tags:
                 self.image_tag = self.image_tags[-1]
 
-    def update_tag(self, tag):
+    def update_tag(self, tag: str) -> None:
         self.image_tag = tag
         if tag not in self.image_tags and tag is not None:
             self.image_tags.append(tag)
 
     @property
-    def response_object(self):
+    def response_object(self) -> Dict[str, Any]:  # type: ignore[misc]
         response_object = self.gen_response_object()
         response_object["imageId"] = {}
         response_object["imageId"]["imageTag"] = self.image_tag
         response_object["imageId"]["imageDigest"] = self.get_image_digest()
         response_object["imageManifest"] = self.image_manifest
+        response_object["imageManifestMediaType"] = self.image_manifest_mediatype
         response_object["repositoryName"] = self.repository
         response_object["registryId"] = self.registry_id
         return {
@@ -282,7 +337,7 @@ class Image(BaseObject):
         }
 
     @property
-    def response_list_object(self):
+    def response_list_object(self) -> Dict[str, Any]:  # type: ignore[misc]
         response_object = self.gen_response_object()
         response_object["imageTag"] = self.image_tag
         response_object["imageDigest"] = self.get_image_digest()
@@ -291,50 +346,53 @@ class Image(BaseObject):
         }
 
     @property
-    def response_describe_object(self):
+    def response_describe_object(self) -> Dict[str, Any]:  # type: ignore[misc]
         response_object = self.gen_response_object()
         response_object["imageTags"] = self.image_tags
         response_object["imageDigest"] = self.get_image_digest()
         response_object["imageManifest"] = self.image_manifest
+        response_object["imageManifestMediaType"] = self.image_manifest_mediatype
         response_object["repositoryName"] = self.repository
         response_object["registryId"] = self.registry_id
-        response_object["imageSizeInBytes"] = self.image_size_in_bytes
+        response_object["imageSizeInBytes"] = self.get_image_size_in_bytes()
         response_object["imagePushedAt"] = self.image_pushed_at
         return {k: v for k, v in response_object.items() if v is not None and v != []}
 
     @property
-    def response_batch_get_image(self):
-        response_object = {}
-        response_object["imageId"] = {}
-        response_object["imageId"]["imageTag"] = self.image_tag
-        response_object["imageId"]["imageDigest"] = self.get_image_digest()
-        response_object["imageManifest"] = self.image_manifest
-        response_object["repositoryName"] = self.repository
-        response_object["registryId"] = self.registry_id
+    def response_batch_get_image(self) -> Dict[str, Any]:  # type: ignore[misc]
+        response_object = {
+            "imageId": {
+                "imageTag": self.image_tag,
+                "imageDigest": self.get_image_digest(),
+            },
+            "imageManifest": self.image_manifest,
+            "repositoryName": self.repository,
+            "registryId": self.registry_id,
+        }
         return {
-            k: v for k, v in response_object.items() if v is not None and v != [None]
+            k: v for k, v in response_object.items() if v is not None and v != [None]  # type: ignore
         }
 
     @property
-    def response_batch_delete_image(self):
+    def response_batch_delete_image(self) -> Dict[str, Any]:  # type: ignore[misc]
         response_object = {}
         response_object["imageDigest"] = self.get_image_digest()
         response_object["imageTag"] = self.image_tag
         return {
-            k: v for k, v in response_object.items() if v is not None and v != [None]
+            k: v for k, v in response_object.items() if v is not None and v != [None]  # type: ignore
         }
 
 
 class ECRBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.registry_policy = None
-        self.replication_config = {"rules": []}
+        self.registry_policy: Optional[str] = None
+        self.replication_config: Dict[str, Any] = {"rules": []}
         self.repositories: Dict[str, Repository] = {}
         self.tagger = TaggingService(tag_name="tags")
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(service_region: str, zones: List[str]) -> List[Dict[str, Any]]:  # type: ignore[misc]
         """Default VPC endpoint service."""
         docker_endpoint = {
             "AcceptanceRequired": False,
@@ -357,16 +415,18 @@ class ECRBackend(BaseBackend):
             service_region, zones, "api.ecr", special_service_name="ecr.api"
         ) + [docker_endpoint]
 
-    def _get_repository(self, name, registry_id=None) -> Repository:
+    def _get_repository(
+        self, name: str, registry_id: Optional[str] = None
+    ) -> Repository:
         repo = self.repositories.get(name)
-        reg_id = registry_id or DEFAULT_REGISTRY_ID
+        reg_id = registry_id or self.account_id
 
         if not repo or repo.registry_id != reg_id:
             raise RepositoryNotFoundException(name, reg_id)
         return repo
 
     @staticmethod
-    def _parse_resource_arn(resource_arn) -> EcrRepositoryArn:
+    def _parse_resource_arn(resource_arn: str) -> EcrRepositoryArn:  # type: ignore[misc]
         match = re.match(ECR_REPOSITORY_ARN_PATTERN, resource_arn)
         if not match:
             raise InvalidParameterException(
@@ -375,7 +435,11 @@ class ECRBackend(BaseBackend):
             )
         return EcrRepositoryArn(**match.groupdict())
 
-    def describe_repositories(self, registry_id=None, repository_names=None):
+    def describe_repositories(
+        self,
+        registry_id: Optional[str] = None,
+        repository_names: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         maxResults and nextToken not implemented
         """
@@ -383,7 +447,7 @@ class ECRBackend(BaseBackend):
             for repository_name in repository_names:
                 if repository_name not in self.repositories:
                     raise RepositoryNotFoundException(
-                        repository_name, registry_id or DEFAULT_REGISTRY_ID
+                        repository_name, registry_id or self.account_id
                     )
 
         repositories = []
@@ -402,17 +466,24 @@ class ECRBackend(BaseBackend):
 
     def create_repository(
         self,
-        repository_name,
-        registry_id,
-        encryption_config,
-        image_scan_config,
-        image_tag_mutablility,
-        tags,
-    ):
+        repository_name: str,
+        registry_id: str,
+        encryption_config: Dict[str, str],
+        image_scan_config: Any,
+        image_tag_mutablility: str,
+        tags: List[Dict[str, str]],
+    ) -> Repository:
         if self.repositories.get(repository_name):
-            raise RepositoryAlreadyExistsException(repository_name, DEFAULT_REGISTRY_ID)
+            raise RepositoryAlreadyExistsException(repository_name, self.account_id)
+
+        match = re.fullmatch(ECR_REPOSITORY_NAME_PATTERN, repository_name)
+        if not match:
+            raise InvalidParameterException(
+                f"Invalid parameter at 'repositoryName' failed to satisfy constraint: 'must satisfy regular expression '{ECR_REPOSITORY_NAME_PATTERN}'"
+            )
 
         repository = Repository(
+            account_id=self.account_id,
             region_name=self.region_name,
             repository_name=repository_name,
             registry_id=registry_id,
@@ -425,18 +496,25 @@ class ECRBackend(BaseBackend):
 
         return repository
 
-    def delete_repository(self, repository_name, registry_id=None, force=False):
+    def delete_repository(
+        self,
+        repository_name: str,
+        registry_id: Optional[str] = None,
+        force: bool = False,
+    ) -> Repository:
         repo = self._get_repository(repository_name, registry_id)
 
         if repo.images and not force:
             raise RepositoryNotEmptyException(
-                repository_name, registry_id or DEFAULT_REGISTRY_ID
+                repository_name, registry_id or self.account_id
             )
 
         self.tagger.delete_all_tags_for_resource(repo.arn)
         return self.repositories.pop(repository_name)
 
-    def list_images(self, repository_name, registry_id=None):
+    def list_images(
+        self, repository_name: str, registry_id: Optional[str] = None
+    ) -> List[Image]:
         """
         maxResults and filtering not implemented
         """
@@ -452,19 +530,21 @@ class ECRBackend(BaseBackend):
 
         if not found:
             raise RepositoryNotFoundException(
-                repository_name, registry_id or DEFAULT_REGISTRY_ID
+                repository_name, registry_id or self.account_id
             )
 
-        images = []
-        for image in repository.images:
-            images.append(image)
-        return images
+        return list(repository.images)  # type: ignore[union-attr]
 
-    def describe_images(self, repository_name, registry_id=None, image_ids=None):
+    def describe_images(
+        self,
+        repository_name: str,
+        registry_id: Optional[str] = None,
+        image_ids: Optional[List[Dict[str, str]]] = None,
+    ) -> Iterable[Image]:
         repository = self._get_repository(repository_name, registry_id)
 
         if image_ids:
-            response = set(
+            return set(
                 repository._get_image(
                     image_id.get("imageTag"), image_id.get("imageDigest")
                 )
@@ -472,35 +552,103 @@ class ECRBackend(BaseBackend):
             )
 
         else:
-            response = []
-            for image in repository.images:
-                response.append(image)
+            return list(repository.images)
 
-        return response
-
-    def put_image(self, repository_name, image_manifest, image_tag):
+    def put_image(
+        self,
+        repository_name: str,
+        image_manifest: str,
+        image_tag: str,
+        image_manifest_mediatype: Optional[str] = None,
+        digest: Optional[str] = None,
+    ) -> Image:
         if repository_name in self.repositories:
             repository = self.repositories[repository_name]
         else:
-            raise Exception("{0} is not a repository".format(repository_name))
+            raise Exception(f"{repository_name} is not a repository")
 
-        existing_images = list(
+        try:
+            parsed_image_manifest = json.loads(image_manifest)
+        except json.JSONDecodeError:
+            raise Exception(
+                "Invalid parameter at 'ImageManifest' failed to satisfy constraint: 'Invalid JSON syntax'"
+            )
+
+        if image_manifest_mediatype:
+            parsed_image_manifest["imageManifest"] = image_manifest_mediatype
+        else:
+            if "mediaType" not in parsed_image_manifest:
+                raise InvalidParameterException(
+                    message="image manifest mediatype not provided in manifest or parameter"
+                )
+            else:
+                image_manifest_mediatype = parsed_image_manifest["mediaType"]
+
+        existing_images_with_matching_manifest = list(
             filter(
                 lambda x: x.response_object["imageManifest"] == image_manifest,
                 repository.images,
             )
         )
-        if not existing_images:
+
+        # if an image with a matching manifest exists and it is tagged,
+        # trying to put the same image with the same tag will result in an
+        # ImageAlreadyExistsException
+
+        try:
+            existing_images_with_matching_tag = list(
+                filter(
+                    lambda x: image_tag in x.image_tags,
+                    repository.images,
+                )
+            )
+        except KeyError:
+            existing_images_with_matching_tag = []
+
+        if not existing_images_with_matching_manifest:
             # this image is not in ECR yet
-            image = Image(image_tag, image_manifest, repository_name)
+            image = Image(
+                self.account_id,
+                image_tag,
+                image_manifest,
+                repository_name,
+                image_manifest_mediatype,
+                digest,
+            )
             repository.images.append(image)
+            if existing_images_with_matching_tag:
+                # Tags are unique, so delete any existing image with this tag first
+                # (or remove the tag if the image has more than one tag)
+                self.batch_delete_image(
+                    repository_name=repository_name, image_ids=[{"imageTag": image_tag}]
+                )
             return image
         else:
-            # update existing image
-            existing_images[0].update_tag(image_tag)
-            return existing_images[0]
+            # this image is in ECR
+            image = existing_images_with_matching_manifest[0]
+            if image.image_tag == image_tag:
+                raise ImageAlreadyExistsException(
+                    registry_id=repository.registry_id,
+                    image_tag=image_tag,
+                    digest=image.get_image_digest(),
+                    repository_name=repository_name,
+                )
+            else:
+                # Tags are unique, so delete any existing image with this tag first
+                # (or remove the tag if the image has more than one tag)
+                self.batch_delete_image(
+                    repository_name=repository_name, image_ids=[{"imageTag": image_tag}]
+                )
+                # update existing image
+                image.update_tag(image_tag)
+                return image
 
-    def batch_get_image(self, repository_name, registry_id=None, image_ids=None):
+    def batch_get_image(
+        self,
+        repository_name: str,
+        registry_id: Optional[str] = None,
+        image_ids: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """
         The parameter AcceptedMediaTypes has not yet been implemented
         """
@@ -508,7 +656,7 @@ class ECRBackend(BaseBackend):
             repository = self.repositories[repository_name]
         else:
             raise RepositoryNotFoundException(
-                repository_name, registry_id or DEFAULT_REGISTRY_ID
+                repository_name, registry_id or self.account_id
             )
 
         if not image_ids:
@@ -516,7 +664,7 @@ class ECRBackend(BaseBackend):
                 msg='Missing required parameter in input: "imageIds"'
             )
 
-        response = {"images": [], "failures": []}
+        response: Dict[str, Any] = {"images": [], "failures": []}
 
         for image_id in image_ids:
             found = False
@@ -525,7 +673,7 @@ class ECRBackend(BaseBackend):
                     "imageDigest" in image_id
                     and image.get_image_digest() == image_id["imageDigest"]
                 ) or (
-                    "imageTag" in image_id and image.image_tag == image_id["imageTag"]
+                    "imageTag" in image_id and image_id["imageTag"] in image.image_tags
                 ):
                     found = True
                     response["images"].append(image.response_batch_get_image)
@@ -541,12 +689,17 @@ class ECRBackend(BaseBackend):
 
         return response
 
-    def batch_delete_image(self, repository_name, registry_id=None, image_ids=None):
+    def batch_delete_image(
+        self,
+        repository_name: str,
+        registry_id: Optional[str] = None,
+        image_ids: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         if repository_name in self.repositories:
             repository = self.repositories[repository_name]
         else:
             raise RepositoryNotFoundException(
-                repository_name, registry_id or DEFAULT_REGISTRY_ID
+                repository_name, registry_id or self.account_id
             )
 
         if not image_ids:
@@ -554,7 +707,7 @@ class ECRBackend(BaseBackend):
                 msg='Missing required parameter in input: "imageIds"'
             )
 
-        response = {"imageIds": [], "failures": []}
+        response: Dict[str, Any] = {"imageIds": [], "failures": []}
 
         for image_id in image_ids:
             image_found = False
@@ -573,12 +726,10 @@ class ECRBackend(BaseBackend):
             # If we have a digest, is it valid?
             if "imageDigest" in image_id:
                 pattern = re.compile(r"^[0-9a-zA-Z_+\.-]+:[0-9a-fA-F]{64}")
-                if not pattern.match(image_id.get("imageDigest")):
+                if not pattern.match(image_id["imageDigest"]):
                     response["failures"].append(
                         {
-                            "imageId": {
-                                "imageDigest": image_id.get("imageDigest", "null")
-                            },
+                            "imageId": {"imageDigest": image_id["imageDigest"]},
                             "failureCode": "InvalidImageDigest",
                             "failureReason": "Invalid request parameters: image digest should satisfy the regex '[a-zA-Z0-9-_+.]+:[a-fA-F0-9]+'",
                         }
@@ -627,7 +778,7 @@ class ECRBackend(BaseBackend):
                         repository.images.remove(image)
 
             if not image_found:
-                failure_response = {
+                failure_response: Dict[str, Any] = {
                     "imageId": {},
                     "failureCode": "ImageNotFound",
                     "failureReason": "Requested image not found",
@@ -647,29 +798,39 @@ class ECRBackend(BaseBackend):
 
         return response
 
-    def list_tags_for_resource(self, arn):
+    def batch_get_repository_scanning_configuration(
+        self, names: List[str]
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        configs = []
+        failing = []
+        for name in names:
+            try:
+                configs.append(
+                    self._get_repository(name=name, registry_id=None).scanning_config
+                )
+            except RepositoryNotFoundException:
+                failing.append(name)
+        return configs, failing
+
+    def list_tags_for_resource(self, arn: str) -> Dict[str, List[Dict[str, str]]]:
         resource = self._parse_resource_arn(arn)
         repo = self._get_repository(resource.repo_name, resource.account_id)
 
         return self.tagger.list_tags_for_resource(repo.arn)
 
-    def tag_resource(self, arn, tags):
+    def tag_resource(self, arn: str, tags: List[Dict[str, str]]) -> None:
         resource = self._parse_resource_arn(arn)
         repo = self._get_repository(resource.repo_name, resource.account_id)
         self.tagger.tag_resource(repo.arn, tags)
 
-        return {}
-
-    def untag_resource(self, arn, tag_keys):
+    def untag_resource(self, arn: str, tag_keys: List[str]) -> None:
         resource = self._parse_resource_arn(arn)
         repo = self._get_repository(resource.repo_name, resource.account_id)
         self.tagger.untag_resource_using_names(repo.arn, tag_keys)
 
-        return {}
-
     def put_image_tag_mutability(
-        self, registry_id, repository_name, image_tag_mutability
-    ):
+        self, registry_id: str, repository_name: str, image_tag_mutability: str
+    ) -> Dict[str, str]:
         if image_tag_mutability not in ["IMMUTABLE", "MUTABLE"]:
             raise InvalidParameterException(
                 "Invalid parameter at 'imageTagMutability' failed to satisfy constraint: "
@@ -686,8 +847,8 @@ class ECRBackend(BaseBackend):
         }
 
     def put_image_scanning_configuration(
-        self, registry_id, repository_name, image_scan_config
-    ):
+        self, registry_id: str, repository_name: str, image_scan_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
         repo.update(image_scan_config=image_scan_config)
 
@@ -697,15 +858,17 @@ class ECRBackend(BaseBackend):
             "imageScanningConfiguration": repo.image_scanning_configuration,
         }
 
-    def set_repository_policy(self, registry_id, repository_name, policy_text):
+    def set_repository_policy(
+        self, registry_id: str, repository_name: str, policy_text: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         try:
             iam_policy_document_validator = IAMPolicyDocumentValidator(policy_text)
             # the repository policy can be defined without a resource field
-            iam_policy_document_validator._validate_resource_exist = lambda: None
+            iam_policy_document_validator._validate_resource_exist = lambda: None  # type: ignore
             # the repository policy can have the old version 2008-10-17
-            iam_policy_document_validator._validate_version = lambda: None
+            iam_policy_document_validator._validate_version = lambda: None  # type: ignore
             iam_policy_document_validator.validate()
         except MalformedPolicyDocument:
             raise InvalidParameterException(
@@ -721,7 +884,9 @@ class ECRBackend(BaseBackend):
             "policyText": repo.policy,
         }
 
-    def get_repository_policy(self, registry_id, repository_name):
+    def get_repository_policy(
+        self, registry_id: str, repository_name: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         if not repo.policy:
@@ -733,7 +898,9 @@ class ECRBackend(BaseBackend):
             "policyText": repo.policy,
         }
 
-    def delete_repository_policy(self, registry_id, repository_name):
+    def delete_repository_policy(
+        self, registry_id: str, repository_name: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
         policy = repo.policy
 
@@ -748,7 +915,9 @@ class ECRBackend(BaseBackend):
             "policyText": policy,
         }
 
-    def put_lifecycle_policy(self, registry_id, repository_name, lifecycle_policy_text):
+    def put_lifecycle_policy(
+        self, registry_id: str, repository_name: str, lifecycle_policy_text: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         validator = EcrLifecyclePolicyValidator(lifecycle_policy_text)
@@ -762,7 +931,9 @@ class ECRBackend(BaseBackend):
             "lifecyclePolicyText": repo.lifecycle_policy,
         }
 
-    def get_lifecycle_policy(self, registry_id, repository_name):
+    def get_lifecycle_policy(
+        self, registry_id: str, repository_name: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         if not repo.lifecycle_policy:
@@ -772,12 +943,12 @@ class ECRBackend(BaseBackend):
             "registryId": repo.registry_id,
             "repositoryName": repository_name,
             "lifecyclePolicyText": repo.lifecycle_policy,
-            "lastEvaluatedAt": iso_8601_datetime_without_milliseconds(
-                datetime.utcnow()
-            ),
+            "lastEvaluatedAt": iso_8601_datetime_without_milliseconds(utcnow()),
         }
 
-    def delete_lifecycle_policy(self, registry_id, repository_name):
+    def delete_lifecycle_policy(
+        self, registry_id: str, repository_name: str
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
         policy = repo.lifecycle_policy
 
@@ -790,12 +961,10 @@ class ECRBackend(BaseBackend):
             "registryId": repo.registry_id,
             "repositoryName": repository_name,
             "lifecyclePolicyText": policy,
-            "lastEvaluatedAt": iso_8601_datetime_without_milliseconds(
-                datetime.utcnow()
-            ),
+            "lastEvaluatedAt": iso_8601_datetime_without_milliseconds(utcnow()),
         }
 
-    def _validate_registry_policy_action(self, policy_text):
+    def _validate_registry_policy_action(self, policy_text: str) -> None:
         # only CreateRepository & ReplicateImage actions are allowed
         VALID_ACTIONS = {"ecr:CreateRepository", "ecr:ReplicateImage"}
 
@@ -807,7 +976,7 @@ class ECRBackend(BaseBackend):
             if set(action) - VALID_ACTIONS:
                 raise MalformedPolicyDocument()
 
-    def put_registry_policy(self, policy_text):
+    def put_registry_policy(self, policy_text: str) -> Dict[str, Any]:
         try:
             iam_policy_document_validator = IAMPolicyDocumentValidator(policy_text)
             iam_policy_document_validator.validate()
@@ -822,32 +991,34 @@ class ECRBackend(BaseBackend):
         self.registry_policy = policy_text
 
         return {
-            "registryId": get_account_id(),
+            "registryId": self.account_id,
             "policyText": policy_text,
         }
 
-    def get_registry_policy(self):
+    def get_registry_policy(self) -> Dict[str, Any]:
         if not self.registry_policy:
-            raise RegistryPolicyNotFoundException(get_account_id())
+            raise RegistryPolicyNotFoundException(self.account_id)
 
         return {
-            "registryId": get_account_id(),
+            "registryId": self.account_id,
             "policyText": self.registry_policy,
         }
 
-    def delete_registry_policy(self):
+    def delete_registry_policy(self) -> Dict[str, Any]:
         policy = self.registry_policy
         if not policy:
-            raise RegistryPolicyNotFoundException(get_account_id())
+            raise RegistryPolicyNotFoundException(self.account_id)
 
         self.registry_policy = None
 
         return {
-            "registryId": get_account_id(),
+            "registryId": self.account_id,
             "policyText": policy,
         }
 
-    def start_image_scan(self, registry_id, repository_name, image_id):
+    def start_image_scan(
+        self, registry_id: str, repository_name: str, image_id: Dict[str, str]
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         image = repo._get_image(image_id.get("imageTag"), image_id.get("imageDigest"))
@@ -868,16 +1039,17 @@ class ECRBackend(BaseBackend):
             "imageScanStatus": {"status": "IN_PROGRESS"},
         }
 
-    def describe_image_scan_findings(self, registry_id, repository_name, image_id):
+    def describe_image_scan_findings(
+        self, registry_id: str, repository_name: str, image_id: Dict[str, Any]
+    ) -> Dict[str, Any]:
         repo = self._get_repository(repository_name, registry_id)
 
         image = repo._get_image(image_id.get("imageTag"), image_id.get("imageDigest"))
 
         if not image.last_scan:
-            image_id_rep = "{{imageDigest:'{0}', imageTag:'{1}'}}".format(
-                image_id.get("imageDigest") or "null",
-                image_id.get("imageTag") or "null",
-            )
+            idigest = image_id.get("imageDigest") or "null"
+            itag = image_id.get("imageTag") or "null"
+            image_id_rep = f"{{imageDigest:'{idigest}', imageTag:'{itag}'}}"
             raise ScanNotFoundException(
                 image_id=image_id_rep,
                 repository_name=repository_name,
@@ -900,7 +1072,7 @@ class ECRBackend(BaseBackend):
                     image.last_scan
                 ),
                 "vulnerabilitySourceUpdatedAt": iso_8601_datetime_without_milliseconds(
-                    datetime.utcnow()
+                    utcnow()
                 ),
                 "findings": [
                     {
@@ -922,7 +1094,9 @@ class ECRBackend(BaseBackend):
             },
         }
 
-    def put_replication_configuration(self, replication_config):
+    def put_replication_configuration(
+        self, replication_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         rules = replication_config["rules"]
         if len(rules) > 1:
             raise ValidationException("This feature is disabled")
@@ -931,7 +1105,7 @@ class ECRBackend(BaseBackend):
             for dest in rules[0]["destinations"]:
                 if (
                     dest["region"] == self.region_name
-                    and dest["registryId"] == DEFAULT_REGISTRY_ID
+                    and dest["registryId"] == self.account_id
                 ):
                     raise InvalidParameterException(
                         "Invalid parameter at 'replicationConfiguration' failed to satisfy constraint: "
@@ -942,9 +1116,20 @@ class ECRBackend(BaseBackend):
 
         return {"replicationConfiguration": replication_config}
 
-    def describe_registry(self):
+    def put_registry_scanning_configuration(self, rules: List[Dict[str, Any]]) -> None:
+        for rule in rules:
+            for repo_filter in rule["repositoryFilters"]:
+                for repo in self.repositories.values():
+                    if repo_filter["filter"] == repo.name or re.match(
+                        repo_filter["filter"], repo.name
+                    ):
+                        repo.scanning_config["scanFrequency"] = rule["scanFrequency"]
+                        # AWS testing seems to indicate that this is always overwritten
+                        repo.scanning_config["appliedScanFilters"] = [repo_filter]
+
+    def describe_registry(self) -> Dict[str, Any]:
         return {
-            "registryId": DEFAULT_REGISTRY_ID,
+            "registryId": self.account_id,
             "replicationConfiguration": self.replication_config,
         }
 

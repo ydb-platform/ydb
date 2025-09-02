@@ -6,13 +6,14 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
 #include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -80,26 +81,27 @@ struct TTestRuntime {
         TAppPrepare app;
         SetupTabletServices(*Runtime, &app, true);
 
-        NConfig::TCheckpointCoordinatorConfig config;
-        auto& storageConfig = *config.MutableStorage();
+        NKikimrConfig::TCheckpointsConfig config;
+        auto& storageConfig = *config.MutableExternalStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
         storageConfig.SetTablePrefix(TablePrefix);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, credFactory, CreateEntityIdGenerator("id"), yqSharedResources);
+        NYdb::TDriver driver(NYdb::TDriverConfig{});
+        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
+        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-        StateStorage = NewYdbStateStorage(config, credFactory, yqSharedResources);
+        StateStorage = NewYdbStateStorage(config, ydbConnectionPtr);
         issues = StateStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
         Fill();
 
-        NConfig::TCheckpointGcConfig gcConfig;
+        NKikimrConfig::TCheckpointsConfig::TCheckpointGcConfig gcConfig;
         auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
         ActorGC = Runtime->Register(gc.release());
 

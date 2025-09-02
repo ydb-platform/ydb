@@ -7,6 +7,8 @@
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_pylifecycle.h"
 #include "pycore_pystate.h"       // _PyThreadState_SetCurrent()
+#include "pycore_sysmodule.h"     // _PySys_GetOptionalAttr()
+
 #include <stddef.h>               // offsetof()
 #include "structmember.h"         // PyMemberDef
 
@@ -961,7 +963,7 @@ local_setattro(localobject *self, PyObject *name, PyObject *v)
     }
     if (r == 1) {
         PyErr_Format(PyExc_AttributeError,
-                     "'%.100s' object attribute '%U' is read-only",
+                     "'%.100s' object attribute %R is read-only",
                      Py_TYPE(self)->tp_name, name);
         return -1;
     }
@@ -1219,6 +1221,7 @@ thread_PyThread_start_new_thread(PyObject *self, PyObject *fargs)
     if (ident == PYTHREAD_INVALID_THREAD_ID) {
         PyErr_SetString(ThreadError, "can't start new thread");
         PyThreadState_Clear(boot->tstate);
+        PyThreadState_Delete(boot->tstate);
         thread_bootstate_free(boot, 1);
         return NULL;
     }
@@ -1566,9 +1569,12 @@ thread_excepthook(PyObject *module, PyObject *args)
     PyObject *exc_tb = PyStructSequence_GET_ITEM(args, 2);
     PyObject *thread = PyStructSequence_GET_ITEM(args, 3);
 
-    PyThreadState *tstate = _PyThreadState_GET();
-    PyObject *file = _PySys_GetAttr(tstate, &_Py_ID(stderr));
+    PyObject *file;
+    if (_PySys_GetOptionalAttr( &_Py_ID(stderr), &file) < 0) {
+        return NULL;
+    }
     if (file == NULL || file == Py_None) {
+        Py_XDECREF(file);
         if (thread == Py_None) {
             /* do nothing if sys.stderr is None and thread is None */
             Py_RETURN_NONE;
@@ -1584,9 +1590,6 @@ thread_excepthook(PyObject *module, PyObject *args)
                when the thread was created */
             Py_RETURN_NONE;
         }
-    }
-    else {
-        Py_INCREF(file);
     }
 
     int res = thread_excepthook_file(file, exc_type, exc_value, exc_tb,

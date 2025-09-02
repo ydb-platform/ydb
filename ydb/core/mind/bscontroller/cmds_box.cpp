@@ -108,16 +108,45 @@ namespace NKikimr::NBsController {
         TBoxInfo& origin = getBox(cmd.GetOriginBoxId(), cmd.GetOriginBoxGeneration(), "origin");
         TBoxInfo& target = getBox(cmd.GetTargetBoxId(), cmd.GetTargetBoxGeneration(), "target");
 
-        while (origin.Hosts) {
-            auto node = origin.Hosts.extract(origin.Hosts.begin());
-            node.key().BoxId = cmd.GetTargetBoxId();
-            if (!target.Hosts.insert(std::move(node)).inserted) {
-                throw TExError() << "duplicate hosts in merged box";
+        THashMap<std::tuple<THostConfigId, THostConfigId>, THostConfigId> mergedHostConfigs;
+
+        for (auto& [originKey, originValue] : origin.Hosts) {
+            const TBoxInfo::THostKey targetKey = originKey.ChangeBox(cmd.GetTargetBoxId()); // make new key for target set
+            if (const auto [it, inserted] = target.Hosts.try_emplace(targetKey, std::move(originValue)); !inserted) {
+                TBoxInfo::THostInfo& targetValue = it->second;
+                if (targetValue.EnforcedNodeId != originValue.EnforcedNodeId) {
+                    throw TExError() << "different EnforcedNodeId for the same HostId# " << THostId(originKey);
+                } else {
+                    const auto sourceConfigs = std::make_tuple(std::min(originValue.HostConfigId, targetValue.HostConfigId),
+                        std::max(originValue.HostConfigId, targetValue.HostConfigId));
+
+                    const auto [jt, inserted] = mergedHostConfigs.try_emplace(sourceConfigs);
+                    if (inserted) {
+                        auto& hostConfigs = HostConfigs.Unshare();
+                        jt->second = hostConfigs.empty() ? 1 : std::prev(hostConfigs.end())->first + 1;
+                        Y_ABORT_UNLESS(!hostConfigs.contains(jt->second));
+                        THostConfigInfo& newHostConfig = hostConfigs[jt->second];
+                        newHostConfig.Generation = 1;
+
+                        auto addDrivesFrom = [&](THostConfigId hostConfigId) {
+                            const auto it = hostConfigs.find(hostConfigId);
+                            if (it == hostConfigs.end()) {
+                                throw TExError() << "missing HostConfig for origin/target box";
+                            }
+                            for (const auto& [key, value] : it->second.Drives) {
+                                const THostConfigInfo::TDriveKey newKey{{jt->second, key.Path}};
+                                if (const auto [it, inserted] = newHostConfig.Drives.emplace(newKey, value); !inserted) {
+                                    throw TExError() << "duplicate drives in origin/target host configs";
+                                }
+                            }
+                        };
+                        addDrivesFrom(originValue.HostConfigId);
+                        addDrivesFrom(targetValue.HostConfigId);
+                    }
+                    targetValue.HostConfigId = jt->second;
+                }
             }
         }
-
-        // spin the generation
-        target.Generation = target.Generation.GetOrElse(1) + 1;
 
         auto& storagePools = StoragePools.Unshare();
         auto& storagePoolGroups = StoragePoolGroups.Unshare();
@@ -197,10 +226,45 @@ namespace NKikimr::NBsController {
         boxes.erase(cmd.GetOriginBoxId());
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
-        auto targetPDiskId = cmd.GetTargetPDiskId();
+    template <class T>
+    TPDiskId GetPDiskId(const TBlobStorageController::TConfigState& state, const T& command) {
+        if (command.HasTargetPDiskId() && command.HasTargetPDiskLocation()) {
+            throw TExError() << "Only one of TargetPDiskId or PDiskLocation can be specified";
+        }
 
-        TPDiskId pdiskId(targetPDiskId.GetNodeId(), targetPDiskId.GetPDiskId());
+        if (command.HasTargetPDiskId()) {
+            const NKikimrBlobStorage::TPDiskId& pdiskId = command.GetTargetPDiskId();
+            ui32 targetNodeId = pdiskId.GetNodeId();
+            ui32 targetPDiskId = pdiskId.GetPDiskId();
+            if (const auto& hostId = state.HostRecords->GetHostId(targetNodeId)) {
+                TPDiskId target(targetNodeId, targetPDiskId);
+                if (state.PDisks.Find(target) && !state.PDisksToRemove.count(target)) {
+                    return target;
+                }
+                throw TExPDiskNotFound(targetNodeId, targetPDiskId);
+            }
+            throw TExHostNotFound(targetNodeId);
+        } else if (command.HasTargetPDiskLocation()) {
+            const NKikimrBlobStorage::TPDiskLocation& pdiskLocation = command.GetTargetPDiskLocation();
+            const TString& targetFqdn = pdiskLocation.GetFqdn();
+            const TString& targetDiskPath = pdiskLocation.GetPath();
+
+            auto range = state.HostRecords->ResolveNodeId(targetFqdn);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                const TNodeId nodeId = it->second;
+                if (const auto& pdiskId = state.FindPDiskByLocation(nodeId, targetDiskPath)) {
+                    return *pdiskId;
+                }
+            }
+            
+            throw TExPDiskNotFound(targetFqdn, targetDiskPath);
+        }
+        throw TExError() << "Either TargetPDiskId or PDiskLocation must be specified";
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRestartPDisk& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
 
@@ -213,13 +277,156 @@ namespace NKikimr::NBsController {
         for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
-                m->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);
                 group->CalculateGroupStatus();
             }
         }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
+
+        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+
+        if (!pdisk) {
+            throw TExPDiskNotFound(pdiskId.NodeId, pdiskId.PDiskId);
+        }
+
+        if (cmd.GetValue()) {
+            pdisk->Mood = TPDiskMood::ReadOnly;
+
+            for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+                if (slot->Group) {
+                    auto *m = VSlots.FindForUpdate(slot->VSlotId);
+                    m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    m->IsReady = false;
+                    TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                    GroupFailureModelChanged.insert(slot->Group->ID);
+                    group->CalculateGroupStatus();
+                }
+            }
+        } else {
+            pdisk->Mood = TPDiskMood::Normal;
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& /*status*/) {
+        TPDiskId pdiskId = GetPDiskId(*this, cmd);
+
+        TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+
+        if (!pdisk) {
+            throw TExPDiskNotFound(pdiskId.NodeId, pdiskId.PDiskId);
+        }
+
+        pdisk->Mood = TPDiskMood::Stop;
+
+        for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+            if (slot->Group) {
+                auto *m = VSlots.FindForUpdate(slot->VSlotId);
+                m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->IsReady = false;
+                TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                GroupFailureModelChanged.insert(slot->Group->ID);
+                group->CalculateGroupStatus();
+            }
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& /*status*/) {
+        TPDiskId sourcePDiskId = GetPDiskId(*this, cmd.GetSourcePDisk());
+        TPDiskId destinationPDiskId = GetPDiskId(*this, cmd.GetDestinationPDisk());
+
+        TPDiskInfo *sourcePDisk = PDisks.FindForUpdate(sourcePDiskId);
+        TPDiskInfo *destinationPDisk = PDisks.FindForUpdate(destinationPDiskId);
+
+        if (!sourcePDisk) {
+            throw TExPDiskNotFound(sourcePDiskId.NodeId, sourcePDiskId.PDiskId);
+        }
+
+        if (!destinationPDisk) {
+            throw TExPDiskNotFound(destinationPDiskId.NodeId, destinationPDiskId.PDiskId);
+        }
+
+        if (sourcePDiskId == destinationPDiskId) {
+            throw TExError() << "Source and destination PDiskIds are the same: " << sourcePDiskId;
+        }
+
+        if (destinationPDisk->Mood != TPDiskMood::Stop) {
+            // It's a loose check, but actually destination disk can't start because the drive is locked by
+            // the source disk, so we can safely assume that it is stopped if mood is Stop.
+            throw TExError() << "Destination PDisk is not stopped: " << destinationPDiskId;
+        }
+
+        // Destination PDisk's GUID is not the same as source PDisk's GUID yet,
+        // set it to the source PDisk's GUID, so that it can start.
+        destinationPDisk->Guid = sourcePDisk->Guid;
+
+        std::unordered_set<TGroupId> changedGroups;
+
+        for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
+            if (srcSlot->Group) {
+                TVDiskIdShort diskId = srcSlot->GetShortVDiskId();
+                
+                TVSlotId newSlotId(destinationPDiskId, srcSlot->VSlotId.VSlotId);
+
+                auto* group = Groups.FindForUpdate(srcSlot->Group->ID);
+                
+                // Remove source slot from the group, so ConstructInplaceNewEntry can populate it with the new slot.
+                const ui32 orderNumber = group->Topology->GetOrderNumber(diskId);
+                group->VDisksInGroup[orderNumber] = nullptr;
+
+                if (changedGroups.insert(group->ID).second) {
+                    // VSlots "moving" requires generation change.
+                    // Need to only update group's generation once, since in some setups
+                    // one disk can have multiple vdisks of the same group.
+                    group->Generation++;
+                }
+
+                // Update all vslots in the group to the new generation.
+                auto it = group->VDisksInGroup.begin();
+                for (; it != group->VDisksInGroup.end(); ++it) {
+                    if ((*it)) {
+                        auto slot = VSlots.FindForUpdate((*it)->VSlotId);
+                        slot->GroupGeneration = group->Generation;
+                    }
+                }
+                
+                // Create a new slot on the destination PDisk.
+                TVSlotInfo *dstSlot = VSlots.ConstructInplaceNewEntry(newSlotId, newSlotId, destinationPDisk,
+                    srcSlot->GroupId, srcSlot->GroupGeneration, group->Generation, srcSlot->Kind, srcSlot->RingIdx,
+                    srcSlot->FailDomainIdx, srcSlot->VDiskIdx, TMood::Normal, group, &Self.VSlotReadyTimestampQ,
+                    TInstant::Zero(), TDuration::Zero());
+
+                dstSlot->VDiskStatusTimestamp = Mono;
+
+                UncommittedVSlots.insert(newSlotId);
+                
+                // Remove old slot from the source PDisk.
+                VSlots.DeleteExistingEntry(srcSlot->VSlotId);
+            }
+        }
+
+        // "Move" all slots from source PDisk to destination PDisk.
+        //destinationPDisk->VSlotsOnPDisk.insert(sourcePDisk->VSlotsOnPDisk.begin(), sourcePDisk->VSlotsOnPDisk.end());
+
+        for (const auto& [id, slot] : destinationPDisk->VSlotsOnPDisk) {
+            TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+            GroupFailureModelChanged.insert(slot->Group->ID);
+            group->CalculateGroupStatus();
+        }
+
+        // Adjust active slots on destination PDisk.
+        destinationPDisk->NumActiveSlots = sourcePDisk->NumActiveSlots;
+        destinationPDisk->Mood = TPDiskMood::Restarting;
+
+        // And remove old pdisk altogether.
+        // It will shutdown some time in the future, this can cause a race condition if destination PDisk
+        // is restarted before the source PDisk is stopped, but nothing we can do here.
+        PDisks.DeleteExistingEntry(sourcePDiskId);
     }
 
 } // namespace NKikimr::NBsController

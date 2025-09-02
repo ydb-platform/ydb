@@ -1,0 +1,15 @@
+{%- if target.enable_preview %}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("--enable-preview")
+    options.compilerArgs.add("-Xlint:preview")
+    options.release.set({{ jdk_version }})
+}
+
+tasks.withType<Javadoc> {
+    val javadocOptions = options as CoreJavadocOptions
+    javadocOptions.addStringOption("source", "{{ jdk_version }}")
+    javadocOptions.addBooleanOption("-enable-preview", true)
+}
+{#- AND SEE ALSO jvm_args.jinja -#}
+{% endif -%}

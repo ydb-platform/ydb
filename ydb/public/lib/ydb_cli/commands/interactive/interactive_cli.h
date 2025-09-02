@@ -2,22 +2,19 @@
 
 #include <util/generic/string.h>
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-class TInteractiveCLI
-{
+class TInteractiveCLI {
 public:
-    TInteractiveCLI(TClientCommand::TConfig & config, std::string prompt);
+    TInteractiveCLI(std::string prompt);
 
-    void Run();
+    int Run(TClientCommand::TConfig& config);
 
 private:
-    TClientCommand::TConfig & Config;
     std::string Prompt;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

@@ -24,7 +24,7 @@ public:
     void Abort() override;
 
 private:
-    THolder<IProxyOutput> Output_;
+    std::unique_ptr<IProxyOutput> Output_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

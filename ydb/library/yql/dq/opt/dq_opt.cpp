@@ -2,8 +2,9 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
 using namespace NYql::NNodes;
 
@@ -139,6 +140,15 @@ bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     });
 }
 
+bool IsDqDependsOnOtherStage(const TExprBase& node, const TDqStageBase& stage) {
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& node) {
+        if (TMaybeNode<TDqStage>(node)) {
+            return node.Get() != ptr;
+        }
+        return false;
+    });
+}
+
 bool IsDqDependsOnStageOutput(const TExprBase& node, const TDqStageBase& stage, ui32 outputIndex) {
     return !!FindNode(node.Ptr(), [ptr = stage.Raw(), outputIndex](const TExprNode::TPtr& exprNode) {
         if (TDqOutput::Match(exprNode.Get())) {
@@ -158,6 +168,16 @@ bool CanPushDqExpr(const TExprBase& expr, const TDqStageBase& stage) {
 
 bool CanPushDqExpr(const TExprBase& expr, const TDqConnection& connection) {
     return CanPushDqExpr(expr, connection.Output().Stage());
+}
+
+IDqOptimization* GetDqOptCallback(const TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx) {
+    if (providerCall.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerCall.Ref().Child(1))) {
+        auto dataSourceName = providerCall.Ref().Child(1)->Child(0)->Content();
+        auto datasource = typeAnnCtx.DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(datasource);
+        return (*datasource)->GetDqOptimization();
+    }
+    return nullptr;
 }
 
 } // namespace NYql::NDq

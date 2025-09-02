@@ -85,6 +85,17 @@ def load_credentials_from_file(
     user credentials, external account credentials, or impersonated service
     account credentials.
 
+    .. warning::
+        Important: If you accept a credential configuration (credential JSON/File/Stream)
+        from an external source for authentication to Google Cloud Platform, you must
+        validate it before providing it to any Google API or client library. Providing an
+        unvalidated credential configuration to Google APIs or libraries can compromise
+        the security of your systems and data. For more information, refer to
+        `Validate credential configurations from external sources`_.
+
+        .. _Validate credential configurations from external sources:
+            https://cloud.google.com/docs/authentication/external/externally-sourced-credentials
+
     Args:
         filename (str): The full path to the credentials file.
         scopes (Optional[Sequence[str]]): The list of scopes for the credentials. If
@@ -136,6 +147,17 @@ def load_credentials_from_dict(
     The credentials file must be a service account key, stored authorized
     user credentials, external account credentials, or impersonated service
     account credentials.
+
+    .. warning::
+        Important: If you accept a credential configuration (credential JSON/File/Stream)
+        from an external source for authentication to Google Cloud Platform, you must
+        validate it before providing it to any Google API or client library. Providing an
+        unvalidated credential configuration to Google APIs or libraries can compromise
+        the security of your systems and data. For more information, refer to
+        `Validate credential configurations from external sources`_.
+
+    .. _Validate credential configurations from external sources:
+        https://cloud.google.com/docs/authentication/external/externally-sourced-credentials
 
     Args:
         info (Dict[str, Any]): A dict object containing the credentials
@@ -237,6 +259,7 @@ def _get_gcloud_sdk_credentials(quota_project_id=None):
     credentials, project_id = load_credentials_from_file(
         credentials_filename, quota_project_id=quota_project_id
     )
+    credentials._cred_file_path = credentials_filename
 
     if not project_id:
         project_id = _cloud_sdk.get_project_id()
@@ -270,6 +293,7 @@ def _get_explicit_environ_credentials(quota_project_id=None):
         credentials, project_id = load_credentials_from_file(
             os.environ[environment_vars.CREDENTIALS], quota_project_id=quota_project_id
         )
+        credentials._cred_file_path = f"{explicit_file} file via the GOOGLE_APPLICATION_CREDENTIALS environment variable"
 
         return credentials, project_id
 
@@ -460,38 +484,8 @@ def _get_impersonated_service_account_credentials(filename, info, scopes):
     from google.auth import impersonated_credentials
 
     try:
-        source_credentials_info = info.get("source_credentials")
-        source_credentials_type = source_credentials_info.get("type")
-        if source_credentials_type == _AUTHORIZED_USER_TYPE:
-            source_credentials, _ = _get_authorized_user_credentials(
-                filename, source_credentials_info
-            )
-        elif source_credentials_type == _SERVICE_ACCOUNT_TYPE:
-            source_credentials, _ = _get_service_account_credentials(
-                filename, source_credentials_info
-            )
-        else:
-            raise exceptions.InvalidType(
-                "source credential of type {} is not supported.".format(
-                    source_credentials_type
-                )
-            )
-        impersonation_url = info.get("service_account_impersonation_url")
-        start_index = impersonation_url.rfind("/")
-        end_index = impersonation_url.find(":generateAccessToken")
-        if start_index == -1 or end_index == -1 or start_index > end_index:
-            raise exceptions.InvalidValue(
-                "Cannot extract target principal from {}".format(impersonation_url)
-            )
-        target_principal = impersonation_url[start_index + 1 : end_index]
-        delegates = info.get("delegates")
-        quota_project_id = info.get("quota_project_id")
-        credentials = impersonated_credentials.Credentials(
-            source_credentials,
-            target_principal,
-            scopes,
-            delegates,
-            quota_project_id=quota_project_id,
+        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
+            info, scopes=scopes
         )
     except ValueError as caught_exc:
         msg = "Failed to load impersonated service account credentials from {}".format(

@@ -19,6 +19,7 @@
 #include "liburing/io_uring_version.h"
 #include "liburing/barrier.h"
 
+
 #ifndef uring_unlikely
 #define uring_unlikely(cond)	__builtin_expect(!!(cond), 0)
 #endif
@@ -131,6 +132,16 @@ struct io_uring {
 	unsigned pad2;
 };
 
+struct io_uring_zcrx_rq {
+	__u32 *khead;
+	__u32 *ktail;
+	__u32 rq_tail;
+	unsigned ring_entries;
+
+	struct io_uring_zcrx_rqe *rqes;
+	void *ring_ptr;
+};
+
 /*
  * Library interface
  */
@@ -173,6 +184,12 @@ unsigned io_uring_peek_batch_cqe(struct io_uring *ring,
 int io_uring_wait_cqes(struct io_uring *ring, struct io_uring_cqe **cqe_ptr,
 		       unsigned wait_nr, struct __kernel_timespec *ts,
 		       sigset_t *sigmask);
+int io_uring_wait_cqes_min_timeout(struct io_uring *ring,
+				   struct io_uring_cqe **cqe_ptr,
+				   unsigned wait_nr,
+				   struct __kernel_timespec *ts,
+				   unsigned int min_ts_usec,
+				   sigset_t *sigmask);
 int io_uring_wait_cqe_timeout(struct io_uring *ring,
 			      struct io_uring_cqe **cqe_ptr,
 			      struct __kernel_timespec *ts);
@@ -183,7 +200,28 @@ int io_uring_submit_and_wait_timeout(struct io_uring *ring,
 				     unsigned wait_nr,
 				     struct __kernel_timespec *ts,
 				     sigset_t *sigmask);
+int io_uring_submit_and_wait_min_timeout(struct io_uring *ring,
+					 struct io_uring_cqe **cqe_ptr,
+					 unsigned wait_nr,
+					 struct __kernel_timespec *ts,
+					 unsigned min_wait,
+					 sigset_t *sigmask);
+int io_uring_submit_and_wait_reg(struct io_uring *ring,
+				 struct io_uring_cqe **cqe_ptr, unsigned wait_nr,
+				 int reg_index);
 
+int io_uring_register_wait_reg(struct io_uring *ring,
+			       struct io_uring_reg_wait *reg, int nr);
+int io_uring_resize_rings(struct io_uring *ring, struct io_uring_params *p);
+int io_uring_clone_buffers_offset(struct io_uring *dst, struct io_uring *src,
+				  unsigned int dst_off, unsigned int src_off,
+				  unsigned int nr, unsigned int flags);
+int __io_uring_clone_buffers_offset(struct io_uring *dst, struct io_uring *src,
+				  unsigned int dst_off, unsigned int src_off,
+				  unsigned int nr, unsigned int flags);
+int io_uring_clone_buffers(struct io_uring *dst, struct io_uring *src);
+int __io_uring_clone_buffers(struct io_uring *dst, struct io_uring *src,
+				unsigned int flags);
 int io_uring_register_buffers(struct io_uring *ring, const struct iovec *iovecs,
 			      unsigned nr_iovecs);
 int io_uring_register_buffers_tags(struct io_uring *ring,
@@ -220,8 +258,10 @@ int io_uring_register_restrictions(struct io_uring *ring,
 				   unsigned int nr_res);
 int io_uring_enable_rings(struct io_uring *ring);
 int __io_uring_sqring_wait(struct io_uring *ring);
+#ifdef _GNU_SOURCE
 int io_uring_register_iowq_aff(struct io_uring *ring, size_t cpusz,
 				const cpu_set_t *mask);
+#endif
 int io_uring_unregister_iowq_aff(struct io_uring *ring);
 int io_uring_register_iowq_max_workers(struct io_uring *ring,
 				       unsigned int *values);
@@ -240,6 +280,11 @@ int io_uring_register_file_alloc_range(struct io_uring *ring,
 
 int io_uring_register_napi(struct io_uring *ring, struct io_uring_napi *napi);
 int io_uring_unregister_napi(struct io_uring *ring, struct io_uring_napi *napi);
+int io_uring_register_ifq(struct io_uring *ring,
+			  struct io_uring_zcrx_ifq_reg *reg);
+
+int io_uring_register_clock(struct io_uring *ring,
+			    struct io_uring_clock_register *arg);
 
 int io_uring_get_events(struct io_uring *ring);
 int io_uring_submit_and_get_events(struct io_uring *ring);
@@ -251,10 +296,16 @@ int io_uring_enter(unsigned int fd, unsigned int to_submit,
 		   unsigned int min_complete, unsigned int flags, sigset_t *sig);
 int io_uring_enter2(unsigned int fd, unsigned int to_submit,
 		    unsigned int min_complete, unsigned int flags,
-		    sigset_t *sig, size_t sz);
+		    void *arg, size_t sz);
 int io_uring_setup(unsigned int entries, struct io_uring_params *p);
 int io_uring_register(unsigned int fd, unsigned int opcode, const void *arg,
 		      unsigned int nr_args);
+
+/*
+ * Mapped/registered regions
+ */
+int io_uring_register_region(struct io_uring *ring,
+			     struct io_uring_mem_region_reg *reg);
 
 /*
  * Mapped buffer ring alloc/register + unregister/free helpers
@@ -262,7 +313,7 @@ int io_uring_register(unsigned int fd, unsigned int opcode, const void *arg,
 struct io_uring_buf_ring *io_uring_setup_buf_ring(struct io_uring *ring,
 						  unsigned int nentries,
 						  int bgid, unsigned int flags,
-						  int *ret);
+						  int *err);
 int io_uring_free_buf_ring(struct io_uring *ring, struct io_uring_buf_ring *br,
 			   unsigned int nentries, int bgid);
 
@@ -274,27 +325,69 @@ int __io_uring_get_cqe(struct io_uring *ring,
 			struct io_uring_cqe **cqe_ptr, unsigned submit,
 			unsigned wait_nr, sigset_t *sigmask);
 
+/*
+ * Enable/disable setting of iowait by the kernel.
+ */
+int io_uring_set_iowait(struct io_uring *ring, bool enable_iowait);
+
 #define LIBURING_UDATA_TIMEOUT	((__u64) -1)
 
 /*
- * Calculates the step size for CQE iteration.
- * 	For standard CQE's its 1, for big CQE's its two.
+ * Returns the bit shift needed to index the CQ.
+ * This shift is 1 for rings with big CQEs, and 0 for rings with normal CQEs.
+ * CQE `index` can be computed as &cq.cqes[(index & cq.ring_mask) << cqe_shift].
  */
-#define io_uring_cqe_shift(ring)					\
-	(!!((ring)->flags & IORING_SETUP_CQE32))
+IOURINGINLINE unsigned io_uring_cqe_shift_from_flags(unsigned flags)
+{
+	return !!(flags & IORING_SETUP_CQE32);
+}
 
-#define io_uring_cqe_index(ring,ptr,mask)				\
-	(((ptr) & (mask)) << io_uring_cqe_shift(ring))
+IOURINGINLINE unsigned io_uring_cqe_shift(const struct io_uring *ring)
+{
+	return io_uring_cqe_shift_from_flags(ring->flags);
+}
 
-#define io_uring_for_each_cqe(ring, head, cqe)				\
-	/*								\
-	 * io_uring_smp_load_acquire() enforces the order of tail	\
-	 * and CQE reads.						\
-	 */								\
-	for (head = *(ring)->cq.khead;					\
-	     (cqe = (head != io_uring_smp_load_acquire((ring)->cq.ktail) ? \
-		&(ring)->cq.cqes[io_uring_cqe_index(ring, head, (ring)->cq.ring_mask)] : NULL)); \
-	     head++)							\
+struct io_uring_cqe_iter {
+	struct io_uring_cqe *cqes;
+	unsigned mask;
+	unsigned shift;
+	unsigned head;
+	unsigned tail;
+};
+
+IOURINGINLINE struct io_uring_cqe_iter
+io_uring_cqe_iter_init(const struct io_uring *ring)
+{
+	return (struct io_uring_cqe_iter) {
+		.cqes = ring->cq.cqes,
+		.mask = ring->cq.ring_mask,
+		.shift = io_uring_cqe_shift(ring),
+		.head = *ring->cq.khead,
+		/* Acquire ordering ensures tail is loaded before any CQEs */
+		.tail = io_uring_smp_load_acquire(ring->cq.ktail),
+	};
+}
+
+IOURINGINLINE bool io_uring_cqe_iter_next(struct io_uring_cqe_iter *iter,
+					  struct io_uring_cqe **cqe)
+{
+	if (iter->head == iter->tail)
+		return false;
+
+	*cqe = &iter->cqes[(iter->head++ & iter->mask) << iter->shift];
+	return true;
+}
+
+/*
+ * NOTE: we should just get rid of the '__head__' being passed in here, it doesn't
+ * serve a purpose anymore. The below is a bit of a work-around to ensure that
+ * the compiler doesn't complain about '__head__' being unused (or only written,
+ * never read), as we use a local iterator for both the head and tail tracking.
+ */
+#define io_uring_for_each_cqe(ring, __head__, cqe)					\
+	for (struct io_uring_cqe_iter __ITER__ = io_uring_cqe_iter_init(ring);	\
+	     (__head__) = __ITER__.head, io_uring_cqe_iter_next(&__ITER__, &(cqe));	\
+	     (void)(__head__))
 
 /*
  * Must be called after io_uring_for_each_cqe()
@@ -368,6 +461,12 @@ IOURINGINLINE void io_uring_sqe_set_flags(struct io_uring_sqe *sqe,
 	sqe->flags = (__u8) flags;
 }
 
+IOURINGINLINE void io_uring_sqe_set_buf_group(struct io_uring_sqe *sqe,
+					      int bgid)
+{
+	sqe->buf_group = (__u16) bgid;
+}
+
 IOURINGINLINE void __io_uring_set_target_fixed_file(struct io_uring_sqe *sqe,
 						    unsigned int file_index)
 {
@@ -375,7 +474,7 @@ IOURINGINLINE void __io_uring_set_target_fixed_file(struct io_uring_sqe *sqe,
 	sqe->file_index = file_index + 1;
 }
 
-IOURINGINLINE void io_uring_initialize_sqe(struct io_uring_sqe *sqe) 
+IOURINGINLINE void io_uring_initialize_sqe(struct io_uring_sqe *sqe)
 {
 	sqe->flags = 0;
 	sqe->ioprio = 0;
@@ -467,6 +566,16 @@ IOURINGINLINE void io_uring_prep_read_fixed(struct io_uring_sqe *sqe, int fd,
 	sqe->buf_index = (__u16) buf_index;
 }
 
+IOURINGINLINE void io_uring_prep_readv_fixed(struct io_uring_sqe *sqe, int fd,
+					     const struct iovec *iovecs,
+					     unsigned nr_vecs, __u64 offset,
+					     int flags, int buf_index)
+{
+	io_uring_prep_readv2(sqe, fd, iovecs, nr_vecs, offset, flags);
+	sqe->opcode = IORING_OP_READV_FIXED;
+	sqe->buf_index = (__u16)buf_index;
+}
+
 IOURINGINLINE void io_uring_prep_writev(struct io_uring_sqe *sqe, int fd,
 					const struct iovec *iovecs,
 					unsigned nr_vecs, __u64 offset)
@@ -489,6 +598,16 @@ IOURINGINLINE void io_uring_prep_write_fixed(struct io_uring_sqe *sqe, int fd,
 {
 	io_uring_prep_rw(IORING_OP_WRITE_FIXED, sqe, fd, buf, nbytes, offset);
 	sqe->buf_index = (__u16) buf_index;
+}
+
+IOURINGINLINE void io_uring_prep_writev_fixed(struct io_uring_sqe *sqe, int fd,
+				       const struct iovec *iovecs,
+				       unsigned nr_vecs, __u64 offset,
+				       int flags, int buf_index)
+{
+	io_uring_prep_writev2(sqe, fd, iovecs, nr_vecs, offset, flags);
+	sqe->opcode = IORING_OP_WRITEV_FIXED;
+	sqe->buf_index = (__u16)buf_index;
 }
 
 IOURINGINLINE void io_uring_prep_recvmsg(struct io_uring_sqe *sqe, int fd,
@@ -669,6 +788,28 @@ IOURINGINLINE void io_uring_prep_connect(struct io_uring_sqe *sqe, int fd,
 	io_uring_prep_rw(IORING_OP_CONNECT, sqe, fd, addr, 0, addrlen);
 }
 
+IOURINGINLINE void io_uring_prep_bind(struct io_uring_sqe *sqe, int fd,
+				      struct sockaddr *addr,
+				      socklen_t addrlen)
+{
+	io_uring_prep_rw(IORING_OP_BIND, sqe, fd, addr, 0, addrlen);
+}
+
+IOURINGINLINE void io_uring_prep_listen(struct io_uring_sqe *sqe, int fd,
+				      int backlog)
+{
+	io_uring_prep_rw(IORING_OP_LISTEN, sqe, fd, 0, backlog, 0);
+}
+
+struct epoll_event;
+IOURINGINLINE void io_uring_prep_epoll_wait(struct io_uring_sqe *sqe, int fd,
+					    struct epoll_event *events,
+					    int maxevents, unsigned flags)
+{
+	io_uring_prep_rw(IORING_OP_EPOLL_WAIT, sqe, fd, events, maxevents, 0);
+	sqe->rw_flags = flags;
+}
+
 IOURINGINLINE void io_uring_prep_files_update(struct io_uring_sqe *sqe,
 					      int *fds, unsigned nr_fds,
 					      int offset)
@@ -706,6 +847,20 @@ IOURINGINLINE void io_uring_prep_openat_direct(struct io_uring_sqe *sqe,
 	__io_uring_set_target_fixed_file(sqe, file_index);
 }
 
+IOURINGINLINE void io_uring_prep_open(struct io_uring_sqe *sqe,
+					const char *path, int flags, mode_t mode)
+{
+	io_uring_prep_openat(sqe, AT_FDCWD, path, flags, mode);
+}
+
+/* open directly into the fixed file table */
+IOURINGINLINE void io_uring_prep_open_direct(struct io_uring_sqe *sqe,
+							const char *path, int flags, mode_t mode,
+							unsigned file_index)
+{
+	io_uring_prep_openat_direct(sqe, AT_FDCWD, path, flags, mode, file_index);
+}
+
 IOURINGINLINE void io_uring_prep_close(struct io_uring_sqe *sqe, int fd)
 {
 	io_uring_prep_rw(IORING_OP_CLOSE, sqe, fd, NULL, 0, 0);
@@ -731,6 +886,7 @@ IOURINGINLINE void io_uring_prep_read_multishot(struct io_uring_sqe *sqe,
 	io_uring_prep_rw(IORING_OP_READ_MULTISHOT, sqe, fd, NULL, nbytes,
 			 offset);
 	sqe->buf_group = buf_group;
+	sqe->flags = IOSQE_BUFFER_SELECT;
 }
 
 IOURINGINLINE void io_uring_prep_write(struct io_uring_sqe *sqe, int fd,
@@ -751,16 +907,31 @@ IOURINGINLINE void io_uring_prep_statx(struct io_uring_sqe *sqe, int dfd,
 }
 
 IOURINGINLINE void io_uring_prep_fadvise(struct io_uring_sqe *sqe, int fd,
-					 __u64 offset, off_t len, int advice)
+					 __u64 offset, __u32 len, int advice)
 {
 	io_uring_prep_rw(IORING_OP_FADVISE, sqe, fd, NULL, (__u32) len, offset);
 	sqe->fadvise_advice = (__u32) advice;
 }
 
 IOURINGINLINE void io_uring_prep_madvise(struct io_uring_sqe *sqe, void *addr,
-					 off_t length, int advice)
+					 __u32 length, int advice)
 {
 	io_uring_prep_rw(IORING_OP_MADVISE, sqe, -1, addr, (__u32) length, 0);
+	sqe->fadvise_advice = (__u32) advice;
+}
+
+IOURINGINLINE void io_uring_prep_fadvise64(struct io_uring_sqe *sqe, int fd,
+					 __u64 offset, off_t len, int advice)
+{
+	io_uring_prep_rw(IORING_OP_FADVISE, sqe, fd, NULL, 0, offset);
+	sqe->addr = len;
+	sqe->fadvise_advice = (__u32) advice;
+}
+
+IOURINGINLINE void io_uring_prep_madvise64(struct io_uring_sqe *sqe, void *addr,
+					 off_t length, int advice)
+{
+	io_uring_prep_rw(IORING_OP_MADVISE, sqe, -1, addr, 0, length);
 	sqe->fadvise_advice = (__u32) advice;
 }
 
@@ -769,6 +940,13 @@ IOURINGINLINE void io_uring_prep_send(struct io_uring_sqe *sqe, int sockfd,
 {
 	io_uring_prep_rw(IORING_OP_SEND, sqe, sockfd, buf, (__u32) len, 0);
 	sqe->msg_flags = (__u32) flags;
+}
+
+IOURINGINLINE void io_uring_prep_send_bundle(struct io_uring_sqe *sqe,
+					     int sockfd, size_t len, int flags)
+{
+	io_uring_prep_send(sqe, sockfd, NULL, len, flags);
+	sqe->ioprio |= IORING_RECVSEND_BUNDLE;
 }
 
 IOURINGINLINE void io_uring_prep_send_set_addr(struct io_uring_sqe *sqe,
@@ -814,6 +992,17 @@ IOURINGINLINE void io_uring_prep_sendmsg_zc(struct io_uring_sqe *sqe, int fd,
 {
 	io_uring_prep_sendmsg(sqe, fd, msg, flags);
 	sqe->opcode = IORING_OP_SENDMSG_ZC;
+}
+
+IOURINGINLINE void io_uring_prep_sendmsg_zc_fixed(struct io_uring_sqe *sqe,
+						int fd,
+						const struct msghdr *msg,
+						unsigned flags,
+						unsigned buf_index)
+{
+	io_uring_prep_sendmsg_zc(sqe, fd, msg, flags);
+	sqe->ioprio |= IORING_RECVSEND_FIXED_BUF;
+	sqe->buf_index = buf_index;
 }
 
 IOURINGINLINE void io_uring_prep_recv(struct io_uring_sqe *sqe, int sockfd,
@@ -1208,10 +1397,36 @@ IOURINGINLINE void io_uring_prep_fixed_fd_install(struct io_uring_sqe *sqe,
 	sqe->install_fd_flags = flags;
 }
 
+#ifdef _GNU_SOURCE
 IOURINGINLINE void io_uring_prep_ftruncate(struct io_uring_sqe *sqe,
 				       int fd, loff_t len)
 {
 	io_uring_prep_rw(IORING_OP_FTRUNCATE, sqe, fd, 0, 0, len);
+}
+#endif
+
+IOURINGINLINE void io_uring_prep_cmd_discard(struct io_uring_sqe *sqe,
+					     int fd,
+					     uint64_t offset, uint64_t nbytes)
+{
+	io_uring_prep_rw(IORING_OP_URING_CMD, sqe, fd, 0, 0, 0);
+	sqe->cmd_op = BLOCK_URING_CMD_DISCARD;
+	sqe->addr = offset;
+	sqe->addr3 = nbytes;
+}
+
+/* Read the kernel's SQ head index with appropriate memory ordering */
+IOURINGINLINE unsigned io_uring_load_sq_head(const struct io_uring *ring)
+{
+	/*
+	 * Without acquire ordering, we could overwrite a SQE before the kernel
+	 * finished reading it. We don't need the acquire ordering for
+	 * non-SQPOLL since then we drive updates.
+	 */
+	if (ring->flags & IORING_SETUP_SQPOLL)
+		return io_uring_smp_load_acquire(ring->sq.khead);
+
+	return *ring->sq.khead;
 }
 
 /*
@@ -1220,20 +1435,8 @@ IOURINGINLINE void io_uring_prep_ftruncate(struct io_uring_sqe *sqe,
  */
 IOURINGINLINE unsigned io_uring_sq_ready(const struct io_uring *ring)
 {
-	unsigned khead;
-
-	/*
-	 * Without a barrier, we could miss an update and think the SQ wasn't
-	 * ready. We don't need the load acquire for non-SQPOLL since then we
-	 * drive updates.
-	 */
-	if (ring->flags & IORING_SETUP_SQPOLL)
-		khead = io_uring_smp_load_acquire(ring->sq.khead);
-	else
-		khead = *ring->sq.khead;
-
 	/* always use real head, to avoid losing sync for short submit */
-	return ring->sq.sqe_tail - khead;
+	return ring->sq.sqe_tail - io_uring_load_sq_head(ring);
 }
 
 /*
@@ -1242,6 +1445,21 @@ IOURINGINLINE unsigned io_uring_sq_ready(const struct io_uring *ring)
 IOURINGINLINE unsigned io_uring_sq_space_left(const struct io_uring *ring)
 {
 	return ring->sq.ring_entries - io_uring_sq_ready(ring);
+}
+
+/*
+ * Returns the bit shift needed to index the SQ.
+ * This shift is 1 for rings with big SQEs, and 0 for rings with normal SQEs.
+ * SQE `index` can be computed as &sq.sqes[(index & sq.ring_mask) << sqe_shift].
+ */
+IOURINGINLINE unsigned io_uring_sqe_shift_from_flags(unsigned flags)
+{
+	return !!(flags & IORING_SETUP_SQE128);
+}
+
+IOURINGINLINE unsigned io_uring_sqe_shift(const struct io_uring *ring)
+{
+	return io_uring_sqe_shift_from_flags(ring->flags);
 }
 
 /*
@@ -1298,7 +1516,7 @@ IOURINGINLINE int io_uring_cq_eventfd_toggle(struct io_uring *ring,
 {
 	uint32_t flags;
 
-	if (!!enabled == io_uring_cq_eventfd_enabled(ring))
+	if (enabled == io_uring_cq_eventfd_enabled(ring))
 		return 0;
 
 	if (!ring->cq.kflags)
@@ -1341,10 +1559,7 @@ IOURINGINLINE int __io_uring_peek_cqe(struct io_uring *ring,
 	int err = 0;
 	unsigned available;
 	unsigned mask = ring->cq.ring_mask;
-	int shift = 0;
-
-	if (ring->flags & IORING_SETUP_CQE32)
-		shift = 1;
+	unsigned shift = io_uring_cqe_shift(ring);
 
 	do {
 		unsigned tail = io_uring_smp_load_acquire(ring->cq.ktail);
@@ -1411,26 +1626,16 @@ IOURINGINLINE int io_uring_wait_cqe(struct io_uring *ring,
 IOURINGINLINE struct io_uring_sqe *_io_uring_get_sqe(struct io_uring *ring)
 {
 	struct io_uring_sq *sq = &ring->sq;
-	unsigned int head, next = sq->sqe_tail + 1;
-	int shift = 0;
+	unsigned head = io_uring_load_sq_head(ring), tail = sq->sqe_tail;
+	struct io_uring_sqe *sqe;
 
-	if (ring->flags & IORING_SETUP_SQE128)
-		shift = 1;
-	if (!(ring->flags & IORING_SETUP_SQPOLL))
-		head = *sq->khead;
-	else
-		head = io_uring_smp_load_acquire(sq->khead);
+	if (tail - head >= sq->ring_entries)
+		return NULL;
 
-	if (next - head <= sq->ring_entries) {
-		struct io_uring_sqe *sqe;
-
-		sqe = &sq->sqes[(sq->sqe_tail & sq->ring_mask) << shift];
-		sq->sqe_tail = next;
-		io_uring_initialize_sqe(sqe);
-		return sqe;
-	}
-
-	return NULL;
+	sqe = &sq->sqes[(tail & sq->ring_mask) << io_uring_sqe_shift(ring)];
+	sq->sqe_tail = tail + 1;
+	io_uring_initialize_sqe(sqe);
+	return sqe;
 }
 
 /*
@@ -1510,6 +1715,25 @@ IOURINGINLINE int io_uring_buf_ring_available(struct io_uring *ring,
 	return (uint16_t) (br->tail - head);
 }
 
+/*
+ * As of liburing-2.2, io_uring_get_sqe() has been converted into a
+ * "static inline" function. However, this change breaks seamless
+ * updates of liburing.so, as applications would need to be recompiled.
+ * To ensure backward compatibility, liburing keeps the original
+ * io_uring_get_sqe() symbol available in the shared library.
+ *
+ * To accomplish this, io_uring_get_sqe() is defined as a non-static
+ * inline function when LIBURING_INTERNAL is set, which only applies
+ * during liburing.so builds.
+ *
+ * This strategy ensures new users adopt the "static inline" version
+ * while preserving compatibility for old applications linked against
+ * the shared library.
+ *
+ * Relevant commits:
+ * 8be8af4afcb4 ("queue: provide io_uring_get_sqe() symbol again")
+ * 52dcdbba35c8 ("src/queue: protect io_uring_get_sqe() with LIBURING_INTERNAL")
+ */
 #ifndef LIBURING_INTERNAL
 IOURINGINLINE struct io_uring_sqe *io_uring_get_sqe(struct io_uring *ring)
 {
@@ -1521,6 +1745,9 @@ struct io_uring_sqe *io_uring_get_sqe(struct io_uring *ring);
 
 ssize_t io_uring_mlock_size(unsigned entries, unsigned flags);
 ssize_t io_uring_mlock_size_params(unsigned entries, struct io_uring_params *p);
+
+ssize_t io_uring_memory_size(unsigned entries, unsigned flags);
+ssize_t io_uring_memory_size_params(unsigned entries, struct io_uring_params *p);
 
 /*
  * Versioning information for liburing.

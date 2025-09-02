@@ -1,10 +1,12 @@
 # Вставка и модификация данных с помощью REPLACE
 
-Добавьте данные в таблицу с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
+{% include [column-and-row-tables-in-read-only-tx](../../yql/reference/_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
+Добавьте новые данные в таблицы с одновременным обновлением уже существующих данных с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 REPLACE INTO episodes
 (
     series_id,
@@ -29,6 +31,4 @@ COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
-
-COMMIT;
 ```

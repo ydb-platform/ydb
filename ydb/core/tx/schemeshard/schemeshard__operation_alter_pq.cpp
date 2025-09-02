@@ -1,13 +1,19 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range_sequence.h>
+#include <ydb/core/persqueue/partition_index_generator/partition_index_generator.h>
 #include <ydb/core/persqueue/utils.h>
+
 #include <ydb/services/lib/sharding/sharding.h>
+
+#include <format>
 
 
 namespace {
@@ -15,7 +21,34 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
+    // return if we should create one child at the root level in the case when another child already exists
+    if (!split.GetCreateRootLevelSibling() || split.ChildPartitionIdsSize() == 0) {
+        return false;
+    }
+    size_t existPartitions = 0;
+    for (const ui32 childId : split.GetChildPartitionIds()) {
+        existPartitions += topic->Partitions.contains(childId);
+    }
+    return (existPartitions > 0) && (existPartitions < split.ChildPartitionIdsSize());
+}
+
+std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions) {
+    TVector<NKikimr::NPQ::TPartitionKeyRangeView> bounds(Reserve(partitions.size()));
+    for (const auto& partition : partitions) {
+        bounds.push_back({
+            .PartitionId = partition.GetPartition(),
+            .FromBound = partition.GetKeyRange().HasFromBound() ? MakeMaybe(partition.GetKeyRange().GetFromBound()) : Nothing(),
+            .ToBound = partition.GetKeyRange().HasToBound() ? MakeMaybe(partition.GetKeyRange().GetToBound()) : Nothing(),
+        });
+    }
+    return NKikimr::NPQ::ValidateKeyRangeSequence(bounds);
+}
+
 class TAlterPQ: public TSubOperation {
+    // Make sure we make decisions using a consistent runtime value
+    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -59,16 +92,33 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        bool splitMergeEnabled = EnableTopicSplitMerge
             && NPQ::SplitMergeEnabled(*tabletConfig)
             && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
 
-        if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize())) {
+        if (!splitMergeEnabled && (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize())) {
             errStr = "Split and merge operations disabled";
             return nullptr;
+        }
+
+        if (alter.RootPartitionBoundariesSize()) {
+            for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                if (!set.HasPartition()) {
+                    errStr = "Partition id for root partition bounds must be specified";
+                    return nullptr;
+                }
+                if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
+                    errStr = "KeyRange must be specified for root partition bounds";
+                    return nullptr;
+                }
+            }
+            if (auto result = ValidateKeyRangeSequence(alter.GetRootPartitionBoundaries()); !result.has_value()) {
+                errStr = result.error();
+                return nullptr;
+            }
         }
 
         if (alter.SplitSize()) {
@@ -136,6 +186,10 @@ public:
                 return nullptr;
             }
 
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
+            }
+
             if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
                 const auto lifetimeSeconds = alterConfig.GetPartitionConfig().GetLifetimeSeconds();
                 if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
@@ -177,12 +231,8 @@ public:
 
             if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
                 && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
-                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 0 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
-                    errStr = TStringBuilder() << "Can`t disable auto partitioning. Disabling auto partitioning is a destructive operation, "
-                            << "after which all partitions will become active and the message order guarantee will be violated. "
-                            << "If you are sure of this, then set max_active_partitions to 0.";
-                    return nullptr;
-                }
+                errStr = TStringBuilder() << "Can`t disable auto partitioning.";
+                return nullptr;
             }
 
             if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
@@ -209,7 +259,7 @@ public:
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
-                PathIdFromPathId(TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId, pathId);
+                TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
@@ -308,6 +358,8 @@ public:
                         partitionInfo->KeyRange.Clear();
                         partitionInfo->ParentPartitionIds.clear();
                         partitionInfo->ChildPartitionIds.clear();
+                    } else if (const auto* range = pqGroup->AlterData->KeyRangesToChange.FindPtr(partitionInfo->PqId)) {
+                        partitionInfo->KeyRange = *range;
                     }
                     context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
                 }
@@ -529,7 +581,7 @@ public:
                 .IsPQGroup()
                 .NotUnderOperation();
 
-            if (!Transaction.GetAllowAccessToPrivatePaths()) {
+            if (!Transaction.GetAllowAccessToPrivatePaths() && !Transaction.GetInternal()) {
                 checks.IsCommonSensePath();
             }
 
@@ -577,22 +629,112 @@ public:
             return result;
         }
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        alterData->ActivePartitionCount = topic->ActivePartitionCount;
+
+        bool splitMergeEnabled = EnableTopicSplitMerge
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
+        THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
             };
 
-            ui32 nextId = topic->NextPartitionId;
-            ui32 nextGroupId = topic->TotalGroupCount;
-
-            THashSet<ui32> involvedPartitions;
+            NKikimr::NPQ::TPartitionIndexGenerator indexGenerator(topic->NextPartitionId);
+            for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                const auto reserve = indexGenerator.ReservePartitionIndex(set.GetPartition(), set.GetPartition(), !set.GetCreatePartition());
+                if (!reserve.has_value()) {
+                    errStr = TStringBuilder() << "Set root partition boundaries: " << reserve.error();
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+            }
+            for (const auto& split : alter.GetSplit()) {
+                for (const ui32 childId : split.GetChildPartitionIds()) {
+                    const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));
+                    if (!reserve.has_value()) {
+                        errStr = TStringBuilder() << "Split with prescribed partition ids: " << reserve.error();
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                }
+            }
+            for (const auto& merge : alter.GetMerge()) {
+                if (merge.HasChildPartitionId()) {
+                    const auto reserve = indexGenerator.ReservePartitionIndex(merge.GetChildPartitionId(), merge.GetPartition(), false);
+                    if (!reserve.has_value()) {
+                        errStr = TStringBuilder() << "Merge with prescribed partition id: " << reserve.error();
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                }
+            }
+            if (alter.RootPartitionBoundariesSize()) {
+                const size_t rootPartitionsCnt = std::ranges::count_if(topic->Partitions, [](const auto& pair) { return pair.second->ParentPartitionIds.empty();});
+                if (rootPartitionsCnt > alter.RootPartitionBoundariesSize()) {
+                    errStr = std::format("Only {} root partitions has new bounds, required: {}",  alter.RootPartitionBoundariesSize(), rootPartitionsCnt);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+                for (const auto& set : alter.GetRootPartitionBoundaries()) {
+                    const auto partitionId = set.GetPartition();
+                    if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
+                        errStr = std::format("Partition #{} doesn't have KeyRange", partitionId);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                    const TMaybe<TTopicTabletInfo::TKeyRange> range = !set.HasKeyRange()
+                        ? Nothing()
+                        : MakeMaybe(TTopicTabletInfo::TKeyRange{
+                            .FromBound = set.GetKeyRange().HasFromBound() ? MakeMaybe(set.GetKeyRange().GetFromBound()) : Nothing(),
+                            .ToBound = set.GetKeyRange().HasToBound() ? MakeMaybe(set.GetKeyRange().GetToBound()) : Nothing(),
+                        });
+                    if (const TTopicTabletInfo::TTopicPartitionInfo* prevPart = topic->Partitions.Value(partitionId, nullptr)) {
+                        const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
+                        if (!partitionIdIndex.has_value()) {
+                            errStr = TStringBuilder() << "Set partition bounds:  " << partitionIdIndex.error();
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        if (set.GetCreatePartition()) {
+                            errStr = TStringBuilder() << "Partition already exists: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        if (!prevPart->ParentPartitionIds.empty()) {
+                            errStr = TStringBuilder() << "Unable to change bounds of non-root partition: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        auto [_, unique] = alterData->KeyRangesToChange.emplace(prevPart->PqId, range);
+                        if (!unique) {
+                            errStr = std::format("Multiple bounds modifications for the partition {}", partitionId);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                    } else {
+                        if (!set.GetCreatePartition()) {
+                            errStr = TStringBuilder() << "Cannot set bounds of non-existing partition: " << partitionId;
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
+                        if (!partitionIdIndex.has_value()) {
+                            errStr = TStringBuilder() << "Create new partition with bounds:  " << partitionIdIndex.error();
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                            return result;
+                        }
+                        alterData->PartitionsToAdd.emplace(partitionIdIndex.value(), partitionIdIndex.value() + 1, range);
+                        alterData->TotalGroupCount += 1;
+                        ++alterData->ActivePartitionCount;
+                    }
+                }
+            }
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
+                ++alterData->ActivePartitionCount;
 
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
@@ -638,22 +780,56 @@ public:
                         return result;
                     }
                 }
+                if (!EqualToOneOf(split.ChildPartitionIdsSize(), 0u, 2u)) {
+                    errStr = TStringBuilder()
+                             << "Invalid number of child partitions: " << split.ChildPartitionIdsSize();
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
 
-                THashSet<ui32> parents{splittedPartitionId};
+                const THashSet<ui32> parents{splittedPartitionId};
+                const TTopicTabletInfo::TKeyRange childRange[2]{
+                    {
+                        .FromBound = keyRange ? keyRange->FromBound : Nothing(),
+                        .ToBound = splitBoundary,
+                    },
+                    {
+                        .FromBound = splitBoundary,
+                        .ToBound = keyRange ? keyRange->ToBound : Nothing(),
+                    },
+                };
 
-                TTopicTabletInfo::TKeyRange range;
-                range.FromBound = keyRange ? keyRange->FromBound : Nothing();
-                range.ToBound = splitBoundary;
-
-                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
-
-                range.FromBound = splitBoundary;
-                range.ToBound = keyRange ? keyRange->ToBound : Nothing();
-
-                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
+                for (const size_t childIndex : {0, 1}) {
+                    const TTopicTabletInfo::TKeyRange& range = childRange[childIndex];
+                    const TMaybe<ui32> prescribedChildPartitionId = childIndex < split.ChildPartitionIdsSize() ? MakeMaybe(split.GetChildPartitionIds(childIndex)) : Nothing();
+                    const auto childPartitionId = prescribedChildPartitionId.Defined()
+                                                      ? indexGenerator.GetNextReservedId(*prescribedChildPartitionId)
+                                                      : indexGenerator.GetNextUnreservedId();
+                    if (!childPartitionId.has_value()) {
+                        errStr = TStringBuilder() << "Split with prescribed partition ids: " << childPartitionId.error();
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                        return result;
+                    }
+                    if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
+                        if (topic->Partitions.contains(*prescribedChildPartitionId)) {
+                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                        std::format("Skipping split partition {} because child partition {} exists",
+                                                    splittedPartitionId, *prescribedChildPartitionId));
+                            alterData->TotalGroupCount -= 1;
+                        } else {
+                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                        std::format("Skipping split partition {}. Create new partition {}",
+                                                    splittedPartitionId, *prescribedChildPartitionId));
+                            alterData->PartitionsToAdd.emplace(childPartitionId.value(), childPartitionId.value() + 1);
+                        }
+                    } else {
+                        alterData->PartitionsToAdd.emplace(childPartitionId.value(), childPartitionId.value() + 1, range, parents);
+                    }
+                }
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
+                --alterData->ActivePartitionCount;
 
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
@@ -720,7 +896,21 @@ public:
                     rangem = range;
                 }
 
-                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, rangem, parents);
+                const auto childPartitionId = merge.HasChildPartitionId()
+                                                  ? indexGenerator.GetNextReservedId(merge.GetChildPartitionId())
+                                                  : indexGenerator.GetNextUnreservedId();
+                if (!childPartitionId.has_value()) {
+                    errStr = TStringBuilder() << "Merge with prescribed partition ids: " << childPartitionId.error();
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+                alterData->PartitionsToAdd.emplace(childPartitionId.value(), childPartitionId.value() + 1, rangem, parents);
+            }
+
+            if (const auto seq = indexGenerator.ValidateAllocationSequence(); !seq.has_value()) {
+                errStr = TStringBuilder() << "Split/Merge operation with prescribed partition ids: " << seq.error();
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
             }
         }
 
@@ -737,6 +927,10 @@ public:
         }
 
         alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
+        if (!splitMergeEnabled) {
+            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        }
+
         alterData->NextPartitionId = topic->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
@@ -780,10 +974,13 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->TotalPartitionCount);
-        const PQGroupReserve oldReserve(tabletConfig, topic->TotalPartitionCount);
+        const auto& stats = topic->Stats;
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
+        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
+        const PQGroupReserve oldReserveForCheckLimit(tabletConfig, topic->ActivePartitionCount, stats.DataSize);
 
-        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserveForCheckLimit.Storage ? reserveForCheckLimit.Storage - oldReserveForCheckLimit.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();
@@ -851,7 +1048,7 @@ public:
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
         path.Base()->IncShardsInside(shardsToCreate);

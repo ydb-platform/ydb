@@ -1,0 +1,145 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e6250a81e323955df133e1953c19a25
+BELONGS ya.make
+    License text:
+              Swig_error(Getfile(c), Getline(c), "Previous declaration of '%s'\n", s);
+              return 0;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Source/Modules/lang.cxx [3015:3016]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23aa5d479e8aaa77f0a2bfc6e11b03a3
+BELONGS ya.make
+    License text:
+        This software includes contributions that are Copyright (c) 2005-2006
+        Arizona Board of Regents (University of Arizona).
+        All Rights Reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-UNIVERSITIES [69:71]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2ad026ce0f5d73743b9fd985961e75e6
+BELONGS ya.make
+    License text:
+        Copyright (c) 1995-1998
+        The University of Utah and the Regents of the University of California
+        All Rights Reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-UNIVERSITIES [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 732fcfb6a44d6047f7c032e342ad2617
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Source/Modules/main.cxx [646:654]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a54c7ef931d30ecbd65164b1a118bde
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Source/Modules/main.cxx [646:654]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae2df1d7b8202a35d22b46f5579a84b9
+BELONGS ya.make
+    License text:
+        	      Swig_warning(WARN_LANG_DEREF_SHADOW, Getfile(c), Getline(c), "previous declaration of '%s'.\n", name);
+        	    } else {
+        	      /* Make sure node with same name doesn't already exist */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Source/Modules/allocate.cxx [417:419]
+        Source/Modules/allocate.cxx [673:673]
+        Source/Swig/extend.c [72:80]
+        Source/Swig/symbol.c [995:998]
+        Source/Swig/symbol.c [1001:1003]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0faebef234e7ccd9f585e9c48077a7c
+BELONGS ya.make
+    License text:
+        This software includes contributions that are Copyright (c) 1998-2005
+        University of Chicago.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-UNIVERSITIES [37:39]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8a83d96f84af4c756938a5684474aac
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Source/Modules/main.cxx [646:654]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe6f4a2cadd39168e946fc1f97e42e56
+BELONGS ya.make
+    License text:
+         Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+         Everyone is permitted to copy and distribute verbatim copies
+         of this license document, but changing it is not allowed.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE-GPL [4:6]

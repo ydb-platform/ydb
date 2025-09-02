@@ -10,18 +10,51 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardCacheConfig
-    : public TAsyncExpiringCacheConfig
+struct TChaosCacheChannelConfig
+    : public NRpc::TRetryingChannelConfig
     , public NRpc::TBalancingChannelConfig
-    , public NRpc::TRetryingChannelConfig
 {
-    REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
+    REGISTER_YSON_STRUCT(TChaosCacheChannelConfig);
 
-    static void Register(TRegistrar)
+    static void Register(TRegistrar /*registrar*/)
     { }
 };
 
+DEFINE_REFCOUNTED_TYPE(TChaosCacheChannelConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicationCardCacheConfig
+    : public TAsyncExpiringCacheConfig
+    , public TChaosCacheChannelConfig
+{
+    bool EnableWatching;
+
+    TReplicationCardCacheConfigPtr ApplyDynamic(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
+
+    static void Register(TRegistrar registrar);
+
+protected:
+    void ApplyDynamicInplace(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig);
+};
+
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicationCardCacheDynamicConfig
+    : public TAsyncExpiringCacheDynamicConfig
+{
+    std::optional<bool> EnableWatching;
+
+    REGISTER_YSON_STRUCT(TReplicationCardCacheDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

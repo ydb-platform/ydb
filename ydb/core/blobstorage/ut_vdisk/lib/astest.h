@@ -6,7 +6,8 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/base/appdata.h>
@@ -64,7 +65,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
     setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
-
+    setup1->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0));
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////
     NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
@@ -92,12 +93,6 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     setup1->LocalServices.push_back(std::move(loggerActorPair));
     //////////////////////////////////////////////////////////////////////////////
 
-    ///////////////////////// SETUP TEST ACTOR ///////////////////////////////////
-    NActors::TActorId testActorId = NActors::TActorId(1, "test123");
-    TActorSetupCmd testActorSetup(testActor, TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testActorId, std::move(testActorSetup)));
-    //////////////////////////////////////////////////////////////////////////////
-
     ///////////////////////// TYPE REGISTRY //////////////////////////////////////
     TIntrusivePtr<NKikimr::NScheme::TTypeRegistry> typeRegistry(new NKikimr::NScheme::TKikimrTypeRegistry());
     //////////////////////////////////////////////////////////////////////////////
@@ -106,14 +101,13 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     if (!MonPort) {
         MonPort = pm.GetPort(MonPort);
     }
-    Monitoring.reset(new NActors::TSyncHttpMon({
+    Monitoring.reset(new NActors::TMon({
         .Port = MonPort,
         .Title = "at"
     }));
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Y_UNUSED(actorsMonPage);
     Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-    Monitoring->Start();
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Monitoring settings set up");
     //////////////////////////////////////////////////////////////////////////////
 
@@ -126,13 +120,19 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 
-
     ActorSystem1->Start();
     LOG_NOTICE(*ActorSystem1, NActorsServices::TEST, "Actor system started");
 
+    Monitoring->Start(ActorSystem1.get()).wait();
 
+    ///////////////////////// SETUP TEST ACTOR ///////////////////////////////////
+    NActors::TActorId testActorId = NActors::TActorId(1, "test123");
+    ActorSystem1->RegisterLocalService(testActorId, ActorSystem1->Register(testActor, TMailboxType::Simple, 0));
+    //////////////////////////////////////////////////////////////////////////////
 
     DoneEvent.Wait();
+
+    Monitoring->Stop();
     ActorSystem1->Stop();
     ActorSystem1.reset();
 }

@@ -1,5 +1,6 @@
 #include "query_builder.h"
 
+#include <library/cpp/iterator/zip.h>
 #include <yt/yt/core/misc/error.h>
 
 #include <util/string/join.h>
@@ -9,20 +10,29 @@ namespace NYT::NQueryClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static std::vector<TString> Parenthesize(std::vector<TString> strings)
+static void Parenthesize(TStringBuilderBase* builder, const std::string& str)
 {
-    for (auto& string : strings) {
-        string.prepend('(').append(')');
-    }
-    return strings;
+    builder->AppendChar('(');
+    builder->AppendString(str);
+    builder->AppendChar(')');
 }
 
-void TQueryBuilder::SetSource(TString source)
+void TQueryBuilder::SetSource(std::string source, int syntax, bool subquerySource)
 {
     Source_ = std::move(source);
+    SyntaxVersion_ = syntax;
+    SourceIsQuery_ = subquerySource;
 }
 
-int TQueryBuilder::AddSelectExpression(TString expression)
+void TQueryBuilder::SetSource(std::string source, std::string alias, int syntax, bool subquerySource)
+{
+    Source_ = std::move(source);
+    SourceAlias_ = std::move(alias);
+    SyntaxVersion_ = syntax;
+    SourceIsQuery_ = subquerySource;
+}
+
+int TQueryBuilder::AddSelectExpression(std::string expression)
 {
     SelectEntries_.push_back(TEntryWithAlias{
         std::move(expression),
@@ -31,7 +41,7 @@ int TQueryBuilder::AddSelectExpression(TString expression)
     return SelectEntries_.size() - 1;
 }
 
-int TQueryBuilder::AddSelectExpression(TString expression, TString alias)
+int TQueryBuilder::AddSelectExpression(std::string expression, std::string alias)
 {
     SelectEntries_.push_back(TEntryWithAlias{
         std::move(expression),
@@ -40,12 +50,12 @@ int TQueryBuilder::AddSelectExpression(TString expression, TString alias)
     return SelectEntries_.size() - 1;
 }
 
-void TQueryBuilder::AddWhereConjunct(TString expression)
+void TQueryBuilder::AddWhereConjunct(std::string expression)
 {
     WhereConjuncts_.push_back(std::move(expression));
 }
 
-void TQueryBuilder::AddGroupByExpression(TString expression)
+void TQueryBuilder::AddGroupByExpression(std::string expression)
 {
     GroupByEntries_.push_back(TEntryWithAlias{
         std::move(expression),
@@ -53,7 +63,7 @@ void TQueryBuilder::AddGroupByExpression(TString expression)
     });
 }
 
-void TQueryBuilder::AddGroupByExpression(TString expression, TString alias)
+void TQueryBuilder::AddGroupByExpression(std::string expression, std::string alias)
 {
     GroupByEntries_.push_back(TEntryWithAlias{
         std::move(expression),
@@ -61,12 +71,17 @@ void TQueryBuilder::AddGroupByExpression(TString expression, TString alias)
     });
 }
 
-void TQueryBuilder::AddHavingConjunct(TString expression)
+void TQueryBuilder::SetWithTotals(EWithTotalsMode withTotalsMode)
+{
+    WithTotalsMode_ = withTotalsMode;
+}
+
+void TQueryBuilder::AddHavingConjunct(std::string expression)
 {
     HavingConjuncts_.push_back(std::move(expression));
 }
 
-void TQueryBuilder::AddOrderByExpression(TString expression)
+void TQueryBuilder::AddOrderByExpression(std::string expression)
 {
     OrderByEntries_.push_back(TOrderByEntry{
         std::move(expression),
@@ -74,7 +89,7 @@ void TQueryBuilder::AddOrderByExpression(TString expression)
     });
 }
 
-void TQueryBuilder::AddOrderByExpression(TString expression, std::optional<EOrderByDirection> direction)
+void TQueryBuilder::AddOrderByExpression(std::string expression, std::optional<EOrderByDirection> direction)
 {
     OrderByEntries_.push_back(TOrderByEntry{
         std::move(expression),
@@ -82,14 +97,19 @@ void TQueryBuilder::AddOrderByExpression(TString expression, std::optional<EOrde
     });
 }
 
-void TQueryBuilder::AddOrderByAscendingExpression(TString expression)
+void TQueryBuilder::AddOrderByAscendingExpression(std::string expression)
 {
     AddOrderByExpression(std::move(expression), EOrderByDirection::Ascending);
 }
 
-void TQueryBuilder::AddOrderByDescendingExpression(TString expression)
+void TQueryBuilder::AddOrderByDescendingExpression(std::string expression)
 {
     AddOrderByExpression(std::move(expression), EOrderByDirection::Descending);
+}
+
+void TQueryBuilder::SetOffset(i64 offset)
+{
+    Offset_ = offset;
 }
 
 void TQueryBuilder::SetLimit(i64 limit)
@@ -97,95 +117,170 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
+void TQueryBuilder::AddArrayJoinExpression(
+    const std::vector<std::string>& expressions,
+    const std::vector<std::string>& aliases,
+    ETableJoinType type,
+    std::string predicate)
+{
+    TJoinEntry entry;
+    entry.Type = type;
+    entry.ArrayJoinFields.reserve(expressions.size());
+    for (const auto& [expression, alias] : Zip(expressions, aliases)) {
+        entry.ArrayJoinFields.emplace_back(expression, alias);
+    }
+    entry.Predicate = predicate;
+    JoinEntries_.push_back(std::move(entry));
+}
+
 void TQueryBuilder::AddJoinExpression(
-    TString table,
-    TString alias,
-    TString onExpression,
-    ETableJoinType type)
+    std::string table,
+    std::string alias,
+    std::string onExpression,
+    ETableJoinType type,
+    std::string predicate)
 {
     JoinEntries_.push_back(TJoinEntry{
         std::move(table),
         std::move(alias),
         std::move(onExpression),
         type,
+        std::vector<TEntryWithAlias>(),
+        std::move(predicate),
     });
 }
 
-TString TQueryBuilder::Build()
+std::string TQueryBuilder::WrapTableName(const std::string& table)
 {
-    std::vector<TString> parts;
-    parts.reserve(8);
+    switch (SyntaxVersion_) {
+        case 1:
+            return "[" + table + "]";
+
+        case 2:
+            return "`" + table + "`";
+
+        default:
+            THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
+    }
+}
+
+std::string TQueryBuilder::Build()
+{
+    TStringBuilder builder;
+    TDelimitedStringBuilderWrapper wrapper(&builder, " ");
 
     if (SelectEntries_.empty()) {
         THROW_ERROR_EXCEPTION("Query must have at least one SELECT expression");
     }
-    parts.push_back(JoinSeq(", ", SelectEntries_));
+    JoinToString(&wrapper, SelectEntries_.begin(), SelectEntries_.end(), &FormatEntryWithAlias);
 
     if (!Source_) {
         THROW_ERROR_EXCEPTION("Source must be specified in query");
     }
-    parts.push_back(Format("FROM [%v]", *Source_));
-
-    for (const auto& join : JoinEntries_) {
-        TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
-        parts.push_back(Format("%v [%v] AS [%v] ON %v", joinType, join.Table, join.Alias, join.OnExpression));
+    if(!SourceIsQuery_) {
+        if (!SourceAlias_) {
+            wrapper->AppendFormat("FROM %v", WrapTableName(*Source_));
+        } else {
+            wrapper->AppendFormat("FROM %v AS %v", WrapTableName(*Source_), *SourceAlias_);
+        }
+    } else {
+        if (!SourceAlias_) {
+            wrapper->AppendFormat("FROM (%v)", *Source_);
+        } else {
+            wrapper->AppendFormat("FROM (%v) AS %v", *Source_, *SourceAlias_);
+        }
     }
 
+    for (const auto& join : JoinEntries_) {
+        if (join.Type == ETableJoinType::Inner || join.Type == ETableJoinType::Left) {
+            TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
+            if (join.Predicate != "") {
+                wrapper->AppendFormat("%v %v AS %v ON %v AND %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression, join.Predicate);
+            } else {
+                wrapper->AppendFormat("%v %v AS %v ON %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression);
+            }
+        } else {
+            TStringBuf joinType = join.Type == ETableJoinType::ArrayInner ? "ARRAY JOIN" : "LEFT ARRAY JOIN";
+            wrapper->AppendFormat(" %v ", joinType);
+            JoinToString(&wrapper, join.ArrayJoinFields.begin(), join.ArrayJoinFields.end(), &FormatEntryWithAlias);
+            if (join.Predicate != "") {
+                wrapper->AppendString("AND");
+                wrapper->AppendString(join.Predicate);
+            }
+        }
+    }
+
+
     if (!WhereConjuncts_.empty()) {
-        parts.push_back("WHERE");
-        parts.push_back(JoinSeq(" AND ", Parenthesize(WhereConjuncts_)));
+        wrapper->AppendFormat("WHERE");
+        JoinToString(&wrapper, WhereConjuncts_.begin(), WhereConjuncts_.end(), &Parenthesize, " AND ");
     }
 
     if (!GroupByEntries_.empty()) {
-        parts.push_back("GROUP BY");
-        parts.push_back(JoinSeq(", ", GroupByEntries_));
+        wrapper->AppendString("GROUP BY");
+        JoinToString(&wrapper, GroupByEntries_.begin(), GroupByEntries_.end(), &FormatEntryWithAlias);
+    }
+
+    if (WithTotalsMode_ == EWithTotalsMode::BeforeHaving) {
+        wrapper->AppendString("WITH TOTALS");
     }
 
     if (!HavingConjuncts_.empty()) {
         if (GroupByEntries_.empty()) {
             THROW_ERROR_EXCEPTION("Having without group by is not valid");
         }
-        parts.push_back("HAVING");
-        parts.push_back(JoinSeq(" AND ", Parenthesize(HavingConjuncts_)));
+        wrapper->AppendString("HAVING");
+        JoinToString(&wrapper, HavingConjuncts_.begin(), HavingConjuncts_.end(), &Parenthesize, " AND ");
+    }
+
+    if (WithTotalsMode_ == EWithTotalsMode::AfterHaving) {
+        wrapper->AppendString("WITH TOTALS");
     }
 
     if (!OrderByEntries_.empty()) {
-        parts.push_back("ORDER BY");
-        parts.push_back(JoinSeq(", ", OrderByEntries_));
+        wrapper->AppendString("ORDER BY");
+        JoinToString(&wrapper, OrderByEntries_.begin(), OrderByEntries_.end(), &FormatOrderByEntry);
+    }
+
+    if (Offset_) {
+        wrapper->AppendFormat("OFFSET %v", *Offset_);
     }
 
     if (Limit_) {
-        parts.push_back(Format("LIMIT %v", *Limit_));
+        wrapper->AppendFormat("LIMIT %v", *Limit_);
     }
 
-    return JoinSeq(" ", parts);
+    return builder.Flush();
 }
 
-void AppendToString(TString& dst, const TQueryBuilder::TEntryWithAlias& entry)
+void TQueryBuilder::FormatEntryWithAlias(TStringBuilderBase* builder, const TQueryBuilder::TEntryWithAlias& entry)
 {
-    TStringOutput output(dst);
     if (entry.Expression == "*") {
-        output << "*";
+        builder->AppendChar('*');
         return;
     }
-    output << '(' << entry.Expression << ')';
+    builder->AppendChar('(');
+    builder->AppendString(entry.Expression);
+    builder->AppendChar(')');
     if (entry.Alias) {
-        output << " AS " << *entry.Alias;
+        builder->AppendString(" AS ");
+        builder->AppendString(*entry.Alias);
     }
 }
 
-void AppendToString(TString& dst, const TQueryBuilder::TOrderByEntry& entry)
+void TQueryBuilder::FormatOrderByEntry(TStringBuilderBase* builder, const TQueryBuilder::TOrderByEntry& entry)
 {
-    TStringOutput output(dst);
-    output << '(' << entry.Expression << ')';
+    builder->AppendChar('(');
+    builder->AppendString(entry.Expression);
+    builder->AppendChar(')');
     if (entry.Direction) {
         TStringBuf directionString = (*entry.Direction == EOrderByDirection::Ascending)
             ? "ASC"
             : "DESC";
-        output << ' ' << directionString;
+        builder->AppendChar(' ');
+        builder->AppendString(directionString);
     }
 }
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueryClient

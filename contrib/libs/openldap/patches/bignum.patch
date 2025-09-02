@@ -1,0 +1,7 @@
+--- a/include/ldap_pvt.h
++++ b/include/ldap_pvt.h
+@@ -449,2 +449,2 @@ LDAP_BEGIN_DECL
+-#include <openssl/crypto.h>
+-#include <openssl/bn.h>
++#error #include <openssl/crypto.h>
++#error #include <openssl/bn.h>

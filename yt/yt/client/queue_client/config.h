@@ -12,10 +12,9 @@ namespace NYT::NQueueClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitionReaderConfig
+struct TPartitionReaderConfig
     : public NYTree::TYsonStruct
 {
-public:
     i64 MaxRowCount;
     i64 MaxDataWeight;
 
@@ -41,10 +40,9 @@ DEFINE_REFCOUNTED_TYPE(TPartitionReaderConfig)
 //! they will be trimmed automatically by the responsible queue agent.
 //! This is not applicable if no vital consumers exist for a queue.
 // TODO(achulkov2): Add example of how multiple vital/non-vital consumers and the options below interact.
-class TQueueAutoTrimConfig
+struct TQueueAutoTrimConfig
     : public NYTree::TYsonStructLite
 {
-public:
     //! If set to false, no automatic trimming is performed.
     bool Enable;
 
@@ -63,12 +61,22 @@ bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TQueueStaticExportConfig
-    : public NYTree::TYsonStructLite
+struct TQueueStaticExportConfig
+    : public NYTree::TYsonStruct
 {
-public:
-    //! Export will be performed at times that are multiple of this period.
-    TDuration ExportPeriod;
+    //! Export will be performed at times that are multiple of this period. Mutually exclusive
+    //! with ExportCronSchedule parameter.
+    std::optional<TDuration> ExportPeriod;
+
+    //! Export will be performed at schedule that is defined by this CRON expression. Mutually exclusive
+    //! with ExportPeriod parameter.
+    //! This CRON format supports features beyond the standard ones, allowing from 5 to 7 fields to be specified:
+    //!  - with 5 fields, it's a standard CRON
+    //!  - with 6 fields, the first field is interpreted as SECONDS
+    //!  - with 7 fields, the last field is interpreted as YEARS
+    //!
+    //! \note See library/cpp/cron_expression/readme.md.
+    std::optional<TString> ExportCronSchedule;
 
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
@@ -95,19 +103,20 @@ public:
     //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
     bool UseUpperBoundForTableNames;
 
-    REGISTER_YSON_STRUCT_LITE(TQueueStaticExportConfig);
+    REGISTER_YSON_STRUCT(TQueueStaticExportConfig);
 
     static void Register(TRegistrar registrar);
 };
+
+DEFINE_REFCOUNTED_TYPE(TQueueStaticExportConfig)
 
 bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TQueueStaticExportDestinationConfig
+struct TQueueStaticExportDestinationConfig
     : public NYTree::TYsonStructLite
 {
-public:
     NObjectClient::TObjectId OriginatingQueueId;
 
     REGISTER_YSON_STRUCT_LITE(TQueueStaticExportDestinationConfig);

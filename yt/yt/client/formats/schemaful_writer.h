@@ -34,6 +34,8 @@ public:
 
     TFuture<void> GetReadyEvent() override;
 
+    std::optional<NCrypto::TMD5Hash> GetDigest() const override;
+
 private:
     const NConcurrency::IAsyncOutputStreamPtr Stream_;
     const NTableClient::TTableSchemaPtr Schema_;

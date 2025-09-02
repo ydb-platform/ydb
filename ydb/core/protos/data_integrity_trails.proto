@@ -1,0 +1,11 @@
+package NKikimrProto;
+
+message TDataIntegrityTrailsConfig {
+    enum ELogMode {
+        ORIGINAL = 1;
+        HASHED = 2;
+    }
+
+    optional ELogMode QueryTextLogMode = 1 [default = HASHED];
+    optional ELogMode KeysLogMode = 2 [default = HASHED];
+};

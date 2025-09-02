@@ -51,7 +51,7 @@
  %define PS 8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
 	push	r12
 	push	r13
@@ -184,13 +184,8 @@ section .text
 %define xp5    xmm14
 
 align 16
-global gf_5vect_dot_prod_sse:ISAL_SYM_TYPE_FUNCTION
+global gf_5vect_dot_prod_sse, function
 func(gf_5vect_dot_prod_sse)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_5vect_dot_prod_sse:ISAL_SYM_TYPE_FUNCTION
-func(_gf_5vect_dot_prod_sse)
-%endif
-
 	FUNC_SAVE
 	sub	len, 16
 	jl	.return_fail
@@ -304,6 +299,3 @@ section .data
 
 align 16
 mask0f:	dq 0x0f0f0f0f0f0f0f0f, 0x0f0f0f0f0f0f0f0f
-
-;;;       func                  core, ver, snum
-slversion gf_5vect_dot_prod_sse, 00,  05,  0065

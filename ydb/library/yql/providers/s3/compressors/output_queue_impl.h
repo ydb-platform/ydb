@@ -2,7 +2,7 @@
 
 #include "output_queue.h"
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <numeric>
 #include <deque>

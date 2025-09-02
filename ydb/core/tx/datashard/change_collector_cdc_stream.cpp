@@ -49,11 +49,11 @@ namespace {
     auto MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TArrayRef<const NScheme::TTypeInfo> types) {
         TVector<TUpdateOp> result(Reserve(cells.size()));
 
-        Y_ABORT_UNLESS(cells.size() == tags.size());
-        Y_ABORT_UNLESS(cells.size() == types.size());
+        Y_ENSURE(cells.size() == tags.size());
+        Y_ENSURE(cells.size() == types.size());
 
         for (TPos pos = 0; pos < cells.size(); ++pos) {
-            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos)));
+            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos).GetTypeId()));
         }
 
         return result;
@@ -88,7 +88,7 @@ namespace {
         case ERowOp::Erase:
             return nullptr;
         default:
-            Y_FAIL_S("Unexpected row op: " << static_cast<int>(state->GetRowState()));
+            Y_ENSURE(false, "Unexpected row op: " << static_cast<int>(state->GetRowState()));
         }
     }
 
@@ -139,7 +139,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
                 value = true;
                 break;
             default:
-                Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(streamInfo.Mode));
+                Y_ENSURE(false, "Invalid stream mode: " << static_cast<ui32>(streamInfo.Mode));
             }
         }
     }
@@ -151,7 +151,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
-    Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+    Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
     const auto& keyTags = userTable->KeyColumnIds;
@@ -159,7 +159,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     const auto valueTags = MakeValueTags(userTable->Columns);
     const auto valueTypes = MakeValueTypes(userTable->Columns);
 
-    Y_VERIFY_S(key.size() == keyTags.size(), "Count doesn't match"
+    Y_ENSURE(key.size() == keyTags.size(), "Count doesn't match"
         << ": key# " << key.size()
         << ", tags# " << keyTags.size());
 
@@ -169,7 +169,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     case ERowOp::Reset:
         break;
     default:
-        Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
+        Y_ENSURE(false, "Unsupported row op: " << static_cast<ui8>(rop));
     }
 
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
@@ -200,8 +200,8 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     const auto& lastKeyCells = info->LastKey->GetCells();
                     const auto keyCells = MakeKeyCells(key);
 
-                    Y_ABORT_UNLESS(keyCells.size() == lastKeyCells.size());
-                    Y_ABORT_UNLESS(keyCells.size() == keyTypes.size());
+                    Y_ENSURE(keyCells.size() == lastKeyCells.size());
+                    Y_ENSURE(keyCells.size() == keyTypes.size());
 
                     const int cmp = CompareTypedCellVectors(keyCells.data(), lastKeyCells.data(), keyTypes.data(), keyCells.size());
                     if (cmp > 0) {
@@ -217,7 +217,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
 
         if (initialState) {
-            Y_ABORT_UNLESS(snapshotVersion.Defined());
+            Y_ENSURE(snapshotVersion.Defined());
             TVersionContext ctx(Sink, *snapshotVersion);
 
             switch (stream.Mode) {
@@ -227,6 +227,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             case NKikimrSchemeOp::ECdcStreamModeUpdate:
                 Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, MakeUpdates(**initialState, valueTags, valueTypes));
                 break;
+            case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup: {
+                Y_ENSURE(false, "Invariant violation: source table must be locked before restore.");
+                break;
+            }
             case NKikimrSchemeOp::ECdcStreamModeNewImage:
             case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
                 Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, nullptr, &*initialState, valueTags);
@@ -235,7 +239,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, &*initialState, nullptr, valueTags);
                 break;
             default:
-                Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(stream.Mode));
+                Y_ENSURE(false, "Invalid stream mode: " << static_cast<ui32>(stream.Mode));
             }
         }
 
@@ -246,6 +250,8 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
             Persist(tableId, pathId, rop, key, keyTags, updates);
             break;
+        case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
+            Y_ENSURE(false, "Invariant violation: source table must be locked before restore.");
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
@@ -265,7 +271,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
             break;
         default:
-            Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(stream.Mode));
+            Y_ENSURE(false, "Invalid stream mode: " << static_cast<ui32>(stream.Mode));
         }
     }
 
@@ -273,10 +279,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 }
 
 TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const TTag> valueTags, TSelectStats& stats, const TMaybe<TRowVersion>& readVersion)
+        TArrayRef<const TTag> valueTags, TSelectStats& stats, const TMaybe<TRowVersion>& snapshot)
 {
     TRowState row;
-    const auto ready = UserDb.SelectRow(tableId, key, valueTags, row, stats, readVersion);
+    const auto ready = UserDb.SelectRow(tableId, key, valueTags, row, stats, snapshot);
 
     if (ready == EReady::Page) {
         return Nothing();
@@ -286,10 +292,10 @@ TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, T
 }
 
 TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const TTag> valueTags, const TMaybe<TRowVersion>& readVersion)
+        TArrayRef<const TTag> valueTags, const TMaybe<TRowVersion>& snapshot)
 {
     TSelectStats stats;
-    return GetState(tableId, key, valueTags, stats, readVersion);
+    return GetState(tableId, key, valueTags, stats, snapshot);
 }
 
 TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowOp rop,
@@ -319,10 +325,10 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
     case ERowOp::Erase:
         break;
     default:
-        Y_ABORT("unreachable");
+        Y_ENSURE(false, "unreachable");
     }
 
-    Y_ABORT_UNLESS(newState.IsFinalized());
+    Y_ENSURE(newState.IsFinalized());
     return newState;
 }
 

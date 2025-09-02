@@ -16,13 +16,17 @@ NKikimr::TConclusionStatus TSerializerContainer::DeserializeFromRequest(NYql::TF
         return TConclusionStatus::Success();
     }
     if (!TBase::Initialize(*className)) {
-        return TConclusionStatus::Fail("dont know anything about class_name=" + *className);
+        return TConclusionStatus::Fail("do not know anything about class_name=" + *className);
     }
     return TBase::GetObjectPtr()->DeserializeFromRequest(features);
 }
 
-std::shared_ptr<NKikimr::NArrow::NSerialization::ISerializer> TSerializerContainer::GetDefaultSerializer() {
+std::shared_ptr<ISerializer> TSerializerContainer::GetDefaultSerializer() {
     return std::make_shared<TNativeSerializer>();
 }
+std::shared_ptr<ISerializer> TSerializerContainer::GetFastestSerializer() {
+    return std::make_shared<TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+}
+
 
 }

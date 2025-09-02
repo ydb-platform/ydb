@@ -63,6 +63,8 @@ namespace orc {
 
     virtual void suppress() override;
 
+    virtual void finishEncode() override;
+
     /**
      * Reset to initial state
      */
@@ -186,16 +188,17 @@ namespace orc {
 
   void ByteRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
     uint64_t flushedSize = outputStream->getSize();
-    uint64_t unflushedSize = static_cast<uint64_t>(bufferPosition);
+    uint64_t unusedBufferSize = static_cast<uint64_t>(bufferLength - bufferPosition);
     if (outputStream->isCompressed()) {
       // start of the compression chunk in the stream
       recorder->add(flushedSize);
-      // number of decompressed bytes that need to be consumed
-      recorder->add(unflushedSize);
+      // There are multiple blocks in the input buffer, but bufferPosition only records the
+      // effective length of the last block. We need rawInputBufferSize to record the total length
+      // of all variable blocks.
+      recorder->add(outputStream->getRawInputBufferSize() - unusedBufferSize);
     } else {
-      flushedSize -= static_cast<uint64_t>(bufferLength);
       // byte offset of the RLE run’s start location
-      recorder->add(flushedSize + unflushedSize);
+      recorder->add(flushedSize - unusedBufferSize);
     }
     recorder->add(static_cast<uint64_t>(numLiterals));
   }
@@ -213,6 +216,13 @@ namespace orc {
     // written data can be just ignored because they are only flushed in memory
     outputStream->suppress();
     reset();
+  }
+
+  void ByteRleEncoderImpl::finishEncode() {
+    writeValues();
+    outputStream->BackUp(bufferLength - bufferPosition);
+    outputStream->finishStream();
+    bufferLength = bufferPosition = 0;
   }
 
   std::unique_ptr<ByteRleEncoder> createByteRleEncoder(
@@ -244,14 +254,14 @@ namespace orc {
     virtual void suppress() override;
 
    private:
-    int bitsRemained;
-    char current;
+    int bitsRemained_;
+    char current_;
   };
 
   BooleanRleEncoderImpl::BooleanRleEncoderImpl(std::unique_ptr<BufferedOutputStream> output)
       : ByteRleEncoderImpl(std::move(output)) {
-    bitsRemained = 8;
-    current = static_cast<char>(0);
+    bitsRemained_ = 8;
+    current_ = static_cast<char>(0);
   }
 
   BooleanRleEncoderImpl::~BooleanRleEncoderImpl() {
@@ -260,43 +270,43 @@ namespace orc {
 
   void BooleanRleEncoderImpl::add(const char* data, uint64_t numValues, const char* notNull) {
     for (uint64_t i = 0; i < numValues; ++i) {
-      if (bitsRemained == 0) {
-        write(current);
-        current = static_cast<char>(0);
-        bitsRemained = 8;
+      if (bitsRemained_ == 0) {
+        write(current_);
+        current_ = static_cast<char>(0);
+        bitsRemained_ = 8;
       }
       if (!notNull || notNull[i]) {
         if (!data || data[i]) {
-          current = static_cast<char>(current | (0x80 >> (8 - bitsRemained)));
+          current_ = static_cast<char>(current_ | (0x80 >> (8 - bitsRemained_)));
         }
-        --bitsRemained;
+        --bitsRemained_;
       }
     }
-    if (bitsRemained == 0) {
-      write(current);
-      current = static_cast<char>(0);
-      bitsRemained = 8;
+    if (bitsRemained_ == 0) {
+      write(current_);
+      current_ = static_cast<char>(0);
+      bitsRemained_ = 8;
     }
   }
 
   uint64_t BooleanRleEncoderImpl::flush() {
-    if (bitsRemained != 8) {
-      write(current);
+    if (bitsRemained_ != 8) {
+      write(current_);
     }
-    bitsRemained = 8;
-    current = static_cast<char>(0);
+    bitsRemained_ = 8;
+    current_ = static_cast<char>(0);
     return ByteRleEncoderImpl::flush();
   }
 
   void BooleanRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
     ByteRleEncoderImpl::recordPosition(recorder);
-    recorder->add(static_cast<uint64_t>(8 - bitsRemained));
+    recorder->add(static_cast<uint64_t>(8 - bitsRemained_));
   }
 
   void BooleanRleEncoderImpl::suppress() {
     ByteRleEncoderImpl::suppress();
-    bitsRemained = 8;
-    current = static_cast<char>(0);
+    bitsRemained_ = 8;
+    current_ = static_cast<char>(0);
   }
 
   std::unique_ptr<ByteRleEncoder> createBooleanRleEncoder(
@@ -386,8 +396,8 @@ namespace orc {
   }
 
   ByteRleDecoderImpl::ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input,
-                                         ReaderMetrics* _metrics)
-      : metrics(_metrics) {
+                                         ReaderMetrics* metrics)
+      : metrics(metrics) {
     inputStream = std::move(input);
     reset();
   }
@@ -526,8 +536,8 @@ namespace orc {
   };
 
   BooleanRleDecoderImpl::BooleanRleDecoderImpl(std::unique_ptr<SeekableInputStream> input,
-                                               ReaderMetrics* _metrics)
-      : ByteRleDecoderImpl(std::move(input), _metrics) {
+                                               ReaderMetrics* metrics)
+      : ByteRleDecoderImpl(std::move(input), metrics) {
     remainingBits = 0;
     lastByte = 0;
   }

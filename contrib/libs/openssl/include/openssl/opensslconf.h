@@ -1,3 +1,4 @@
+#include <contrib/libs/openssl/redef.h>
 #pragma once
 
 #if defined(__ANDROID__) && defined(__arm__)
@@ -24,6 +25,12 @@
 #   include "opensslconf-linux-arm.h"
 #elif defined(__linux__) && (defined(__aarch64__) || defined(_M_ARM64))
 #   include "opensslconf-linux-aarch64.h"
+#elif defined(__wasm__) && !defined(__wasm64__)
+#   include "opensslconf-wasm32.h"
+#elif defined(__wasm64__)
+#   include "opensslconf-wasm64.h"
+#elif defined(__FreeBSD__)
+#   include "opensslconf-freebsd.h"
 #else
 #   include "opensslconf-linux.h"
 #endif

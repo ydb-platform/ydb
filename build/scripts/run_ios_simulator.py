@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import json
 import os
@@ -55,7 +56,7 @@ def action_spawn(simctl, profiles, device_dir, name, args):
 def action_kill(simctl, profiles, device_dir, name):
     device = filter(lambda x: x["name"] == name, get_all_devices(simctl, profiles, device_dir))
     if not device:
-        print >> sys.stderr, "Device named {} not found; do nothing".format(name)
+        print("Device named {} not found; do nothing".format(name), file=sys.stderr)
         return
     if len(device) > 1:
         raise Exception("Can't remove: too many devices named {}:\n{}".format(name, '\n'.join(i for i in device)))

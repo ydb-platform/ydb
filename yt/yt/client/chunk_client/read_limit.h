@@ -170,7 +170,7 @@ public:
     TReadLimit ToExactUpperCounterpart() const;
 
     //! Return inverted read limit, i.e. integer selectors remain as is and key bound is inverted.
-    //! NB: this method makes YT_VERIFY that read limit contains exactly one selector. Otherwise
+    //! NB: This method makes YT_VERIFY that read limit contains exactly one selector. Otherwise
     //! semantics of such method is weird.
     TReadLimit Invert() const;
 

@@ -1,4 +1,11 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
+#include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -7,6 +14,11 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
+
+#define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
+    .prefix = prefix,                           \
+    .prefix##HDD = prefix##HDD,                 \
+    .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
@@ -35,9 +47,17 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon,
-                        getCounters(info), EnablePutBatching, EnableVPatch), TMailboxType::ReadAsFilled,
-                        AppData()->SystemPoolId);
+                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
+                        getCounters(info), TBlobStorageProxyParameters{
+                            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                            .Controls = TBlobStorageProxyControlWrappers{
+                                .EnablePutBatching = EnablePutBatching,
+                                .EnableVPatch = EnableVPatch,
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                            }
+                        }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
@@ -48,15 +68,40 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
         } else {
             // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, DsProxyNodeMon, getCounters(info),
-                EnablePutBatching, EnableVPatch));
+            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
+                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                        .Controls = TBlobStorageProxyControlWrappers{
+                            .EnablePutBatching = EnablePutBatching,
+                            .EnableVPatch = EnableVPatch,
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                            ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+                        }
+                    }
+                )
+            );
         }
     } else {
         // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, EnablePutBatching, EnableVPatch));
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .Controls = TBlobStorageProxyControlWrappers{
+                .EnablePutBatching = EnablePutBatching,
+                .EnableVPatch = EnableVPatch,
+                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
+                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
+            }
+        }));
     }
+
+    // subscribe for group information changes through distconf cache
+    Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
@@ -158,3 +203,22 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
         TActivationContext::Send(ev->Forward(WhiteboardId));
     }
 }
+
+void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
+    auto& msg = *ev->Get();
+    ui32 groupId;
+    if (msg.Key.StartsWith("G") && TryIntFromString<16>(msg.Key.substr(1), groupId) && msg.GenerationValue) {
+        auto& [generation, value] = *msg.GenerationValue;
+        NKikimrBlobStorage::TGroupInfo groupInfo;
+        const bool success = groupInfo.ParseFromString(value);
+        Y_DEBUG_ABORT_UNLESS(success);
+        if (success) {
+            Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
+            ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
+        }
+    }
+}
+
+#undef ADD_CONTROLS_FOR_DEVICE_TYPES

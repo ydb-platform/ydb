@@ -1,6 +1,8 @@
 #include "node_broker_impl.h"
 #include "node_broker__scheme.h"
 
+#include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -14,6 +16,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG_SUBSCRIPTION; }
+
     bool Execute(TTransactionContext &txc,
                  const TActorContext &ctx) override
     {
@@ -23,7 +27,8 @@ public:
         Y_ABORT_UNLESS(rec.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
         SubscriptionId = rec.GetSubscriptionId();
-        Self->DbUpdateConfigSubscription(SubscriptionId, txc);
+        Self->Dirty.DbUpdateConfigSubscription(SubscriptionId, txc);
+        Self->Dirty.ConfigSubscriptionId = SubscriptionId;
 
         return true;
     }
@@ -35,9 +40,9 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "Using new subscription id=" << SubscriptionId);
 
-        Self->ConfigSubscriptionId = SubscriptionId;
+        Self->Committed.ConfigSubscriptionId = SubscriptionId;
 
-        Self->TxCompleted(0, this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 
@@ -13,9 +14,9 @@ public:
                                    NActors::TActorId id, const TMaybe<ui64>& requestsInflightLimit = Nothing());
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-    bool IncRequest();
-    void DecRequest();
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override final;
+    bool IncRequest() override final;
+    void DecRequest() override final;
     void StopService() noexcept override;
 
     using NYdbGrpc::TGrpcServiceBase<Ydb::PersQueue::V1::ClusterDiscoveryService>::GetService;

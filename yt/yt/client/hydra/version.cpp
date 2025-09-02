@@ -58,22 +58,22 @@ TVersion::TVersion(int segmentId, int recordId) noexcept
     , RecordId(recordId)
 { }
 
-std::strong_ordering TVersion::operator <=> (const TVersion& other) const
-{
-    if (SegmentId != other.SegmentId) {
-        return SegmentId <=> other.SegmentId;
-    }
-    return RecordId <=> other.RecordId;
-}
+// std::strong_ordering TVersion::operator <=> (const TVersion& other) const
+// {
+//     if (SegmentId != other.SegmentId) {
+//         return SegmentId <=> other.SegmentId;
+//     }
+//     return RecordId <=> other.RecordId;
+// }
 
 TRevision TVersion::ToRevision() const
 {
-    return (static_cast<TRevision>(SegmentId) << 32) | static_cast<TRevision>(RecordId);
+    return TRevision((static_cast<ui64>(SegmentId) << 32) | static_cast<ui64>(RecordId));
 }
 
 TVersion TVersion::FromRevision(TRevision revision)
 {
-    return TVersion(revision >> 32, revision & 0xffffffff);
+    return TVersion(revision.Underlying() >> 32, revision.Underlying() & 0xffffffff);
 }
 
 TVersion TVersion::Advance(int delta) const

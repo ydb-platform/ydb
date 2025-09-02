@@ -1,6 +1,7 @@
 #include "test_brokendevice.h"
 #include "helpers.h"
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>

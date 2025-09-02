@@ -8,6 +8,7 @@
 #define NO_FUNC (int (*) ()) NULL    /* to clean up tdefs */
 #define NO_LFUNC (long (*) ()) NULL        /* to clean up tdefs */
 
+void advanceStream(int nStream, DSS_HUGE nCalls, int bUse64Bit);
 long sd_cust (int child, DSS_HUGE skip_count);
 long sd_line (int child, DSS_HUGE skip_count);
 long sd_order (int child, DSS_HUGE skip_count);
@@ -16,6 +17,19 @@ long sd_psupp (int child, DSS_HUGE skip_count);
 long sd_supp (int child, DSS_HUGE skip_count);
 long sd_order_line (int child, DSS_HUGE skip_count);
 long sd_part_psupp (int child, DSS_HUGE skip_count);
+
+long sd_region (int child, DSS_HUGE skip_count) {
+    (void)child;
+    advanceStream(R_CMNT_SD, 2 * skip_count, 0);
+    return 0;
+}
+
+long sd_nation (int child, DSS_HUGE skip_count) {
+    (void)child;
+    advanceStream(N_CMNT_SD, 2 * skip_count, 0);
+    return 0;
+}
+
 void ReadDistFromResource(const char* name, distribution* target);
 
 tdef tdefs[] =
@@ -28,8 +42,8 @@ tdef tdefs[] =
     {"lineitem", "lineitem table", 150000 * ORDERS_PER_CUST, NO_FUNC, sd_line, NONE, 0},                //LINE          5
     {"orders", "orders/lineitem tables", 150000 * ORDERS_PER_CUST, NO_FUNC, sd_order, LINE, 0},         //ORDER_LINE    6
     {"part", "part/partsupplier tables", 200000, NO_FUNC, sd_part, PSUPP, 0},                           //PART_PSUPP    7
-    {"nation", "nation table", NATIONS_MAX, NO_FUNC, NO_LFUNC, NONE, 0},                                //NATION        8
-    {"region", "region table", NATIONS_MAX, NO_FUNC, NO_LFUNC, NONE, 0},                                //REGION        9
+    {"nation", "nation table", NATIONS_MAX, NO_FUNC, sd_nation, NONE, 0},                                //NATION        8
+    {"region", "region table", NATIONS_MAX, NO_FUNC, sd_region, NONE, 0},                                //REGION        9
 };
 
 
@@ -83,4 +97,23 @@ void GenSeed(int tableNum, DSS_HUGE rowsCount) {
     if (childNum != NONE && tdefs[childNum].gen_seed != NULL) {
         ((gen_seed)tdefs[childNum].gen_seed)(0, rowsCount);
     }
+}
+
+DSS_HUGE SetState(int table, double sf, long procs, long step, DSS_HUGE* extraRows) {
+    DSS_HUGE rowsCount;
+
+    if (sf == 0 || step == 0)
+        return(0);
+
+    rowsCount = tdefs[table].base;
+    rowsCount *= sf;
+    *extraRows = rowsCount % procs;
+    rowsCount /= procs;
+    for (int i = 0; i < step - 1; i++) {
+        GenSeed(table, rowsCount);
+    }
+    if (step > procs)    /* moving to the end to generate updates */
+        GenSeed(table, *extraRows);
+
+    return rowsCount;
 }

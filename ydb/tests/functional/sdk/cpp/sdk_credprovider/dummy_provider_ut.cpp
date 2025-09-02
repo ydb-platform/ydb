@@ -3,15 +3,15 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 
 /// !!!! JUST FOR UT, DO NOT COPY-PASTE !!! ///
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/driver/constants.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/driver/constants.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NYdb;
@@ -22,7 +22,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
     class TExampleDummyProvider : public ICredentialsProvider {
     private:
         TPeriodicCb CreatePingPongTask(std::weak_ptr<ICoreFacility> facility) {
-            auto periodicCb = [this, facility](NYql::TIssues&&, EStatus status) {
+            auto periodicCb = [this, facility](NYdb::NIssue::TIssues&&, EStatus status) {
                 if (status != EStatus::SUCCESS) {
                     return false;
                 }
@@ -37,7 +37,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
 
                     UNIT_ASSERT_C(status.Ok(), status.Status);
                     UNIT_ASSERT(resp->operation().ready());
-                    (*RunCnt)++;
+                    RunCnt.fetch_add(1);
                 };
 
                 // use CreateSession as ping pong
@@ -57,7 +57,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
             return periodicCb;
         }
     public:
-        TExampleDummyProvider(std::weak_ptr<ICoreFacility> facility, int* runCnt)
+        TExampleDummyProvider(std::weak_ptr<ICoreFacility> facility, std::atomic<int>& runCnt)
             : RunCnt(runCnt)
         {
             auto strong = facility.lock();
@@ -66,7 +66,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
             strong->AddPeriodicTask(CreatePingPongTask(facility), TDuration::Seconds(1));
         }
 
-        TString GetAuthInfo() const override {
+        std::string GetAuthInfo() const override {
             return "";
         }
 
@@ -74,11 +74,11 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
             return true;
         }
     private:
-        int* RunCnt;
+        std::atomic<int>& RunCnt;
     };
 
 public:
-    TExampleDummyProviderFactory(int* runCnt)
+    TExampleDummyProviderFactory(std::atomic<int>& runCnt)
         : RunCnt(runCnt)
     {}
 
@@ -93,12 +93,12 @@ public:
     }
 
 private:
-    int* RunCnt;
+    std::atomic<int>& RunCnt;
 
 };
 
 void RunTest(bool sync) {
-    int runCnt = 0;
+    std::atomic<int> runCnt = 0;
     int maxWait = 10;
 
     TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
@@ -106,16 +106,15 @@ void RunTest(bool sync) {
     auto driver = NYdb::TDriver(
         TDriverConfig(connectionString)
             .SetDiscoveryMode(sync ? EDiscoveryMode::Sync : EDiscoveryMode::Async)
-            .SetCredentialsProviderFactory(std::make_shared<TExampleDummyProviderFactory>(&runCnt)));
+            .SetCredentialsProviderFactory(std::make_shared<TExampleDummyProviderFactory>(runCnt)));
     // Creates DbDriverState in case of empty database
     auto client = NYdb::NTable::TTableClient(driver);
     Y_UNUSED(client);
 
-    while (runCnt < 2 && maxWait--)
+    while (runCnt.load() < 2 && maxWait--)
         Sleep(TDuration::Seconds(1));
 
-    Cerr << runCnt << Endl;
-    UNIT_ASSERT_C(runCnt > 1, runCnt);
+    UNIT_ASSERT_C(runCnt.load() > 1, runCnt.load());
     driver.Stop(true);
 }
 

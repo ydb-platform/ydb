@@ -2,8 +2,8 @@
 
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_async_io.h"
-#include "retry_queue.h"
 
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -19,8 +19,6 @@ enum ECheckpointingMode : int;
 } // namespace NYql::NDqProto
 
 namespace NYql::NDq {
-
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 
 class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
 {
@@ -162,5 +160,14 @@ private:
     TInstant CheckpointStartTime;
     bool SavingToDatabase = false;
 };
+
+NYql::NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NYql::NDq::TDqTaskSettings& task);
+
+bool IsIngress(const NYql::NDq::TDqTaskSettings& task);
+
+bool IsEgress(const NYql::NDq::TDqTaskSettings& task);
+
+bool HasState(const NYql::NDq::TDqTaskSettings& task);
+
 
 } // namespace NYql::NDq

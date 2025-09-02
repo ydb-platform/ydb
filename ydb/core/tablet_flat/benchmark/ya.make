@@ -1,14 +1,12 @@
-G_BENCHMARK()
+G_BENCHMARK(core_tablet_flat_benchmark)
 
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 SIZE(LARGE)
-TIMEOUT(600)
 
 IF (BENCHMARK_MAKE_LARGE_PART)
     CFLAGS(
         -DBENCHMARK_MAKE_LARGE_PART=1
     )
-    TIMEOUT(1200)
 ENDIF()
 
 SRCS(

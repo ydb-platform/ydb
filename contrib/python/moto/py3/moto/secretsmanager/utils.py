@@ -1,20 +1,18 @@
-import random
 import string
 import re
-
-from moto.core import get_account_id
+from moto.moto_api._internal import mock_random as random
 
 
 def random_password(
-    password_length,
-    exclude_characters,
-    exclude_numbers,
-    exclude_punctuation,
-    exclude_uppercase,
-    exclude_lowercase,
-    include_space,
-    require_each_included_type,
-):
+    password_length: int,
+    exclude_characters: str,
+    exclude_numbers: bool,
+    exclude_punctuation: bool,
+    exclude_uppercase: bool,
+    exclude_lowercase: bool,
+    include_space: bool,
+    require_each_included_type: bool,
+) -> str:
 
     password = ""
     required_characters = ""
@@ -63,36 +61,41 @@ def random_password(
     return password
 
 
-def secret_arn(region, secret_id):
-    id_string = "".join(random.choice(string.ascii_letters) for _ in range(5))
-    return "arn:aws:secretsmanager:{0}:{1}:secret:{2}-{3}".format(
-        region, get_account_id(), secret_id, id_string
+def secret_arn(account_id: str, region: str, secret_id: str) -> str:
+    id_string = "".join(random.choice(string.ascii_letters) for _ in range(6))
+    return (
+        f"arn:aws:secretsmanager:{region}:{account_id}:secret:{secret_id}-{id_string}"
     )
 
 
-def get_secret_name_from_arn(secret_id):
-    # can fetch by both arn and by name
-    # but we are storing via name
-    # so we need to change the arn to name
-    # if it starts with arn then the secret id is arn
-    if secret_id.startswith("arn:aws:secretsmanager:"):
+def get_secret_name_from_partial_arn(partial_arn: str) -> str:
+    # We can retrieve a secret either using a full ARN, or using a partial ARN
+    # name:        testsecret
+    # full ARN:    arn:aws:secretsmanager:us-west-2:123456789012:secret:testsecret-xxxxxx
+    # partial ARN: arn:aws:secretsmanager:us-west-2:123456789012:secret:testsecret
+    #
+    # This method only deals with partial ARN's, and will return the name: testsecret
+    #
+    # If you were to pass in  full url, this method will return 'testsecret-xxxxxx' - which has no meaning on it's own
+    if partial_arn.startswith("arn:aws:secretsmanager:"):
         # split the arn by colon
         # then get the last value which is the name appended with a random string
-        # then remove the random string
-        secret_id = "-".join(secret_id.split(":")[-1].split("-")[:-1])
-    return secret_id
+        return partial_arn.split(":")[-1]
+    return partial_arn
 
 
-def _exclude_characters(password, exclude_characters):
+def _exclude_characters(password: str, exclude_characters: str) -> str:
     for c in exclude_characters:
         if c in string.punctuation:
             # Escape punctuation regex usage
-            c = r"\{0}".format(c)
+            c = rf"\{c}"
         password = re.sub(c, "", str(password))
     return password
 
 
-def _add_password_require_each_included_type(password, required_characters):
+def _add_password_require_each_included_type(
+    password: str, required_characters: str
+) -> str:
     password_with_required_char = password[: -len(required_characters)]
     password_with_required_char += required_characters
 

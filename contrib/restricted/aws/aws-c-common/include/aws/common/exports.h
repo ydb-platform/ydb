@@ -4,7 +4,7 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-#if defined(AWS_C_RT_USE_WINDOWS_DLL_SEMANTICS) || defined(_WIN32)
+#if defined(AWS_CRT_USE_WINDOWS_DLL_SEMANTICS) || defined(_WIN32)
 #    ifdef AWS_COMMON_USE_IMPORT_EXPORT
 #        ifdef AWS_COMMON_EXPORTS
 #            define AWS_COMMON_API __declspec(dllexport)
@@ -15,15 +15,15 @@
 #        define AWS_COMMON_API
 #    endif /* AWS_COMMON_USE_IMPORT_EXPORT */
 
-#else /* defined (AWS_C_RT_USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32) */
+#else /* defined (AWS_CRT_USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32) */
 
-#    if ((__GNUC__ >= 4) || defined(__clang__)) && defined(AWS_COMMON_USE_IMPORT_EXPORT) && defined(AWS_COMMON_EXPORTS)
+#    if defined(AWS_COMMON_USE_IMPORT_EXPORT) && defined(AWS_COMMON_EXPORTS)
 #        define AWS_COMMON_API __attribute__((visibility("default")))
 #    else
 #        define AWS_COMMON_API
-#    endif /* __GNUC__ >= 4 || defined(__clang__) */
+#    endif
 
-#endif /* defined (AWS_C_RT_USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32) */
+#endif /* defined (AWS_CRT_USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32) */
 
 #ifdef AWS_NO_STATIC_IMPL
 #    define AWS_STATIC_IMPL AWS_COMMON_API

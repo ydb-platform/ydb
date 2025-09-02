@@ -25,6 +25,10 @@
 #include <iosfwd>
 #include <ios>
 
+namespace DB
+{
+class ReadBufferFromIStream;
+}
 
 namespace Poco {
 
@@ -124,6 +128,8 @@ protected:
 	}
 
 private:
+	friend class DB::ReadBufferFromIStream;
+	
 	virtual int readFromDevice(char_type* /*buffer*/, std::streamsize /*length*/)
 	{
 		return 0;

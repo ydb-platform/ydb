@@ -304,7 +304,13 @@ public:
                                     NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup->RequireDifferentNodes));
                     }
 
-                    Self->UpdateTabletFollowersNumber(*tablet, db, SideEffects);
+                    auto followerGroupsEnd = itFollowerGroup;
+                    for (; itFollowerGroup != tablet->FollowerGroups.end(); ++itFollowerGroup) {
+                        db.Table<Schema::TabletFollowerGroup>().Key(TabletId, itFollowerGroup->Id).Delete();
+                    }
+                    tablet->FollowerGroups.erase(followerGroupsEnd, tablet->FollowerGroups.end());
+
+                    Self->CreateTabletFollowers(*tablet, db, SideEffects);
                     ProcessTablet(*tablet);
 
                     BLOG_D("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has been successfully updated");
@@ -377,6 +383,14 @@ public:
         for (const TDataCenterId& dc : tablet.NodeFilter.AllowedDataCenters) {
             allowedDataCenters.push_back(DataCenterFromString(dc));
         }
+
+        TDomainInfo* domain = Self->FindDomain(ObjectDomain);
+        if (domain && domain->Stopped) {
+            tablet.State = ETabletState::Stopped;
+            tablet.BecomeStopped();
+            tablet.StoppedByTenant = true;
+        }
+
         db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::Owner>(tablet.Owner),
                                                         NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet.NodeId),
                                                         NIceDb::TUpdate<Schema::Tablet::TabletType>(tablet.Type),
@@ -392,7 +406,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(tablet.ObjectId.second),
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(ObjectDomain),
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
-                                                        NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy));
+                                                        NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
+                                                        NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 
@@ -461,7 +476,7 @@ public:
                         NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));
         }
 
-        Self->UpdateTabletFollowersNumber(tablet, db, SideEffects);
+        Self->CreateTabletFollowers(tablet, db, SideEffects);
         Self->OwnerToTablet.emplace(ownerIdx, TabletId);
         Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
         Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();

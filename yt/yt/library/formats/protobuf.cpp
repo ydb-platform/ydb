@@ -36,16 +36,16 @@ using namespace NYT::NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEnumerationDescription::TEnumerationDescription(const TString& name)
+TEnumerationDescription::TEnumerationDescription(const std::string& name)
     : Name_(name)
 { }
 
-const TString& TEnumerationDescription::GetEnumerationName() const
+const std::string& TEnumerationDescription::GetEnumerationName() const
 {
     return Name_;
 }
 
-const TString& TEnumerationDescription::GetValueName(i32 value) const
+const std::string& TEnumerationDescription::GetValueName(i32 value) const
 {
     if (auto valueName = TryGetValueName(value)) {
         return *valueName;
@@ -55,7 +55,7 @@ const TString& TEnumerationDescription::GetValueName(i32 value) const
         << TErrorAttribute("value", value);
 }
 
-const TString* TEnumerationDescription::TryGetValueName(i32 value) const
+const std::string* TEnumerationDescription::TryGetValueName(i32 value) const
 {
     auto it = ValueToName_.find(value);
     if (it == ValueToName_.end()) {
@@ -83,7 +83,7 @@ std::optional<i32> TEnumerationDescription::TryGetValue(TStringBuf valueName) co
     return it->second;
 }
 
-void TEnumerationDescription::Add(TString name, i32 value)
+void TEnumerationDescription::Add(std::string name, i32 value)
 {
     if (NameToValue_.find(name) != NameToValue_.end()) {
         THROW_ERROR_EXCEPTION("Enumeration %v already has value %v",
@@ -121,7 +121,7 @@ public:
     void AddError(
         int line,
         ::google::protobuf::io::ColumnNumber column,
-        const TString& message) override
+        const TProtobufString& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
@@ -145,11 +145,11 @@ class TDescriptorPoolErrorCollector
 {
 public:
     void AddError(
-        const TString& fileName,
-        const TString& elementName,
+        const TProtobufString& fileName,
+        const TProtobufString& elementName,
         const Message* /*descriptor*/,
         DescriptorPool::ErrorCollector::ErrorLocation /*location*/,
-        const TString& message) override
+        const TProtobufString& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
@@ -174,7 +174,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 static TEnumerationDescription CreateEnumerationMap(
-    const TString& enumName,
+    const std::string& enumName,
     const IMapNodePtr& enumerationConfig)
 {
     TEnumerationDescription result(enumName);
@@ -384,7 +384,7 @@ void ValidateSimpleType(
 
     auto validateLogicalType = [&] (auto... expectedTypes) {
         if ((... && (logicalType != expectedTypes))) {
-            auto typeNameList = std::vector<TString>{FormatEnum(expectedTypes)...};
+            auto typeNameList = std::vector<std::string>{FormatEnum(expectedTypes)...};
             throwMismatchError(Format("expected logical type to be one of %v", typeNameList));
         }
     };
@@ -822,7 +822,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptorsLegacy(
 
     std::vector<const Descriptor*> messageDescriptors;
     for (size_t i = 0; i < config->FileIndices.size(); ++i) {
-        if (config->FileIndices[i] >= static_cast<int>(fileDescriptors.size())) {
+        if (config->FileIndices[i] >= std::ssize(fileDescriptors)) {
             THROW_ERROR_EXCEPTION("File index is out of bound")
                 << TErrorAttribute("file_index", config->FileIndices[i])
                 << TErrorAttribute("file_count", fileDescriptors.size());
@@ -893,7 +893,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
 {
     auto embeddingIndex = tableType->AddEmbedding(parentEmbeddingIndex, columnConfig);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, parent, embeddingIndex);
     }
 }
@@ -922,7 +922,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
             std::move(child), //KMP
             fieldIndex);
 
-    for (auto& fieldConfig: columnConfig->Type->Fields) {
+    for (auto& fieldConfig : columnConfig->Type->Fields) {
         InitColumn(fieldIndex, tableSchema, typeBuilder, tableType, fieldConfig, childPtr->Type, parentEmbeddingIndex);
     }
 }
@@ -1003,13 +1003,16 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
 {
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
-        for (const auto& [name, field] : enumerationConfigMap->GetChildren()) {
+        for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
+            // TODO(babenko): migrate to std::string
+            auto name = std::string(name_);
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(name, enumerationConfig));
+            // TODO(babenko): migrate to std::string
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(std::string(TimestampColumnName), enumerationConfig));
         }
     }
 
@@ -1041,7 +1044,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename TType>
-TProtobufTypeBuilder<TType>::TProtobufTypeBuilder(const THashMap<TString, TEnumerationDescription>& enumerations)
+TProtobufTypeBuilder<TType>::TProtobufTypeBuilder(const THashMap<std::string, TEnumerationDescription>& enumerations)
     : Enumerations_(enumerations)
 { }
 
@@ -1242,9 +1245,9 @@ void TProtobufTypeBuilder<TType>:: VisitStruct(
 
     const auto& structFields = descriptor.GetType()->GetFields();
     if (!isOneof) {
-        type->StructFieldCount = static_cast<int>(structFields.size());
+        type->StructFieldCount = std::ssize(structFields);
     }
-    for (int fieldIndex = 0; fieldIndex != static_cast<int>(structFields.size()); ++fieldIndex) {
+    for (int fieldIndex = 0; fieldIndex != std::ssize(structFields); ++fieldIndex) {
         const auto& structField = structFields[fieldIndex];
         auto configIt = nameToConfig.find(structField.Name);
         if (configIt == nameToConfig.end()) {
@@ -1317,7 +1320,7 @@ void TProtobufTypeBuilder<TType>::VisitDict(
 template <typename T>
 static T& ResizeAndGetElement(std::vector<T>& vector, int index, const T& fill = {})
 {
-    if (index >= static_cast<int>(vector.size())) {
+    if (index >= std::ssize(vector)) {
         vector.resize(index + 1, fill);
     }
     return vector[index];
@@ -1377,7 +1380,7 @@ void TProtobufWriterType::IgnoreChild(
 
 const TProtobufWriterFieldDescription* TProtobufWriterType::FindAlternative(int alternativeIndex) const
 {
-    if (alternativeIndex >= static_cast<int>(AlternativeToChildIndex_.size())) {
+    if (alternativeIndex >= std::ssize(AlternativeToChildIndex_)) {
         return nullptr;
     }
     if (AlternativeToChildIndex_[alternativeIndex] == InvalidChildIndex) {
@@ -1595,7 +1598,7 @@ static int Process(
     const std::unique_ptr<TProtobufParserFieldDescription>& child)
 {
     if (child->Type->ProtoType == EProtobufType::EmbeddedMessage) {
-        for (const auto& grandChild: child->Type->Children) {
+        for (const auto& grandChild : child->Type->Children) {
             globalChildIndex = Process(ids, globalChildIndex, nameTable, child->Type, grandChild);
         }
     } else {
@@ -1615,7 +1618,7 @@ std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> TProtobufParserFo
     std::vector<std::pair<ui16, TProtobufParserFieldDescription*>> ids;
     int globalChildIndex = 0;
 
-    for (const auto& child: TableType_->Children) {
+    for (const auto& child : TableType_->Children) {
         globalChildIndex = Process(ids, globalChildIndex, nameTable, TableType_, child);
     }
 

@@ -7,8 +7,8 @@ PEERDIR(
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/dq/actors
-    ydb/library/yql/public/udf/service/stub
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(

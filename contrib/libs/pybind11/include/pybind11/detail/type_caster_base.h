@@ -9,15 +9,22 @@
 
 #pragma once
 
-#include "../pytypes.h"
+#include <pybind11/pytypes.h>
+
 #include "common.h"
+#if PY_MAJOR_VERSION >= 3
+#include "cpp_conduit.h"
+#endif
 #include "descr.h"
 #include "internals.h"
 #include "typeid.h"
+#include "value_and_holder.h"
 
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <typeindex>
@@ -36,14 +43,13 @@ private:
     loader_life_support *parent = nullptr;
     std::unordered_set<PyObject *> keep_alive;
 
-#if defined(WITH_THREAD)
     // Store stack pointer in thread-local storage.
     static PYBIND11_TLS_KEY_REF get_stack_tls_key() {
-#    if PYBIND11_INTERNALS_VERSION == 4
+#if PYBIND11_INTERNALS_VERSION == 4
         return get_local_internals().loader_life_support_tls_key;
-#    else
+#else
         return get_internals().loader_life_support_tls_key;
-#    endif
+#endif
     }
     static loader_life_support *get_stack_top() {
         return static_cast<loader_life_support *>(PYBIND11_TLS_GET_VALUE(get_stack_tls_key()));
@@ -51,15 +57,6 @@ private:
     static void set_stack_top(loader_life_support *value) {
         PYBIND11_TLS_REPLACE_VALUE(get_stack_tls_key(), value);
     }
-#else
-    // Use single global variable for stack.
-    static loader_life_support **get_stack_pp() {
-        static loader_life_support *global_stack = nullptr;
-        return global_stack;
-    }
-    static loader_life_support *get_stack_top() { return *get_stack_pp(); }
-    static void set_stack_top(loader_life_support *value) { *get_stack_pp() = value; }
-#endif
 
 public:
     /// A new patient frame is created when a function is entered
@@ -218,12 +215,15 @@ inline detail::type_info *get_local_type_info(const std::type_index &tp) {
 }
 
 inline detail::type_info *get_global_type_info(const std::type_index &tp) {
-    auto &types = get_internals().registered_types_cpp;
-    auto it = types.find(tp);
-    if (it != types.end()) {
-        return it->second;
-    }
-    return nullptr;
+    return with_internals([&](internals &internals) {
+        detail::type_info *type_info = nullptr;
+        auto &types = internals.registered_types_cpp;
+        auto it = types.find(tp);
+        if (it != types.end()) {
+            type_info = it->second;
+        }
+        return type_info;
+    });
 }
 
 /// Return the type info for a given C++ type; on lookup failure can either throw or return
@@ -254,77 +254,18 @@ PYBIND11_NOINLINE handle get_type_handle(const std::type_info &tp, bool throw_if
 // Searches the inheritance graph for a registered Python instance, using all_type_info().
 PYBIND11_NOINLINE handle find_registered_python_instance(void *src,
                                                          const detail::type_info *tinfo) {
-    auto it_instances = get_internals().registered_instances.equal_range(src);
-    for (auto it_i = it_instances.first; it_i != it_instances.second; ++it_i) {
-        for (auto *instance_type : detail::all_type_info(Py_TYPE(it_i->second))) {
-            if (instance_type && same_type(*instance_type->cpptype, *tinfo->cpptype)) {
-                return handle((PyObject *) it_i->second).inc_ref();
+    return with_instance_map(src, [&](instance_map &instances) {
+        auto it_instances = instances.equal_range(src);
+        for (auto it_i = it_instances.first; it_i != it_instances.second; ++it_i) {
+            for (auto *instance_type : detail::all_type_info(Py_TYPE(it_i->second))) {
+                if (instance_type && same_type(*instance_type->cpptype, *tinfo->cpptype)) {
+                    return handle((PyObject *) it_i->second).inc_ref();
+                }
             }
         }
-    }
-    return handle();
+        return handle();
+    });
 }
-
-struct value_and_holder {
-    instance *inst = nullptr;
-    size_t index = 0u;
-    const detail::type_info *type = nullptr;
-    void **vh = nullptr;
-
-    // Main constructor for a found value/holder:
-    value_and_holder(instance *i, const detail::type_info *type, size_t vpos, size_t index)
-        : inst{i}, index{index}, type{type},
-          vh{inst->simple_layout ? inst->simple_value_holder
-                                 : &inst->nonsimple.values_and_holders[vpos]} {}
-
-    // Default constructor (used to signal a value-and-holder not found by get_value_and_holder())
-    value_and_holder() = default;
-
-    // Used for past-the-end iterator
-    explicit value_and_holder(size_t index) : index{index} {}
-
-    template <typename V = void>
-    V *&value_ptr() const {
-        return reinterpret_cast<V *&>(vh[0]);
-    }
-    // True if this `value_and_holder` has a non-null value pointer
-    explicit operator bool() const { return value_ptr() != nullptr; }
-
-    template <typename H>
-    H &holder() const {
-        return reinterpret_cast<H &>(vh[1]);
-    }
-    bool holder_constructed() const {
-        return inst->simple_layout
-                   ? inst->simple_holder_constructed
-                   : (inst->nonsimple.status[index] & instance::status_holder_constructed) != 0u;
-    }
-    // NOLINTNEXTLINE(readability-make-member-function-const)
-    void set_holder_constructed(bool v = true) {
-        if (inst->simple_layout) {
-            inst->simple_holder_constructed = v;
-        } else if (v) {
-            inst->nonsimple.status[index] |= instance::status_holder_constructed;
-        } else {
-            inst->nonsimple.status[index] &= (std::uint8_t) ~instance::status_holder_constructed;
-        }
-    }
-    bool instance_registered() const {
-        return inst->simple_layout
-                   ? inst->simple_instance_registered
-                   : ((inst->nonsimple.status[index] & instance::status_instance_registered) != 0);
-    }
-    // NOLINTNEXTLINE(readability-make-member-function-const)
-    void set_instance_registered(bool v = true) {
-        if (inst->simple_layout) {
-            inst->simple_instance_registered = v;
-        } else if (v) {
-            inst->nonsimple.status[index] |= instance::status_instance_registered;
-        } else {
-            inst->nonsimple.status[index] &= (std::uint8_t) ~instance::status_instance_registered;
-        }
-    }
-};
 
 // Container for accessing and iterating over an instance's values/holders
 struct values_and_holders {
@@ -501,7 +442,7 @@ PYBIND11_NOINLINE void instance::allocate_layout() {
 // NOLINTNEXTLINE(readability-make-member-function-const)
 PYBIND11_NOINLINE void instance::deallocate_layout() {
     if (!simple_layout) {
-        PyMem_Free(nonsimple.values_and_holders);
+        PyMem_Free(reinterpret_cast<void *>(nonsimple.values_and_holders));
     }
 }
 
@@ -514,16 +455,17 @@ PYBIND11_NOINLINE bool isinstance_generic(handle obj, const std::type_info &tp) 
 }
 
 PYBIND11_NOINLINE handle get_object_handle(const void *ptr, const detail::type_info *type) {
-    auto &instances = get_internals().registered_instances;
-    auto range = instances.equal_range(ptr);
-    for (auto it = range.first; it != range.second; ++it) {
-        for (const auto &vh : values_and_holders(it->second)) {
-            if (vh.type == type) {
-                return handle((PyObject *) it->second);
+    return with_instance_map(ptr, [&](instance_map &instances) {
+        auto range = instances.equal_range(ptr);
+        for (auto it = range.first; it != range.second; ++it) {
+            for (const auto &vh : values_and_holders(it->second)) {
+                if (vh.type == type) {
+                    return handle((PyObject *) it->second);
+                }
             }
         }
-    }
-    return handle();
+        return handle();
+    });
 }
 
 inline PyThreadState *get_thread_state_unchecked() {
@@ -684,6 +626,15 @@ public:
         }
         return false;
     }
+#if PY_MAJOR_VERSION >= 3
+    bool try_cpp_conduit(handle src) {
+        value = try_raw_pointer_ephemeral_from_cpp_conduit(src, cpptype);
+        if (value != nullptr) {
+            return true;
+        }
+        return false;
+    }
+#endif
     void check_holder_compat() {}
 
     PYBIND11_NOINLINE static void *local_load(PyObject *src, const type_info *ti) {
@@ -815,6 +766,12 @@ public:
             return true;
         }
 
+#if PY_MAJOR_VERSION >= 3
+        if (convert && cpptype && this_.try_cpp_conduit(src)) {
+            return true;
+        }
+#endif
+
         return false;
     }
 
@@ -841,6 +798,32 @@ public:
     const std::type_info *cpptype = nullptr;
     void *value = nullptr;
 };
+
+inline object cpp_conduit_method(handle self,
+                                 const bytes &pybind11_platform_abi_id,
+                                 const capsule &cpp_type_info_capsule,
+                                 const bytes &pointer_kind) {
+#ifdef PYBIND11_HAS_STRING_VIEW
+    using cpp_str = std::string_view;
+#else
+    using cpp_str = std::string;
+#endif
+    if (cpp_str(pybind11_platform_abi_id) != PYBIND11_PLATFORM_ABI_ID) {
+        return none();
+    }
+    if (std::strcmp(cpp_type_info_capsule.name(), typeid(std::type_info).name()) != 0) {
+        return none();
+    }
+    if (cpp_str(pointer_kind) != "raw_pointer_ephemeral") {
+        throw std::runtime_error("Invalid pointer_kind: \"" + std::string(pointer_kind) + "\"");
+    }
+    const auto *cpp_type_info = cpp_type_info_capsule.get_pointer<const std::type_info>();
+    type_caster_generic caster(*cpp_type_info);
+    if (!caster.load(self, false)) {
+        return none();
+    }
+    return capsule(caster.value, cpp_type_info->name());
+}
 
 /**
  * Determine suitable casting operator for pointer-or-lvalue-casting type casters.  The type caster
@@ -1121,11 +1104,11 @@ public:
             || policy == return_value_policy::automatic_reference) {
             policy = return_value_policy::copy;
         }
-        return cast(&src, policy, parent);
+        return cast(std::addressof(src), policy, parent);
     }
 
     static handle cast(itype &&src, return_value_policy, handle parent) {
-        return cast(&src, return_value_policy::move, parent);
+        return cast(std::addressof(src), return_value_policy::move, parent);
     }
 
     // Returns a (pointer, type_info) pair taking care of necessary type lookup for a
@@ -1194,14 +1177,14 @@ protected:
        does not have a private operator new implementation. A comma operator is used in the
        decltype argument to apply SFINAE to the public copy/move constructors.*/
     template <typename T, typename = enable_if_t<is_copy_constructible<T>::value>>
-    static auto make_copy_constructor(const T *)
-        -> decltype(new T(std::declval<const T>()), Constructor{}) {
+    static auto make_copy_constructor(const T *) -> decltype(new T(std::declval<const T>()),
+                                                             Constructor{}) {
         return [](const void *arg) -> void * { return new T(*reinterpret_cast<const T *>(arg)); };
     }
 
     template <typename T, typename = enable_if_t<is_move_constructible<T>::value>>
-    static auto make_move_constructor(const T *)
-        -> decltype(new T(std::declval<T &&>()), Constructor{}) {
+    static auto make_move_constructor(const T *) -> decltype(new T(std::declval<T &&>()),
+                                                             Constructor{}) {
         return [](const void *arg) -> void * {
             return new T(std::move(*const_cast<T *>(reinterpret_cast<const T *>(arg))));
         };

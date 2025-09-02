@@ -1,34 +1,46 @@
 import copy
 import json
-import re
 
 import itertools
 from functools import wraps
+from typing import Any, Dict, List, Union, Callable, Optional
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
-from moto.core.utils import camelcase_to_underscores, amz_crc32, amzn_request_id
+from moto.core.utils import camelcase_to_underscores
+from moto.dynamodb.parsing.key_condition_expression import parse_expression
+from moto.dynamodb.parsing.reserved_keywords import ReservedKeywords
 from .exceptions import (
     MockValidationException,
     ResourceNotFoundException,
-    ConditionalCheckFailed,
+    UnknownKeyType,
 )
-from moto.dynamodb.models import dynamodb_backends, dynamo_json_dump
+from moto.dynamodb.models import dynamodb_backends, Table, DynamoDBBackend
+from moto.dynamodb.models.utilities import dynamo_json_dump
+from moto.utilities.aws_headers import amz_crc32, amzn_request_id
 
 
 TRANSACTION_MAX_ITEMS = 25
 
 
-def include_consumed_capacity(val=1.0):
-    def _inner(f):
+def include_consumed_capacity(
+    val: float = 1.0,
+) -> Callable[
+    [Callable[["DynamoHandler"], str]],
+    Callable[["DynamoHandler"], Union[str, TYPE_RESPONSE]],
+]:
+    def _inner(
+        f: Callable[..., Union[str, TYPE_RESPONSE]]
+    ) -> Callable[["DynamoHandler"], Union[str, TYPE_RESPONSE]]:
         @wraps(f)
-        def _wrapper(*args, **kwargs):
+        def _wrapper(
+            *args: "DynamoHandler", **kwargs: None
+        ) -> Union[str, TYPE_RESPONSE]:
             (handler,) = args
             expected_capacity = handler.body.get("ReturnConsumedCapacity", "NONE")
             if expected_capacity not in ["NONE", "TOTAL", "INDEXES"]:
                 type_ = "ValidationException"
-                message = "1 validation error detected: Value '{}' at 'returnConsumedCapacity' failed to satisfy constraint: Member must satisfy enum value set: [INDEXES, TOTAL, NONE]".format(
-                    expected_capacity
-                )
+                message = f"1 validation error detected: Value '{expected_capacity}' at 'returnConsumedCapacity' failed to satisfy constraint: Member must satisfy enum value set: [INDEXES, TOTAL, NONE]"
                 return (
                     400,
                     handler.response_headers,
@@ -67,9 +79,17 @@ def include_consumed_capacity(val=1.0):
     return _inner
 
 
-def put_has_empty_keys(field_updates, table):
+def validate_put_has_empty_keys(
+    field_updates: Dict[str, Any], table: Table, custom_error_msg: Optional[str] = None
+) -> None:
+    """
+    Error if any keys have an empty value. Checks Global index attributes as well
+    """
     if table:
         key_names = table.attribute_keys
+        gsi_key_names = list(
+            itertools.chain(*[gsi.schema_key_attrs for gsi in table.global_indexes])
+        )
 
         # string/binary fields with empty string as value
         empty_str_fields = [
@@ -77,13 +97,32 @@ def put_has_empty_keys(field_updates, table):
             for (key, val) in field_updates.items()
             if next(iter(val.keys())) in ["S", "B"] and next(iter(val.values())) == ""
         ]
-        return any([keyname in empty_str_fields for keyname in key_names])
-    return False
+
+        # First validate that all of the GSI-keys are set
+        empty_gsi_key = next(
+            (kn for kn in gsi_key_names if kn in empty_str_fields), None
+        )
+        if empty_gsi_key:
+            gsi_name = table.global_indexes[0].name
+            raise MockValidationException(
+                f"One or more parameter values are not valid. A value specified for a secondary index key is not supported. The AttributeValue for a key attribute cannot contain an empty string value. IndexName: {gsi_name}, IndexKey: {empty_gsi_key}"
+            )
+
+        # Then validate that all of the regular keys are set
+        empty_key = next(
+            (keyname for keyname in key_names if keyname in empty_str_fields), None
+        )
+        if empty_key:
+            msg = (
+                custom_error_msg
+                or "One or more parameter values were invalid: An AttributeValue may not contain an empty string. Key: {}"
+            )
+            raise MockValidationException(msg.format(empty_key))
 
 
-def put_has_empty_attrs(field_updates, table):
+def put_has_empty_attrs(field_updates: Dict[str, Any], table: Table) -> bool:
     # Example invalid attribute: [{'M': {'SS': {'NS': []}}}]
-    def _validate_attr(attr: dict):
+    def _validate_attr(attr: Dict[str, Any]) -> bool:
         if "NS" in attr and attr["NS"] == []:
             return True
         else:
@@ -100,8 +139,36 @@ def put_has_empty_attrs(field_updates, table):
     return False
 
 
+def validate_put_has_gsi_keys_set_to_none(item: Dict[str, Any], table: Table) -> None:
+    for gsi in table.global_indexes:
+        for attr in gsi.schema:
+            attr_name = attr["AttributeName"]
+            if attr_name in item and item[attr_name] == {"NULL": True}:
+                raise MockValidationException(
+                    f"One or more parameter values were invalid: Type mismatch for Index Key {attr_name} Expected: S Actual: NULL IndexName: {gsi.name}"
+                )
+
+
+def check_projection_expression(expression: str) -> None:
+    if expression.upper() in ReservedKeywords.get_reserved_keywords():
+        raise MockValidationException(
+            f"ProjectionExpression: Attribute name is a reserved keyword; reserved keyword: {expression}"
+        )
+    if expression[0].isnumeric():
+        raise MockValidationException(
+            "ProjectionExpression: Attribute name starts with a number"
+        )
+    if " " in expression:
+        raise MockValidationException(
+            "ProjectionExpression: Attribute name contains white space"
+        )
+
+
 class DynamoHandler(BaseResponse):
-    def get_endpoint_name(self, headers):
+    def __init__(self) -> None:
+        super().__init__(service_name="dynamodb")
+
+    def get_endpoint_name(self, headers: Any) -> Optional[str]:
         """Parses request headers and extracts part od the X-Amz-Target
         that corresponds to a method of DynamoHandler
 
@@ -111,18 +178,19 @@ class DynamoHandler(BaseResponse):
         match = headers.get("x-amz-target") or headers.get("X-Amz-Target")
         if match:
             return match.split(".")[1]
+        return None
 
     @property
-    def dynamodb_backend(self):
+    def dynamodb_backend(self) -> DynamoDBBackend:
         """
-        :return: DynamoDB2 Backend
-        :rtype: moto.dynamodb2.models.DynamoDBBackend
+        :return: DynamoDB Backend
+        :rtype: moto.dynamodb.models.DynamoDBBackend
         """
-        return dynamodb_backends[self.region]
+        return dynamodb_backends[self.current_account][self.region]
 
     @amz_crc32
     @amzn_request_id
-    def call_action(self):
+    def call_action(self) -> TYPE_RESPONSE:
         self.body = json.loads(self.body or "{}")
         endpoint = self.get_endpoint_name(self.headers)
         if endpoint:
@@ -138,7 +206,7 @@ class DynamoHandler(BaseResponse):
         else:
             return 404, self.response_headers, ""
 
-    def list_tables(self):
+    def list_tables(self) -> str:
         body = self.body
         limit = body.get("Limit", 100)
         exclusive_start_table_name = body.get("ExclusiveStartTableName")
@@ -146,13 +214,13 @@ class DynamoHandler(BaseResponse):
             limit, exclusive_start_table_name
         )
 
-        response = {"TableNames": tables}
+        response: Dict[str, Any] = {"TableNames": tables}
         if last_eval:
             response["LastEvaluatedTableName"] = last_eval
 
         return dynamo_json_dump(response)
 
-    def create_table(self):
+    def create_table(self) -> str:
         body = self.body
         # get the table name
         table_name = body["TableName"]
@@ -175,21 +243,42 @@ class DynamoHandler(BaseResponse):
         sse_spec = body.get("SSESpecification")
         # getting the schema
         key_schema = body["KeySchema"]
+        for idx, _key in enumerate(key_schema, start=1):
+            key_type = _key["KeyType"]
+            if key_type not in ["HASH", "RANGE"]:
+                raise UnknownKeyType(
+                    key_type=key_type, position=f"keySchema.{idx}.member.keyType"
+                )
         # getting attribute definition
         attr = body["AttributeDefinitions"]
-        # getting the indexes
+
+        # getting/validating the indexes
         global_indexes = body.get("GlobalSecondaryIndexes")
         if global_indexes == []:
             raise MockValidationException(
                 "One or more parameter values were invalid: List of GlobalSecondaryIndexes is empty"
             )
         global_indexes = global_indexes or []
+        for idx, g_idx in enumerate(global_indexes, start=1):
+            for idx2, _key in enumerate(g_idx["KeySchema"], start=1):
+                key_type = _key["KeyType"]
+                if key_type not in ["HASH", "RANGE"]:
+                    position = f"globalSecondaryIndexes.{idx}.member.keySchema.{idx2}.member.keyType"
+                    raise UnknownKeyType(key_type=key_type, position=position)
+
         local_secondary_indexes = body.get("LocalSecondaryIndexes")
         if local_secondary_indexes == []:
             raise MockValidationException(
                 "One or more parameter values were invalid: List of LocalSecondaryIndexes is empty"
             )
         local_secondary_indexes = local_secondary_indexes or []
+        for idx, g_idx in enumerate(local_secondary_indexes, start=1):
+            for idx2, _key in enumerate(g_idx["KeySchema"], start=1):
+                key_type = _key["KeyType"]
+                if key_type not in ["HASH", "RANGE"]:
+                    position = f"localSecondaryIndexes.{idx}.member.keySchema.{idx2}.member.keyType"
+                    raise UnknownKeyType(key_type=key_type, position=position)
+
         # Verify AttributeDefinitions list all
         expected_attrs = []
         expected_attrs.extend([key["AttributeName"] for key in key_schema])
@@ -210,7 +299,7 @@ class DynamoHandler(BaseResponse):
         actual_attrs = [item["AttributeName"] for item in attr]
         actual_attrs.sort()
         if actual_attrs != expected_attrs:
-            return self._throw_attr_error(
+            self._throw_attr_error(
                 actual_attrs, expected_attrs, global_indexes or local_secondary_indexes
             )
         # get the stream specification
@@ -232,8 +321,10 @@ class DynamoHandler(BaseResponse):
         )
         return dynamo_json_dump(table.describe())
 
-    def _throw_attr_error(self, actual_attrs, expected_attrs, indexes):
-        def dump_list(list_):
+    def _throw_attr_error(
+        self, actual_attrs: List[str], expected_attrs: List[str], indexes: bool
+    ) -> None:
+        def dump_list(list_: List[str]) -> str:
             return str(list_).replace("'", "")
 
         err_head = "One or more parameter values were invalid: "
@@ -282,28 +373,44 @@ class DynamoHandler(BaseResponse):
                     + dump_list(actual_attrs)
                 )
 
-    def delete_table(self):
+    def _get_filter_expression(self) -> Optional[str]:
+        filter_expression = self.body.get("FilterExpression")
+        if filter_expression == "":
+            raise MockValidationException(
+                "Invalid FilterExpression: The expression can not be empty;"
+            )
+        return filter_expression
+
+    def _get_projection_expression(self) -> Optional[str]:
+        expression = self.body.get("ProjectionExpression")
+        if expression == "":
+            raise MockValidationException(
+                "Invalid ProjectionExpression: The expression can not be empty;"
+            )
+        return expression
+
+    def delete_table(self) -> str:
         name = self.body["TableName"]
         table = self.dynamodb_backend.delete_table(name)
         return dynamo_json_dump(table.describe())
 
-    def describe_endpoints(self):
+    def describe_endpoints(self) -> str:
         response = {"Endpoints": self.dynamodb_backend.describe_endpoints()}
         return dynamo_json_dump(response)
 
-    def tag_resource(self):
+    def tag_resource(self) -> str:
         table_arn = self.body["ResourceArn"]
         tags = self.body["Tags"]
         self.dynamodb_backend.tag_resource(table_arn, tags)
         return ""
 
-    def untag_resource(self):
+    def untag_resource(self) -> str:
         table_arn = self.body["ResourceArn"]
         tags = self.body["TagKeys"]
         self.dynamodb_backend.untag_resource(table_arn, tags)
         return ""
 
-    def list_tags_of_resource(self):
+    def list_tags_of_resource(self) -> str:
         table_arn = self.body["ResourceArn"]
         all_tags = self.dynamodb_backend.list_tags_of_resource(table_arn)
         all_tag_keys = [tag["Key"] for tag in all_tags]
@@ -321,7 +428,7 @@ class DynamoHandler(BaseResponse):
             return json.dumps({"Tags": tags_resp, "NextToken": next_marker})
         return json.dumps({"Tags": tags_resp})
 
-    def update_table(self):
+    def update_table(self) -> str:
         name = self.body["TableName"]
         attr_definitions = self.body.get("AttributeDefinitions", None)
         global_index = self.body.get("GlobalSecondaryIndexUpdates", None)
@@ -338,13 +445,13 @@ class DynamoHandler(BaseResponse):
         )
         return dynamo_json_dump(table.describe())
 
-    def describe_table(self):
+    def describe_table(self) -> str:
         name = self.body["TableName"]
         table = self.dynamodb_backend.describe_table(name)
         return dynamo_json_dump(table)
 
     @include_consumed_capacity()
-    def put_item(self):
+    def put_item(self) -> str:
         name = self.body["TableName"]
         item = self.body["Item"]
         return_values = self.body.get("ReturnValues", "NONE")
@@ -352,14 +459,13 @@ class DynamoHandler(BaseResponse):
         if return_values not in ("ALL_OLD", "NONE"):
             raise MockValidationException("Return values set to invalid value")
 
-        if put_has_empty_keys(item, self.dynamodb_backend.get_table(name)):
-            raise MockValidationException(
-                "One or more parameter values were invalid: An AttributeValue may not contain an empty string"
-            )
-        if put_has_empty_attrs(item, self.dynamodb_backend.get_table(name)):
+        table = self.dynamodb_backend.get_table(name)
+        validate_put_has_empty_keys(item, table)
+        if put_has_empty_attrs(item, table):
             raise MockValidationException(
                 "One or more parameter values were invalid: An number set  may not be empty"
             )
+        validate_put_has_gsi_keys_set_to_none(item, table)
 
         overwrite = "Expected" not in self.body
         if not overwrite:
@@ -378,7 +484,7 @@ class DynamoHandler(BaseResponse):
         # expression
         condition_expression = self.body.get("ConditionExpression")
         expression_attribute_names = self.body.get("ExpressionAttributeNames", {})
-        expression_attribute_values = self.body.get("ExpressionAttributeValues", {})
+        expression_attribute_values = self._get_expr_attr_values()
 
         if condition_expression:
             overwrite = False
@@ -400,19 +506,31 @@ class DynamoHandler(BaseResponse):
             item_dict.pop("Attributes", None)
         return dynamo_json_dump(item_dict)
 
-    def batch_write_item(self):
+    def batch_write_item(self) -> str:
         table_batches = self.body["RequestItems"]
-
+        put_requests = []
+        delete_requests = []
         for table_name, table_requests in table_batches.items():
+            table = self.dynamodb_backend.get_table(table_name)
             for table_request in table_requests:
                 request_type = list(table_request.keys())[0]
                 request = list(table_request.values())[0]
                 if request_type == "PutRequest":
                     item = request["Item"]
-                    self.dynamodb_backend.put_item(table_name, item)
+                    validate_put_has_empty_keys(
+                        item,
+                        table,
+                        custom_error_msg="One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: {}",
+                    )
+                    put_requests.append((table_name, item))
                 elif request_type == "DeleteRequest":
                     keys = request["Key"]
-                    self.dynamodb_backend.delete_item(table_name, keys)
+                    delete_requests.append((table_name, keys))
+
+        for table_name, item in put_requests:
+            self.dynamodb_backend.put_item(table_name, item)
+        for table_name, keys in delete_requests:
+            self.dynamodb_backend.delete_item(table_name, keys)
 
         response = {
             "ConsumedCapacity": [
@@ -430,11 +548,24 @@ class DynamoHandler(BaseResponse):
         return dynamo_json_dump(response)
 
     @include_consumed_capacity(0.5)
-    def get_item(self):
+    def get_item(self) -> str:
         name = self.body["TableName"]
         self.dynamodb_backend.get_table(name)
         key = self.body["Key"]
-        projection_expression = self.body.get("ProjectionExpression")
+        empty_keys = [k for k, v in key.items() if not next(iter(v.values()))]
+        if empty_keys:
+            raise MockValidationException(
+                "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an "
+                f"empty string value. Key: {empty_keys[0]}"
+            )
+
+        projection_expression = self._get_projection_expression()
+        attributes_to_get = self.body.get("AttributesToGet")
+        if projection_expression and attributes_to_get:
+            raise MockValidationException(
+                "Can not use both expression and non-expression parameters in the same request: Non-expression parameters: {AttributesToGet} Expression parameters: {ProjectionExpression}"
+            )
+
         expression_attribute_names = self.body.get("ExpressionAttributeNames")
         if expression_attribute_names == {}:
             if projection_expression is None:
@@ -447,11 +578,11 @@ class DynamoHandler(BaseResponse):
                 )
 
         expression_attribute_names = expression_attribute_names or {}
-        projection_expression = self._adjust_projection_expression(
+        projection_expressions = self._adjust_projection_expression(
             projection_expression, expression_attribute_names
         )
 
-        item = self.dynamodb_backend.get_item(name, key, projection_expression)
+        item = self.dynamodb_backend.get_item(name, key, projection_expressions)
         if item:
             item_dict = item.describe_attrs(attributes=None)
             return dynamo_json_dump(item_dict)
@@ -459,10 +590,14 @@ class DynamoHandler(BaseResponse):
             # Item not found
             return dynamo_json_dump({})
 
-    def batch_get_item(self):
+    def batch_get_item(self) -> str:
         table_batches = self.body["RequestItems"]
 
-        results = {"ConsumedCapacity": [], "Responses": {}, "UnprocessedKeys": {}}
+        results: Dict[str, Any] = {
+            "ConsumedCapacity": [],
+            "Responses": {},
+            "UnprocessedKeys": {},
+        }
 
         # Validation: Can only request up to 100 items at the same time
         # Scenario 1: We're requesting more than a 100 keys from a single table
@@ -482,6 +617,7 @@ class DynamoHandler(BaseResponse):
                 "Too many items requested for the BatchGetItem call"
             )
 
+        result_size: int = 0
         for table_name, table_request in table_batches.items():
             keys = table_request["Keys"]
             if self._contains_duplicates(keys):
@@ -494,25 +630,33 @@ class DynamoHandler(BaseResponse):
                 "ExpressionAttributeNames", {}
             )
 
-            projection_expression = self._adjust_projection_expression(
+            projection_expressions = self._adjust_projection_expression(
                 projection_expression, expression_attribute_names
             )
 
             results["Responses"][table_name] = []
             for key in keys:
                 item = self.dynamodb_backend.get_item(
-                    table_name, key, projection_expression
+                    table_name, key, projection_expressions
                 )
                 if item:
-                    item_describe = item.describe_attrs(attributes_to_get)
-                    results["Responses"][table_name].append(item_describe["Item"])
+                    # A single operation can retrieve up to 16 MB of data [and] returns a partial result if the response size limit is exceeded
+                    if result_size + item.size() > (16 * 1024 * 1024):
+                        # Result is already getting too big - next results should be part of UnprocessedKeys
+                        if table_name not in results["UnprocessedKeys"]:
+                            results["UnprocessedKeys"][table_name] = {"Keys": []}
+                        results["UnprocessedKeys"][table_name]["Keys"].append(key)
+                    else:
+                        item_describe = item.describe_attrs(attributes_to_get)
+                        results["Responses"][table_name].append(item_describe["Item"])
+                        result_size += item.size()
 
             results["ConsumedCapacity"].append(
                 {"CapacityUnits": len(keys), "TableName": table_name}
             )
         return dynamo_json_dump(results)
 
-    def _contains_duplicates(self, keys):
+    def _contains_duplicates(self, keys: List[str]) -> bool:
         unique_keys = []
         for k in keys:
             if k in unique_keys:
@@ -522,125 +666,30 @@ class DynamoHandler(BaseResponse):
         return False
 
     @include_consumed_capacity()
-    def query(self):
+    def query(self) -> str:
         name = self.body["TableName"]
         key_condition_expression = self.body.get("KeyConditionExpression")
-        projection_expression = self.body.get("ProjectionExpression")
+        projection_expression = self._get_projection_expression()
         expression_attribute_names = self.body.get("ExpressionAttributeNames", {})
-        filter_expression = self.body.get("FilterExpression")
-        expression_attribute_values = self.body.get("ExpressionAttributeValues", {})
+        filter_expression = self._get_filter_expression()
+        expression_attribute_values = self._get_expr_attr_values()
 
-        projection_expression = self._adjust_projection_expression(
+        projection_expressions = self._adjust_projection_expression(
             projection_expression, expression_attribute_names
         )
 
         filter_kwargs = {}
 
         if key_condition_expression:
-            value_alias_map = self.body.get("ExpressionAttributeValues", {})
-
             index_name = self.body.get("IndexName")
             schema = self.dynamodb_backend.get_schema(
                 table_name=name, index_name=index_name
             )
-
-            reverse_attribute_lookup = dict(
-                (v, k) for k, v in self.body.get("ExpressionAttributeNames", {}).items()
-            )
-
-            if " and " in key_condition_expression.lower():
-                expressions = re.split(
-                    " AND ", key_condition_expression, maxsplit=1, flags=re.IGNORECASE
-                )
-
-                index_hash_key = [key for key in schema if key["KeyType"] == "HASH"][0]
-                hash_key_var = reverse_attribute_lookup.get(
-                    index_hash_key["AttributeName"], index_hash_key["AttributeName"]
-                )
-                hash_key_regex = r"(^|[\s(]){0}\b".format(hash_key_var)
-                i, hash_key_expression = next(
-                    (
-                        (i, e)
-                        for i, e in enumerate(expressions)
-                        if re.search(hash_key_regex, e)
-                    ),
-                    (None, None),
-                )
-                if hash_key_expression is None:
-                    raise MockValidationException(
-                        "Query condition missed key schema element: {}".format(
-                            hash_key_var
-                        )
-                    )
-                hash_key_expression = hash_key_expression.strip("()")
-                expressions.pop(i)
-
-                # TODO implement more than one range expression and OR operators
-                range_key_expression = expressions[0].strip("()")
-                # Split expression, and account for all kinds of whitespacing around commas and brackets
-                range_key_expression_components = re.split(
-                    r"\s*\(\s*|\s*,\s*|\s", range_key_expression
-                )
-                # Skip whitespace
-                range_key_expression_components = [
-                    c for c in range_key_expression_components if c
-                ]
-                range_comparison = range_key_expression_components[1]
-
-                if " and " in range_key_expression.lower():
-                    range_comparison = "BETWEEN"
-                    # [range_key, between, x, and, y]
-                    range_values = [
-                        value_alias_map[range_key_expression_components[2]],
-                        value_alias_map[range_key_expression_components[4]],
-                    ]
-                    supplied_range_key = range_key_expression_components[0]
-                elif "begins_with" in range_key_expression:
-                    range_comparison = "BEGINS_WITH"
-                    # [begins_with, range_key, x]
-                    range_values = [
-                        value_alias_map[range_key_expression_components[-1]]
-                    ]
-                    supplied_range_key = range_key_expression_components[1]
-                elif "begins_with" in range_key_expression.lower():
-                    function_used = range_key_expression[
-                        range_key_expression.lower().index("begins_with") : len(
-                            "begins_with"
-                        )
-                    ]
-                    raise MockValidationException(
-                        "Invalid KeyConditionExpression: Invalid function name; function: {}".format(
-                            function_used
-                        )
-                    )
-                else:
-                    # [range_key, =, x]
-                    range_values = [value_alias_map[range_key_expression_components[2]]]
-                    supplied_range_key = range_key_expression_components[0]
-
-                supplied_range_key = expression_attribute_names.get(
-                    supplied_range_key, supplied_range_key
-                )
-                range_keys = [
-                    k["AttributeName"] for k in schema if k["KeyType"] == "RANGE"
-                ]
-                if supplied_range_key not in range_keys:
-                    raise MockValidationException(
-                        "Query condition missed key schema element: {}".format(
-                            range_keys[0]
-                        )
-                    )
-            else:
-                hash_key_expression = key_condition_expression.strip("()")
-                range_comparison = None
-                range_values = []
-
-            if not re.search("[^<>]=", hash_key_expression):
-                raise MockValidationException("Query key condition not supported")
-            hash_key_value_alias = hash_key_expression.split("=")[1].strip()
-            # Temporary fix until we get proper KeyConditionExpression function
-            hash_key = value_alias_map.get(
-                hash_key_value_alias, {"S": hash_key_value_alias}
+            hash_key, range_comparison, range_values = parse_expression(
+                key_condition_expression=key_condition_expression,
+                expression_attribute_names=expression_attribute_names,
+                expression_attribute_values=expression_attribute_values,
+                schema=schema,
             )
         else:
             # 'KeyConditions': {u'forum_name': {u'ComparisonOperator': u'EQ', u'AttributeValueList': [{u'S': u'the-key'}]}}
@@ -693,15 +742,15 @@ class DynamoHandler(BaseResponse):
             limit,
             exclusive_start_key,
             scan_index_forward,
-            projection_expression,
+            projection_expressions,
             index_name=index_name,
             expr_names=expression_attribute_names,
             expr_values=expression_attribute_values,
             filter_expression=filter_expression,
-            **filter_kwargs
+            **filter_kwargs,
         )
 
-        result = {
+        result: Dict[str, Any] = {
             "Count": len(items),
             "ScannedCount": scanned_count,
         }
@@ -714,27 +763,29 @@ class DynamoHandler(BaseResponse):
 
         return dynamo_json_dump(result)
 
-    def _adjust_projection_expression(self, projection_expression, expr_attr_names):
-        def _adjust(expression):
-            return (
-                expr_attr_names[expression]
-                if expression in expr_attr_names
-                else expression
-            )
+    def _adjust_projection_expression(
+        self, projection_expression: Optional[str], expr_attr_names: Dict[str, str]
+    ) -> List[List[str]]:
+        """
+        lvl1.lvl2.attr1,lvl1.attr2 --> [["lvl1", "lvl2", "attr1"], ["lvl1", "attr2]]
+        """
 
-        if projection_expression and expr_attr_names:
+        def _adjust(expression: str) -> str:
+            return (expr_attr_names or {}).get(expression, expression)
+
+        if projection_expression:
             expressions = [x.strip() for x in projection_expression.split(",")]
-            return ",".join(
-                [
-                    ".".join([_adjust(expr) for expr in nested_expr.split(".")])
-                    for nested_expr in expressions
-                ]
-            )
+            for expression in expressions:
+                check_projection_expression(expression)
+            return [
+                [_adjust(expr) for expr in nested_expr.split(".")]
+                for nested_expr in expressions
+            ]
 
-        return projection_expression
+        return []
 
     @include_consumed_capacity()
-    def scan(self):
+    def scan(self) -> str:
         name = self.body["TableName"]
 
         filters = {}
@@ -746,13 +797,17 @@ class DynamoHandler(BaseResponse):
             comparison_values = scan_filter.get("AttributeValueList", [])
             filters[attribute_name] = (comparison_operator, comparison_values)
 
-        filter_expression = self.body.get("FilterExpression")
-        expression_attribute_values = self.body.get("ExpressionAttributeValues", {})
+        filter_expression = self._get_filter_expression()
+        expression_attribute_values = self._get_expr_attr_values()
         expression_attribute_names = self.body.get("ExpressionAttributeNames", {})
-        projection_expression = self.body.get("ProjectionExpression", "")
+        projection_expression = self._get_projection_expression()
         exclusive_start_key = self.body.get("ExclusiveStartKey")
         limit = self.body.get("Limit")
         index_name = self.body.get("IndexName")
+
+        projection_expressions = self._adjust_projection_expression(
+            projection_expression, expression_attribute_names
+        )
 
         try:
             items, scanned_count, last_evaluated_key = self.dynamodb_backend.scan(
@@ -764,10 +819,10 @@ class DynamoHandler(BaseResponse):
                 expression_attribute_names,
                 expression_attribute_values,
                 index_name,
-                projection_expression,
+                projection_expressions,
             )
         except ValueError as err:
-            raise MockValidationException("Bad Filter Expression: {0}".format(err))
+            raise MockValidationException(f"Bad Filter Expression: {err}")
 
         result = {
             "Count": len(items),
@@ -778,25 +833,20 @@ class DynamoHandler(BaseResponse):
             result["LastEvaluatedKey"] = last_evaluated_key
         return dynamo_json_dump(result)
 
-    def delete_item(self):
+    def delete_item(self) -> str:
         name = self.body["TableName"]
         key = self.body["Key"]
         return_values = self.body.get("ReturnValues", "NONE")
         if return_values not in ("ALL_OLD", "NONE"):
             raise MockValidationException("Return values set to invalid value")
 
-        try:
-            self.dynamodb_backend.get_table(name)
-        except ResourceNotFoundException:
-            raise ConditionalCheckFailed(
-                "A condition specified in the operation could not be evaluated."
-            )
+        self.dynamodb_backend.get_table(name)
 
         # Attempt to parse simple ConditionExpressions into an Expected
         # expression
         condition_expression = self.body.get("ConditionExpression")
         expression_attribute_names = self.body.get("ExpressionAttributeNames", {})
-        expression_attribute_values = self.body.get("ExpressionAttributeValues", {})
+        expression_attribute_values = self._get_expr_attr_values()
 
         item = self.dynamodb_backend.delete_item(
             name,
@@ -813,7 +863,7 @@ class DynamoHandler(BaseResponse):
         item_dict["ConsumedCapacityUnits"] = 0.5
         return dynamo_json_dump(item_dict)
 
-    def update_item(self):
+    def update_item(self) -> str:
         name = self.body["TableName"]
         key = self.body["Key"]
         return_values = self.body.get("ReturnValues", "NONE")
@@ -823,6 +873,9 @@ class DynamoHandler(BaseResponse):
             raise MockValidationException(
                 "Can not use both expression and non-expression parameters in the same request: Non-expression parameters: {AttributeUpdates} Expression parameters: {UpdateExpression}"
             )
+        return_values_on_condition_check_failure = self.body.get(
+            "ReturnValuesOnConditionCheckFailure"
+        )
         # We need to copy the item in order to avoid it being modified by the update_item operation
         existing_item = copy.deepcopy(self.dynamodb_backend.get_item(name, key))
         if existing_item:
@@ -848,7 +901,7 @@ class DynamoHandler(BaseResponse):
         # expression
         condition_expression = self.body.get("ConditionExpression")
         expression_attribute_names = self.body.get("ExpressionAttributeNames", {})
-        expression_attribute_values = self.body.get("ExpressionAttributeValues", {})
+        expression_attribute_values = self._get_expr_attr_values()
 
         item = self.dynamodb_backend.update_item(
             name,
@@ -859,6 +912,7 @@ class DynamoHandler(BaseResponse):
             expression_attribute_values=expression_attribute_values,
             expected=expected,
             condition_expression=condition_expression,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
         )
 
         item_dict = item.to_json()
@@ -888,11 +942,20 @@ class DynamoHandler(BaseResponse):
             )
         return dynamo_json_dump(item_dict)
 
-    def _build_updated_new_attributes(self, original, changed):
+    def _get_expr_attr_values(self) -> Dict[str, Dict[str, str]]:
+        values = self.body.get("ExpressionAttributeValues", {})
+        for key in values.keys():
+            if not key.startswith(":"):
+                raise MockValidationException(
+                    f'ExpressionAttributeValues contains invalid key: Syntax error; key: "{key}"'
+                )
+        return values
+
+    def _build_updated_new_attributes(self, original: Any, changed: Any) -> Any:
         if type(changed) != type(original):
             return changed
         else:
-            if type(changed) is dict:
+            if isinstance(changed, dict):
                 return {
                     key: self._build_updated_new_attributes(
                         original.get(key, None), changed[key]
@@ -913,7 +976,7 @@ class DynamoHandler(BaseResponse):
             else:
                 return changed
 
-    def describe_limits(self):
+    def describe_limits(self) -> str:
         return json.dumps(
             {
                 "AccountMaxReadCapacityUnits": 20000,
@@ -923,7 +986,7 @@ class DynamoHandler(BaseResponse):
             }
         )
 
-    def update_time_to_live(self):
+    def update_time_to_live(self) -> str:
         name = self.body["TableName"]
         ttl_spec = self.body["TimeToLiveSpecification"]
 
@@ -931,16 +994,16 @@ class DynamoHandler(BaseResponse):
 
         return json.dumps({"TimeToLiveSpecification": ttl_spec})
 
-    def describe_time_to_live(self):
+    def describe_time_to_live(self) -> str:
         name = self.body["TableName"]
 
         ttl_spec = self.dynamodb_backend.describe_time_to_live(name)
 
         return json.dumps({"TimeToLiveDescription": ttl_spec})
 
-    def transact_get_items(self):
+    def transact_get_items(self) -> str:
         transact_items = self.body["TransactItems"]
-        responses = list()
+        responses: List[Dict[str, Any]] = list()
 
         if len(transact_items) > TRANSACTION_MAX_ITEMS:
             msg = "1 validation error detected: Value '["
@@ -963,10 +1026,9 @@ class DynamoHandler(BaseResponse):
             raise MockValidationException(msg)
 
         ret_consumed_capacity = self.body.get("ReturnConsumedCapacity", "NONE")
-        consumed_capacity = dict()
+        consumed_capacity: Dict[str, Any] = dict()
 
         for transact_item in transact_items:
-
             table_name = transact_item["Get"]["TableName"]
             key = transact_item["Get"]["Key"]
             item = self.dynamodb_backend.get_item(table_name, key)
@@ -975,7 +1037,7 @@ class DynamoHandler(BaseResponse):
                 responses.append({})
                 continue
 
-            item_describe = item.describe_attrs(False)
+            item_describe = item.describe_attrs(attributes=None)
             responses.append(item_describe)
 
             table_capacity = consumed_capacity.get(table_name, {})
@@ -999,20 +1061,26 @@ class DynamoHandler(BaseResponse):
 
         return dynamo_json_dump(result)
 
-    def transact_write_items(self):
+    def transact_write_items(self) -> str:
         transact_items = self.body["TransactItems"]
+        # Validate first - we should error before we start the transaction
+        for item in transact_items:
+            if "Put" in item:
+                item_attrs = item["Put"]["Item"]
+                table = self.dynamodb_backend.get_table(item["Put"]["TableName"])
+                validate_put_has_empty_keys(item_attrs, table)
         self.dynamodb_backend.transact_write_items(transact_items)
-        response = {"ConsumedCapacity": [], "ItemCollectionMetrics": {}}
+        response: Dict[str, Any] = {"ConsumedCapacity": [], "ItemCollectionMetrics": {}}
         return dynamo_json_dump(response)
 
-    def describe_continuous_backups(self):
+    def describe_continuous_backups(self) -> str:
         name = self.body["TableName"]
 
         response = self.dynamodb_backend.describe_continuous_backups(name)
 
         return json.dumps({"ContinuousBackupsDescription": response})
 
-    def update_continuous_backups(self):
+    def update_continuous_backups(self) -> str:
         name = self.body["TableName"]
         point_in_time_spec = self.body["PointInTimeRecoverySpecification"]
 
@@ -1022,14 +1090,14 @@ class DynamoHandler(BaseResponse):
 
         return json.dumps({"ContinuousBackupsDescription": response})
 
-    def list_backups(self):
+    def list_backups(self) -> str:
         body = self.body
         table_name = body.get("TableName")
         backups = self.dynamodb_backend.list_backups(table_name)
         response = {"BackupSummaries": [backup.summary for backup in backups]}
         return dynamo_json_dump(response)
 
-    def create_backup(self):
+    def create_backup(self) -> str:
         body = self.body
         table_name = body.get("TableName")
         backup_name = body.get("BackupName")
@@ -1037,21 +1105,21 @@ class DynamoHandler(BaseResponse):
         response = {"BackupDetails": backup.details}
         return dynamo_json_dump(response)
 
-    def delete_backup(self):
+    def delete_backup(self) -> str:
         body = self.body
         backup_arn = body.get("BackupArn")
         backup = self.dynamodb_backend.delete_backup(backup_arn)
         response = {"BackupDescription": backup.description}
         return dynamo_json_dump(response)
 
-    def describe_backup(self):
+    def describe_backup(self) -> str:
         body = self.body
         backup_arn = body.get("BackupArn")
         backup = self.dynamodb_backend.describe_backup(backup_arn)
         response = {"BackupDescription": backup.description}
         return dynamo_json_dump(response)
 
-    def restore_table_from_backup(self):
+    def restore_table_from_backup(self) -> str:
         body = self.body
         target_table_name = body.get("TargetTableName")
         backup_arn = body.get("BackupArn")
@@ -1060,7 +1128,7 @@ class DynamoHandler(BaseResponse):
         )
         return dynamo_json_dump(restored_table.describe())
 
-    def restore_table_to_point_in_time(self):
+    def restore_table_to_point_in_time(self) -> str:
         body = self.body
         target_table_name = body.get("TargetTableName")
         source_table_name = body.get("SourceTableName")
@@ -1068,3 +1136,21 @@ class DynamoHandler(BaseResponse):
             target_table_name, source_table_name
         )
         return dynamo_json_dump(restored_table.describe())
+
+    def execute_statement(self) -> str:
+        stmt = self.body.get("Statement", "")
+        parameters = self.body.get("Parameters", [])
+        items = self.dynamodb_backend.execute_statement(
+            statement=stmt, parameters=parameters
+        )
+        return dynamo_json_dump({"Items": items})
+
+    def execute_transaction(self) -> str:
+        stmts = self.body.get("TransactStatements", [])
+        items = self.dynamodb_backend.execute_transaction(stmts)
+        return dynamo_json_dump({"Responses": items})
+
+    def batch_execute_statement(self) -> str:
+        stmts = self.body.get("Statements", [])
+        items = self.dynamodb_backend.batch_execute_statement(stmts)
+        return dynamo_json_dump({"Responses": items})

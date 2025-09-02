@@ -374,6 +374,7 @@ static PyObject *
 gen_close(PyGenObject *gen, PyObject *args)
 {
     PyObject *retval;
+    PyObject *yf = _PyGen_yf(gen);
     int err = 0;
 
     if (gen->gi_frame_state == FRAME_CREATED) {
@@ -383,7 +384,6 @@ gen_close(PyGenObject *gen, PyObject *args)
     if (gen->gi_frame_state >= FRAME_COMPLETED) {
         Py_RETURN_NONE;
     }
-    PyObject *yf = _PyGen_yf(gen);
     if (yf) {
         PyFrameState state = gen->gi_frame_state;
         gen->gi_frame_state = FRAME_EXECUTING;
@@ -396,14 +396,12 @@ gen_close(PyGenObject *gen, PyObject *args)
      * YIELD_VALUE if the debugger has changed the lineno. */
     if (err == 0 && is_yield(frame->prev_instr)) {
         assert(is_resume(frame->prev_instr + 1));
-        int exception_handler_depth = frame->prev_instr[0].op.arg;
+        int exception_handler_depth = frame->prev_instr[0].op.code;
         assert(exception_handler_depth > 0);
         /* We can safely ignore the outermost try block
          * as it automatically generated to handle
          * StopIteration. */
         if (exception_handler_depth == 1) {
-            gen->gi_frame_state = FRAME_COMPLETED;
-            _PyFrame_ClearLocals((_PyInterpreterFrame *)gen->gi_iframe);
             Py_RETURN_NONE;
         }
     }
@@ -620,30 +618,19 @@ gen_iternext(PyGenObject *gen)
 int
 _PyGen_SetStopIterationValue(PyObject *value)
 {
-    PyObject *e;
-
-    if (value == NULL ||
-        (!PyTuple_Check(value) && !PyExceptionInstance_Check(value)))
-    {
-        /* Delay exception instantiation if we can */
-        PyErr_SetObject(PyExc_StopIteration, value);
-        return 0;
-    }
-    /* Construct an exception instance manually with
-     * PyObject_CallOneArg and pass it to PyErr_SetObject.
-     *
-     * We do this to handle a situation when "value" is a tuple, in which
-     * case PyErr_SetObject would set the value of StopIteration to
-     * the first element of the tuple.
-     *
-     * (See PyErr_SetObject/_PyErr_CreateException code for details.)
-     */
-    e = PyObject_CallOneArg(PyExc_StopIteration, value);
-    if (e == NULL) {
+    assert(!PyErr_Occurred());
+    // Construct an exception instance manually with PyObject_CallOneArg()
+    // but use PyErr_SetRaisedException() instead of PyErr_SetObject() as
+    // PyErr_SetObject(exc_type, value) has a fast path when 'value'
+    // is a tuple, where the value of the StopIteration exception would be
+    // set to 'value[0]' instead of 'value'.
+    PyObject *exc = value == NULL
+        ? PyObject_CallNoArgs(PyExc_StopIteration)
+        : PyObject_CallOneArg(PyExc_StopIteration, value);
+    if (exc == NULL) {
         return -1;
     }
-    PyErr_SetObject(PyExc_StopIteration, e);
-    Py_DECREF(e);
+    PyErr_SetRaisedException(exc /* stolen */);
     return 0;
 }
 

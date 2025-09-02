@@ -97,6 +97,7 @@ namespace NKikimr::NBlobDepot {
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCollectGarbageResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCommitBlobSeqResult::TPtr ev);
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvResolveResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvPrepareWriteS3Result::TPtr ev);
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
@@ -108,6 +109,7 @@ namespace NKikimr::NBlobDepot {
 
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvGetResult::TPtr ev);
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
+    template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvCheckIntegrityResult::TPtr ev);
 
     void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {

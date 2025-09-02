@@ -13,7 +13,7 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TYardTestRestore) {
 
     YARD_UNIT_TEST(TestRestore15) {
-        TTestContext tc(false, true);
+        TTestContext tc(true);
         ui32 chunkSize = MIN_CHUNK_SIZE;
         Run<TTestWriteChunksAndLog>(&tc, 1, chunkSize, false);
         // TODO(kruall): fix the test and remove the line below

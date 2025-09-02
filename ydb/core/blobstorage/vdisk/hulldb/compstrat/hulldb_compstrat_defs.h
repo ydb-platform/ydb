@@ -38,10 +38,13 @@ namespace NKikimr {
             ui64 FullCompactionLsn = 0;
             // time compaction request was issued
             TInstant CompactionStartTime;
+            // explicit set of SSTables we need to compact
+            THashSet<ui64> TablesToCompact;
 
-            TFullCompactionAttrs(ui64 lsn, TInstant startTime)
+            TFullCompactionAttrs(ui64 lsn, TInstant startTime, THashSet<ui64> tablesToCompact)
                 : FullCompactionLsn(lsn)
                 , CompactionStartTime(startTime)
+                , TablesToCompact(std::move(tablesToCompact))
             {}
 
             bool operator==(const TFullCompactionAttrs &attrs) const {
@@ -74,6 +77,7 @@ namespace NKikimr {
                 TLeveledSsts TablesToAdd;
                 // huge blobs to delete
                 TDiskPartVec HugeBlobsToDelete;
+                TDiskPartVec HugeBlobsAllocated;
                 // is data finalized
                 bool Finalized = false;
 
@@ -99,6 +103,11 @@ namespace NKikimr {
                 const TDiskPartVec &GetHugeBlobsToDelete() const {
                     Y_ABORT_UNLESS(Finalized);
                     return HugeBlobsToDelete;
+                }
+
+                const TDiskPartVec &GetHugeBlobsAllocated() const {
+                    Y_ABORT_UNLESS(Finalized);
+                    return HugeBlobsAllocated;
                 }
 
                 TDiskPartVec ExtractHugeBlobsToDelete() {
@@ -202,6 +211,7 @@ namespace NKikimr {
                 using TBase::TablesToDelete;
                 using TBase::TablesToAdd;
                 using TBase::HugeBlobsToDelete;
+                using TBase::HugeBlobsAllocated;
 
                 ui32 TargetLevel = (ui32)(-1);
                 TKey LastCompactedKey = TKey::First();
@@ -241,7 +251,8 @@ namespace NKikimr {
 
                 void CompactionFinished(
                         TOrderedLevelSegmentsPtr &&segVec,
-                        TDiskPartVec &&hugeBlobsToDelete,
+                        TDiskPartVec&& hugeBlobsToDelete,
+                        TDiskPartVec&& hugeBlobsAllocated,
                         bool aborted)
                 {
                     if (aborted) {
@@ -249,9 +260,11 @@ namespace NKikimr {
                         TablesToDelete.Clear();
                         TablesToAdd.Clear();
                         HugeBlobsToDelete.Clear();
+                        HugeBlobsAllocated.Clear();
                     } else {
                         Y_ABORT_UNLESS(!TablesToDelete.Empty());
                         HugeBlobsToDelete = std::move(hugeBlobsToDelete);
+                        HugeBlobsAllocated = std::move(hugeBlobsAllocated);
                         if (segVec) {
                             TLeveledSsts tmp(TargetLevel, *segVec);
                             TablesToAdd.Swap(tmp);
@@ -266,6 +279,12 @@ namespace NKikimr {
                     str << " TARGET: " << TargetLevel;
                     str << " LastCompacted: " << LastCompactedKey.ToString();
                     TBase::Output(str);
+                }
+
+                TString ToString() const {
+                    TStringStream str;
+                    Output(str);
+                    return str.Str();
                 }
 
                 void Finalize() {
@@ -314,6 +333,10 @@ namespace NKikimr {
 
             const TDiskPartVec &GetHugeBlobsToDelete() const {
                 return GetPtr()->GetHugeBlobsToDelete();
+            }
+
+            const TDiskPartVec &GetHugeBlobsAllocated() const {
+                return GetPtr()->GetHugeBlobsAllocated();
             }
 
             TDiskPartVec ExtractHugeBlobsToDelete() {

@@ -1,5 +1,7 @@
 #include "blob_recovery_impl.h"
 
+#include <bit>
+
 namespace NKikimr {
 
     void TBlobRecoveryActor::AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed,
@@ -73,10 +75,10 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::SendPendingQueries() {
         for (auto& [vdiskId, query] : std::exchange(Queries, {})) {
-            Y_ABORT_UNLESS(query.VGet);
+            Y_VERIFY_S(query.VGet, LogPrefix);
             query.Pending.push_back(std::move(query.VGet));
             auto queueIt = Queues.find(vdiskId);
-            Y_ABORT_UNLESS(queueIt != Queues.end());
+            Y_VERIFY_S(queueIt != Queues.end(), LogPrefix);
             for (auto& vget : query.Pending) {
                 STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS34, VDISKP(LogPrefix, "sending TEvVGet"), (SelfId, SelfId()),
                     (Msg, vget->ToString()));
@@ -156,7 +158,7 @@ namespace NKikimr {
         if (item.GetAvailableParts().IsSupersetOf(item.Needed)) {
             return NKikimrProto::OK;
         }
-        const ui32 numParts = PopCount(item.PartsMask);
+        const ui32 numParts = std::popcount(item.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
             Y_DEBUG_ABORT_UNLESS(item.Parts.size() == Info->Type.TotalPartCount());
 

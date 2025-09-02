@@ -3,40 +3,47 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
-#include "shared_cache_memtable.h"
+#include "shared_page.h"
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-#include <memory>
-
-namespace NKikimr {
-namespace NSharedCache {
-
+namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
+    using TPageId = NTable::NPage::TPageId;
+
+    enum class EWakeupTag {
+        DoGCScheduled = 1,
+        DoGCManual = 2
+    };
 
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
         EvTouch = EvBegin + 512,
         EvUnregister,
-        EvInvalidate,
+        EvDetach,
         EvAttach,
+        EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
-        EvMem,
-        EvMemTableRegister,
-        EvMemTableRegistered,
-        EvMemTableCompact,
-        EvMemTableCompacted,
-        EvMemTableUnregister,
 
         EvEnd
 
         /* +1024 range is reserved for scan events */
+    };
+
+    enum class ERequestTypeCookie : ui64 {
+        Undefined = 0,
+        Transaction = 1,
+        StickyPages,
+        PendingInit,
+        BootLogic,
+        TryKeepInMemPages,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
@@ -44,62 +51,78 @@ namespace NSharedCache {
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
-    struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> {
+    struct TEvDetach : public TEventLocal<TEvDetach, EvDetach> {
         const TLogoBlobID PageCollectionId;
 
-        TEvInvalidate(const TLogoBlobID &pageCollectionId)
+        TEvDetach(const TLogoBlobID &pageCollectionId)
             : PageCollectionId(pageCollectionId)
         {}
     };
 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
+    // notifies Shared Cache about Private Cache owned shared bodies
+    // so it can send back dropped pages
+    struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
+        THashMap<TLogoBlobID, THashSet<TPageId>> Pages;
 
-        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
-            : Touched(std::move(touched))
+        TEvSync(THashMap<TLogoBlobID, THashSet<TPageId>> &&pages)
+            : Pages(std::move(pages))
         {}
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TActorId Owner;
+        ECacheMode CacheMode;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode)
             : PageCollection(std::move(pageCollection))
-            , Owner(owner)
+            , CacheMode(cacheMode)
         {
-            Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
+        }
+    };
+
+    // Note: compacted pages do not have an owner yet
+    // at first they should be accepted by an executor
+    // and it will send TEvAttach itself when it have happened
+    struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TIntrusivePtr<TPage>> Pages;
+
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+            : PageCollection(std::move(pageCollection))
+        {
         }
     };
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
-        const EPriority Priority;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
-        TActorId Owner;
-
-        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
+        TEvRequest(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageId> pages, ui64 cookie = 0)
             : Priority(priority)
-            , Fetch(fetch)
-            , Owner(owner)
-        {
-            Y_ABORT_UNLESS(Owner, "Cannot sent request with empty owner");
-        }
+            , PageCollection(std::move(pageCollection))
+            , Pages(std::move(pages))
+            , Cookie(cookie)
+        { }
+
+        const EPriority Priority;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageId> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
+        NWilson::TTraceId TraceId;
+        const ui64 Cookie;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
+        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, EStatus status, ui64 cookie)
             : Status(status)
+            , PageCollection(std::move(pageCollection))
             , Cookie(cookie)
-            , Origin(origin)
         { }
 
         void Describe(IOutputStream &out) const
         {
             out
-                << "TEvResult{" << Loaded.size() << " pages"
-                << " " << Origin->Label()
+                << "TEvResult{" << Pages.size() << " pages"
+                << " " << PageCollection->Label()
                 << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
@@ -107,83 +130,31 @@ namespace NSharedCache {
         ui64 Bytes() const
         {
             return
-                std::accumulate(Loaded.begin(), Loaded.end(), ui64(0),
+                std::accumulate(Pages.begin(), Pages.end(), ui64(0),
                     [](ui64 bytes, const TLoaded& loaded)
                         { return bytes + TPinnedPageRef(loaded.Page)->size(); });
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
+            TLoaded(TPageId pageId, TSharedPageRef page)
                 : PageId(pageId)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            TPageId PageId;
             TSharedPageRef Page;
         };
 
         const EStatus Status;
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TLoaded> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
         const ui64 Cookie;
-        const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
-        TVector<TLoaded> Loaded;
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
-        struct TActions {
-            THashMap<ui32, TSharedPageRef> Accepted;
-            THashSet<ui32> Dropped;
-        };
-
-        THashMap<TLogoBlobID, TActions> Actions;
+        THashMap<TLogoBlobID, THashSet<TPageId>> DroppedPages;
     };
-
-    struct TEvMem : public TEventLocal<TEvMem, EvMem> {
-    };
-
-    struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {
-        const ui32 Table;
-
-        TEvMemTableRegister(ui32 table)
-            : Table(table)
-        {}
-    };
-
-    struct TEvMemTableRegistered : public TEventLocal<TEvMemTableRegistered, EvMemTableRegistered> {
-        const ui32 Table;
-        TIntrusivePtr<ISharedPageCacheMemTableRegistration> Registration;
-
-        TEvMemTableRegistered(ui32 table, TIntrusivePtr<ISharedPageCacheMemTableRegistration> registration)
-            : Table(table)
-            , Registration(std::move(registration))
-        {}
-    };
-
-    struct TEvMemTableCompact : public TEventLocal<TEvMemTableCompact, EvMemTableCompact> {
-        const ui32 Table;
-        const ui64 ExpectedSize;
-
-        TEvMemTableCompact(ui32 table, ui64 expectedSize)
-            : Table(table)
-            , ExpectedSize(expectedSize)
-        {}
-    };
-
-    struct TEvMemTableCompacted : public TEventLocal<TEvMemTableCompacted, EvMemTableCompacted> {
-        const TIntrusivePtr<ISharedPageCacheMemTableRegistration> Registration;
-
-        TEvMemTableCompacted(TIntrusivePtr<ISharedPageCacheMemTableRegistration> registration)
-            : Registration(registration)
-        {}
-    };
-
-    struct TEvMemTableUnregister : public TEventLocal<TEvMemTableUnregister, EvMemTableUnregister> {
-        const ui32 Table;
-
-        TEvMemTableUnregister(ui32 table)
-            : Table(table)
-        {}
-    };
-}
 }
 
 template<> inline

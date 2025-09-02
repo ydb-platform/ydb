@@ -1,11 +1,8 @@
-"""TextractBackend class with methods for supported APIs."""
-
-import uuid
-from random import randint
 from collections import defaultdict
+from typing import Any, Dict, List
 
-from moto.core import BaseBackend, BaseModel
-from moto.core.utils import BackendDict
+from moto.core import BaseBackend, BackendDict, BaseModel
+from moto.moto_api._internal import mock_random
 
 from .exceptions import InvalidParameterException, InvalidJobIdException
 
@@ -18,10 +15,10 @@ class TextractJobStatus:
 
 
 class TextractJob(BaseModel):
-    def __init__(self, job):
+    def __init__(self, job: Dict[str, Any]):
         self.job = job
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return self.job
 
 
@@ -29,14 +26,14 @@ class TextractBackend(BaseBackend):
     """Implementation of Textract APIs."""
 
     JOB_STATUS = TextractJobStatus.succeeded
-    PAGES = {"Pages": randint(5, 500)}
-    BLOCKS = []
+    PAGES = {"Pages": mock_random.randint(5, 500)}
+    BLOCKS: List[Dict[str, Any]] = []
 
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.async_text_detection_jobs = defaultdict()
+        self.async_text_detection_jobs: Dict[str, TextractJob] = defaultdict()
 
-    def get_document_text_detection(self, job_id):
+    def get_document_text_detection(self, job_id: str) -> TextractJob:
         """
         Pagination has not yet been implemented
         """
@@ -45,13 +42,13 @@ class TextractBackend(BaseBackend):
             raise InvalidJobIdException()
         return job
 
-    def start_document_text_detection(self, document_location):
+    def start_document_text_detection(self, document_location: str) -> str:
         """
         The following parameters have not yet been implemented: ClientRequestToken, JobTag, NotificationChannel, OutputConfig, KmsKeyID
         """
         if not document_location:
             raise InvalidParameterException()
-        job_id = str(uuid.uuid4())
+        job_id = str(mock_random.uuid4())
         self.async_text_detection_jobs[job_id] = TextractJob(
             {
                 "Blocks": TextractBackend.BLOCKS,

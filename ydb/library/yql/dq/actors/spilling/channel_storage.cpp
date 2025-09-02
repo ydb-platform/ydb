@@ -2,7 +2,7 @@
 
 #include "channel_storage_actor.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -30,10 +30,11 @@ class TDqChannelStorage : public IDqChannelStorage {
         NThreading::TFuture<void> IsBlobWrittenFuture_;
     };
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem)
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, 
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
     : ActorSystem_(actorSystem)
     {
-        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
+        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
         ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
     }
 
@@ -53,13 +54,13 @@ public:
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TRope&& blob, ui64 cookie = 0) override {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
         UpdateWriteStatus();
 
         auto promise = NThreading::NewPromise<void>();
         auto future = promise.GetFuture();
 
-        ui64 blobSize = blob.size();
+        ui64 blobSize = blob.Size();
 
         ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
 
@@ -119,9 +120,14 @@ private:
 
 } // anonymous namespace
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem)
+
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
+    TWakeUpCallback wakeUpCallback,
+    TErrorCallback errorCallback,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
+    TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
 }
 
 } // namespace NYql::NDq

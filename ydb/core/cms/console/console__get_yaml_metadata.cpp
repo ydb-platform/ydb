@@ -1,6 +1,7 @@
 #include "console_configs_manager.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr::NConsole {
 
@@ -19,8 +20,8 @@ public:
     {
         Response = MakeHolder<TEvConsole::TEvGetAllMetadataResponse>();
 
-        if (Self->YamlConfig) {
-            auto doc = NFyaml::TDocument::Parse(Self->YamlConfig);
+        if (Self->MainYamlConfig) {
+            auto doc = NFyaml::TDocument::Parse(Self->MainYamlConfig);
 
             TStringStream metadata;
             metadata << doc.Root().Map().at("metadata");

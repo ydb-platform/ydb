@@ -1,17 +1,21 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
     struct TGenericSettings {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
 
-        NCommon::TConfSetting<bool, false> UsePredicatePushdown;
-        NCommon::TConfSetting<TString, false> DateTimeFormat;
+    private:
+        static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+    public:
+
+        NCommon::TConfSetting<bool, Static> UsePredicatePushdown;
+        NCommon::TConfSetting<TString, Static> DateTimeFormat;
 
         struct TDefault {
             static constexpr bool UsePredicatePushdown = false;
@@ -38,8 +42,9 @@ namespace NYql {
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
 
     public:
+        TDuration DescribeTableTimeout; 
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
     };
-} //namespace NYql
+} // namespace NYql

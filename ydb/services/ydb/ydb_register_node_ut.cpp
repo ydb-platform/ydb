@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/location.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
@@ -19,20 +18,20 @@
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -54,6 +53,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
 
     struct TServerInitialization {
         bool EnforceUserToken = false;
+        bool EnforceCheckUserToken = false; // Takes effect when EnforceUserToken = false
         bool EnableDynamicNodeAuth = false;
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
@@ -71,6 +71,9 @@ private:
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
         if (serverInitialization.EnforceUserToken) {
             securityConfig.SetEnforceUserTokenRequirement(true);
+        }
+        if (serverInitialization.EnforceCheckUserToken) {
+            securityConfig.SetEnforceUserTokenCheckRequirement(true);
         }
         if (serverInitialization.EnableDynamicNodeAuth) {
             config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
@@ -884,6 +887,47 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
     }
 }
 
+Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
+    // Scenario when we want to turn on secure node registration, but to check it in safe way
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    TProps props = TProps::AsClientServer();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, props);
+
+    props.Organization = "Enemy Org";
+    const TCertAndKey clientServerEnemyCert = GenerateSignedCert(caCert, props);
+
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = false, // still allow not secure way
+        .EnforceCheckUserToken = true, // when attempt to register with cert arrives, check it as if EnforceUserToken was switched on
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .RegisterNodeAllowedSids = {"DefaultClientAuth@cert"}
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    SetLogPriority(server);
+
+    TDriverConfig secureConnectionConfig;
+    secureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+        .SetEndpoint(location);
+
+    TDriverConfig insecureConnectionConfig;
+    insecureConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .SetEndpoint(location);
+
+    TDriverConfig enemyConnectionConfig;
+    enemyConnectionConfig.UseSecureConnection(caCert.Certificate.c_str())
+        .UseClientCertificate(clientServerEnemyCert.Certificate.c_str(),clientServerEnemyCert.PrivateKey.c_str())
+        .SetEndpoint(location);
+
+    CheckGood(RegisterNode(secureConnectionConfig));
+    CheckGood(RegisterNode(insecureConnectionConfig)); // without token and cert // EnforceUserToken = false
+    CheckAccessDenied(RegisterNode(insecureConnectionConfig.SetAuthToken("invalid token")), "Unknown token");
+    CheckAccessDeniedRegisterNode(RegisterNode(enemyConnectionConfig), "Client certificate failed verification");
+}
+
 }
 
 namespace {
@@ -998,15 +1042,25 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
 
     Cerr << "Trying to register node" << Endl;
 
-    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
-    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     TKikimrServerForTestNodeRegistration server({
         .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true
     });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -1038,10 +1092,26 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
 
     Cerr << "Trying to register node" << Endl;
 
-    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
-    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
+
+    {
+        kikimr.SetSecurityToken("wrong_token");
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Could not find correct token validator }");
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
@@ -1063,9 +1133,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
 
     auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
     UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
-    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot create token from certificate. Client certificate failed verification");
+    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Cannot create token from certificate. Client certificate failed verification }");
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    if (resp->GetTransportStatus() == NBus::MESSAGE_OK) {
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
 }
 
 }

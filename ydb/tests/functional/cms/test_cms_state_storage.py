@@ -7,8 +7,9 @@ from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.tests.library.common.delayed import wait_tablets_are_active
 
 import utils
@@ -23,16 +24,20 @@ class AbstractLocalClusterTest(object):
     @classmethod
     def setup_class(cls):
         configurator = KikimrConfigGenerator(Erasure.NONE,
-                                             nodes=27,
+                                             nodes=5,
                                              use_in_memory_pdisks=False,
                                              additional_log_configs={'CMS': LogLevels.DEBUG},
-                                             state_storage_rings=[[n, n + 1, n + 2] for n in range(1, 27, 3)]
+                                             state_storage_rings=list(range(1, 6)),
+                                             n_to_select=5,
                                              )
-        cls.cluster = kikimr_cluster_factory(configurator=configurator)
+        cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
         time.sleep(120)
         cms.request_increase_ratio_limit(cls.cluster.client)
+        host = cls.cluster.nodes[1].host
+        mon_port = cls.cluster.nodes[1].mon_port
+        cls.swagger_client = SwaggerClient(host, mon_port)
 
     @classmethod
     def teardown_class(cls):
@@ -42,12 +47,10 @@ class AbstractLocalClusterTest(object):
 class AbstractTestCmsStateStorageSimple(AbstractLocalClusterTest):
     def test_check_shutdown_state_storage_nodes(self):
         number_of_tablets = 10
-        tablet_ids = create_tablets_and_wait_for_start(
-            self.cluster.client, number_of_tablets,
-            batch_size=number_of_tablets,
-            timeout_seconds=120
-        )
-
+        path = '/Root/mydb'
+        table_path = '/Root/mydb/mytable'
+        self.cluster.scheme_client.make_directory(path)
+        tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, number_of_tablets, table_path, timeout_seconds=120)
         allowed_hosts = cms.request_shutdown_nodes(self.cluster.client,
                                                    self.cluster.nodes.keys(),
                                                    type(self).mode)

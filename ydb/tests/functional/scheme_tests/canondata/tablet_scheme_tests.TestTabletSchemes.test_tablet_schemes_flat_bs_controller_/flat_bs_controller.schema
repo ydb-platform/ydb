@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -115,12 +120,33 @@
                 "ColumnId": 23,
                 "ColumnName": "TryToRelocateBrokenDisksLocallyFirst",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "YamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "ShredState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExpectedStorageYamlConfigVersion",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     4,
@@ -142,7 +168,11 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24,
+                    26,
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -156,7 +186,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -209,7 +242,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -221,16 +257,6 @@
             2
         ],
         "ColumnsAdded": [
-            {
-                "ColumnId": 17,
-                "ColumnName": "DecommitStatus",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Mood",
-                "ColumnType": "Byte"
-            },
             {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
@@ -300,14 +326,37 @@
                 "ColumnId": 16,
                 "ColumnName": "LastSeenPath",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "DecommitStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "Mood",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "MaintenanceStatus",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "InferPDiskSlotCountFromUnitSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
-                    18,
                     1,
                     2,
                     3,
@@ -321,7 +370,12 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -335,7 +389,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -370,6 +427,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Owner",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 121,
+                "ColumnName": "BridgeGroupInfo",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 5,
@@ -422,13 +484,23 @@
                 "ColumnType": "Bool"
             },
             {
+                "ColumnId": 102,
+                "ColumnName": "VirtualGroupState",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 15,
                 "ColumnName": "DecommitStatus",
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 102,
-                "ColumnName": "VirtualGroupState",
+                "ColumnId": 16,
+                "ColumnName": "GroupSizeInUnits",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "BridgePileId",
                 "ColumnType": "Uint32"
             },
             {
@@ -476,6 +548,7 @@
                     3,
                     120,
                     4,
+                    121,
                     5,
                     6,
                     7,
@@ -486,8 +559,10 @@
                     12,
                     13,
                     14,
-                    15,
                     102,
+                    15,
+                    16,
+                    17,
                     106,
                     109,
                     110,
@@ -508,7 +583,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -644,6 +722,16 @@
                 "ColumnId": 25,
                 "ColumnName": "RandomizeGroupMapping",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "DefaultGroupSizeInUnits",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "BridgeMode",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -674,7 +762,9 @@
                     22,
                     23,
                     24,
-                    25
+                    25,
+                    26,
+                    27
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -688,7 +778,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -803,7 +896,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -852,7 +948,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -921,7 +1020,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -991,7 +1093,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1039,7 +1144,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1086,7 +1194,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1139,7 +1250,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1198,7 +1312,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1251,7 +1368,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1335,7 +1455,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1408,7 +1531,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1497,7 +1623,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1544,7 +1673,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1586,7 +1718,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1633,7 +1768,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1680,7 +1818,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1692,11 +1833,6 @@
             2
         ],
         "ColumnsAdded": [
-            {
-                "ColumnId": 7,
-                "ColumnName": "PDiskConfig",
-                "ColumnType": "String"
-            },
             {
                 "ColumnId": 1,
                 "ColumnName": "HostConfigId",
@@ -1726,19 +1862,30 @@
                 "ColumnId": 6,
                 "ColumnName": "Kind",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "InferPDiskSlotCountFromUnitSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1752,7 +1899,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1813,7 +1963,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     }

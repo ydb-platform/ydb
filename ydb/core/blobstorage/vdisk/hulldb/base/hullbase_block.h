@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
-#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 
@@ -34,12 +33,12 @@ namespace NKikimr {
             return Sprintf("[%16" PRIu64 "]", TabletId);
         }
 
-        TLogoBlobID LogoBlobID() const {
-            return TLogoBlobID();
-        }
-
         static TKeyBlock First() {
             return TKeyBlock();
+        }
+
+        static TKeyBlock Inf() {
+            return TKeyBlock(Max<ui64>());
         }
 
         bool IsSameAs(const TKeyBlock& other) const {
@@ -91,7 +90,7 @@ namespace NKikimr {
             : BlockedGeneration(blockGen)
         {}
 
-        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/) {
+        void Merge(const TMemRecBlock& rec, const TKeyBlock& /*key*/, bool /*clearLocal*/, TBlobStorageGroupType /*gtype*/) {
             BlockedGeneration = Max(BlockedGeneration, rec.BlockedGeneration);
         }
 

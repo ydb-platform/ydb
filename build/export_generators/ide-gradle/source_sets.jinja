@@ -1,0 +1,106 @@
+{%- macro IncludeGlobs(some_set, dir) -%}
+.include({%- for glob in some_set.globs -%}"{{ glob }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
+{%- endmacro -%}
+
+{%- macro SomeSet(some_set, module, reldir = "") -%}
+{%-     set dir = some_set.dir -%}
+{%-     if (reldir != "") and (dir[0] != "/") -%}
+{#-         Relative path in tests #}
+{%-         set dir = reldir + dir -%}
+{%-     endif %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-     if module == 'resources' -%}
+{%-         if not('**/*' in some_set.globs) -%}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         endif -%}
+{%-     else -%}
+{%-         if some_set.globs|join('')|replace('*', '') == some_set.globs|join('') -%}
+{#- Use single source file from each glob -#}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         endif -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro TargetSets(current_target, target_subdir, reldir = "") -%}
+{%-     if current_target.source_sets|length -%}
+{%-         if auto_resource_sets -%}
+{%-             set source_sets = current_target.source_sets|rejectattr('dir', 'eq', 'resources')|rejectattr('dir', 'eq', 'src/' + target_subdir + '/resources') -%}
+{%-         else -%}
+{%-             set source_sets = current_target.source_sets -%}
+{%-         endif -%}
+{%-     else -%}
+{%-         set source_sets = [] -%}
+{%-     endif -%}
+{%-     if source_sets|length -%}
+{%-         for source_set in source_sets -%}
+{{ SomeSet(source_set, "java", reldir) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%-     if current_target.resource_sets|length -%}
+{%-         set resource_sets = current_target.resource_sets -%}
+{%-     else -%}
+{%-         set resource_sets = [] -%}
+{%-     endif -%}
+{%-     if auto_resource_sets and current_target.source_sets|length -%}
+{%-         set source2resource_sets = current_target.source_sets|selectattr('dir', 'in', ['resources', 'src/' + target_subdir + '/resources']) -%}
+{%-         if source2resource_sets|length -%}
+{%-             set resource_sets = resource_sets + source2resource_sets -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if resource_sets|length -%}
+{%-         for resource_set in resource_sets -%}
+{{ SomeSet(resource_set, "resources", reldir) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro %}
+
+sourceSets {
+{%- if target.source_sets|length or target.resource_sets|length or proto_template %}
+    main {
+{#- glue -#}
+{{ TargetSets(target, "main") }}
+
+{%-     if proto_template and symlinks_to_generated %}
+        java.srcDir("generated/source/proto/main/java")
+{%-         if target.proto_grpc %}
+        java.srcDir("generated/source/proto/main/grpc")
+{%-         endif -%}
+{%-     elif proto_template %}
+        java.srcDir("$buildDir/generated/source/proto/main/java")
+{%-         if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+{%-         endif -%}
+{%-     endif %}
+    }
+{%  endif -%}
+
+{%- if not proto_template -%}
+{%-     if extra_targets|length %}
+    test {
+{%-     for extra_target in extra_targets -%}
+{%-         set reldir = "" -%}
+{%-         if extra_target.test_reldir -%}
+{%-             set reldir = extra_target.test_reldir + "/" -%}
+{%-         endif -%}
+{{ TargetSets(extra_target, "test", reldir) }}
+{%-     endfor %}
+    }
+{%      else %}
+    test {
+        java.exclude("**/*")
+        resources.exclude("**/*")
+    }
+{%      endif -%}
+{%- endif -%}
+}
+
+tasks.withType<Jar>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType<Copy>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
+tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)

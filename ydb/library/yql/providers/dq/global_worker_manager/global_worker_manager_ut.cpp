@@ -5,16 +5,16 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 #include <ydb/library/yql/providers/dq/common/attrs.h>
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/actors/resource_allocator.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 

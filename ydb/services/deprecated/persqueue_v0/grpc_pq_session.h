@@ -2,6 +2,7 @@
 
 #include "ydb/core/client/server/grpc_base.h"
 #include <ydb/library/grpc/server/grpc_server.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/queue.h>
 
@@ -25,7 +26,7 @@ public:
     virtual void Finish() = 0;
 
     /// Send reply to client.
-    virtual void Reply(const TResponse& resp) = 0;
+    virtual void Reply(TResponse&& resp) = 0;
 
     virtual void ReadyForNextRead() = 0;
 
@@ -117,14 +118,18 @@ protected:
                 Session->HaveWriteInflight = false;
                 if (Session->NeedFinish) {
                     lock.Release();
-                    Session->Stream.Finish(Status::OK, new TFinishDone(Session));
+                    if (!NYdbGrpc::GrpcDead) {
+                        Session->Stream.Finish(Status::OK, new TFinishDone(Session));
+                    }
                 }
             } else {
-                auto resp = Session->Responses.front();
+                auto resp = std::move(Session->Responses.front());
                 Session->Responses.pop();
                 lock.Release();
                 ui64 sz = resp.ByteSize();
-                Session->Stream.Write(resp, new TWriteDone(Session, sz));
+                if (!NYdbGrpc::GrpcDead) {
+                    Session->Stream.Write(resp, new TWriteDone(Session, sz));
+                }
             }
 
             return false;
@@ -253,7 +258,7 @@ protected:
         TResponse response;
         response.MutableError()->SetDescription(description);
         response.MutableError()->SetCode(code);
-        Reply(response);
+        Reply(std::move(response));
         Finish();
     }
 
@@ -269,18 +274,19 @@ protected:
             }
             HaveWriteInflight = true;
         }
-
-        Stream.Finish(Status::OK, new TFinishDone(this));
+        if (!NYdbGrpc::GrpcDead) {
+            Stream.Finish(Status::OK, new TFinishDone(this));
+        }
     }
 
     /// Send reply to client.
-    void Reply(const TResponse& resp) override {
+    void Reply(TResponse&& resp) override {
         {
             TGuard<TSpinLock> lock(Lock);
             if (NeedFinish) //ignore responses after finish
                 return;
             if (HaveWriteInflight || !Responses.empty()) {
-                Responses.push(resp);
+                Responses.push(std::move(resp));
                 return;
             } else {
                 HaveWriteInflight = true;
@@ -288,7 +294,9 @@ protected:
         }
 
         ui64 size = resp.ByteSize();
-        Stream.Write(resp, new TWriteDone(this, size));
+        if (!NYdbGrpc::GrpcDead) {
+            Stream.Write(resp, new TWriteDone(this, size));
+        }
     }
 
     void ReadyForNextRead() override {
@@ -300,16 +308,18 @@ protected:
         }
 
         auto read = new TReadDone(this);
-        Stream.Read(&read->Request, read);
+        if (!NYdbGrpc::GrpcDead) {
+            Stream.Read(&read->Request, read);
+        }
     }
 
 protected:
     grpc::ServerCompletionQueue* const CQ;
     grpc::ServerContext Context;
-    grpc::ServerAsyncReaderWriter<TResponse, TRequest>
-            Stream;
-private:
+    grpc::ServerAsyncReaderWriter<TResponse, TRequest> Stream;
+
     TSpinLock Lock;
+private:
     bool HaveWriteInflight;
     bool NeedFinish;
     std::atomic<bool> ClientIsDone;

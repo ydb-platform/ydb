@@ -12,13 +12,13 @@ TEST(TLocalYPClusterTest, Basic)
     TString ypHostNameMan = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
     TString ypHostNameSas = "hellodarknessmyoldfriend.sas.yp-c.yandex.net";
 
-    WriteLocalHostName(ypHostNameMan);
-    TStringBuf localYPCluster1{ReadLocalYPCluster()};
+    SetLocalHostName(ypHostNameMan);
+    TStringBuf localYPCluster1{GetLocalYPClusterRaw()};
     EXPECT_EQ(localYPCluster1, "man");
     EXPECT_EQ(GetLocalYPCluster(), "man");
 
-    WriteLocalHostName(ypHostNameSas);
-    TStringBuf localYPCluster2{ReadLocalYPCluster()};
+    SetLocalHostName(ypHostNameSas);
+    TStringBuf localYPCluster2{GetLocalYPClusterRaw()};
     EXPECT_EQ(localYPCluster1, "man");
     EXPECT_EQ(localYPCluster2, "sas");
     EXPECT_EQ(GetLocalYPCluster(), "sas");

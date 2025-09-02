@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <library/cpp/colorizer/colors.h>
+#include <util/system/file.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -9,8 +10,11 @@ namespace NConsoleClient {
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors);
 TString FormatTime(TInstant time);
 TString FormatDuration(TDuration duration);
-TString PrettySize(size_t size);
+TString PrettySize(ui64 size);
+TString PrettyNumber(ui64 number);
 TString EntryTypeToString(NScheme::ESchemeEntryType entry);
+int PrintProtoJsonBase64(const google::protobuf::Message& msg);
+FHANDLE GetStdinFileno();
 
 }
 }

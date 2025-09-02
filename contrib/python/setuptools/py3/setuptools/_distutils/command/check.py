@@ -4,6 +4,7 @@ Implements the Distutils 'check' command.
 """
 
 import contextlib
+from typing import ClassVar
 
 from ..core import Command
 from ..errors import DistutilsSetupError
@@ -21,7 +22,7 @@ with contextlib.suppress(ImportError):
             report_level,
             halt_level,
             stream=None,
-            debug=0,
+            debug=False,
             encoding='ascii',
             error_handler='replace',
         ):
@@ -41,15 +42,12 @@ class check(Command):
     """This command checks the meta-data of the package."""
 
     description = "perform some checks on the package"
-    user_options = [
+    user_options: ClassVar[list[tuple[str, str, str]]] = [
         ('metadata', 'm', 'Verify meta-data'),
         (
             'restructuredtext',
             'r',
-            (
-                'Checks if long string meta-data syntax '
-                'are reStructuredText-compliant'
-            ),
+            'Checks if long string meta-data syntax are reStructuredText-compliant',
         ),
         ('strict', 's', 'Will exit with an error if a check fails'),
     ]
@@ -58,9 +56,9 @@ class check(Command):
 
     def initialize_options(self):
         """Sets default values for options."""
-        self.restructuredtext = 0
+        self.restructuredtext = False
         self.metadata = 1
-        self.strict = 0
+        self.strict = False
         self._warnings = 0
 
     def finalize_options(self):
@@ -100,13 +98,12 @@ class check(Command):
         """
         metadata = self.distribution.metadata
 
-        missing = []
-        for attr in 'name', 'version':
-            if not getattr(metadata, attr, None):
-                missing.append(attr)
+        missing = [
+            attr for attr in ('name', 'version') if not getattr(metadata, attr, None)
+        ]
 
         if missing:
-            self.warn("missing required meta-data: %s" % ', '.join(missing))
+            self.warn("missing required meta-data: {}".format(', '.join(missing)))
 
     def check_restructuredtext(self):
         """Checks if the long string fields are reST-compliant."""
@@ -147,7 +144,7 @@ class check(Command):
         except AttributeError as e:
             reporter.messages.append((
                 -1,
-                'Could not finish the parsing: %s.' % e,
+                f'Could not finish the parsing: {e}.',
                 '',
                 {},
             ))

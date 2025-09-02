@@ -73,11 +73,11 @@ public:
         const auto& status = ev->Get()->Status.GetValueSync();
         CPS_LOG_D(TDerived::RequestTypeName << "Request. Got response from database: " << status.GetStatus());
         if (!status.IsSuccess()) {
-            ReplyWithError(status.GetIssues());
+            ReplyWithError(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             return;
         }
 
-        const TVector<NYdb::TResultSet>& resultSets = *ev->Get()->ResultSets;
+        const std::vector<NYdb::TResultSet>& resultSets = *ev->Get()->ResultSets;
         if (resultSets.size() != 2) {
             ReplyWithError(TStringBuilder() << "Result set size is not equal to 2 but equal to " << resultSets.size() << ". Please contact internal support");
             return;

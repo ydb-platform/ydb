@@ -1,10 +1,12 @@
 #include "kqp_proxy_service_impl.h"
 
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 namespace NKikimr::NKqp {
 
 using VSessions = NKikimr::NSysView::Schema::QuerySessions;
+
+constexpr size_t QUERY_TEXT_LIMIT = 10_KB;
 
 void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFieldsMap& fieldsMap) const {
     if (fieldsMap.NeedField(VSessions::SessionId::ColumnId)) {  // 1
@@ -26,7 +28,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     // last executed query or currently running query.
     if (fieldsMap.NeedField(VSessions::Query::ColumnId)) {  // 4
-        proto->SetQuery(QueryText);
+        if (QueryText.size() > QUERY_TEXT_LIMIT) {
+            TString truncatedText = QueryText.substr(0, QUERY_TEXT_LIMIT);
+            proto->SetQuery(QueryText);
+        } else {
+            proto->SetQuery(QueryText);
+        }
     }
 
     if (fieldsMap.NeedField(VSessions::QueryCount::ColumnId)) {  // 5

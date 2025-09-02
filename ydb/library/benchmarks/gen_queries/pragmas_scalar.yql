@@ -16,3 +16,4 @@ pragma OrderedColumns="true";
 
 pragma FilterPushdownOverJoinOptionalSide;
 pragma RotateJoinTree="false";
+pragma AnsiOptionalAs="true";

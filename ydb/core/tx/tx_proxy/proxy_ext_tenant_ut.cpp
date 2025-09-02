@@ -22,7 +22,7 @@ void DeclareAndLs(TTestEnv& env) {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, env.GetSettings().FeatureFlags.GetEnableRealSystemViewPaths() ? 8 : 5);
     }
 }
 
@@ -41,7 +41,7 @@ void DeclareAndDrop(TTestEnv& env) {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, env.GetSettings().FeatureFlags.GetEnableRealSystemViewPaths() ? 10 : 7);
     }
 
 }
@@ -689,7 +689,7 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
 
     {
         NKikimrMiniKQL::TResult result;
-        env.GetClient().FlatQuery("("
+        env.GetClient().FlatQuery(&env.GetRuntime(), "("
                                   "(let row0_ '('('key (Uint64 '42))))"
                                   "(let cols_ '('value))"
                                   "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"
@@ -704,13 +704,13 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
 }
 
 Y_UNIT_TEST_SUITE(TExtSubDomainTest) {
-    Y_UNIT_TEST(DeclareAndLs) {
-        TTestEnv env(1, 0);
+    Y_UNIT_TEST_FLAG(DeclareAndLs, EnableRealSystemViewPaths) {
+        TTestEnv env(1, 0, EnableRealSystemViewPaths);
         DeclareAndLs(env);
     }
 
-    Y_UNIT_TEST(DeclareAndDrop) {
-        TTestEnv env(1, 0);
+    Y_UNIT_TEST_FLAG(DeclareAndDrop, EnableRealSystemViewPaths) {
+        TTestEnv env(1, 0, EnableRealSystemViewPaths);
         DeclareAndDrop(env);
     }
 

@@ -79,11 +79,10 @@ void TFls::Set(int index, TCookie cookie)
 
 TFls* SwapCurrentFls(TFls* newFls)
 {
-
     return std::exchange(NDetail::CurrentFls(), newFls);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConcurrency::NDetail
+} // namespace NYT::NConcurrency
 

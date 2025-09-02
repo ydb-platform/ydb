@@ -4,9 +4,10 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAsyncSemaphore::TAsyncSemaphore(i64 totalSlots)
+TAsyncSemaphore::TAsyncSemaphore(i64 totalSlots, bool enableOverdraft)
     : TotalSlots_(totalSlots)
     , FreeSlots_(totalSlots)
+    , EnableOverdraft_(enableOverdraft)
 {
     YT_VERIFY(TotalSlots_ >= 0);
 }
@@ -33,6 +34,7 @@ void TAsyncSemaphore::Release(i64 slots)
         auto guard = WriterGuard(SpinLock_);
 
         FreeSlots_ += slots;
+
         YT_VERIFY(FreeSlots_ <= TotalSlots_);
 
         if (Releasing_) {
@@ -48,8 +50,17 @@ void TAsyncSemaphore::Release(i64 slots)
 
         {
             auto guard = WriterGuard(SpinLock_);
+            auto frontWaiterOverdraftsSlots = [&] {
+                return CanOverdraft() && !Waiters_.empty() && Waiters_.front().Slots > TotalSlots_;
+            };
+            auto frontWaiterCanAcquireSlots = [&] {
+                return !Waiters_.empty() && FreeSlots_ >= Waiters_.front().Slots;
+            };
 
-            while (!Waiters_.empty() && FreeSlots_ >= Waiters_.front().Slots) {
+            for (auto canAcquire = frontWaiterCanAcquireSlots(); canAcquire || frontWaiterOverdraftsSlots(); canAcquire = frontWaiterCanAcquireSlots()) {
+                // To execute "fat" request we need all total slots in semaphore to be free.
+                YT_VERIFY(canAcquire || FreeSlots_ == TotalSlots_);
+
                 auto& waiter = Waiters_.front();
                 FreeSlots_ -= waiter.Slots;
                 waitersToRelease.push_back(std::move(waiter));
@@ -82,6 +93,7 @@ bool TAsyncSemaphore::Acquire(i64 slots)
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
+
     FreeSlots_ -= slots;
 
     return FreeSlots_ >= 0;
@@ -92,11 +104,12 @@ bool TAsyncSemaphore::TryAcquire(i64 slots)
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
-    if (FreeSlots_ < slots) {
-        return false;
+
+    if (FreeSlots_ >= slots || CanOverdraft()) {
+        FreeSlots_ -= slots;
+        return true;
     }
-    FreeSlots_ -= slots;
-    return true;
+    return false;
 }
 
 TFuture<TAsyncSemaphoreGuard> TAsyncSemaphore::AsyncAcquire(i64 slots)
@@ -104,7 +117,8 @@ TFuture<TAsyncSemaphoreGuard> TAsyncSemaphore::AsyncAcquire(i64 slots)
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
-    if (FreeSlots_ >= slots) {
+
+    if (FreeSlots_ >= slots || CanOverdraft()) {
         FreeSlots_ -= slots;
         return MakeFuture(TAsyncSemaphoreGuard(this, slots));
     } else {
@@ -159,7 +173,14 @@ TFuture<void> TAsyncSemaphore::GetReadyEvent()
         ReadyEvent_ = NewPromise<void>();
     }
 
-    return ReadyEvent_;
+    return ReadyEvent_.ToFuture().ToUncancelable();
+}
+
+bool TAsyncSemaphore::CanOverdraft() const
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
+
+    return EnableOverdraft_ && TotalSlots_ == FreeSlots_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -209,7 +209,8 @@ private:
                     break;
             }
 
-            if (entry.KeyDescription->TableId.IsSystemView() ||
+            if ((entry.KeyDescription->TableId.IsSystemView() ||
+                 entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) ||
                 TSysTables::IsSystemTable(entry.KeyDescription->TableId))
             {
                 const TString explanation = TStringBuilder()

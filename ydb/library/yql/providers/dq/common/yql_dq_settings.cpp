@@ -31,6 +31,8 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, _LiteralTimeout);
     REGISTER_SETTING(*this, _TableTimeout);
+    REGISTER_SETTING(*this, QueryTimeout);
+
     REGISTER_SETTING(*this, _LongWorkersAllocationWarnTimeout);
     REGISTER_SETTING(*this, _LongWorkersAllocationFailTimeout);
 
@@ -90,6 +92,10 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+    REGISTER_SETTING(*this, ValuePackerVersion).Parser([](const TString& v) {
+            return FromString<TDqSettings::EValuePackerVersion>(v);
+        });
+
     REGISTER_SETTING(*this, DisableLLVMForBlockStages);
     REGISTER_SETTING(*this, SplitStageOnDqReplicate)
         .ValueSetter([this](const TString&, bool value) {
@@ -110,11 +116,13 @@ TDqConfiguration::TDqConfiguration() {
                 if (s.empty()) {
                     throw yexception() << "Empty value item";
                 }
-                auto value = FromString<EEnabledSpillingNodes>(s);
+                auto value = FromString<NDq::EEnabledSpillingNodes>(s);
                 res |= ui64(value);
             }
             return res;
         });
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, Scheduler);
 }
 
 } // namespace NYql

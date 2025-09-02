@@ -80,7 +80,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, false,
+                nullptr, NWilson::TTraceId());
         }
 
         static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->Record = proto;
@@ -105,7 +106,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, false,
+                nullptr, NWilson::TTraceId());
         }
 
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
@@ -302,19 +304,6 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(0, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "");
     }
-
-    Y_UNIT_TEST(EmptyTest) {
-        TEnvironmentSetup env(true, GetErasureTypeByString("none"));
-        TTestInfo test = InitTest(env);
-
-        constexpr ui32 size = 0;
-        TLogoBlobID blobId(1, 1, 0, 0, size, 0, 1);
-        SendPut(env, test, blobId, NKikimrProto::OK, size);
-        const TString data("");
-        auto vdiskId = test.Info->GetVDiskId(0);
-        SendGet(env, test, vdiskId, blobId, data);
-    }
-
 
     Y_UNIT_TEST(ProtobufBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -529,7 +518,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             if (i % 19 != 18) {
                 ++goodCount;
                 TLogoBlobID blob(i, 1, 0, 0, blobSize, 0, 1);
-                static_cast<TEvBlobStorage::TEvVMultiPut*>(events[i].get())->AddVPut(blob, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+                static_cast<TEvBlobStorage::TEvVMultiPut*>(events[i].get())->AddVPut(blob, TRcBuf(data), nullptr, false,
+                    false, nullptr, NWilson::TTraceId());
             }
         }
 

@@ -5,8 +5,6 @@
 
 namespace NKafka {
 
-static constexpr ui8 SUPPORTED_KEY_TYPE = 0; // consumer
-
 NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFindCoordinatorRequestData>& message) {
     return new TKafkaFindCoordinatorActor(context, correlationId, message);
 }
@@ -18,12 +16,12 @@ TString TKafkaFindCoordinatorActor::LogPrefix() {
 }
 
 void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
-    if (Message->KeyType != SUPPORTED_KEY_TYPE) {
+    if (!SUPPORTED_KEY_TYPES.contains(Message->KeyType)) {
         SendResponseFailAndDie(EKafkaErrors::INVALID_REQUEST, TStringBuilder() << "Unsupported coordinator KeyType: " << Message->KeyType, ctx);
         return;
     }
 
-    bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().Empty();
+    bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().empty();
     if (withProxy) {
         SendResponseOkAndDie(Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort(), NKafka::ProxyNodeId, ctx);
         return;

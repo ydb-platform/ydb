@@ -2,10 +2,9 @@
 import json
 import re
 import time
-import random
-import string
 
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
 from moto.config.exceptions import (
     InvalidResourceTypeException,
@@ -19,6 +18,7 @@ from moto.config.exceptions import (
     InvalidDeliveryChannelNameException,
     NoSuchBucketException,
     InvalidS3KeyPrefixException,
+    InvalidS3KmsKeyArnException,
     InvalidSNSTopicARNException,
     MaxNumberOfDeliveryChannelsExceededException,
     NoAvailableDeliveryChannelException,
@@ -45,15 +45,17 @@ from moto.config.exceptions import (
     MaxNumberOfConfigRulesExceededException,
     InsufficientPermissionsException,
     NoSuchConfigRuleException,
+    NoSuchRetentionConfigurationException,
     ResourceInUseException,
     MissingRequiredConfigRuleParameterException,
 )
 
-from moto.core import BaseBackend, BaseModel
-from moto.core import get_account_id
+from moto.core import BaseBackend, BackendDict, BaseModel
+from moto.core.common_models import ConfigQueryModel
 from moto.core.responses import AWSServiceSpec
-from moto.core.utils import BackendDict
+from moto.core.utils import utcnow
 from moto.iam.config import role_config_query, policy_config_query
+from moto.moto_api._internal import mock_random as random
 from moto.s3.config import s3_config_query
 from moto.s3control.config import s3_account_public_access_block_query
 from moto.utilities.utils import load_resource
@@ -71,7 +73,7 @@ DEFAULT_PAGE_SIZE = 100
 CONFIG_RULE_PAGE_SIZE = 25
 
 # Map the Config resource type to a backend:
-RESOURCE_MAP = {
+RESOURCE_MAP: Dict[str, ConfigQueryModel] = {
     "AWS::S3::Bucket": s3_config_query,
     "AWS::S3::AccountPublicAccessBlock": s3_account_public_access_block_query,
     "AWS::IAM::Role": role_config_query,
@@ -86,11 +88,11 @@ MANAGED_RULES = load_resource(__name__, "resources/aws_managed_rules.json")
 MANAGED_RULES_CONSTRAINTS = MANAGED_RULES["ManagedRules"]
 
 
-def datetime2int(date):
+def datetime2int(date: datetime) -> int:
     return int(time.mktime(date.timetuple()))
 
 
-def snake_to_camels(original, cap_start, cap_arn):
+def snake_to_camels(original: str, cap_start: bool, cap_arn: bool) -> str:
     parts = original.split("_")
 
     camel_cased = parts[0].lower() + "".join(p.title() for p in parts[1:])
@@ -106,16 +108,12 @@ def snake_to_camels(original, cap_start, cap_arn):
     return camel_cased
 
 
-def random_string():
+def random_string() -> str:
     """Returns a random set of 8 lowercase letters for the Config Aggregator ARN"""
-    chars = []
-    for _ in range(0, 8):
-        chars.append(random.choice(string.ascii_lowercase))
-
-    return "".join(chars)
+    return random.get_random_string(length=8, include_digits=False, lower_case=True)
 
 
-def validate_tag_key(tag_key, exception_param="tags.X.member.key"):
+def validate_tag_key(tag_key: str, exception_param: str = "tags.X.member.key") -> None:
     """Validates the tag key.
 
     :param tag_key: The tag key to check against.
@@ -137,7 +135,7 @@ def validate_tag_key(tag_key, exception_param="tags.X.member.key"):
         raise InvalidTagCharacters(tag_key, param=exception_param)
 
 
-def check_tag_duplicate(all_tags, tag_key):
+def check_tag_duplicate(all_tags: Dict[str, str], tag_key: str) -> None:
     """Validates that a tag key is not a duplicate
 
     :param all_tags: Dict to check if there is a duplicate tag.
@@ -148,8 +146,8 @@ def check_tag_duplicate(all_tags, tag_key):
         raise DuplicateTags()
 
 
-def validate_tags(tags):
-    proper_tags = {}
+def validate_tags(tags: List[Dict[str, str]]) -> Dict[str, str]:
+    proper_tags: Dict[str, str] = {}
 
     if len(tags) > MAX_TAGS_IN_ARG:
         raise TooManyTags(tags)
@@ -168,7 +166,7 @@ def validate_tags(tags):
     return proper_tags
 
 
-def convert_to_class_args(dict_arg):
+def convert_to_class_args(dict_arg: Dict[str, Any]) -> Dict[str, Any]:
     """Return dict that can be used to instantiate it's representative class.
 
     Given a dictionary in the incoming API request, convert the keys to
@@ -190,7 +188,7 @@ class ConfigEmptyDictable(BaseModel):
     This assumes that the sub-class will NOT return 'None's in the JSON.
     """
 
-    def __init__(self, capitalize_start=False, capitalize_arn=True):
+    def __init__(self, capitalize_start: bool = False, capitalize_arn: bool = True):
         """Assists with the serialization of the config object
         :param capitalize_start: For some Config services, the first letter
                                  is lowercase -- for others it's capital
@@ -200,8 +198,8 @@ class ConfigEmptyDictable(BaseModel):
         self.capitalize_start = capitalize_start
         self.capitalize_arn = capitalize_arn
 
-    def to_dict(self):
-        data = {}
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
         for item, value in self.__dict__.items():
             # ignore private attributes
             if not item.startswith("_") and value is not None:
@@ -226,32 +224,32 @@ class ConfigEmptyDictable(BaseModel):
 
 
 class ConfigRecorderStatus(ConfigEmptyDictable):
-    def __init__(self, name):
+    def __init__(self, name: str):
         super().__init__()
 
         self.name = name
         self.recording = False
-        self.last_start_time = None
-        self.last_stop_time = None
-        self.last_status = None
-        self.last_error_code = None
-        self.last_error_message = None
-        self.last_status_change_time = None
+        self.last_start_time: Optional[int] = None
+        self.last_stop_time: Optional[int] = None
+        self.last_status: Optional[str] = None
+        self.last_error_code: Optional[str] = None
+        self.last_error_message: Optional[str] = None
+        self.last_status_change_time: Optional[int] = None
 
-    def start(self):
+    def start(self) -> None:
         self.recording = True
         self.last_status = "PENDING"
-        self.last_start_time = datetime2int(datetime.utcnow())
-        self.last_status_change_time = datetime2int(datetime.utcnow())
+        self.last_start_time = datetime2int(utcnow())
+        self.last_status_change_time = datetime2int(utcnow())
 
-    def stop(self):
+    def stop(self) -> None:
         self.recording = False
-        self.last_stop_time = datetime2int(datetime.utcnow())
-        self.last_status_change_time = datetime2int(datetime.utcnow())
+        self.last_stop_time = datetime2int(utcnow())
+        self.last_status_change_time = datetime2int(utcnow())
 
 
 class ConfigDeliverySnapshotProperties(ConfigEmptyDictable):
-    def __init__(self, delivery_frequency):
+    def __init__(self, delivery_frequency: str):
         super().__init__()
 
         self.delivery_frequency = delivery_frequency
@@ -259,33 +257,61 @@ class ConfigDeliverySnapshotProperties(ConfigEmptyDictable):
 
 class ConfigDeliveryChannel(ConfigEmptyDictable):
     def __init__(
-        self, name, s3_bucket_name, prefix=None, sns_arn=None, snapshot_properties=None
+        self,
+        name: str,
+        s3_bucket_name: str,
+        prefix: Optional[str] = None,
+        sns_arn: Optional[str] = None,
+        s3_kms_key_arn: Optional[str] = None,
+        snapshot_properties: Optional[ConfigDeliverySnapshotProperties] = None,
     ):
         super().__init__()
 
         self.name = name
         self.s3_bucket_name = s3_bucket_name
         self.s3_key_prefix = prefix
+        self.s3_kms_key_arn = s3_kms_key_arn
         self.sns_topic_arn = sns_arn
         self.config_snapshot_delivery_properties = snapshot_properties
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Need to override this function because the KMS Key ARN is written as `Arn` vs. SNS which is `ARN`."""
+        data = super().to_dict()
+
+        # Fix the KMS ARN if it's here:
+        kms_arn = data.pop("s3KmsKeyARN", None)
+        if kms_arn:
+            data["s3KmsKeyArn"] = kms_arn
+
+        return data
 
 
 class RecordingGroup(ConfigEmptyDictable):
     def __init__(
         self,
-        all_supported=True,
-        include_global_resource_types=False,
-        resource_types=None,
+        all_supported: bool = True,
+        include_global_resource_types: bool = False,
+        resource_types: Optional[List[str]] = None,
+        exclusion_by_resource_types: Optional[Dict[str, List[str]]] = None,
+        recording_strategy: Optional[Dict[str, str]] = None,
     ):
         super().__init__()
 
         self.all_supported = all_supported
         self.include_global_resource_types = include_global_resource_types
         self.resource_types = resource_types
+        self.exclusion_by_resource_types = exclusion_by_resource_types
+        self.recording_strategy = recording_strategy
 
 
 class ConfigRecorder(ConfigEmptyDictable):
-    def __init__(self, role_arn, recording_group, name="default", status=None):
+    def __init__(
+        self,
+        role_arn: str,
+        recording_group: RecordingGroup,
+        name: str = "default",
+        status: Optional[ConfigRecorderStatus] = None,
+    ):
         super().__init__()
 
         self.name = name
@@ -299,7 +325,12 @@ class ConfigRecorder(ConfigEmptyDictable):
 
 
 class AccountAggregatorSource(ConfigEmptyDictable):
-    def __init__(self, account_ids, aws_regions=None, all_aws_regions=None):
+    def __init__(
+        self,
+        account_ids: List[str],
+        aws_regions: Optional[List[str]] = None,
+        all_aws_regions: Optional[bool] = None,
+    ):
         super().__init__(capitalize_start=True)
 
         # Can't have both the regions and all_regions flag present -- also
@@ -327,7 +358,12 @@ class AccountAggregatorSource(ConfigEmptyDictable):
 
 
 class OrganizationAggregationSource(ConfigEmptyDictable):
-    def __init__(self, role_arn, aws_regions=None, all_aws_regions=None):
+    def __init__(
+        self,
+        role_arn: str,
+        aws_regions: Optional[List[str]] = None,
+        all_aws_regions: Optional[bool] = None,
+    ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
 
         # Can't have both the regions and all_regions flag present -- also
@@ -354,23 +390,29 @@ class OrganizationAggregationSource(ConfigEmptyDictable):
 
 
 class ConfigAggregator(ConfigEmptyDictable):
-    def __init__(self, name, region, account_sources=None, org_source=None, tags=None):
+    def __init__(
+        self,
+        name: str,
+        account_id: str,
+        region: str,
+        account_sources: Optional[List[AccountAggregatorSource]] = None,
+        org_source: Optional[OrganizationAggregationSource] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
 
         self.configuration_aggregator_name = name
-        self.configuration_aggregator_arn = "arn:aws:config:{region}:{id}:config-aggregator/config-aggregator-{random}".format(
-            region=region, id=get_account_id(), random=random_string()
-        )
+        self.configuration_aggregator_arn = f"arn:aws:config:{region}:{account_id}:config-aggregator/config-aggregator-{random_string()}"
         self.account_aggregation_sources = account_sources
         self.organization_aggregation_source = org_source
-        self.creation_time = datetime2int(datetime.utcnow())
-        self.last_updated_time = datetime2int(datetime.utcnow())
+        self.creation_time = datetime2int(utcnow())
+        self.last_updated_time = datetime2int(utcnow())
 
         # Tags are listed in the list_tags_for_resource API call.
         self.tags = tags or {}
 
     # Override the to_dict so that we can format the tags properly...
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()
 
         # Override the account aggregation sources if present:
@@ -389,22 +431,19 @@ class ConfigAggregator(ConfigEmptyDictable):
 
 class ConfigAggregationAuthorization(ConfigEmptyDictable):
     def __init__(
-        self, current_region, authorized_account_id, authorized_aws_region, tags=None
+        self,
+        account_id: str,
+        current_region: str,
+        authorized_account_id: str,
+        authorized_aws_region: str,
+        tags: Dict[str, str],
     ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
 
-        self.aggregation_authorization_arn = (
-            "arn:aws:config:{region}:{id}:aggregation-authorization/"
-            "{auth_account}/{auth_region}".format(
-                region=current_region,
-                id=get_account_id(),
-                auth_account=authorized_account_id,
-                auth_region=authorized_aws_region,
-            )
-        )
+        self.aggregation_authorization_arn = f"arn:aws:config:{current_region}:{account_id}:aggregation-authorization/{authorized_account_id}/{authorized_aws_region}"
         self.authorized_account_id = authorized_account_id
         self.authorized_aws_region = authorized_aws_region
-        self.creation_time = datetime2int(datetime.utcnow())
+        self.creation_time = datetime2int(utcnow())
 
         # Tags are listed in the list_tags_for_resource API call.
         self.tags = tags or {}
@@ -413,44 +452,41 @@ class ConfigAggregationAuthorization(ConfigEmptyDictable):
 class OrganizationConformancePack(ConfigEmptyDictable):
     def __init__(
         self,
-        region,
-        name,
-        delivery_s3_bucket,
-        delivery_s3_key_prefix=None,
-        input_parameters=None,
-        excluded_accounts=None,
+        account_id: str,
+        region: str,
+        name: str,
+        delivery_s3_bucket: str,
+        delivery_s3_key_prefix: Optional[str] = None,
+        input_parameters: Optional[List[Dict[str, Any]]] = None,
+        excluded_accounts: Optional[List[str]] = None,
     ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
 
         self._status = "CREATE_SUCCESSFUL"
-        self._unique_pack_name = "{0}-{1}".format(name, random_string())
+        self._unique_pack_name = f"{name}-{random_string()}"
 
         self.conformance_pack_input_parameters = input_parameters or []
         self.delivery_s3_bucket = delivery_s3_bucket
         self.delivery_s3_key_prefix = delivery_s3_key_prefix
         self.excluded_accounts = excluded_accounts or []
-        self.last_update_time = datetime2int(datetime.utcnow())
-        self.organization_conformance_pack_arn = (
-            "arn:aws:config:{0}:{1}:organization-conformance-pack/{2}".format(
-                region, get_account_id(), self._unique_pack_name
-            )
-        )
+        self.last_update_time = datetime2int(utcnow())
+        self.organization_conformance_pack_arn = f"arn:aws:config:{region}:{account_id}:organization-conformance-pack/{self._unique_pack_name}"
         self.organization_conformance_pack_name = name
 
     def update(
         self,
-        delivery_s3_bucket,
-        delivery_s3_key_prefix,
-        input_parameters,
-        excluded_accounts,
-    ):
+        delivery_s3_bucket: str,
+        delivery_s3_key_prefix: str,
+        input_parameters: List[Dict[str, Any]],
+        excluded_accounts: List[str],
+    ) -> None:
         self._status = "UPDATE_SUCCESSFUL"
 
         self.conformance_pack_input_parameters = input_parameters
         self.delivery_s3_bucket = delivery_s3_bucket
         self.delivery_s3_key_prefix = delivery_s3_key_prefix
         self.excluded_accounts = excluded_accounts
-        self.last_update_time = datetime2int(datetime.utcnow())
+        self.last_update_time = datetime2int(utcnow())
 
 
 class Scope(ConfigEmptyDictable):
@@ -468,10 +504,10 @@ class Scope(ConfigEmptyDictable):
 
     def __init__(
         self,
-        compliance_resource_types=None,
-        tag_key=None,
-        tag_value=None,
-        compliance_resource_id=None,
+        compliance_resource_types: Optional[List[str]] = None,
+        tag_key: Optional[str] = None,
+        tag_value: Optional[str] = None,
+        compliance_resource_id: Optional[str] = None,
     ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
         self.tags = None
@@ -493,7 +529,7 @@ class Scope(ConfigEmptyDictable):
                 "Scope cannot be applied to both resource and tag"
             )
 
-        if compliance_resource_id and len(compliance_resource_types) != 1:
+        if compliance_resource_id and len(compliance_resource_types) != 1:  # type: ignore[arg-type]
             raise InvalidParameterValueException(
                 "A single resourceType should be provided when resourceId "
                 "is provided in scope"
@@ -526,7 +562,10 @@ class SourceDetail(ConfigEmptyDictable):
     EVENT_SOURCES = ["aws.config"]
 
     def __init__(
-        self, event_source=None, message_type=None, maximum_execution_frequency=None
+        self,
+        event_source: Optional[str] = None,
+        message_type: Optional[str] = None,
+        maximum_execution_frequency: Optional[str] = None,
     ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
 
@@ -602,7 +641,14 @@ class Source(ConfigEmptyDictable):
 
     OWNERS = {"AWS", "CUSTOM_LAMBDA"}
 
-    def __init__(self, region, owner, source_identifier, source_details=None):
+    def __init__(
+        self,
+        account_id: str,
+        region: str,
+        owner: str,
+        source_identifier: str,
+        source_details: Optional[SourceDetail] = None,
+    ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
         if owner not in Source.OWNERS:
             raise ValidationException(
@@ -644,7 +690,7 @@ class Source(ConfigEmptyDictable):
         from moto.awslambda import lambda_backends
 
         try:
-            lambda_backends[region].get_function(source_identifier)
+            lambda_backends[account_id][region].get_function(source_identifier)
         except Exception:
             raise InsufficientPermissionsException(
                 f"The AWS Lambda function {source_identifier} cannot be "
@@ -653,7 +699,7 @@ class Source(ConfigEmptyDictable):
             )
 
         details = []
-        for detail in source_details:
+        for detail in source_details:  # type: ignore[attr-defined]
             detail_dict = convert_to_class_args(detail)
             details.append(SourceDetail(**detail_dict))
 
@@ -661,7 +707,7 @@ class Source(ConfigEmptyDictable):
         self.owner = owner
         self.source_identifier = source_identifier
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """Format the SourceDetails properly."""
         result = super().to_dict()
         if self.source_details:
@@ -680,8 +726,15 @@ class ConfigRule(ConfigEmptyDictable):
     MAX_RULES = 150
     RULE_STATES = {"ACTIVE", "DELETING", "DELETING_RESULTS", "EVALUATING"}
 
-    def __init__(self, region, config_rule, tags):
+    def __init__(
+        self,
+        account_id: str,
+        region: str,
+        config_rule: Dict[str, Any],
+        tags: Dict[str, str],
+    ):
         super().__init__(capitalize_start=True, capitalize_arn=False)
+        self.account_id = account_id
         self.config_rule_name = config_rule.get("ConfigRuleName")
         if config_rule.get("ConfigRuleArn") or config_rule.get("ConfigRuleId"):
             raise InvalidParameterValueException(
@@ -694,9 +747,13 @@ class ConfigRule(ConfigEmptyDictable):
         self.maximum_execution_frequency = None  # keeps pylint happy
         self.modify_fields(region, config_rule, tags)
         self.config_rule_id = f"config-rule-{random_string():.6}"
-        self.config_rule_arn = f"arn:aws:config:{region}:{get_account_id()}:config-rule/{self.config_rule_id}"
+        self.config_rule_arn = (
+            f"arn:aws:config:{region}:{account_id}:config-rule/{self.config_rule_id}"
+        )
 
-    def modify_fields(self, region, config_rule, tags):
+    def modify_fields(
+        self, region: str, config_rule: Dict[str, Any], tags: Dict[str, str]
+    ) -> None:
         """Initialize or update ConfigRule fields."""
         self.config_rule_state = config_rule.get("ConfigRuleState", "ACTIVE")
         if self.config_rule_state not in ConfigRule.RULE_STATES:
@@ -721,7 +778,7 @@ class ConfigRule(ConfigEmptyDictable):
             self.scope = Scope(**scope_dict)
 
         source_dict = convert_to_class_args(config_rule["Source"])
-        self.source = Source(region, **source_dict)
+        self.source = Source(self.account_id, region, **source_dict)
 
         self.input_parameters = config_rule.get("InputParameters")
         self.input_parameters_dict = {}
@@ -783,10 +840,10 @@ class ConfigRule(ConfigEmptyDictable):
                 "CreatedBy field"
             )
 
-        self.last_updated_time = datetime2int(datetime.utcnow())
+        self.last_updated_time = datetime2int(utcnow())
         self.tags = tags
 
-    def validate_managed_rule(self):
+    def validate_managed_rule(self) -> None:
         """Validate parameters specific to managed rules."""
         rule_info = MANAGED_RULES_CONSTRAINTS[self.source.source_identifier]
         param_names = self.input_parameters_dict.keys()
@@ -796,8 +853,7 @@ class ConfigRule(ConfigEmptyDictable):
             allowed_names = {x["Name"] for x in rule_info["Parameters"]}
             if not set(param_names).issubset(allowed_names):
                 raise InvalidParameterValueException(
-                    "Unknown parameters provided in the inputParameters: "
-                    + self.input_parameters
+                    f"Unknown parameters provided in the inputParameters: {self.input_parameters}"
                 )
 
         # Verify all the required parameters are specified.
@@ -847,25 +903,34 @@ class ConfigRule(ConfigEmptyDictable):
         # Verify the rule is allowed for this region -- not yet implemented.
 
 
+class RetentionConfiguration(ConfigEmptyDictable):
+    def __init__(self, retention_period_in_days: int, name: Optional[str] = None):
+        super().__init__(capitalize_start=True, capitalize_arn=False)
+
+        self.name = name or "default"
+        self.retention_period_in_days = retention_period_in_days
+
+
 class ConfigBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
-        self.recorders = {}
-        self.delivery_channels = {}
-        self.config_aggregators = {}
-        self.aggregation_authorizations = {}
-        self.organization_conformance_packs = {}
-        self.config_rules = {}
-        self.config_schema = None
+        self.recorders: Dict[str, ConfigRecorder] = {}
+        self.delivery_channels: Dict[str, ConfigDeliveryChannel] = {}
+        self.config_aggregators: Dict[str, ConfigAggregator] = {}
+        self.aggregation_authorizations: Dict[str, ConfigAggregationAuthorization] = {}
+        self.organization_conformance_packs: Dict[str, OrganizationConformancePack] = {}
+        self.config_rules: Dict[str, ConfigRule] = {}
+        self.config_schema: Optional[AWSServiceSpec] = None
+        self.retention_configuration: Optional[RetentionConfiguration] = None
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(service_region: str, zones: List[str]) -> List[Dict[str, Any]]:  # type: ignore[misc]
         """List of dicts representing default VPC endpoints for this service."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "config"
         )
 
-    def _validate_resource_types(self, resource_list):
+    def _validate_resource_types(self, resource_list: List[str]) -> None:
         if not self.config_schema:
             self.config_schema = AWSServiceSpec(
                 path="data/config/2014-11-12/service-2.json"
@@ -882,7 +947,9 @@ class ConfigBackend(BaseBackend):
                 bad_list, self.config_schema.shapes["ResourceType"]["enum"]
             )
 
-    def _validate_delivery_snapshot_properties(self, properties):
+    def _validate_delivery_snapshot_properties(
+        self, properties: Dict[str, Any]
+    ) -> None:
         if not self.config_schema:
             self.config_schema = AWSServiceSpec(
                 path="data/config/2014-11-12/service-2.json"
@@ -898,16 +965,16 @@ class ConfigBackend(BaseBackend):
                 self.config_schema.shapes["MaximumExecutionFrequency"]["enum"],
             )
 
-    def put_configuration_aggregator(self, config_aggregator):
+    def put_configuration_aggregator(
+        self, config_aggregator: Dict[str, Any]
+    ) -> Dict[str, Any]:
         # Validate the name:
-        if len(config_aggregator["ConfigurationAggregatorName"]) > 256:
-            raise NameTooLongException(
-                config_aggregator["ConfigurationAggregatorName"],
-                "configurationAggregatorName",
-            )
+        config_aggr_name = config_aggregator["ConfigurationAggregatorName"]
+        if len(config_aggr_name) > 256:
+            raise NameTooLongException(config_aggr_name, "configurationAggregatorName")
 
-        account_sources = None
-        org_source = None
+        account_sources: Optional[List[AccountAggregatorSource]] = None
+        org_source: Optional[OrganizationAggregationSource] = None
 
         # Tag validation:
         tags = validate_tags(config_aggregator.get("Tags", []))
@@ -964,35 +1031,32 @@ class ConfigBackend(BaseBackend):
             )
 
         # Grab the existing one if it exists and update it:
-        if not self.config_aggregators.get(
-            config_aggregator["ConfigurationAggregatorName"]
-        ):
+        if not self.config_aggregators.get(config_aggr_name):
             aggregator = ConfigAggregator(
-                config_aggregator["ConfigurationAggregatorName"],
-                self.region_name,
+                config_aggr_name,
+                account_id=self.account_id,
+                region=self.region_name,
                 account_sources=account_sources,
                 org_source=org_source,
                 tags=tags,
             )
-            self.config_aggregators[
-                config_aggregator["ConfigurationAggregatorName"]
-            ] = aggregator
+            self.config_aggregators[config_aggr_name] = aggregator
 
         else:
-            aggregator = self.config_aggregators[
-                config_aggregator["ConfigurationAggregatorName"]
-            ]
+            aggregator = self.config_aggregators[config_aggr_name]
             aggregator.tags = tags
             aggregator.account_aggregation_sources = account_sources
             aggregator.organization_aggregation_source = org_source
-            aggregator.last_updated_time = datetime2int(datetime.utcnow())
+            aggregator.last_updated_time = datetime2int(utcnow())
 
         return aggregator.to_dict()
 
-    def describe_configuration_aggregators(self, names, token, limit):
+    def describe_configuration_aggregators(
+        self, names: List[str], token: str, limit: Optional[int]
+    ) -> Dict[str, Any]:
         limit = DEFAULT_PAGE_SIZE if not limit or limit < 0 else limit
         agg_list = []
-        result = {"ConfigurationAggregators": []}
+        result: Dict[str, Any] = {"ConfigurationAggregators": []}
 
         if names:
             for name in names:
@@ -1032,37 +1096,44 @@ class ConfigBackend(BaseBackend):
 
         return result
 
-    def delete_configuration_aggregator(self, config_aggregator):
+    def delete_configuration_aggregator(self, config_aggregator: str) -> None:
         if not self.config_aggregators.get(config_aggregator):
             raise NoSuchConfigurationAggregatorException()
 
         del self.config_aggregators[config_aggregator]
 
     def put_aggregation_authorization(
-        self, authorized_account, authorized_region, tags
-    ):
+        self,
+        authorized_account: str,
+        authorized_region: str,
+        tags: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
         # Tag validation:
-        tags = validate_tags(tags or [])
+        tag_dict = validate_tags(tags or [])
 
         # Does this already exist?
-        key = "{}/{}".format(authorized_account, authorized_region)
+        key = f"{authorized_account}/{authorized_region}"
         agg_auth = self.aggregation_authorizations.get(key)
         if not agg_auth:
             agg_auth = ConfigAggregationAuthorization(
-                self.region_name, authorized_account, authorized_region, tags=tags
+                self.account_id,
+                self.region_name,
+                authorized_account,
+                authorized_region,
+                tags=tag_dict,
             )
-            self.aggregation_authorizations[
-                "{}/{}".format(authorized_account, authorized_region)
-            ] = agg_auth
+            self.aggregation_authorizations[key] = agg_auth
         else:
             # Only update the tags:
-            agg_auth.tags = tags
+            agg_auth.tags = tag_dict
 
         return agg_auth.to_dict()
 
-    def describe_aggregation_authorizations(self, token, limit):
+    def describe_aggregation_authorizations(
+        self, token: Optional[str], limit: Optional[int]
+    ) -> Dict[str, Any]:
         limit = DEFAULT_PAGE_SIZE if not limit or limit < 0 else limit
-        result = {"AggregationAuthorizations": []}
+        result: Dict[str, Any] = {"AggregationAuthorizations": []}
 
         if not self.aggregation_authorizations:
             return result
@@ -1091,19 +1162,21 @@ class ConfigBackend(BaseBackend):
 
         return result
 
-    def delete_aggregation_authorization(self, authorized_account, authorized_region):
+    def delete_aggregation_authorization(
+        self, authorized_account: str, authorized_region: str
+    ) -> None:
         # This will always return a 200 -- regardless if there is or isn't an existing
         # aggregation authorization.
-        key = "{}/{}".format(authorized_account, authorized_region)
+        key = f"{authorized_account}/{authorized_region}"
         self.aggregation_authorizations.pop(key, None)
 
-    def put_configuration_recorder(self, config_recorder):
+    def put_configuration_recorder(self, config_recorder: Dict[str, Any]) -> None:
         # Validate the name:
         if not config_recorder.get("name"):
             raise InvalidConfigurationRecorderNameException(config_recorder.get("name"))
-        if len(config_recorder.get("name")) > 256:
+        if len(config_recorder["name"]) > 256:
             raise NameTooLongException(
-                config_recorder.get("name"), "configurationRecorder.name"
+                config_recorder["name"], "configurationRecorder.name"
             )
 
         # We're going to assume that the passed in Role ARN is correct.
@@ -1121,7 +1194,13 @@ class ConfigBackend(BaseBackend):
 
         # Validate the Recording Group:
         if config_recorder.get("recordingGroup") is None:
-            recording_group = RecordingGroup()
+            recording_group = RecordingGroup(
+                all_supported=True,
+                include_global_resource_types=False,
+                resource_types=[],
+                exclusion_by_resource_types={"resourceTypes": []},
+                recording_strategy={"useOnly": "ALL_SUPPORTED_RESOURCE_TYPES"},
+            )
         else:
             rgroup = config_recorder["recordingGroup"]
 
@@ -1129,27 +1208,94 @@ class ConfigBackend(BaseBackend):
             if not rgroup:
                 raise InvalidRecordingGroupException()
 
-            # Can't have both the resource types specified and the other flags as True.
-            if rgroup.get("resourceTypes") and (
-                rgroup.get("allSupported", False)
-                or rgroup.get("includeGlobalResourceTypes", False)
-            ):
-                raise InvalidRecordingGroupException()
-
-            # Must supply resourceTypes if 'allSupported' is not supplied:
-            if not rgroup.get("allSupported") and not rgroup.get("resourceTypes"):
-                raise InvalidRecordingGroupException()
-
-            # Validate that the list provided is correct:
-            self._validate_resource_types(rgroup.get("resourceTypes", []))
-
-            recording_group = RecordingGroup(
-                all_supported=rgroup.get("allSupported", True),
-                include_global_resource_types=rgroup.get(
-                    "includeGlobalResourceTypes", False
-                ),
-                resource_types=rgroup.get("resourceTypes", []),
+            # Recording strategy must be one of the allowed enums:
+            recording_strategy = rgroup.get("recordingStrategy", {}).get(
+                "useOnly", None
             )
+            if recording_strategy not in {
+                None,
+                "ALL_SUPPORTED_RESOURCE_TYPES",
+                "INCLUSION_BY_RESOURCE_TYPES",
+                "EXCLUSION_BY_RESOURCE_TYPES",
+            }:
+                raise ValidationException(
+                    f"1 validation error detected: Value '{recording_strategy}' at 'configurationRecorder.recordingGroup.recordingStrategy.useOnly' failed to satisfy constraint:"
+                    f" Member must satisfy enum value set: [INCLUSION_BY_RESOURCE_TYPES, ALL_SUPPORTED_RESOURCE_TYPES, EXCLUSION_BY_RESOURCE_TYPES]"
+                )
+
+            # Validate the allSupported:
+            if rgroup.get("allSupported", False):
+                if (
+                    rgroup.get("resourceTypes", [])
+                    or (
+                        rgroup.get("exclusionByResourceTypes", {"resourceTypes": []})
+                        != {"resourceTypes": []}
+                    )
+                    or recording_strategy not in {None, "ALL_SUPPORTED_RESOURCE_TYPES"}
+                ):
+                    raise InvalidRecordingGroupException()
+
+                recording_group = RecordingGroup(
+                    all_supported=True,
+                    include_global_resource_types=rgroup.get(
+                        "includeGlobalResourceTypes", False
+                    ),
+                    resource_types=[],
+                    exclusion_by_resource_types={"resourceTypes": []},
+                    recording_strategy={"useOnly": "ALL_SUPPORTED_RESOURCE_TYPES"},
+                )
+
+            # Validate the specifically passed in resource types:
+            elif rgroup.get("resourceTypes", []):
+                if (
+                    rgroup.get("includeGlobalResourceTypes", False)
+                    or (
+                        rgroup.get("exclusionByResourceTypes", {"resourceTypes": []})
+                        != {"resourceTypes": []}
+                    )
+                    or recording_strategy not in {None, "INCLUSION_BY_RESOURCE_TYPES"}
+                ):
+                    raise InvalidRecordingGroupException()
+
+                # Validate that the resource list provided is correct:
+                self._validate_resource_types(rgroup["resourceTypes"])
+
+                recording_group = RecordingGroup(
+                    all_supported=False,
+                    include_global_resource_types=False,
+                    resource_types=rgroup["resourceTypes"],
+                    exclusion_by_resource_types={"resourceTypes": []},
+                    recording_strategy={"useOnly": "INCLUSION_BY_RESOURCE_TYPES"},
+                )
+
+            # Validate the excluded resource types:
+            elif rgroup.get("exclusionByResourceTypes", {}):
+                if not rgroup["exclusionByResourceTypes"].get("resourceTypes", []):
+                    raise InvalidRecordingGroupException()
+
+                # The recording strategy must be provided for exclusions.
+                if (
+                    rgroup.get("includeGlobalResourceTypes", False)
+                    or recording_strategy != "EXCLUSION_BY_RESOURCE_TYPES"
+                ):
+                    raise InvalidRecordingGroupException()
+
+                # Validate that the resource list provided is correct:
+                self._validate_resource_types(
+                    rgroup["exclusionByResourceTypes"]["resourceTypes"]
+                )
+
+                recording_group = RecordingGroup(
+                    all_supported=False,
+                    include_global_resource_types=False,
+                    resource_types=[],
+                    exclusion_by_resource_types=rgroup["exclusionByResourceTypes"],
+                    recording_strategy={"useOnly": "EXCLUSION_BY_RESOURCE_TYPES"},
+                )
+
+            # If the resourceTypes is an empty list, this will be reached:
+            else:
+                raise InvalidRecordingGroupException()
 
         self.recorders[config_recorder["name"]] = ConfigRecorder(
             config_recorder["roleARN"],
@@ -1158,8 +1304,10 @@ class ConfigBackend(BaseBackend):
             status=recorder_status,
         )
 
-    def describe_configuration_recorders(self, recorder_names):
-        recorders = []
+    def describe_configuration_recorders(
+        self, recorder_names: Optional[List[str]]
+    ) -> List[Dict[str, Any]]:
+        recorders: List[Dict[str, Any]] = []
 
         if recorder_names:
             for rname in recorder_names:
@@ -1175,8 +1323,10 @@ class ConfigBackend(BaseBackend):
 
         return recorders
 
-    def describe_configuration_recorder_status(self, recorder_names):
-        recorders = []
+    def describe_configuration_recorder_status(
+        self, recorder_names: List[str]
+    ) -> List[Dict[str, Any]]:
+        recorders: List[Dict[str, Any]] = []
 
         if recorder_names:
             for rname in recorder_names:
@@ -1192,7 +1342,7 @@ class ConfigBackend(BaseBackend):
 
         return recorders
 
-    def put_delivery_channel(self, delivery_channel):
+    def put_delivery_channel(self, delivery_channel: Dict[str, Any]) -> None:
         # Must have a configuration recorder:
         if not self.recorders:
             raise NoAvailableConfigurationRecorderException()
@@ -1200,10 +1350,8 @@ class ConfigBackend(BaseBackend):
         # Validate the name:
         if not delivery_channel.get("name"):
             raise InvalidDeliveryChannelNameException(delivery_channel.get("name"))
-        if len(delivery_channel.get("name")) > 256:
-            raise NameTooLongException(
-                delivery_channel.get("name"), "deliveryChannel.name"
-            )
+        if len(delivery_channel["name"]) > 256:
+            raise NameTooLongException(delivery_channel["name"], "deliveryChannel.name")
 
         # We are going to assume that the bucket exists -- but will verify if
         # the bucket provided is blank:
@@ -1218,8 +1366,14 @@ class ConfigBackend(BaseBackend):
 
         # Ditto for SNS -- Only going to assume that the ARN provided is not
         # an empty string:
+        # NOTE: SNS "ARN" is all caps, but KMS "Arn" is UpperCamelCase!
         if delivery_channel.get("snsTopicARN", None) == "":
             raise InvalidSNSTopicARNException()
+
+        # Ditto for S3 KMS Key ARN -- Only going to assume that the ARN provided is not
+        # an empty string:
+        if delivery_channel.get("s3KmsKeyArn", None) == "":
+            raise InvalidS3KmsKeyArnException()
 
         # Config currently only allows 1 delivery channel for an account:
         if len(self.delivery_channels) == 1 and not self.delivery_channels.get(
@@ -1246,12 +1400,15 @@ class ConfigBackend(BaseBackend):
             delivery_channel["name"],
             delivery_channel["s3BucketName"],
             prefix=delivery_channel.get("s3KeyPrefix", None),
+            s3_kms_key_arn=delivery_channel.get("s3KmsKeyArn", None),
             sns_arn=delivery_channel.get("snsTopicARN", None),
             snapshot_properties=dprop,
         )
 
-    def describe_delivery_channels(self, channel_names):
-        channels = []
+    def describe_delivery_channels(
+        self, channel_names: List[str]
+    ) -> List[Dict[str, Any]]:
+        channels: List[Dict[str, Any]] = []
 
         if channel_names:
             for cname in channel_names:
@@ -1267,7 +1424,7 @@ class ConfigBackend(BaseBackend):
 
         return channels
 
-    def start_configuration_recorder(self, recorder_name):
+    def start_configuration_recorder(self, recorder_name: str) -> None:
         if not self.recorders.get(recorder_name):
             raise NoSuchConfigurationRecorderException(recorder_name)
 
@@ -1278,20 +1435,20 @@ class ConfigBackend(BaseBackend):
         # Start recording:
         self.recorders[recorder_name].status.start()
 
-    def stop_configuration_recorder(self, recorder_name):
+    def stop_configuration_recorder(self, recorder_name: str) -> None:
         if not self.recorders.get(recorder_name):
             raise NoSuchConfigurationRecorderException(recorder_name)
 
         # Stop recording:
         self.recorders[recorder_name].status.stop()
 
-    def delete_configuration_recorder(self, recorder_name):
+    def delete_configuration_recorder(self, recorder_name: str) -> None:
         if not self.recorders.get(recorder_name):
             raise NoSuchConfigurationRecorderException(recorder_name)
 
         del self.recorders[recorder_name]
 
-    def delete_delivery_channel(self, channel_name):
+    def delete_delivery_channel(self, channel_name: str) -> None:
         if not self.delivery_channels.get(channel_name):
             raise NoSuchDeliveryChannelException(channel_name)
 
@@ -1304,13 +1461,13 @@ class ConfigBackend(BaseBackend):
 
     def list_discovered_resources(
         self,
-        resource_type,
-        backend_region,
-        resource_ids,
-        resource_name,
-        limit,
-        next_token,
-    ):
+        resource_type: str,
+        backend_region: str,
+        resource_ids: List[str],
+        resource_name: str,
+        limit: int,
+        next_token: str,
+    ) -> Dict[str, Any]:
         """Queries against AWS Config (non-aggregated) listing function.
 
         The listing function must exist for the resource backend.
@@ -1323,7 +1480,7 @@ class ConfigBackend(BaseBackend):
         :param next_token:
         :return:
         """
-        identifiers = []
+        identifiers: List[Dict[str, Any]] = []
         new_token = None
 
         limit = limit or DEFAULT_PAGE_SIZE
@@ -1345,17 +1502,22 @@ class ConfigBackend(BaseBackend):
             backend_query_region = (
                 backend_region  # Always provide the backend this request arrived from.
             )
-            if RESOURCE_MAP[resource_type].backends.get("global"):
+            if RESOURCE_MAP[resource_type].backends[self.account_id].get("global"):
                 backend_region = "global"
 
             # For non-aggregated queries, the we only care about the
             # backend_region. Need to verify that moto has implemented
             # the region for the given backend:
-            if RESOURCE_MAP[resource_type].backends.get(backend_region):
+            if (
+                RESOURCE_MAP[resource_type]
+                .backends[self.account_id]
+                .get(backend_region)
+            ):
                 # Fetch the resources for the backend's region:
                 identifiers, new_token = RESOURCE_MAP[
                     resource_type
                 ].list_config_service_resources(
+                    self.account_id,
                     resource_ids,
                     resource_name,
                     limit,
@@ -1373,7 +1535,7 @@ class ConfigBackend(BaseBackend):
 
             resource_identifiers.append(item)
 
-        result = {"resourceIdentifiers": resource_identifiers}
+        result: Dict[str, Any] = {"resourceIdentifiers": resource_identifiers}
 
         if new_token:
             result["nextToken"] = new_token
@@ -1381,8 +1543,13 @@ class ConfigBackend(BaseBackend):
         return result
 
     def list_aggregate_discovered_resources(
-        self, aggregator_name, resource_type, filters, limit, next_token
-    ):
+        self,
+        aggregator_name: str,
+        resource_type: str,
+        filters: Dict[str, str],
+        limit: Optional[int],
+        next_token: Optional[str],
+    ) -> Dict[str, Any]:
         """Queries AWS Config listing function that must exist for resource backend.
 
         As far a moto goes -- the only real difference between this function
@@ -1400,7 +1567,7 @@ class ConfigBackend(BaseBackend):
         if not self.config_aggregators.get(aggregator_name):
             raise NoSuchConfigurationAggregatorException()
 
-        identifiers = []
+        identifiers: List[Dict[str, Any]] = []
         new_token = None
         filters = filters or {}
 
@@ -1420,6 +1587,7 @@ class ConfigBackend(BaseBackend):
             identifiers, new_token = RESOURCE_MAP[
                 resource_type
             ].list_config_service_resources(
+                self.account_id,
                 resource_id,
                 resource_name,
                 limit,
@@ -1431,7 +1599,7 @@ class ConfigBackend(BaseBackend):
         resource_identifiers = []
         for identifier in identifiers:
             item = {
-                "SourceAccountId": get_account_id(),
+                "SourceAccountId": self.account_id,
                 "SourceRegion": identifier["region"],
                 "ResourceType": identifier["type"],
                 "ResourceId": identifier["id"],
@@ -1441,14 +1609,16 @@ class ConfigBackend(BaseBackend):
 
             resource_identifiers.append(item)
 
-        result = {"ResourceIdentifiers": resource_identifiers}
+        result: Dict[str, Any] = {"ResourceIdentifiers": resource_identifiers}
 
         if new_token:
             result["NextToken"] = new_token
 
         return result
 
-    def get_resource_config_history(self, resource_type, resource_id, backend_region):
+    def get_resource_config_history(
+        self, resource_type: str, resource_id: str, backend_region: str
+    ) -> Dict[str, Any]:
         """Returns configuration of resource for the current regional backend.
 
         Item returned in AWS Config format.
@@ -1468,29 +1638,31 @@ class ConfigBackend(BaseBackend):
         backend_query_region = (
             backend_region  # Always provide the backend this request arrived from.
         )
-        print(RESOURCE_MAP[resource_type].backends)
-        if RESOURCE_MAP[resource_type].backends.get("global"):
-            print("yes, its global")
+        if RESOURCE_MAP[resource_type].backends[self.account_id].get("global"):
             backend_region = "global"
 
         # If the backend region isn't implemented then we won't find the item:
-        if not RESOURCE_MAP[resource_type].backends.get(backend_region):
-            print(f"cant find {backend_region} for {resource_type}")
+        if (
+            not RESOURCE_MAP[resource_type]
+            .backends[self.account_id]
+            .get(backend_region)
+        ):
             raise ResourceNotDiscoveredException(resource_type, resource_id)
 
         # Get the item:
         item = RESOURCE_MAP[resource_type].get_config_resource(
-            resource_id, backend_region=backend_query_region
+            self.account_id, resource_id, backend_region=backend_query_region
         )
         if not item:
-            print("item not found")
             raise ResourceNotDiscoveredException(resource_type, resource_id)
 
-        item["accountId"] = get_account_id()
+        item["accountId"] = self.account_id
 
         return {"configurationItems": [item]}
 
-    def batch_get_resource_config(self, resource_keys, backend_region):
+    def batch_get_resource_config(
+        self, resource_keys: List[Dict[str, str]], backend_region: str
+    ) -> Dict[str, Any]:
         """Returns configuration of resource for the current regional backend.
 
         Item is returned in AWS Config format.
@@ -1516,23 +1688,31 @@ class ConfigBackend(BaseBackend):
             backend_query_region = (
                 backend_region  # Always provide the backend this request arrived from.
             )
-            if RESOURCE_MAP[resource["resourceType"]].backends.get("global"):
+            if (
+                RESOURCE_MAP[resource["resourceType"]]
+                .backends[self.account_id]
+                .get("global")
+            ):
                 config_backend_region = "global"
 
             # If the backend region isn't implemented then we won't find the item:
-            if not RESOURCE_MAP[resource["resourceType"]].backends.get(
-                config_backend_region
+            if (
+                not RESOURCE_MAP[resource["resourceType"]]
+                .backends[self.account_id]
+                .get(config_backend_region)
             ):
                 continue
 
             # Get the item:
             item = RESOURCE_MAP[resource["resourceType"]].get_config_resource(
-                resource["resourceId"], backend_region=backend_query_region
+                self.account_id,
+                resource["resourceId"],
+                backend_region=backend_query_region,
             )
             if not item:
                 continue
 
-            item["accountId"] = get_account_id()
+            item["accountId"] = self.account_id
 
             results.append(item)
 
@@ -1542,8 +1722,8 @@ class ConfigBackend(BaseBackend):
         }  # At this time, moto is not adding unprocessed items.
 
     def batch_get_aggregate_resource_config(
-        self, aggregator_name, resource_identifiers
-    ):
+        self, aggregator_name: str, resource_identifiers: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
         """Returns configuration of resource for current regional backend.
 
         Item is returned in AWS Config format.
@@ -1580,6 +1760,7 @@ class ConfigBackend(BaseBackend):
 
             # Get the item:
             item = RESOURCE_MAP[resource_type].get_config_resource(
+                self.account_id,
                 resource_id,
                 resource_name=resource_name,
                 resource_region=resource_region,
@@ -1588,7 +1769,7 @@ class ConfigBackend(BaseBackend):
                 not_found.append(identifier)
                 continue
 
-            item["accountId"] = get_account_id()
+            item["accountId"] = self.account_id
 
             # The 'tags' field is not included in aggregate results for some reason...
             item.pop("tags", None)
@@ -1600,7 +1781,12 @@ class ConfigBackend(BaseBackend):
             "UnprocessedResourceIdentifiers": not_found,
         }
 
-    def put_evaluations(self, evaluations=None, result_token=None, test_mode=False):
+    def put_evaluations(
+        self,
+        evaluations: Optional[List[Dict[str, Any]]] = None,
+        result_token: Optional[str] = None,
+        test_mode: Optional[bool] = False,
+    ) -> Dict[str, List[Any]]:
         if not evaluations:
             raise InvalidParameterValueException(
                 "The Evaluations object in your request cannot be null."
@@ -1623,14 +1809,14 @@ class ConfigBackend(BaseBackend):
 
     def put_organization_conformance_pack(
         self,
-        name,
-        template_s3_uri,
-        template_body,
-        delivery_s3_bucket,
-        delivery_s3_key_prefix,
-        input_parameters,
-        excluded_accounts,
-    ):
+        name: str,
+        template_s3_uri: str,
+        template_body: str,
+        delivery_s3_bucket: str,
+        delivery_s3_key_prefix: str,
+        input_parameters: List[Dict[str, str]],
+        excluded_accounts: List[str],
+    ) -> Dict[str, Any]:
         # a real validation of the content of the template is missing at the moment
         if not template_s3_uri and not template_body:
             raise ValidationException("Template body is invalid")
@@ -1638,9 +1824,9 @@ class ConfigBackend(BaseBackend):
         if not re.match(r"s3://.*", template_s3_uri):
             raise ValidationException(
                 "1 validation error detected: "
-                "Value '{}' at 'templateS3Uri' failed to satisfy constraint: "
+                f"Value '{template_s3_uri}' at 'templateS3Uri' failed to satisfy constraint: "
                 "Member must satisfy regular expression pattern: "
-                "s3://.*".format(template_s3_uri)
+                "s3://.*"
             )
 
         pack = self.organization_conformance_packs.get(name)
@@ -1654,6 +1840,7 @@ class ConfigBackend(BaseBackend):
             )
         else:
             pack = OrganizationConformancePack(
+                account_id=self.account_id,
                 region=self.region_name,
                 name=name,
                 delivery_s3_bucket=delivery_s3_bucket,
@@ -1668,7 +1855,9 @@ class ConfigBackend(BaseBackend):
             "OrganizationConformancePackArn": pack.organization_conformance_pack_arn
         }
 
-    def describe_organization_conformance_packs(self, names):
+    def describe_organization_conformance_packs(
+        self, names: List[str]
+    ) -> Dict[str, Any]:
         packs = []
 
         for name in names:
@@ -1685,7 +1874,9 @@ class ConfigBackend(BaseBackend):
 
         return {"OrganizationConformancePacks": packs}
 
-    def describe_organization_conformance_pack_statuses(self, names):
+    def describe_organization_conformance_pack_statuses(
+        self, names: List[str]
+    ) -> Dict[str, Any]:
         packs = []
         statuses = []
 
@@ -1715,7 +1906,9 @@ class ConfigBackend(BaseBackend):
 
         return {"OrganizationConformancePackStatuses": statuses}
 
-    def get_organization_conformance_pack_detailed_status(self, name):
+    def get_organization_conformance_pack_detailed_status(
+        self, name: str
+    ) -> Dict[str, Any]:
         pack = self.organization_conformance_packs.get(name)
 
         if not pack:
@@ -1727,50 +1920,44 @@ class ConfigBackend(BaseBackend):
         # actually here would be a list of all accounts in the organization
         statuses = [
             {
-                "AccountId": get_account_id(),
-                "ConformancePackName": "OrgConformsPack-{0}".format(
-                    pack._unique_pack_name
-                ),
+                "AccountId": self.account_id,
+                "ConformancePackName": f"OrgConformsPack-{pack._unique_pack_name}",
                 "Status": pack._status,
-                "LastUpdateTime": datetime2int(datetime.utcnow()),
+                "LastUpdateTime": datetime2int(utcnow()),
             }
         ]
 
         return {"OrganizationConformancePackDetailedStatuses": statuses}
 
-    def delete_organization_conformance_pack(self, name):
+    def delete_organization_conformance_pack(self, name: str) -> None:
         pack = self.organization_conformance_packs.get(name)
 
         if not pack:
             raise NoSuchOrganizationConformancePackException(
                 "Could not find an OrganizationConformancePack for given "
-                "request with resourceName {}".format(name)
+                f"request with resourceName {name}"
             )
 
         self.organization_conformance_packs.pop(name)
 
-    def _match_arn(self, resource_arn):
+    def _match_arn(
+        self, resource_arn: str
+    ) -> Union[ConfigRule, ConfigAggregator, ConfigAggregationAuthorization]:
         """Return config instance that has a matching ARN."""
         # The allowed resources are ConfigRule, ConfigurationAggregator,
         # and AggregatorAuthorization.
-        allowed_resources = [
-            {
-                "configs": self.config_aggregators,
-                "arn_attribute": "configuration_aggregator_arn",
-            },
-            {
-                "configs": self.aggregation_authorizations,
-                "arn_attribute": "aggregation_authorization_arn",
-            },
-            {"configs": self.config_rules, "arn_attribute": "config_rule_arn"},
-        ]
+        allowed_resources = {
+            "configuration_aggregator_arn": self.config_aggregators,
+            "aggregation_authorization_arn": self.aggregation_authorizations,
+            "config_rule_arn": self.config_rules,
+        }
 
         # Find matching config for given resource_arn among all the
         # allowed config resources.
         matched_config = None
-        for resource in allowed_resources:
-            for config in resource["configs"].values():
-                if resource_arn == getattr(config, resource["arn_attribute"]):
+        for arn_attribute, configs in allowed_resources.items():
+            for config in configs.values():  # type: ignore[attr-defined]
+                if resource_arn == getattr(config, arn_attribute):
                     matched_config = config
                     break
 
@@ -1778,18 +1965,18 @@ class ConfigBackend(BaseBackend):
             raise ResourceNotFoundException(resource_arn)
         return matched_config
 
-    def tag_resource(self, resource_arn, tags):
+    def tag_resource(self, resource_arn: str, tags: List[Dict[str, str]]) -> None:
         """Add tags in config with a matching ARN."""
         # Tag validation:
-        tags = validate_tags(tags)
+        tag_dict = validate_tags(tags)
 
         # Find config with a matching ARN.
         matched_config = self._match_arn(resource_arn)
 
         # Merge the new tags with the existing tags.
-        matched_config.tags.update(tags)
+        matched_config.tags.update(tag_dict)
 
-    def untag_resource(self, resource_arn, tag_keys):
+    def untag_resource(self, resource_arn: str, tag_keys: List[str]) -> None:
         """Remove tags in config with a matching ARN.
 
         If the tags in the tag_keys don't match any keys for that
@@ -1805,8 +1992,8 @@ class ConfigBackend(BaseBackend):
             matched_config.tags.pop(tag_key, None)
 
     def list_tags_for_resource(
-        self, resource_arn, limit, next_token
-    ):  # pylint: disable=unused-argument
+        self, resource_arn: str, limit: int
+    ) -> Dict[str, List[Dict[str, str]]]:
         """Return list of tags for AWS Config resource."""
         # The limit argument is essentially ignored as a config instance
         # can only have 50 tags, but we'll check the argument anyway.
@@ -1823,7 +2010,9 @@ class ConfigBackend(BaseBackend):
             ]
         }
 
-    def put_config_rule(self, config_rule, tags=None):
+    def put_config_rule(
+        self, config_rule: Dict[str, Any], tags: Optional[List[Dict[str, str]]] = None
+    ) -> str:
         """Add/Update config rule for evaluating resource compliance.
 
         TBD - Only the "accounting" of config rules are handled at the
@@ -1858,7 +2047,7 @@ class ConfigBackend(BaseBackend):
                     "Name or Id or Arn"
                 )
 
-        tags = validate_tags(tags or [])
+        tag_dict = validate_tags(tags or [])
 
         # With the rule_name, determine whether it's for an existing rule
         # or whether a new rule should be created.
@@ -1874,20 +2063,22 @@ class ConfigBackend(BaseBackend):
                 )
 
             # Update the current rule.
-            rule.modify_fields(self.region_name, config_rule, tags)
+            rule.modify_fields(self.region_name, config_rule, tag_dict)
         else:
             # Create a new ConfigRule if the limit hasn't been reached.
             if len(self.config_rules) == ConfigRule.MAX_RULES:
                 raise MaxNumberOfConfigRulesExceededException(
                     rule_name, ConfigRule.MAX_RULES
                 )
-            rule = ConfigRule(self.region_name, config_rule, tags)
+            rule = ConfigRule(self.account_id, self.region_name, config_rule, tag_dict)
             self.config_rules[rule_name] = rule
         return ""
 
-    def describe_config_rules(self, config_rule_names, next_token):
+    def describe_config_rules(
+        self, config_rule_names: Optional[List[str]], next_token: Optional[str]
+    ) -> Dict[str, Any]:
         """Return details for the given ConfigRule names or for all rules."""
-        result = {"ConfigRules": []}
+        result: Dict[str, Any] = {"ConfigRules": []}
         if not self.config_rules:
             return result
 
@@ -1915,7 +2106,7 @@ class ConfigBackend(BaseBackend):
             result["NextToken"] = sorted_rules[start + CONFIG_RULE_PAGE_SIZE]
         return result
 
-    def delete_config_rule(self, rule_name):
+    def delete_config_rule(self, rule_name: str) -> None:
         """Delete config rule used for evaluating resource compliance."""
         rule = self.config_rules.get(rule_name)
         if not rule:
@@ -1929,6 +2120,67 @@ class ConfigBackend(BaseBackend):
         #     )
         rule.config_rule_state = "DELETING"
         self.config_rules.pop(rule_name)
+
+    def put_retention_configuration(
+        self, retention_period_in_days: int
+    ) -> Dict[str, Any]:
+        """Creates a Retention Configuration."""
+        if retention_period_in_days < 30:
+            raise ValidationException(
+                f"Value '{retention_period_in_days}' at 'retentionPeriodInDays' failed to satisfy constraint: Member must have value greater than or equal to 30"
+            )
+
+        if retention_period_in_days > 2557:
+            raise ValidationException(
+                f"Value '{retention_period_in_days}' at 'retentionPeriodInDays' failed to satisfy constraint: Member must have value less than or equal to 2557"
+            )
+
+        self.retention_configuration = RetentionConfiguration(retention_period_in_days)
+        return {"RetentionConfiguration": self.retention_configuration.to_dict()}
+
+    def describe_retention_configurations(
+        self, retention_configuration_names: Optional[List[str]]
+    ) -> List[Dict[str, Any]]:
+        """
+        This will return the retention configuration if one is present.
+
+        This should only receive at most 1 name in. It will raise a ValidationException if more than 1 is supplied.
+        """
+        # Handle the cases where we get a retention name to search for:
+        if retention_configuration_names:
+            if len(retention_configuration_names) > 1:
+                raise ValidationException(
+                    f"Value '{retention_configuration_names}' at 'retentionConfigurationNames' failed to satisfy constraint: Member must have length less than or equal to 1"
+                )
+
+            # If we get a retention name to search for, and we don't have it, then we need to raise an exception:
+            if (
+                not self.retention_configuration
+                or not self.retention_configuration.name
+                == retention_configuration_names[0]
+            ):
+                raise NoSuchRetentionConfigurationException(
+                    retention_configuration_names[0]
+                )
+
+            # If we found it, then return it:
+            return [self.retention_configuration.to_dict()]
+
+        # If no name was supplied:
+        if self.retention_configuration:
+            return [self.retention_configuration.to_dict()]
+
+        return []
+
+    def delete_retention_configuration(self, retention_configuration_name: str) -> None:
+        """This will delete the retention configuration if one is present with the provided name."""
+        if (
+            not self.retention_configuration
+            or not self.retention_configuration.name == retention_configuration_name
+        ):
+            raise NoSuchRetentionConfigurationException(retention_configuration_name)
+
+        self.retention_configuration = None
 
 
 config_backends = BackendDict(ConfigBackend, "config")

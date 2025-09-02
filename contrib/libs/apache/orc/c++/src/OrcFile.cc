@@ -49,29 +49,29 @@ namespace orc {
 
   class FileInputStream : public InputStream {
    private:
-    std::string filename;
-    int file;
-    uint64_t totalLength;
-    ReaderMetrics* metrics;
+    std::string filename_;
+    int file_;
+    uint64_t totalLength_;
+    ReaderMetrics* metrics_;
 
    public:
-    FileInputStream(std::string _filename, ReaderMetrics* _metrics)
-        : filename(_filename), metrics(_metrics) {
-      file = open(filename.c_str(), O_BINARY | O_RDONLY);
-      if (file == -1) {
-        throw ParseError("Can't open " + filename);
+    FileInputStream(std::string filename, ReaderMetrics* metrics)
+        : filename_(filename), metrics_(metrics) {
+      file_ = open(filename_.c_str(), O_BINARY | O_RDONLY);
+      if (file_ == -1) {
+        throw ParseError("Can't open " + filename_);
       }
       struct stat fileStat;
-      if (fstat(file, &fileStat) == -1) {
-        throw ParseError("Can't stat " + filename);
+      if (fstat(file_, &fileStat) == -1) {
+        throw ParseError("Can't stat " + filename_);
       }
-      totalLength = static_cast<uint64_t>(fileStat.st_size);
+      totalLength_ = static_cast<uint64_t>(fileStat.st_size);
     }
 
     ~FileInputStream() override;
 
     uint64_t getLength() const override {
-      return totalLength;
+      return totalLength_;
     }
 
     uint64_t getNaturalReadSize() const override {
@@ -79,27 +79,27 @@ namespace orc {
     }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
-      SCOPED_STOPWATCH(metrics, IOBlockingLatencyUs, IOCount);
+      SCOPED_STOPWATCH(metrics_, IOBlockingLatencyUs, IOCount);
       if (!buf) {
         throw ParseError("Buffer is null");
       }
-      ssize_t bytesRead = pread(file, buf, length, static_cast<off_t>(offset));
+      ssize_t bytesRead = pread(file_, buf, length, static_cast<off_t>(offset));
 
       if (bytesRead == -1) {
-        throw ParseError("Bad read of " + filename);
+        throw ParseError("Bad read of " + filename_);
       }
       if (static_cast<uint64_t>(bytesRead) != length) {
-        throw ParseError("Short read of " + filename);
+        throw ParseError("Short read of " + filename_);
       }
     }
 
     const std::string& getName() const override {
-      return filename;
+      return filename_;
     }
   };
 
   FileInputStream::~FileInputStream() {
-    close(file);
+    close(file_);
   }
 
   std::unique_ptr<InputStream> readFile(const std::string& path, ReaderMetrics* metrics) {
@@ -126,26 +126,26 @@ namespace orc {
 
   class FileOutputStream : public OutputStream {
    private:
-    std::string filename;
-    int file;
-    uint64_t bytesWritten;
-    bool closed;
+    std::string filename_;
+    int file_;
+    uint64_t bytesWritten_;
+    bool closed_;
 
    public:
-    FileOutputStream(std::string _filename) {
-      bytesWritten = 0;
-      filename = _filename;
-      closed = false;
-      file = open(filename.c_str(), O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
-      if (file == -1) {
-        throw ParseError("Can't open " + filename);
+    FileOutputStream(std::string filename) {
+      bytesWritten_ = 0;
+      filename_ = filename;
+      closed_ = false;
+      file_ = open(filename_.c_str(), O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
+      if (file_ == -1) {
+        throw ParseError("Can't open " + filename_);
       }
     }
 
     ~FileOutputStream() override;
 
     uint64_t getLength() const override {
-      return bytesWritten;
+      return bytesWritten_;
     }
 
     uint64_t getNaturalWriteSize() const override {
@@ -153,41 +153,41 @@ namespace orc {
     }
 
     void write(const void* buf, size_t length) override {
-      if (closed) {
+      if (closed_) {
         throw std::logic_error("Cannot write to closed stream.");
       }
-      ssize_t bytesWrite = ::write(file, buf, length);
+      ssize_t bytesWrite = ::write(file_, buf, length);
       if (bytesWrite == -1) {
-        throw ParseError("Bad write of " + filename);
+        throw ParseError("Bad write of " + filename_);
       }
       if (static_cast<uint64_t>(bytesWrite) != length) {
-        throw ParseError("Short write of " + filename);
+        throw ParseError("Short write of " + filename_);
       }
-      bytesWritten += static_cast<uint64_t>(bytesWrite);
+      bytesWritten_ += static_cast<uint64_t>(bytesWrite);
     }
 
     const std::string& getName() const override {
-      return filename;
+      return filename_;
     }
 
     void close() override {
-      if (!closed) {
-        ::close(file);
-        closed = true;
+      if (!closed_) {
+        ::close(file_);
+        closed_ = true;
       }
     }
 
     void flush() override {
-      if (!closed) {
-        ::fsync(file);
+      if (!closed_) {
+        ::fsync(file_);
       }
     }
   };
 
   FileOutputStream::~FileOutputStream() {
-    if (!closed) {
-      ::close(file);
-      closed = true;
+    if (!closed_) {
+      ::close(file_);
+      closed_ = true;
     }
   }
 

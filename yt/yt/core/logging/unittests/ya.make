@@ -2,10 +2,6 @@ GTEST(unittester-core-logging)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
@@ -17,6 +13,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+    yt/yt/library/safe_assert
     library/cpp/streams/zstd
 )
 
@@ -34,7 +31,12 @@ SIZE(SMALL)
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
 ENDIF()
 
 END()

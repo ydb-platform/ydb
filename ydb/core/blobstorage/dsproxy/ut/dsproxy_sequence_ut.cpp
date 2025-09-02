@@ -425,7 +425,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
 
@@ -500,7 +500,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
 void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorageGroupType &type,
                                   const TBatchedVec<NKikimrProto::EReplyStatus> &statuses) {
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TVector<TLogoBlobID> blobIds = {
         TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
@@ -599,7 +599,7 @@ Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
     Setup(runtime, type);
 
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TVector<TLogoBlobID> blobIds = {
         TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
@@ -649,8 +649,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
 
     TLogoBlobID blobId = TLogoBlobID(72075186224047637, 1, 2194, 1, 142, 12288);
 
-    TTestState testState(runtime, type, DSProxyEnv.Info);
-
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest({blobId}, false);
     TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog).release());
@@ -703,7 +702,6 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
     UNIT_ASSERT(getResult->ResponseSz == 1);
     UNIT_ASSERT(getResult->Responses[0].Status == NKikimrProto::OK);
 }
-
 
 struct TBlobPack {
     ui32 Count;
@@ -1285,6 +1283,141 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     }
 }
 
+Y_UNIT_TEST(TestBlock42CheckLwtrack) {
+    NLWTrace::TManager mngr(*Singleton<NLWTrace::TProbeRegistry>(), true);
+    NLWTrace::TOrbit orbit;
+    NLWTrace::TTraceRequest req;
+    req.SetIsTraced(true);
+    mngr.HandleTraceRequest(req, orbit);
+
+
+    TTestBasicRuntime runtime(1, false);
+    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
+    Setup(runtime, type);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_GET, NLog::PRI_DEBUG);
+
+    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
+    TActorId sender = runtime.AllocateEdgeActor(0);
+
+    TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    TLogoBlobID logoblobid(1, 0, 0, 0, (ui32)data.size(), 0);
+
+    TVector<TVDiskState> subgroup;
+    PrepareBlobSubgroup(logoblobid, data, subgroup, runtime, type);
+
+    auto ev = new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
+            NKikimrBlobStorage::EGetHandleClass::FastRead);
+    ev->Orbit = std::move(orbit);
+
+    runtime.Send(new IEventHandle(proxy, sender, ev));
+    for (ui32 i = 0; i < 6; ++i) {
+        TAutoPtr<IEventHandle> handle;
+        auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
+        UNIT_ASSERT(vget);
+        for (size_t idx = 0; idx < subgroup.size(); ++idx) {
+            if (subgroup[idx].ActorId == handle->Recipient) {
+                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget);
+            }
+        }
+    }
+
+    SendVGetResult(6, NKikimrProto::OK, 2, subgroup, runtime);
+    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
+    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
+    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
+    SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
+    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
+    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
+    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
+
+    TAutoPtr<IEventHandle> handle;
+    auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
+    UNIT_ASSERT(getResult);
+    UNIT_ASSERT(getResult->Status == NKikimrProto::OK);
+    UNIT_ASSERT(getResult->ResponseSz == 1);
+    UNIT_ASSERT(getResult->Responses[0].Status == NKikimrProto::OK);
+
+    NLWTrace::TTraceResponse resp;
+    getResult->Orbit.Serialize(0, *resp.MutableTrace());
+    auto& r = resp.GetTrace();
+    UNIT_ASSERT_VALUES_EQUAL(21, r.EventsSize());
+
+    {
+        const auto& p = r.GetEvents(0);
+        UNIT_ASSERT_VALUES_EQUAL("BLOBSTORAGE_PROVIDER", p.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyGetHandle", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+
+    {
+        const auto& p = r.GetEvents(1);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyGetBootstrap", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+
+    {
+        const auto& p = r.GetEvents(2);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyGetRequest", p.GetName());
+        // check groupId
+        UNIT_ASSERT_VALUES_EQUAL(0, p.GetParams(0).GetUintValue());
+        // check deviceType
+        UNIT_ASSERT_VALUES_EQUAL("DEVICE_TYPE_UNKNOWN(255)", p.GetParams(1).GetStrValue());
+        // check handleClass
+        UNIT_ASSERT_VALUES_EQUAL("FastRead", p.GetParams(2).GetStrValue());
+    }
+
+    TVector<ui32> vdiskOrderNum = {0, 1, 4, 5, 6, 7};
+    for (auto i = 3; i < 9; ++i) {
+        const auto& p = r.GetEvents(i);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyVGetSent", p.GetName());
+        // check vdiskId
+        UNIT_ASSERT_VALUES_EQUAL("[0:_:0:" + ToString(vdiskOrderNum[i-3]) + ":0]", p.GetParams(0).GetStrValue());
+        // check vdiskOrderNum
+        UNIT_ASSERT_VALUES_EQUAL(vdiskOrderNum[i-3], p.GetParams(1).GetUintValue());
+        // check vgets count
+        UNIT_ASSERT_VALUES_EQUAL(6, p.GetParams(2).GetUintValue());
+    }
+
+    for (auto i = 9; i < 13; ++i) {
+        const auto& p = r.GetEvents(i);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyVDiskRequestDuration", p.GetName());
+    }
+
+    for (auto i = 13; i < 15; ++i) {
+        const auto& p = r.GetEvents(i);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyScheduleAccelerate", p.GetName());
+         UNIT_ASSERT_VALUES_EQUAL("Get", p.GetParams(1).GetStrValue());
+    }
+
+    for (auto i = 15; i < 17; ++i) {
+        const auto& p = r.GetEvents(i);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyVDiskRequestDuration", p.GetName());
+    }
+
+    {
+        const auto& p = r.GetEvents(17);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyStartTransfer", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+
+    {
+        const auto& p = r.GetEvents(18);
+        UNIT_ASSERT_VALUES_EQUAL("VDiskStartProcessing", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+
+    {
+        const auto& p = r.GetEvents(19);
+        UNIT_ASSERT_VALUES_EQUAL("VDiskReply", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+
+    {
+        const auto& p = r.GetEvents(20);
+        UNIT_ASSERT_VALUES_EQUAL("DSProxyGetReply", p.GetName());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
+    }
+}
 
 } // Y_UNIT_TEST_SUITE TBlobStorageProxySequenceTest
 } // namespace NBlobStorageProxySequenceTest

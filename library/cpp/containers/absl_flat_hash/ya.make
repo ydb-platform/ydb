@@ -1,11 +1,6 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/restricted/abseil-cpp/absl/container
-)
-
-# WARN thegeorg@: removing this ADDINCL will break svn selective checkout. Just don't.
-ADDINCL(
     contrib/restricted/abseil-cpp
 )
 

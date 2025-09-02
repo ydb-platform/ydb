@@ -1,8 +1,8 @@
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -139,18 +139,6 @@ void SetStatsObserver(TTestActorRuntime& runtime, const std::function<TTestActor
             return originalObserver(ev);
         }
     });
-}
-
-TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
-                             const TString& path
-) {
-    TVector<ui64> shards;
-    auto tableDescription = DescribePath(runtime, path, true);
-    for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
-        shards.emplace_back(part.GetDatashardId());
-    }
-
-    return shards;
 }
 
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
@@ -646,7 +634,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         );
         env.TestWaitNotification(runtime, txId);
 
-        auto shards = GetTableShards(runtime, "/MyRoot/SomeTable");
+        auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeTable");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
         auto& datashard = shards[0];
         constexpr ui32 rowsCount = 100u;
@@ -659,7 +647,9 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
                                  NKikimrTxDataShard::TEvCompactTableResult::OK
         );
         // we wait for at least 1 part count, because it signals that the stats have been recalculated after compaction
-        WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
 
         auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {
             if (IsIn(poolsKinds, poolUsage.GetPoolKind())) {

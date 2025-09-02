@@ -161,7 +161,10 @@ class SyncResponseIterator(object):
         return self
 
     def _next(self):
-        return self.wrapper(next(self.it))
+        res = self.wrapper(next(self.it))
+        if res is not None:
+            return res
+        return self._next()
 
     def next(self):
         return self._next()
@@ -182,3 +185,21 @@ class AtomicCounter:
         with self._lock:
             self._value += 1
             return self._value
+
+
+def get_first_message_with_timeout(status_stream: SyncResponseIterator, timeout: int):
+    waiter = future()
+
+    def get_first_response(waiter):
+        first_response = next(status_stream)
+        waiter.set_result(first_response)
+
+    thread = threading.Thread(
+        target=get_first_response,
+        args=(waiter,),
+        name="first response attach stream thread",
+        daemon=True,
+    )
+    thread.start()
+
+    return waiter.result(timeout=timeout)

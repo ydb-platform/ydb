@@ -4,7 +4,4 @@ PY_SRCS(
     MAIN runner.py
 )
 
-PEERDIR(
-)
-
 END()

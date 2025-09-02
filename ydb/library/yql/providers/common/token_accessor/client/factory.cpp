@@ -1,8 +1,8 @@
 #include "factory.h"
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_structured_token.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/string/cast.h>
 
 namespace NYql {
@@ -94,6 +94,15 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
             ythrow yexception() << "You must provide credentials factory instance to transform service account credentials into IAM-token.";
         }
         return WrapWithBearerIfNeeded(factory->Create(id, signature), addBearerToToken);
+    }
+
+    if (parser.HasBasicAuth()) {
+        TString login;
+        TString password;
+        parser.GetBasicAuth(login, password);
+        return NYdb::CreateLoginCredentialsProviderFactory({
+            .User = login,
+            .Password = password});
     }
 
     if (parser.IsNoAuth()) {

@@ -142,6 +142,15 @@ class Unparser:
             self.write(" = ")
         self.dispatch(t.value)
 
+    def _AnnAssign(self, t):
+        self.fill()
+        self.dispatch(t.target)
+        self.write(": ")
+        self.dispatch(t.annotation)
+        if t.value:
+            self.write(" = ")
+            self.dispatch(t.value)
+
     def _AugAssign(self, t):
         self.fill()
         self.dispatch(t.target)
@@ -207,6 +216,10 @@ class Unparser:
 
     def _Global(self, t):
         self.fill("global ")
+        interleave(lambda: self.write(", "), self.write, t.names)
+
+    def _Nonlocal(self, t):
+        self.fill("nonlocal ")
         interleave(lambda: self.write(", "), self.write, t.names)
 
     def _Yield(self, t):

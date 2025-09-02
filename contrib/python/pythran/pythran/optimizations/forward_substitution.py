@@ -9,6 +9,7 @@ from pythran.passmanager import Transformation
 import pythran.graph as graph
 
 from collections import defaultdict
+from copy import deepcopy
 import gast as ast
 
 try:
@@ -35,8 +36,18 @@ class Remover(ast.NodeTransformer):
                 return ast.Pass()
         return node
 
+    def visit_AnnAssign(self, node):
+        if node in self.nodes:
+            to_prune = self.nodes[node]
+            if node.target in to_prune:
+                return ast.Pass()
+            else:
+                return node
+        return node
 
-class ForwardSubstitution(Transformation):
+
+class ForwardSubstitution(Transformation[LazynessAnalysis, UseDefChains, DefUseChains,
+                                         Ancestors, CFG, Literals]):
 
     """
     Replace variable that can be computed later.
@@ -71,12 +82,7 @@ class ForwardSubstitution(Transformation):
 
     def __init__(self):
         """ Satisfy dependencies on others analyses. """
-        super(ForwardSubstitution, self).__init__(LazynessAnalysis,
-                                                  UseDefChains,
-                                                  DefUseChains,
-                                                  Ancestors,
-                                                  CFG,
-                                                  Literals)
+        super().__init__()
         self.to_remove = None
 
     def visit_FunctionDef(self, node):
@@ -88,6 +94,31 @@ class ForwardSubstitution(Transformation):
         self.generic_visit(node)
         Remover(self.to_remove).visit(node)
         return node
+
+    def visit_AugAssign(self, node):
+        # Separate case for augassign, where we only handle situation where the
+        # def is a literal (any kind) with a single use (this AugAssign).
+        self.generic_visit(node)
+        if not isinstance(node.target, ast.Name):
+            return node
+
+        defs = self.use_def_chains[node.target]
+        name_defs = [dnode for dnode in defs if isinstance(dnode.node, ast.Name)]
+        if len(name_defs) != 1:
+            return node
+        name_def, = name_defs
+        dnode = name_def.node
+        parent = self.ancestors[dnode][-1]
+        if not isinstance(parent, ast.Assign):
+            return node
+
+        try:
+            ast.literal_eval(parent.value)
+        except ValueError:
+            return node
+
+        self.update = True
+        return ast.Assign([node.target], ast.BinOp(deepcopy(parent.value), node.op, node.value))
 
     def visit_Name(self, node):
         if not isinstance(node.ctx, ast.Load):
@@ -135,22 +166,31 @@ class ForwardSubstitution(Transformation):
                     return value
             elif len(parent.targets) == 1:
                 ids = self.gather(Identifiers, value)
-                node_stmt = next(reversed([s for s in self.ancestors[node]
-                                 if isinstance(s, ast.stmt)]))
-                all_paths = graph.all_simple_paths(self.cfg, parent, node_stmt)
-                for path in all_paths:
-                    for stmt in path[1:-1]:
-                        assigned_ids = {n.id
-                                        for n in self.gather(IsAssigned, stmt)}
-                        if not ids.isdisjoint(assigned_ids):
-                            break
-                    else:
+                node_stmt = next(s for s in self.ancestors[node][::-1]
+                                 if isinstance(s, ast.stmt))
+                # Check if there is a path from `parent' to `node_stmt' that
+                # modifies any of the identifier from `value'. If so, cancel the
+                # forward substitution.
+                worklist = [node_stmt]
+                visited = {parent}
+                while worklist:
+                    workitem = worklist.pop()
+                    if workitem in visited:
                         continue
-                    break
-                else:
-                    self.update = True
-                    self.to_remove[parent].append(dnode)
-                    return value
+                    visited.add(workitem)
+                    for pred in self.cfg.predecessors(workitem):
+                        if not graph.has_path(self.cfg, parent, pred):
+                            continue
+
+                        assigned_ids = {n.id
+                                        for n in self.gather(IsAssigned,
+                                                             pred)}
+                        if not ids.isdisjoint(assigned_ids):
+                            return node  # cancel
+                        worklist.append(pred)
+                self.update = True
+                self.to_remove[parent].append(dnode)
+                return value
 
         return node
 

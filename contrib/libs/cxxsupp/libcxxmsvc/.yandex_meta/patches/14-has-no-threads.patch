@@ -1,0 +1,84 @@
+diff --git a/include/__memory/shared_ptr.h b/include/__memory/shared_ptr.h
+index ff8e601..828513a 100644
+--- a/include/__memory/shared_ptr.h
++++ b/include/__memory/shared_ptr.h
+@@ -30,7 +30,7 @@
+ #include <stdexcept>
+ #include <type_traits>
+ #include <typeinfo>
+-#if !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
++#if !defined(_LIBCPP_HAS_NO_THREADS) // !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
+ #  include <atomic>
+ #endif
+ 
+@@ -150,7 +150,12 @@ class _LIBCPP_TYPE_VIS __shared_count
+     __shared_count& operator=(const __shared_count&);
+ 
+ protected:
+-    long __shared_owners_;
++#ifdef _LIBCPP_HAS_NO_THREADS
++    typedef long __atomic_count;
++#else
++    typedef atomic<long> __atomic_count;
++#endif
++    __atomic_count __shared_owners_;
+     virtual ~__shared_count();
+ private:
+     virtual void __on_zero_shared() _NOEXCEPT = 0;
+@@ -167,11 +172,19 @@ public:
+ #else
+     _LIBCPP_INLINE_VISIBILITY
+     void __add_shared() _NOEXCEPT {
++#ifdef _LIBCPP_HAS_NO_THREADS
+       __libcpp_atomic_refcount_increment(__shared_owners_);
++#else
++      __shared_owners_++;
++#endif
+     }
+     _LIBCPP_INLINE_VISIBILITY
+     bool __release_shared() _NOEXCEPT {
++#ifdef _LIBCPP_HAS_NO_THREADS
+       if (__libcpp_atomic_refcount_decrement(__shared_owners_) == -1) {
++#else
++      if (--__shared_owners_ == -1) {
++#endif
+         __on_zero_shared();
+         return true;
+       }
+@@ -180,14 +193,23 @@ public:
+ #endif
+     _LIBCPP_INLINE_VISIBILITY
+     long use_count() const _NOEXCEPT {
++#ifdef _LIBCPP_HAS_NO_THREADS
+         return __libcpp_relaxed_load(&__shared_owners_) + 1;
++#else
++        return __shared_owners_.load(memory_order_relaxed) + 1;
++#endif
+     }
+ };
+ 
+ class _LIBCPP_TYPE_VIS __shared_weak_count
+     : private __shared_count
+ {
+-    long __shared_weak_owners_;
++#ifdef _LIBCPP_HAS_NO_THREADS
++    typedef long __atomic_count;
++#else
++    typedef atomic<long> __atomic_count;
++#endif
++    __atomic_count __shared_weak_owners_;
+ 
+ public:
+     _LIBCPP_INLINE_VISIBILITY
+@@ -210,7 +232,11 @@ public:
+     }
+     _LIBCPP_INLINE_VISIBILITY
+     void __add_weak() _NOEXCEPT {
++#ifdef _LIBCPP_HAS_NO_THREADS
+       __libcpp_atomic_refcount_increment(__shared_weak_owners_);
++#else
++      __shared_weak_owners_++;
++#endif
+     }
+     _LIBCPP_INLINE_VISIBILITY
+     void __release_shared() _NOEXCEPT {

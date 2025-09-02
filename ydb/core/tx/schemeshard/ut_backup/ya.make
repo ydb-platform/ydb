@@ -5,11 +5,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(11)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -23,8 +21,9 @@ IF (NOT OS_WINDOWS)
         ydb/core/testlib/default
         ydb/core/tx
         ydb/core/tx/schemeshard/ut_helpers
+        ydb/core/util
         ydb/core/wrappers/ut_helpers
-        ydb/library/yql/public/udf/service/exception_policy
+        yql/essentials/public/udf/service/exception_policy
     )
     SRCS(
         ut_backup.cpp

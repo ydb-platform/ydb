@@ -2,8 +2,8 @@
 #include "cli_cmds.h"
 
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -71,14 +71,16 @@ public:
                  << " (" << response.GetStatus().GetReason() << ")" << Endl;
     }
 
-    virtual void PrintResponse(const Ydb::Operations::Operation &response)
+    virtual bool PrintResponse(const Ydb::Operations::Operation &response)
     {
-        if (response.status() == Ydb::StatusIds::SUCCESS)
+        if (response.status() == Ydb::StatusIds::SUCCESS) {
             Cout << "OK" << Endl;
-        else {
+            return true;
+        } else {
             Cout << "ERROR: " << response.status() << Endl;
             for (auto &issue : response.issues())
                 Cout << issue.message() << Endl;
+            return false;
         }
     }
 
@@ -142,6 +144,8 @@ public:
         ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
         ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
+        ClientConfig.SslCredentials.pem_cert_chain = CommandConfig.ClientConfig.SslCredentials.pem_cert_chain;
+        ClientConfig.SslCredentials.pem_private_key = CommandConfig.ClientConfig.SslCredentials.pem_private_key;
     }
 
     int Run(TConfig &config) override
@@ -158,7 +162,10 @@ public:
             (ClientConfig, GRpcRequest, response, function, config.SecurityToken);
 
         if (!res) {
-            PrintResponse(response);
+            if (!PrintResponse(response)) {
+                return EXIT_FAILURE;
+            }
+            return res;
         }
 
         return res;
@@ -178,10 +185,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::ListDatabasesResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -189,6 +196,7 @@ public:
             Cout << "Databases:" << Endl;
             for (auto &path : result.paths())
                 Cout << "  " << path << Endl;
+            return true;
         }
     }
 };
@@ -206,10 +214,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::DescribeDatabaseOptionsResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -233,6 +241,7 @@ public:
                 for (auto &pr : unit.labels())
                     Cout << "     " << pr.first << ": " << pr.second << Endl;
             }
+            return true;
         }
     }
 };
@@ -262,10 +271,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::GetDatabaseStatusResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -307,6 +316,7 @@ public:
             }
             Cout << "  Data size hard quota: " << result.database_quotas().data_size_hard_quota() << Endl;
             Cout << "  Data size soft quota: " << result.database_quotas().data_size_soft_quota() << Endl;
+            return true;
         }
     }
 };
@@ -361,7 +371,7 @@ public:
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
             .NoArgument().StoreTrue(&Serverless);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<pool type>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<pool type>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
     }
 
     void Parse(TConfig& config) override
@@ -425,7 +435,7 @@ public:
     {
         TTenantClientGRpcCommand::Config(config);
         config.Opts->AddLongOption("force", "Force command execution")
-            .NoArgument().SetFlag(&Force);
+            .StoreTrue(&Force);
     }
 
     void Parse(TConfig& config) override
@@ -463,7 +473,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
     }
 
     void Parse(TConfig& config) override
@@ -498,7 +508,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
     }
 
     void Parse(TConfig& config) override
@@ -533,7 +543,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("<host>:<port>:<kind>", "Triples describing registered units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<host>:<port>:<kind>", "Triples describing registered units.");
     }
 
     void Parse(TConfig& config) override
@@ -574,7 +584,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("<host>:<port>", "Pairs describing deregistered units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<host>:<port>", "Pairs describing deregistered units.");
     }
 
     void Parse(TConfig& config) override
@@ -613,7 +623,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<pool kind>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<pool kind>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
     }
 
     void Parse(TConfig& config) override

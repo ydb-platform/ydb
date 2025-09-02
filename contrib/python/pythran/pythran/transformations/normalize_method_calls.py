@@ -12,7 +12,7 @@ import gast as ast
 from functools import reduce
 
 
-class NormalizeMethodCalls(Transformation):
+class NormalizeMethodCalls(Transformation[Globals, Ancestors]):
     '''
     Turns built in method calls into function calls.
 
@@ -22,11 +22,12 @@ class NormalizeMethodCalls(Transformation):
     >>> pm = passmanager.PassManager("test")
     >>> _, node = pm.apply(NormalizeMethodCalls, node)
     >>> print(pm.dump(backend.Python, node))
-    builtins.list.append([], 12)
+    import __dispatch__ as __pythran_import___dispatch__
+    __pythran_import___dispatch__.append([], 12)
     '''
 
     def __init__(self):
-        Transformation.__init__(self, Globals, Ancestors)
+        super().__init__()
         self.imports = {'builtins': 'builtins',
                         mangle('__dispatch__'): '__dispatch__'}
         self.to_import = set()
@@ -83,10 +84,12 @@ class NormalizeMethodCalls(Transformation):
             return None
         else:
             n = self.generic_visit(node)
-            for t in node.targets:
+            targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+            for t in targets:
                 if isinstance(t, ast.Name):
                     self.imports.pop(t.id, None)
             return n
+    visit_AnnAssign = visit_Assign
 
     def visit_For(self, node):
         node.iter = self.visit(node.iter)
@@ -198,7 +201,11 @@ class NormalizeMethodCalls(Transformation):
                 # the only situation where this arises is for real/imag of
                 # a ndarray. As a call is not valid for a store, add a slice
                 # to ends up with a valid lhs
-                assert node.attr in ('real', 'imag'), "only store to imag/real"
+                if node.attr not in ('real', 'imag'):
+                    raise PythranSyntaxError(
+                            "Unsupported store to attribute {}".format(node.attr),
+                            node)
+
                 return ast.Subscript(call,
                                      ast.Slice(None, None, None),
                                      node.ctx)

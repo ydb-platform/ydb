@@ -1,0 +1,25 @@
+commit e6bd3e8b0ad99208c704b8e999dee9fd60267214
+author: dldmitry
+date: 2016-07-04T12:23:34+03:00
+revision: 2387435
+
+    libevent: use ipv6 if possible in http client
+    __BYPASS_CHECKS__
+
+--- libevent/bufferevent_sock.c	(index)
++++ libevent/bufferevent_sock.c	(working tree)
+@@ -482,8 +482,12 @@ bufferevent_connect_getaddrinfo_cb(int result, struct evutil_addrinfo *ai,
+ 	}
+
+ 	/* XXX use the other addrinfos? */
+-	bufferevent_socket_set_conn_address_(bev, ai->ai_addr, (int)ai->ai_addrlen);
+-	r = bufferevent_socket_connect(bev, ai->ai_addr, (int)ai->ai_addrlen);
++	struct evutil_addrinfo *found_ai = ai;
++	while (found_ai->ai_addr->sa_family != AF_INET6 && found_ai->ai_next != NULL) {
++	    found_ai = found_ai->ai_next;
++	}
++	bufferevent_socket_set_conn_address_(bev, found_ai->ai_addr, (int)found_ai->ai_addrlen);
++	r = bufferevent_socket_connect(bev, found_ai->ai_addr, (int)found_ai->ai_addrlen);
+ 	if (r < 0)
+ 		bufferevent_run_eventcb_(bev, BEV_EVENT_ERROR, 0);
+ 	bufferevent_decref_and_unlock_(bev);

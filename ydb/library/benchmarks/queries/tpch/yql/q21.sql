@@ -5,7 +5,7 @@
 -- using 1680793381 as a seed to the RNG
 
 $n = select n_nationkey from {{nation}}
-where n_name = 'EGYPT';
+where n_name = 'SAUDI ARABIA';
 
 $s = select s_name, s_suppkey from {{supplier}} as supplier
 join $n as nation

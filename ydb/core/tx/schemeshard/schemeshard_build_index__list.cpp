@@ -1,7 +1,7 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,7 +15,7 @@ private:
     static constexpr ui64 DefaultPage = 1;
 public:
     explicit TTxList(TSelf* self, TEvIndexBuilder::TEvListRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_LIST_INDEX_BUILD, false)
+        : TTxSimple(self, InvalidIndexBuildId, ev, TXTYPE_LIST_INDEX_BUILD, false)
     {}
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
@@ -43,28 +43,28 @@ public:
         const ui64 pageSize = Min(record.GetPageSize() ? Max(record.GetPageSize(), MinPageSize) : DefaultPageSize, MaxPageSize);
 
 
-        auto it = Self->IndexBuilds.begin();
+        auto it = Self->IndexBuilds.end();
         ui64 skip = (page - 1) * pageSize;
-        while ((it != Self->IndexBuilds.end()) && skip) {
+        while ((it != Self->IndexBuilds.begin()) && skip) {
+            --it;
             if (it->second->DomainPathId == domainPathId) {
                 --skip;
             }
-            ++it;
         }
 
         auto& respRecord = Response->Record;
         respRecord.SetStatus(Ydb::StatusIds::SUCCESS);
 
         ui64 size = 0;
-        while ((it != Self->IndexBuilds.end()) && size < pageSize) {
+        while ((it != Self->IndexBuilds.begin()) && size < pageSize) {
+            --it;
             if (it->second->DomainPathId == domainPathId) {
-                Fill(*respRecord.MutableEntries()->Add(), it->second);
+                Fill(*respRecord.MutableEntries()->Add(), *it->second);
                 ++size;
             }
-            ++it;
         }
 
-        if (it == Self->IndexBuilds.end()) {
+        if (it == Self->IndexBuilds.begin()) {
             respRecord.SetNextPageToken("0");
         } else {
             respRecord.SetNextPageToken(ToString(page + 1));

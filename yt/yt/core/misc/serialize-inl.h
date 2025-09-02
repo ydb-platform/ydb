@@ -6,14 +6,19 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
+#include "mpl.h"
+
+#include <yt/yt/core/phoenix/concepts.h>
 
 #include <yt/yt/core/yson/string.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+
+#include <library/cpp/yt/assert/assert.h>
 
 #include <optional>
 #include <variant>
@@ -159,7 +164,7 @@ TSharedRef PackRefs(const T& parts)
 
     WritePod(output, static_cast<i32>(parts.size()));
     for (const auto& ref : parts) {
-        WritePod(output, static_cast<i64>(ref.Size()));
+        WritePod(output, std::ssize(ref));
         WriteRef(output, ref);
     }
 
@@ -453,6 +458,26 @@ T Load(C& context, TArgs&&... args)
     return value;
 }
 
+template <class TSerializer, class T, class C, class... TArgs>
+void SaveWith(C& context, const T& value, TArgs&&... args)
+{
+    TSerializer::Save(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+void LoadWith(C& context, T& value, TArgs&&... args)
+{
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+T LoadWith(C& context, TArgs&&... args)
+{
+    T value{};
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
+    return value;
+}
+
 template <class T, class C, class... TArgs>
 T LoadSuspended(C& context, TArgs&&... args)
 {
@@ -513,6 +538,7 @@ struct TValueBoundSerializer
     { };
 
     template <class T, class C>
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TSaver<
         T,
         C,
@@ -526,6 +552,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (NPhoenix::SupportsPhoenix<T> || !NPhoenix::SupportsPersist<T, C>)
     struct TLoader<
         T,
         C,
@@ -538,6 +565,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TSaver<
         T,
         C,
@@ -550,6 +578,7 @@ struct TValueBoundSerializer
     };
 
     template <class T, class C>
+        requires (!NPhoenix::SupportsPhoenix<T>)
     struct TLoader<
         T,
         C,
@@ -757,16 +786,16 @@ struct TEnumSerializer
 
 struct TStringSerializer
 {
-    template <class C>
-    static void Save(C& context, TStringBuf value)
+    template <class T, class C>
+    static void Save(C& context, const T& value)
     {
         TSizeSerializer::Save(context, value.size());
 
         TRangeSerializer::Save(context, TRef::FromStringBuf(value));
     }
 
-    template <class C>
-    static void Load(C& context, TString& value)
+    template <class T, class C>
+    static void Load(C& context, T& value)
     {
         size_t size = TSizeSerializer::LoadSuspended(context);
         value.resize(size);
@@ -775,7 +804,7 @@ struct TStringSerializer
             TRangeSerializer::Load(context, TMutableRef::FromString(value));
         }
 
-        SERIALIZATION_DUMP_WRITE(context, "TString %Qv", value);
+        SERIALIZATION_DUMP_WRITE(context, "string %Qv", value);
     }
 };
 
@@ -1768,6 +1797,13 @@ struct TSerializerTraits<
 
 template <class C>
 struct TSerializerTraits<TString, C, void>
+{
+    using TSerializer = TStringSerializer;
+    using TComparer = TValueBoundComparer;
+};
+
+template <class C>
+struct TSerializerTraits<std::string, C, void>
 {
     using TSerializer = TStringSerializer;
     using TComparer = TValueBoundComparer;

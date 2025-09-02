@@ -44,10 +44,12 @@ struct TPathId {
     TPathId NextId() const;
     TPathId PrevId() const;
 
-}; // TPathId
+    static TPathId FromProto(const NKikimrProto::TPathID& proto);
+    void ToProto(NKikimrProto::TPathID& proto) const;
+    void ToProto(NKikimrProto::TPathID* proto) const;
+    NKikimrProto::TPathID ToProto() const;
 
-TPathId PathIdFromPathId(const NKikimrProto::TPathID& proto);
-void PathIdFromPathId(const TPathId& pathId, NKikimrProto::TPathID* proto);
+}; // TPathId
 
 } // NKikimr
 

@@ -9,6 +9,8 @@
 #include <util/generic/strbuf.h>
 #include <util/string/printf.h>
 
+#include <cmath>
+
 namespace NKikimr::NVisual {
 namespace {
 TMap<EFlameGraphType, TString> TypeName = {

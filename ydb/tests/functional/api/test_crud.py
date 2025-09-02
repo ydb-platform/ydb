@@ -5,7 +5,9 @@ import random
 
 from hamcrest import assert_that, equal_to, raises
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+import yatest
+
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 class TestCreateAndUpsertWithRepetitions(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -73,7 +75,7 @@ class TestCreateAndUpsertWithRepetitions(object):
 class TestCRUDOperations(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(load_udfs=True))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(udfs_path=yatest.common.build_path("yql/udfs")))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -134,7 +136,7 @@ class TestCRUDOperations(object):
 class TestSelect(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(load_udfs=True))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(udfs_path=yatest.common.build_path("yql/udfs")))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -189,7 +191,7 @@ class TestSelect(object):
 class TestClientTimeouts(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver_config = ydb.DriverConfig(
             database='/Root', endpoint="%s:%s" % (
@@ -242,7 +244,7 @@ class TestManySelectsInRow(object):
     """
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(

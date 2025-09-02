@@ -135,13 +135,17 @@ public:
             TString requestId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::RequestID>();
             TString owner = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::Owner>();
             bool hasSingleCompositeActionGroup = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>();
+            ui64 createTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::CreateTime>();
+            ui64 lastRefreshTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::LastRefreshTime>();
 
             state->MaintenanceRequests.emplace(requestId, taskId);
             state->MaintenanceTasks.emplace(taskId, TTaskInfo{
                 .TaskId = taskId,
                 .RequestId = requestId,
                 .Owner = owner,
-                .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup
+                .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup,
+                .CreateTime = TInstant::MicroSeconds(createTime),
+                .LastRefreshTime = TInstant::MicroSeconds(lastRefreshTime)
             });
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",

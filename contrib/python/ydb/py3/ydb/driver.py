@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
+import grpc
+import logging
+import os
+from typing import Any  # noqa
+
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-import os
-import grpc
 from . import iam
 from . import _utilities
 
-from typing import Any  # noqa
+
+logger = logging.getLogger(__name__)
 
 
 class RPCCompression:
@@ -54,6 +58,13 @@ def credentials_from_env_variables(tracer=None):
             ctx.trace({"credentials.access_token": True})
             return credentials_impl.AuthTokenCredentials(access_token)
 
+        oauth2_key_file = os.getenv("YDB_OAUTH2_KEY_FILE")
+        if oauth2_key_file:
+            ctx.trace({"credentials.oauth2_key_file": True})
+            import ydb.oauth2_token_exchange
+
+            return ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(oauth2_key_file)
+
         ctx.trace(
             {
                 "credentials.env_default": True,
@@ -78,12 +89,14 @@ class DriverConfig(object):
         "secure_channel",
         "table_client_settings",
         "topic_client_settings",
+        "query_client_settings",
         "endpoints",
         "primary_user_agent",
         "tracer",
         "grpc_lb_policy_name",
         "discovery_request_timeout",
         "compression",
+        "disable_discovery",
     )
 
     def __init__(
@@ -101,12 +114,14 @@ class DriverConfig(object):
         grpc_keep_alive_timeout=None,
         table_client_settings=None,
         topic_client_settings=None,
+        query_client_settings=None,
         endpoints=None,
         primary_user_agent="python-library",
         tracer=None,
         grpc_lb_policy_name="round_robin",
         discovery_request_timeout=10,
         compression=None,
+        disable_discovery=False,
     ):
         """
         A driver config to initialize a driver instance
@@ -127,6 +142,7 @@ class DriverConfig(object):
         If tracing aio ScopeManager must be ContextVarsScopeManager
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
+        :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
 
         """
         self.endpoint = endpoint
@@ -148,11 +164,13 @@ class DriverConfig(object):
         self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
         self.table_client_settings = table_client_settings
         self.topic_client_settings = topic_client_settings
+        self.query_client_settings = query_client_settings
         self.primary_user_agent = primary_user_agent
         self.tracer = tracer if tracer is not None else tracing.Tracer(None)
         self.grpc_lb_policy_name = grpc_lb_policy_name
         self.discovery_request_timeout = discovery_request_timeout
         self.compression = compression
+        self.disable_discovery = disable_discovery
 
     def set_database(self, database):
         self.database = database
@@ -165,7 +183,7 @@ class DriverConfig(object):
             database,
             credentials=default_credentials(credentials),
             root_certificates=root_certificates,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -176,12 +194,21 @@ class DriverConfig(object):
             database,
             credentials=default_credentials(credentials),
             root_certificates=root_certificates,
-            **kwargs
+            **kwargs,
         )
 
     def set_grpc_keep_alive_timeout(self, timeout):
         self.grpc_keep_alive_timeout = timeout
         return self
+
+    def _update_attrs_by_kwargs(self, **kwargs):
+        for key, value in kwargs.items():
+            if value is not None:
+                if getattr(self, key) is not None:
+                    logger.warning(
+                        f"Arg {key} was used in both DriverConfig and Driver. Value from Driver will be used."
+                    )
+                setattr(self, key, value)
 
 
 ConnectionParams = DriverConfig
@@ -195,7 +222,7 @@ def get_config(
     root_certificates=None,
     credentials=None,
     config_class=DriverConfig,
-    **kwargs
+    **kwargs,
 ):
     if driver_config is None:
         if connection_string is not None:
@@ -206,7 +233,17 @@ def get_config(
             driver_config = config_class.default_from_endpoint_and_database(
                 endpoint, database, root_certificates, credentials, **kwargs
             )
-        return driver_config
+    else:
+        kwargs["endpoint"] = endpoint
+        kwargs["database"] = database
+        kwargs["root_certificates"] = root_certificates
+        kwargs["credentials"] = credentials
+
+        driver_config._update_attrs_by_kwargs(**kwargs)
+
+    if driver_config.credentials is not None:
+        driver_config.credentials._update_driver_config(driver_config)
+
     return driver_config
 
 
@@ -221,7 +258,7 @@ class Driver(pool.ConnectionPool):
         database=None,
         root_certificates=None,
         credentials=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Constructs a driver instance to be used in table and scheme clients.
@@ -252,3 +289,8 @@ class Driver(pool.ConnectionPool):
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, driver_config.table_client_settings)
         self.topic_client = topic.TopicClient(self, driver_config.topic_client_settings)
+
+    def stop(self, timeout=10):
+        self.table_client._stop_pool_if_needed(timeout=timeout)
+        self.topic_client.close()
+        super().stop(timeout=timeout)

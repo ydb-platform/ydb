@@ -27,7 +27,7 @@ inline ui64 millisec() {
 }
 /// Current time in seconds since epoch
 ui32 Seconds() noexcept;
-///Current thread time in microseconds
+/// Current thread time in microseconds
 ui64 ThreadCPUUserTime() noexcept;
 ui64 ThreadCPUSystemTime() noexcept;
 ui64 ThreadCPUTime() noexcept;
@@ -37,7 +37,7 @@ void NanoSleep(ui64 ns) noexcept;
 #if defined(_x86_)
 namespace NPrivate {
     bool HaveRdtscpImpl();
-}
+} // namespace NPrivate
 #endif
 
 // GetCycleCount guarantees to return synchronous values on different cores

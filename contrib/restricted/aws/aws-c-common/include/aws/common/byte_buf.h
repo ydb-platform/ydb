@@ -11,6 +11,8 @@
 
 #include <string.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /**
  * Represents a length-delimited binary string or buffer. If byte buffer points
  * to constant memory or memory that should otherwise not be freed by this
@@ -59,7 +61,7 @@ struct aws_byte_cursor {
  * Helper Macro for initializing a byte cursor from a string literal
  */
 #define AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(literal)                                                                 \
-    { .ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1 }
+    {.ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1}
 
 /**
  * Signature for function argument to trim APIs
@@ -132,6 +134,18 @@ AWS_COMMON_API int aws_byte_buf_init_copy(
  */
 AWS_COMMON_API
 int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocator *alloc, const char *filename);
+
+/**
+ * Same as aws_byte_buf_init_from_file(), but for reading "special files" like /proc/cpuinfo.
+ * These files don't accurately report their size, so size_hint is used as initial buffer size,
+ * and the buffer grows until the while file is read.
+ */
+AWS_COMMON_API
+int aws_byte_buf_init_from_file_with_size_hint(
+    struct aws_byte_buf *out_buf,
+    struct aws_allocator *alloc,
+    const char *filename,
+    size_t size_hint);
 
 /**
  * Evaluates the set of properties that define the shape of all valid aws_byte_buf structures.
@@ -948,5 +962,6 @@ AWS_COMMON_API
 int aws_byte_cursor_utf8_parse_u64_hex(struct aws_byte_cursor cursor, uint64_t *dst);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_BYTE_BUF_H */

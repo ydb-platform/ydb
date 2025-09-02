@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -16,9 +17,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 #undef PQ_LOG_PREFIX
 #endif
 #define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
-
-static constexpr char KafkaPlainAuthPermission[] = "ydb.api.kafkaPlainAuth";
-static constexpr char KafkaPlainAuthSid[] = "ydb.api.kafkaPlainAuth@as";
 
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?
 // const TString& TopicPrefix(const TActorContext& ctx);
@@ -76,25 +74,16 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
 void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
 
 
-static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId, bool useKafkaApi = false) {
-    TVector<TString> permissions = {
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect",
-        "ydb.tables.select",
-        "ydb.schemas.getMetadata",
-        "ydb.streams.write"
-    };
-    if (useKafkaApi) {
-        permissions.push_back(KafkaPlainAuthPermission);
-    }
+static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});
     if (!attributes.empty()) {
-        return {{permissions, attributes}};
+        return {{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::STREAM>::Get(), attributes}};
     }
     return {};
 }
+
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TSchemeCacheNavigate::EStatus status);
 
 } //namespace NKikimr::NGRpcProxy::V1

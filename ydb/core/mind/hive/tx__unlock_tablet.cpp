@@ -8,6 +8,7 @@ class TTxUnlockTabletExecution : public TTransactionBase<THive> {
     const ui64 TabletId;
     const TActorId OwnerActor;
     const ui64 SeqNo;
+    const NKikimrHive::ELockLostReason Reason = NKikimrHive::LOCK_LOST_REASON_UNKNOWN;
 
     const TActorId Sender;
     const ui64 Cookie;
@@ -21,6 +22,7 @@ public:
         , TabletId(rec.GetTabletID())
         , OwnerActor(GetOwnerActor(rec, sender))
         , SeqNo(0)
+        , Reason(NKikimrHive::LOCK_LOST_REASON_UNLOCKED)
         , Sender(sender)
         , Cookie(cookie)
     {
@@ -29,15 +31,16 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UNLOCK_TABLET_EXECUTION; }
 
-    TTxUnlockTabletExecution(ui64 tabletId, ui64 seqNo, THive* hive)
+    TTxUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKikimrHive::ELockLostReason reason, THive* hive)
         : TBase(hive)
         , TabletId(tabletId)
         , SeqNo(seqNo)
+        , Reason(reason)
         , Cookie(0)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxUnlockTabletExecution::Execute TabletId: " << TabletId);
+        BLOG_NOTICE("THive::TTxUnlockTabletExecution::Execute TabletId: " << TabletId);
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet == nullptr) {
@@ -69,8 +72,11 @@ public:
             NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(tablet->LockedReconnectTimeout.MilliSeconds()));
 
         if (PreviousOwner) {
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                tablet->BecomeStopped();
+            }
             // Notify previous owner that its lock ownership has been lost
-            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId, Reason));
         }
 
         if (!tablet->IsLockedToActor()) {
@@ -82,7 +88,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        BLOG_NOTICE("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }
 
@@ -100,19 +106,20 @@ ITransaction* THive::CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTab
     return new TTxUnlockTabletExecution(rec, sender, cookie, this);
 }
 
-ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) {
-    return new TTxUnlockTabletExecution(tabletId, seqNo, this);
+ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKikimrHive::ELockLostReason reason) {
+    return new TTxUnlockTabletExecution(tabletId, seqNo, reason, this);
 }
 
-void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
+void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason) {
     // Unlock tablets that have been locked by this node
+    BLOG_NOTICE("ScheduleUnlockTabletExecution(" << node.Id << ", " << NKikimrHive::ELockLostReason_Name(reason) << ")");
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
         Y_ABORT_UNLESS(FindTabletEvenInDeleting(tablet->Id) == tablet);
         Y_ABORT_UNLESS(tablet->LockedToActor.NodeId() == node.Id);
         if (tablet->PendingUnlockSeqNo == 0) {
             tablet->PendingUnlockSeqNo = NextTabletUnlockSeqNo++;
             Y_ABORT_UNLESS(tablet->PendingUnlockSeqNo != 0);
-            auto event = new TEvPrivate::TEvUnlockTabletReconnectTimeout(tablet->Id, tablet->PendingUnlockSeqNo);
+            auto event = new TEvPrivate::TEvUnlockTabletReconnectTimeout(*tablet, reason);
             if (tablet->LockedReconnectTimeout) {
                 Schedule(tablet->LockedReconnectTimeout, event);
             } else {
@@ -125,7 +132,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
 void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
-    BLOG_D("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId);
+    BLOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId << " Reason=" << NKikimrHive::ELockLostReason_Name(ev->Get()->Reason));
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr && tablet->IsLockedToActor() && tablet->PendingUnlockSeqNo == seqNo) {
         // We use sequence numbers to make sure unlock happens only if some
@@ -141,7 +148,7 @@ void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
         // - reconnect timeout (execute, failure)
         //   tablet is not unlocked, because logically lock/reconnect
         //   transaction was scheduled before the timeout really happened.
-        Execute(CreateUnlockTabletExecution(tabletId, seqNo));
+        Execute(CreateUnlockTabletExecution(tabletId, seqNo, ev->Get()->Reason));
     }
 }
 

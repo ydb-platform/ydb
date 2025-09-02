@@ -811,7 +811,12 @@ class AresDNSResolver : public DNSResolver {
 };
 
 bool ShouldUseAres(y_absl::string_view resolver_env) {
+#ifdef _win_
+  // ARC-6747: Disable on Windows due to assert and resolving problems.
   return !resolver_env.empty() && y_absl::EqualsIgnoreCase(resolver_env, "ares");
+#else
+  return resolver_env.empty() || y_absl::EqualsIgnoreCase(resolver_env, "ares");
+#endif
 }
 
 bool UseAresDnsResolver() {

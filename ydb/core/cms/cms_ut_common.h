@@ -85,12 +85,20 @@ struct TTestEnvOpts {
     ui32 NRings;
     ui32 RingSize;
     ui32 DataCenterCount;
+    ui32 PileCount;
+    ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
+    bool EnableDynamicGroups;
+    bool IsBridgeMode;
+    bool EnableSimpleStateStorageConfig;
+
+    using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
+    TNodeLocationCallback NodeLocationCallback;
 
     TTestEnvOpts() = default;
 
@@ -103,12 +111,17 @@ struct TTestEnvOpts {
         , NRings(1)
         , RingSize(nodeCount)
         , DataCenterCount(1)
+        , PileCount(0)
+        , NodesWithoutPDisksCount(0)
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
         , EnableSentinel(false)
-        , EnableCMSRequestPriorities(false)
+        , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
+        , EnableDynamicGroups(false)
+        , IsBridgeMode(false)
+        , EnableSimpleStateStorageConfig(false)
     {
     }
 
@@ -122,8 +135,25 @@ struct TTestEnvOpts {
         return *this;
     }
 
-    TTestEnvOpts& WithEnableCMSRequestPriorities() {
-        EnableCMSRequestPriorities = true;
+    TTestEnvOpts& WithoutEnableCMSRequestPriorities() {
+        EnableCMSRequestPriorities = false;
+        return *this;
+    }
+
+    TTestEnvOpts& WithNodeLocationCallback(TNodeLocationCallback nodeLocationCallback) {
+        NodeLocationCallback = nodeLocationCallback;
+        return *this;
+    }
+
+    TTestEnvOpts& WithDynamicGroups() {
+        EnableDynamicGroups = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2, bool enableSimpleStateStorageConfig = false) {
+        IsBridgeMode = true;
+        PileCount = pileCount;
+        EnableSimpleStateStorageConfig = enableSimpleStateStorageConfig;
         return *this;
     }
 };
@@ -159,6 +189,9 @@ public:
 
     NKikimrCms::TClusterState RequestState(const NKikimrCms::TClusterStateRequest &request = {},
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    
+    using TListNodes = ::google::protobuf::RepeatedPtrField< ::Ydb::Maintenance::Node>;
+    TListNodes RequestListNodes();
 
     std::pair<TString, TVector<TString>> ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
 
@@ -305,6 +338,12 @@ public:
         bool dry = false,
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
     NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
+    NKikimrCms::TManageRequestResponse CheckApproveRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK
+    );
 
     NKikimrCms::TPermissionResponse CheckRequest(
         const TString &user,
@@ -322,6 +361,8 @@ public:
     {
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
+
+    void CheckBSCUpdateRequests(std::set<ui32> expectedNodes, NKikimrBlobStorage::EDriveStatus expectedStatus);
 
     void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 
@@ -396,10 +437,47 @@ public:
         return CheckResetMarker(req, code);
     }
 
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskRefresh(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvRefreshMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    Ydb::Maintenance::GetMaintenanceTaskResult CheckMaintenanceTaskGet(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvGetMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvGetMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
             const Ts&... actionGroups) 
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
@@ -407,7 +485,7 @@ public:
 
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
-        req->mutable_task_options()->set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_STRONG);
+        req->mutable_task_options()->set_availability_mode(availabilityMode);
         AddActionGroups(*req, actionGroups...);
 
         SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
@@ -417,6 +495,15 @@ public:
         const auto &rec = reply->Record;
         UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
         return rec.GetResult();
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            const Ts&... actionGroups) 
+    {   
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
     }
 
     void EnableBSBaseConfig();

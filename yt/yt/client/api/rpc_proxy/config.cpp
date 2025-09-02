@@ -19,8 +19,8 @@ using namespace NNet;
 ////////////////////////////////////////////////////////////////////////////////
 
 TConnectionConfigPtr TConnectionConfig::CreateFromClusterUrl(
-    TString clusterUrl,
-    std::optional<TString> proxyRole)
+    const std::string& clusterUrl,
+    const std::optional<std::string>& proxyRole)
 {
     auto config = New<TConnectionConfig>();
     config->ClusterUrl = std::move(clusterUrl);
@@ -50,6 +50,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
         .Default(true);
+    registrar.Parameter("proxy_url_aliasing_rules", &TThis::ProxyUrlAliasingRules)
+        .Default();
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();
@@ -82,6 +84,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(15));
     registrar.Parameter("default_streaming_stall_timeout", &TThis::DefaultStreamingStallTimeout)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("default_chaos_lease_timeout", &TThis::DefaultChaosLeaseTimeout)
+        .Default(TDuration::Seconds(30));
 
     registrar.Parameter("default_ping_period", &TThis::DefaultPingPeriod)
         .Default(TDuration::Seconds(5));
@@ -100,9 +104,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(NCompression::ECodec::None);
     registrar.Parameter("response_codec", &TThis::ResponseCodec)
         .Default(NCompression::ECodec::None);
-    // COMPAT(danilalexeev  ): legacy RPC codecs
+    // COMPAT(danilalexeev): legacy RPC codecs
     registrar.Parameter("enable_legacy_rpc_codecs", &TThis::EnableLegacyRpcCodecs)
-        .Default(true);
+        .Default(false);
 
     registrar.Parameter("enable_retries", &TThis::EnableRetries)
         .Default(false);
@@ -127,23 +131,28 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
-        if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
-            THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
-        }
-        if (config->ProxyEndpoints && config->ProxyRole) {
-            THROW_ERROR_EXCEPTION("\"proxy_role\" is not supported by Service Discovery");
-        }
-        if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
-            THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
-        }
-        if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-            THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
-        }
-
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);
         }
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateConnectionConfig(const TConnectionConfigPtr& config)
+{
+    if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
+        THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
+    }
+    if (config->ProxyEndpoints && config->ProxyRole) {
+        THROW_ERROR_EXCEPTION("\"proxy_role\" is not supported by Service Discovery");
+    }
+    if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
+        THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
+    }
+    if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
+        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

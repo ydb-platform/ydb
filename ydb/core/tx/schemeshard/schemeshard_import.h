@@ -19,6 +19,8 @@ struct TEvImport {
         EvForgetImportResponse,
         EvListImportsRequest,
         EvListImportsResponse,
+        EvListObjectsInS3ExportRequest,
+        EvListObjectsInS3ExportResponse,
 
         EvEnd
     };
@@ -161,6 +163,12 @@ struct TEvImport {
     };
 
     DECLARE_EVENT_CLASS(EvListImportsResponse) {
+    };
+
+    DECLARE_EVENT_CLASS(EvListObjectsInS3ExportRequest) {
+    };
+
+    DECLARE_EVENT_CLASS(EvListObjectsInS3ExportResponse) {
     };
 
 #undef DECLARE_EVENT_CLASS

@@ -1,21 +1,13 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/viewer/yaml/yaml.h>
-#include <ydb/core/util/wildcard.h>
-#include <library/cpp/json/json_writer.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
+#include "viewer.h"
+#include <ydb/core/viewer/yaml/yaml.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 
-class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
+class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -30,8 +22,7 @@ class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
 
 protected:
     using TThis = TPDiskInfo;
-    using TBase = TViewerPipeClient<TThis>;
-    ui32 Timeout = 0;
+    using TBase = TViewerPipeClient;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
@@ -45,18 +36,19 @@ protected:
     ui32 PDiskId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
-        NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
-        PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
+    void Bootstrap() override {
+        TString pDiskId = Params.Get("pdisk_id");
+        if (pDiskId.Contains('-')) {
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), 0);
+        } else {
+            NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
+            PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
+        }
 
         if (PDiskId == Max<ui32>()) {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"), "BadRequest");
@@ -68,16 +60,13 @@ public:
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
+        Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 3);
+        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 3);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
-
-        SendWhiteboardRequest();
+        SendWhiteboardRequests();
         SendBSCRequest();
 
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -94,7 +83,7 @@ public:
         }
     }
 
-    void SendWhiteboardRequest() {
+    void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
@@ -115,7 +104,7 @@ public:
 
     bool RetryRequest() {
         if (Retries) {
-            if (++ActualRetries <= Retries) {
+            if (++ActualRetries < Retries) {
                 TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
@@ -124,53 +113,69 @@ public:
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        WhiteboardPDisk.Error("NodeDisconnected");
-        WhiteboardVDisk.Error("NodeDisconnected");
+        ui32 requestsDone = 0;
+        if (WhiteboardPDisk.Error("NodeDisconnected")) {
+            ++requestsDone;
+        }
+        if (WhiteboardVDisk.Error("NodeDisconnected")) {
+            ++requestsDone;
+        }
         if (!RetryRequest()) {
-            TBase::RequestDone(2);
+            TBase::RequestDone(requestsDone);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            SysViewPDisks.Error("ClientNotConnected");
-            SysViewVSlots.Error("ClientNotConnected");
-            TBase::RequestDone(2);
+            ui32 requestsDone = 0;
+            if (SysViewPDisks.Error("ClientNotConnected")) {
+                ++requestsDone;
+            }
+            if (SysViewVSlots.Error("ClientNotConnected")) {
+                ++requestsDone;
+            }
+            TBase::RequestDone(requestsDone);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        SysViewPDisks.Error("ClientDestroyed");
-        SysViewVSlots.Error("ClientDestroyed");
-        TBase::RequestDone(2);
+        ui32 requestsDone = 0;
+        if (SysViewPDisks.Error("ClientDestroyed")) {
+            ++requestsDone;
+        }
+        if (SysViewVSlots.Error("ClientDestroyed")) {
+            ++requestsDone;
+        }
+        TBase::RequestDone(requestsDone);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        SysViewPDisks.Set(std::move(ev));
-        TBase::RequestDone();
+        if (SysViewPDisks.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        SysViewVSlots.Set(std::move(ev));
-        TBase::RequestDone();
+        if (SysViewVSlots.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
-        WhiteboardPDisk.Set(std::move(ev));
-        TBase::RequestDone();
+        if (WhiteboardPDisk.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
-        WhiteboardVDisk.Set(std::move(ev));
-        TBase::RequestDone();
+        if (WhiteboardVDisk.Set(std::move(ev))) {
+            TBase::RequestDone();
+        }
     }
 
     void HandleRetry() {
-        SendWhiteboardRequest();
-    }
-
-    void HandleTimeout() {
-        TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT("text/plain", "Timeout receiving response"), "Timeout");
+        SendWhiteboardRequests();
+        TBase::RequestDone(2); // complete previous requests
     }
 
     void PassAway() override {
@@ -178,7 +183,11 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void HandleTimeout() {
+        ReplyAndPassAway(); // try to respond with what we have
+    }
+
+    void ReplyAndPassAway() override {
         NKikimrViewer::TPDiskInfo proto;
         bool hasPDisk = false;
         bool hasVDisk = false;
@@ -229,59 +238,44 @@ public:
                 }
             }
         }
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, proto, {
-            .EnumAsNumbers = false,
-        });
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(proto));
+    }
+
+    static YAML::Node GetSwagger() {
+        YAML::Node node = YAML::Load(R"___(
+          get:
+            tags:
+            - pdisk
+            summary: Gets PDisk info
+            description: Gets PDisk information from Whiteboard and BSC
+            parameters:
+            - name: pdisk_id
+              in: query
+              description: pdisk identifier
+              required: true
+              type: string
+            responses:
+              200:
+                description: OK
+                content:
+                  application/json:
+                    schema: {}
+              400:
+                description: Bad Request
+              403:
+                description: Forbidden
+              504:
+                description: Gateway Timeout
+            )___");
+
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
+        YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
+        TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
+        TProtoToYaml::FillEnum(properties["VDisks"]["items"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EVDiskStatus>());
+        return node;
     }
 };
 
-template <>
-YAML::Node TJsonRequestSwagger<TPDiskInfo>::GetSwagger() {
-    YAML::Node node = YAML::Load(R"___(
-        get:
-          tags:
-          - pdisk
-          summary: Gets PDisk info
-          description: Gets PDisk information from Whiteboard and BSC
-          parameters:
-          - name: node_id
-            in: query
-            description: node identifier
-            type: integer
-          - name: pdisk_id
-            in: query
-            description: pdisk identifier
-            required: true
-            type: integer
-          - name: timeout
-            in: query
-            description: timeout in ms
-            required: false
-            type: integer
-          responses:
-            200:
-              description: OK
-              content:
-                application/json:
-                  schema: {}
-            400:
-              description: Bad Request
-            403:
-              description: Forbidden
-            504:
-              description: Gateway Timeout
-        )___");
-
-    node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
-    YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
-    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
-    TProtoToYaml::FillEnum(properties["VDisks"]["items"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EVDiskStatus>());
-    return node;
-}
-
-}
 }

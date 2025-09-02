@@ -14,11 +14,17 @@ class TEnumIndexedFairShareActionQueue
 {
 public:
     TEnumIndexedFairShareActionQueue(
-        const TString& threadName,
+        std::string threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
-        NProfiling::IRegistryImplPtr registry)
-        : Queue_(CreateFairShareActionQueue(threadName, queueNames, bucketToQueues, std::move(registry)))
+        NThreading::TThreadOptions threadOptions,
+        NProfiling::IRegistryPtr registry)
+        : Queue_(CreateFairShareActionQueue(
+            threadName,
+            queueNames,
+            bucketToQueues,
+            threadOptions,
+            std::move(registry)))
     { }
 
     const IInvokerPtr& GetInvoker(EQueue queue) override
@@ -39,9 +45,10 @@ private:
 
 template <typename EQueue, typename EBucket>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues,
-    NProfiling::IRegistryImplPtr registry)
+    NThreading::TThreadOptions threadOptions,
+    NProfiling::IRegistryPtr registry)
 {
     std::vector<TString> queueNames;
     for (const auto& queueName : TEnumTraits<EQueue>::GetDomainNames()) {
@@ -55,7 +62,12 @@ IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueu
             stringBucket.push_back(ToString(queue));
         }
     }
-    return New<TEnumIndexedFairShareActionQueue<EQueue>>(threadName, queueNames, stringBuckets, std::move(registry));
+    return New<TEnumIndexedFairShareActionQueue<EQueue>>(
+        threadName,
+        queueNames,
+        stringBuckets,
+        threadOptions,
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

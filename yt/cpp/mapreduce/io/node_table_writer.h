@@ -25,8 +25,8 @@ public:
     void Abort() override;
 
 private:
-    THolder<IProxyOutput> Output_;
-    TVector<THolder<::NYson::TYsonWriter>> Writers_;
+    std::unique_ptr<IProxyOutput> Output_;
+    TVector<std::unique_ptr<::NYson::TYsonWriter>> Writers_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

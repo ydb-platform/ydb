@@ -103,16 +103,25 @@ public:
             outVGetResult.MakeError(Status, TString(), request);
             return;
         }
-        //ui64 messageCookie = request->Record.GetCookie();
 
         outVGetResult.Record.SetStatus(NKikimrProto::OK);
-        // Ignore RangeQuery (pretend there are no results)
+
+        Y_ABORT_UNLESS(request.HasVDiskID());
+        TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
+        VDiskIDFromVDiskID(vDiskId, outVGetResult.Record.MutableVDiskID());
+        if (request.HasCookie()) {
+            outVGetResult.Record.SetCookie(request.GetCookie());
+        }
+
+        if (request.HasRangeQuery()) {
+            ProcessRangeIndexQuery(vGet, outVGetResult);
+            return;
+        }
 
         // TODO: Check for overlapping / out of order queries
         size_t size = request.ExtremeQueriesSize();
         for (unsigned i = 0; i < size; i++) {
             const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
-            Y_ABORT_UNLESS(request.HasVDiskID());
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
             ui64 partId = id.PartId();
             ui64 partBegin = partId ? partId : 1;
@@ -152,12 +161,55 @@ public:
                 outVGetResult.AddResult(NKikimrProto::NODATA, id, cookie);
             }
         }
-        Y_ABORT_UNLESS(request.HasVDiskID());
-        TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
-        VDiskIDFromVDiskID(vDiskId, outVGetResult.Record.MutableVDiskID());
-        if (request.HasCookie()) {
-            outVGetResult.Record.SetCookie(request.GetCookie());
+    }
+
+    void ProcessRangeIndexQuery(const TEvBlobStorage::TEvVGet& vGet, TEvBlobStorage::TEvVGetResult& outVGetResult) {
+        const auto& record = vGet.Record;
+        auto vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        const NKikimrBlobStorage::TRangeQuery& query = record.GetRangeQuery();
+
+        auto first = LogoBlobIDFromLogoBlobID(query.GetFrom());
+        auto last = LogoBlobIDFromLogoBlobID(query.GetTo());
+
+        ui64 *cookie = nullptr;
+        ui64 cookieValue = 0;
+        if (query.HasCookie()) {
+            cookieValue = query.GetCookie();
+            cookie = &cookieValue;
         }
+
+        TMap<TLogoBlobID, TIngress> resultBlobs;
+
+        if (first <= last) {
+            auto from = Blobs.lower_bound(first);
+            auto to = Blobs.upper_bound(last);
+            for (auto it = from; it != to; ++it) {
+                auto& id = it->first;
+                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
+                resultBlobs[id.FullID()].Merge(*ingress);
+            }
+            for (auto it = resultBlobs.begin(); it != resultBlobs.end(); ++it) {
+                ui64 ingr = it->second.Raw();
+                ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
+                const NMatrix::TVectorType local = it->second.LocalParts(Info->GetTopology().GType);
+                outVGetResult.AddResult(NKikimrProto::OK, it->first, cookie, pingr, &local, true, false);
+            }
+        } else {
+            auto from = Blobs.upper_bound(first);
+            auto to = Blobs.lower_bound(last);
+            for (auto it = std::reverse_iterator(from); it != std::reverse_iterator(to); ++it) {
+                auto& id = it->first;
+                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
+                resultBlobs[id.FullID()].Merge(*ingress);
+            }
+            for (auto it = resultBlobs.rbegin(); it != resultBlobs.rend(); ++it) {
+                ui64 ingr = it->second.Raw();
+                ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
+                const NMatrix::TVectorType local = it->second.LocalParts(Info->GetTopology().GType);
+                outVGetResult.AddResult(NKikimrProto::OK, it->first, cookie, pingr, &local, true, false);
+            }
+        }
+
     }
 };
 
@@ -303,17 +355,27 @@ struct TPartLocation {
 
 class TGroupMock {
     const ui32 GroupId;
-    const TErasureType::EErasureSpecies ErasureSpecies;
+    TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    const ui32 FailRealms;
     const ui32 FailDomains;
-    const ui32 DrivesPerFailDomain;
+    const ui32 DisksPerFailDomain;
 
     TVector<TVDiskMock> VDisks;
-    TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    THashMap<TVDiskID, ui32> VDisksIdxMap;
+
+    TVDiskMock& GetVDisk(ui32 diskIdx) {
+        Y_ABORT_UNLESS(diskIdx < VDisks.size(), "i# %" PRIu32 " size# %" PRIu32, (ui32)diskIdx, (ui32)VDisks.size());
+        return VDisks[diskIdx];
+    }
 
     TVDiskMock& GetVDisk(ui32 failDomainIdx, ui32 driveIdx) {
-        ui32 i = failDomainIdx * DrivesPerFailDomain + driveIdx;
+        ui32 i = failDomainIdx * DisksPerFailDomain + driveIdx;
         Y_ABORT_UNLESS(i < VDisks.size(), "i# %" PRIu32 " size# %" PRIu32, (ui32)i, (ui32)VDisks.size());
         return VDisks[i];
+    }
+
+    TVDiskMock& GetVDisk(TVDiskID vdiskId) {
+        return VDisks[VDisksIdxMap[vdiskId]];
     }
 
     void InitBsInfo() {
@@ -323,40 +385,35 @@ class TGroupMock {
     }
 
     void InitVDisks() {
+        for (ui64 realmIdx = 0; realmIdx < FailRealms; ++realmIdx) {
         for (ui64 domainIdx = 0; domainIdx < FailDomains; ++domainIdx) {
-            for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
-                // Node = domainIdx
-                // PoolId = driveIdx
-                // LocalId = index in VDisks
-                TVDiskID vDiskId(GroupId, 1, 0, domainIdx, driveIdx);
-                VDisks.emplace_back(vDiskId);
-            }
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
+            TVDiskID vDiskId(GroupId, 1, realmIdx, domainIdx, driveIdx);
+            VDisksIdxMap[vDiskId] = VDisks.size();
+            VDisks.emplace_back(vDiskId);
+        }
+        }
         }
     }
 
 public:
-    TGroupMock(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains, ui32 drivesPerFailDomain,
-            TIntrusivePtr<TBlobStorageGroupInfo> info)
+    TGroupMock(ui32 groupId, TIntrusivePtr<TBlobStorageGroupInfo> info)
         : GroupId(groupId)
-        , ErasureSpecies(erasureSpecies)
-        , FailDomains(failDomains)
-        , DrivesPerFailDomain(drivesPerFailDomain)
         , Info(info)
+        , FailRealms(Info->GetTopology().GetTotalFailRealmsNum())
+        , FailDomains(Info->GetTopology().GetNumFailDomainsPerFailRealm())
+        , DisksPerFailDomain(Info->GetTopology().GetNumVDisksPerFailDomain())
     {
-        Y_UNUSED(ErasureSpecies);
         InitVDisks();
         InitBsInfo();
     }
 
-    TGroupMock(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains, ui32 drivesPerFailDomain)
-        : TGroupMock(groupId, erasureSpecies, failDomains, drivesPerFailDomain,
-                new TBlobStorageGroupInfo(erasureSpecies, drivesPerFailDomain, failDomains))
-    {
-    }
+    TGroupMock(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains, ui32 failRealms, ui32 drivesPerFailDomain)
+        : TGroupMock(groupId, new TBlobStorageGroupInfo(erasureSpecies, drivesPerFailDomain, failDomains, failRealms))
+    {}
 
     ui32 VDiskIdx(const TVDiskID &id) {
-        ui32 idx = (ui32)id.FailDomain * DrivesPerFailDomain + (ui32)id.VDisk;
-        return idx;
+        return (ui32)id.FailRealm * FailDomains * DisksPerFailDomain + (ui32)id.FailDomain * DisksPerFailDomain + (ui32)id.VDisk;
     }
 
     TIntrusivePtr<TBlobStorageGroupInfo> GetInfo() {
@@ -366,7 +423,7 @@ public:
     void OnVGet(const TEvBlobStorage::TEvVGet &vGet, TEvBlobStorage::TEvVGetResult &outVGetResult) {
         Y_ABORT_UNLESS(vGet.Record.HasVDiskID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(vGet.Record.GetVDiskID());
-        GetVDisk(vDiskId.FailDomain, vDiskId.VDisk).OnVGet(vGet, outVGetResult);
+        GetVDisk(vDiskId).OnVGet(vGet, outVGetResult);
     }
 
     NKikimrProto::EReplyStatus OnVPut(TEvBlobStorage::TEvVPut &vPut) {
@@ -414,7 +471,7 @@ public:
     }
 
     void Wipe(ui32 domainIdx) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).Wipe();
         }
     }
@@ -426,25 +483,29 @@ public:
     }
 
     void SetError(ui32 domainIdx, NKikimrProto::EReplyStatus status) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetError(status);
         }
     }
 
+    void SetError(TVDiskID vdiskId, NKikimrProto::EReplyStatus status) {
+        GetVDisk(vdiskId).SetError(status);
+    }
+
     void SetPredictedDelayNs(ui32 domainIdx, ui64 predictedDelayNs) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetPredictedDelayNs(predictedDelayNs);
         }
     }
 
     void UnsetError(ui32 domainIdx) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).UnsetError();
         }
     }
 
     void SetSpecialStatus(ui32 domainIdx, TLogoBlobID blobID, NKikimrProto::EReplyStatus status) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetSpecialStatus(blobID, status);
         }
     }
@@ -457,12 +518,14 @@ public:
     }
 
     void SetNotYetBlob(ui32 domainIdx, const TLogoBlobID blobID) {
-        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DisksPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetNotYet(blobID);
         }
     }
 
-    void Put(const TLogoBlobID id, const TString &data, ui32 handoffsToUse = 0) {
+    void Put(const TLogoBlobID id, const TString &data, ui32 handoffsToUse = 0,
+        const THashSet<ui32>* selectedParts = nullptr)
+    {
         const ui32 hash = id.Hash();
         const ui32 totalvd = Info->Type.BlobSubgroupSize();
         const ui32 totalParts = Info->Type.TotalPartCount();
@@ -479,14 +542,29 @@ public:
         TDataPartSet partSet;
         partSet.Parts.resize(totalParts);
         Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
-        for (ui32 i = 0; i < totalParts; ++i) {
-            TLogoBlobID pId(id, i + 1);
-            TRope pData = partSet.Parts[i].OwnedString;
-            if (i < handoffsToUse) {
-                Y_ABORT_UNLESS(totalParts + i < totalvd);
-                GetVDisk(vDisksId[totalParts + i].FailDomain, vDisksId[totalParts + i].VDisk).Put(pId, pData.ConvertToString());
-            } else {
-                GetVDisk(vDisksId[i].FailDomain, vDisksId[i].VDisk).Put(pId, pData.ConvertToString());
+
+        if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+            auto part1 = partSet.Parts[0].OwnedString.ConvertToString();
+            auto part2 = partSet.Parts[1].OwnedString.ConvertToString();
+            GetVDisk(vDisksId[0]).Put(TLogoBlobID(id, 1), part1);
+            GetVDisk(vDisksId[1]).Put(TLogoBlobID(id, 2), part2);
+            GetVDisk(vDisksId[vDisksId.size() - 1]).Put(TLogoBlobID(id, 2), partSet.Parts[1].OwnedString.ConvertToString());
+            for (ui32 i = 2; i < vDisksId.size() - 1; ++i) {
+                GetVDisk(vDisksId[i]).Put(TLogoBlobID(id, 3), TString());
+            }
+        } else {
+            for (ui32 i = 0; i < totalParts; ++i) {
+                if (selectedParts && !selectedParts->contains(i + 1)) {
+                    continue;
+                }
+                TLogoBlobID pId(id, i + 1);
+                TRope pData = partSet.Parts[i].OwnedString;
+                if (i < handoffsToUse) {
+                    Y_ABORT_UNLESS(totalParts + i < totalvd);
+                    GetVDisk(vDisksId[totalParts + i]).Put(pId, pData.ConvertToString());
+                } else {
+                    GetVDisk(vDisksId[i]).Put(pId, pData.ConvertToString());
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
     Y_UNIT_TEST(CheckSetConfig) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)
@@ -53,9 +52,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
         {
             // Base checks
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
-                .SetKqpSettings({setting});
+            auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
@@ -98,7 +95,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             )");
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unsupported table: pgtable"));
 
             query = Q_(R"(
                 select set_config('search_path', 'public', false);
@@ -120,8 +117,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             // Check for disabled ast cache
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
+            auto serverSettings = TKikimrSettings(appConfig)
                 .SetKqpSettings({setting});
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
@@ -213,9 +209,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             // Check for enabled ast cache
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
-                .SetKqpSettings({setting});
+            auto serverSettings = TKikimrSettings(appConfig).SetKqpSettings({setting});
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
             auto session = db.GetSession().GetValueSync().GetSession();
@@ -289,8 +283,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             // Check enable per statement
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
             appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
+            auto serverSettings = TKikimrSettings(appConfig)
                 .SetKqpSettings({setting});
 
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
@@ -317,7 +310,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             )");
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unsupported table: pgtable"));
 
             query = Q_(R"(
                 select set_config('search_path', 'public', false);
@@ -353,8 +346,10 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         }
     }
 
-    Y_UNIT_TEST(PgDatabase) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(PgDatabase, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
         {
@@ -416,7 +411,8 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE table1 (
-                    id int4 primary key
+                    id int4 primary key,
+                    value int4
                 );
                 CREATE TABLE table2 (
                     id varchar primary key
@@ -459,8 +455,58 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
             CompareYson(
-                Sprintf("[[\"%u\"]]", experimentalPg ? 208 : 205), 
+                Sprintf("[[\"%u\"]]", experimentalPg ? 214 : 211),
                 FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT rel.oid, rel.relname AS name
+                FROM pg_catalog.pg_class rel
+                    WHERE rel.relkind IN ('r','s','t','p') AND rel.relnamespace = 2200::oid
+                    AND NOT rel.relispartition
+                        ORDER BY rel.relname;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                [#;"table1"];[#;"table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //SuperSet
+            auto result = db.ExecuteQuery(R"(
+                SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind in ('r', 'p');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["table1"];["table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //https://github.com/ydb-platform/ydb/issues/7286
+            auto result = db.ExecuteQuery(R"(
+                select tablename from pg_catalog.pg_tables where tablename='pg_proc'
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["pg_proc"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //https://github.com/ydb-platform/ydb/issues/7287
+            auto result = db.ExecuteQuery(R"(
+                drop table table1;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = db.ExecuteQuery(R"(
+                create table table1(id serial primary key);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                select tablename from pg_tables where hasindexes='pg_proc';
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type boolean: \"pg_proc\""));
         }
     }
 }

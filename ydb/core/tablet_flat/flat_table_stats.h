@@ -8,7 +8,8 @@ namespace NTable {
 
     struct TPartStats {
         ui64 PartsCount = 0;    /* Total used TPart units in db    */
-        ui64 IndexBytes = 0;
+        ui64 FlatIndexBytes = 0;
+        ui64 BTreeIndexBytes = 0;
         ui64 OtherBytes = 0;    /* Other metadata and sys. indexes */
         ui64 ByKeyBytes = 0;
         ui64 PlainBytes = 0;    /* Plain data pages size           */
@@ -52,6 +53,32 @@ namespace NTable {
         ui64 MemRowCount = 0;
         ui64 MemDataSize = 0;
         ui64 MemDataWaste = 0;
+    };
+
+    struct TTableRuntimeStats {
+        ui64 OpenTxCount = 0;
+        ui64 TxsWithDataCount = 0;
+        ui64 CommittedTxCount = 0;
+        ui64 RemovedTxCount = 0;
+        ui64 RemovedCommittedTxs = 0;
+
+        TTableRuntimeStats& operator+=(const TTableRuntimeStats& s) noexcept {
+            OpenTxCount += s.OpenTxCount;
+            TxsWithDataCount += s.TxsWithDataCount;
+            CommittedTxCount += s.CommittedTxCount;
+            RemovedTxCount += s.RemovedTxCount;
+            RemovedCommittedTxs += s.RemovedCommittedTxs;
+            return *this;
+        }
+
+        TTableRuntimeStats& operator-=(const TTableRuntimeStats& s) noexcept {
+            OpenTxCount -= s.OpenTxCount;
+            TxsWithDataCount -= s.TxsWithDataCount;
+            CommittedTxCount -= s.CommittedTxCount;
+            RemovedTxCount -= s.RemovedTxCount;
+            RemovedCommittedTxs -= s.RemovedCommittedTxs;
+            return *this;
+        }
     };
 
 }

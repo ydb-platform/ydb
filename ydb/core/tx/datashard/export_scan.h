@@ -32,18 +32,21 @@ struct TEvExportScan {
     struct TEvBuffer: public TEventLocal<TEvBuffer<TBuffer>, EvBuffer> {
         TBuffer Buffer;
         bool Last;
+        TString Checksum;
 
         TEvBuffer() = default;
 
-        explicit TEvBuffer(TBuffer&& buffer, bool last)
+        explicit TEvBuffer(TBuffer&& buffer, bool last, TString&& checksum = "")
             : Buffer(std::move(buffer))
             , Last(last)
+            , Checksum(std::move(checksum))
         {
         }
 
         TString ToString() const override {
             return TStringBuilder() << this->ToStringHeader() << " {"
                 << " Last: " << Last
+                << " Checksum:" << Checksum
             << " }";
         }
     };

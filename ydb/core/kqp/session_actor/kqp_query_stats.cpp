@@ -26,7 +26,7 @@ ui64 TKqpQueryStats::GetWorkerCpuTimeUs() const {
     return WorkerCpuTimeUs;
 }
 
-constexpr size_t QUERY_TEXT_LIMIT = 4096;
+constexpr size_t QUERY_TEXT_LIMIT = 10240;
 
 template <typename T>
 void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
@@ -210,6 +210,7 @@ ui64 CalcRequestUnit(const TKqpQueryStats& stats) {
 NKqpProto::TKqpStatsQuery TKqpQueryStats::ToProto() const {
     NKqpProto::TKqpStatsQuery result;
     result.SetDurationUs(DurationUs);
+    result.SetQueuedTimeUs(QueuedTimeUs);
 
     if (Compilation) {
         result.MutableCompilation()->SetFromCache(Compilation->FromCache);

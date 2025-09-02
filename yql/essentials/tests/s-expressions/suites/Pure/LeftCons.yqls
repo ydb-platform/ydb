@@ -1,0 +1,5 @@
+(
+(let c (Cons! world (String 'a)))
+(let world (Left! c))
+(return world)
+)

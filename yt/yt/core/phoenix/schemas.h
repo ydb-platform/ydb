@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -13,7 +13,6 @@ struct TFieldSchema
 {
     TString Name;
     TFieldTag Tag;
-    bool Deprecated;
 
     REGISTER_YSON_STRUCT(TFieldSchema);
     static void Register(TRegistrar registrar);
@@ -53,4 +52,4 @@ DEFINE_REFCOUNTED_TYPE(TUniverseSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

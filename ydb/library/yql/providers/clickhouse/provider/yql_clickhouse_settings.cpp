@@ -13,7 +13,7 @@ TClickHouseSettings::TConstPtr TClickHouseConfiguration::Snapshot() const {
 }
 
 bool TClickHouseConfiguration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 } // NYql

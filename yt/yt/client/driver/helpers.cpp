@@ -14,7 +14,7 @@ namespace NYT::NDriver {
 using namespace NObjectClient;
 using namespace NTracing;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 bool operator==(const TEtag& lhs, const TEtag& rhs)
 {
@@ -51,7 +51,7 @@ void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf /*spe
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PutMethodInfoInTraceContext(const TStringBuf& methodName)
+void PutMethodInfoInTraceContext(TStringBuf methodName)
 {
     if (auto* traceContext = TryGetCurrentTraceContext()) {
         auto baggage = traceContext->UnpackOrCreateBaggage();

@@ -97,6 +97,157 @@ TEST(TNonblockingQueueTest, EnqueueFirstAsync)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TBoundedNonblockingQueueTest, DequeueFirst)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto resultDequeue1 = queue.Dequeue();
+    auto resultDequeue2 = queue.Dequeue();
+
+    EXPECT_FALSE(resultDequeue1.IsSet());
+    EXPECT_FALSE(resultDequeue2.IsSet());
+
+    auto resultEnqueue1 = queue.Enqueue(1);
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(1, resultDequeue1.Get().Value());
+
+    auto resultEnqueue2 = queue.Enqueue(2);
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(2, resultDequeue2.Get().Value());
+}
+
+TEST(TBoundedNonblockingQueueTest, EnqueueFirst)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto resultEnqueue1 = queue.Enqueue(1);
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+
+    auto resultEnqueue2 = queue.Enqueue(2);
+    EXPECT_FALSE(resultEnqueue2.IsSet());
+
+    auto resultDequeue1 = queue.Dequeue();
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(1, resultDequeue1.Get().Value());
+
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    auto resultDequeue2 = queue.Dequeue();
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(2, resultDequeue2.Get().Value());
+}
+
+TEST(TBoundedNonblockingQueueTest, MixedEnqueueFirst)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto resultEnqueue1 = queue.Enqueue(1);
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+
+    auto resultDequeue1 = queue.Dequeue();
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(1, resultDequeue1.Get().Value());
+
+    auto resultDequeue2 = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue2.IsSet());
+
+    auto resultEnqueue2 = queue.Enqueue(2);
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(2, resultDequeue2.Get().Value());
+}
+
+TEST(TBoundedNonblockingQueueTest, MixedDequeueFirst)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+
+    auto resultDequeue1 = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue1.IsSet());
+
+    auto resultEnqueue1 = queue.Enqueue(1);
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(1, resultDequeue1.Get().Value());
+
+    auto resultEnqueue2 = queue.Enqueue(2);
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    auto resultDequeue2 = queue.Dequeue();
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(2, resultDequeue2.Get().Value());
+}
+
+TEST(TBoundedNonblockingQueueTest, DequeueFirstAsync)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto resultDequeue = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue.IsSet());
+
+    auto promise = NewPromise<int>();
+    auto resultEnqueue = queue.Enqueue(promise.ToFuture());
+    EXPECT_FALSE(resultDequeue.IsSet());
+    EXPECT_TRUE(resultEnqueue.IsSet());
+
+    promise.Set(1);
+    EXPECT_TRUE(resultDequeue.IsSet());
+    EXPECT_EQ(resultDequeue.Get().Value(), 1);
+}
+
+TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto promise1 = NewPromise<int>();
+    auto promise2 = NewPromise<int>();
+    auto resultEnqueue1 = queue.Enqueue(promise1.ToFuture());
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+    auto resultEnqueue2 = queue.Enqueue(promise2.ToFuture());
+    EXPECT_FALSE(resultEnqueue2.IsSet());
+
+    auto resultDequeue1 = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue1.IsSet());
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    promise1.Set(1);
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(resultDequeue1.Get().Value(), 1);
+
+    promise2.Set(2);
+    auto resultDequeue2 = queue.Dequeue();
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(resultDequeue2.Get().Value(), 2);
+}
+
+TEST(TBoundedNonblockingQueueTest, EnqueueFirstAsync2)
+{
+    TBoundedNonblockingQueue<int> queue(1);
+    auto promise1 = NewPromise<int>();
+    auto promise2 = NewPromise<int>();
+    auto resultEnqueue1 = queue.Enqueue(promise1.ToFuture());
+    EXPECT_TRUE(resultEnqueue1.IsSet());
+    auto resultEnqueue2 = queue.Enqueue(promise2.ToFuture());
+    EXPECT_FALSE(resultEnqueue2.IsSet());
+
+    auto resultDequeue1 = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue1.IsSet());
+
+    EXPECT_TRUE(resultEnqueue2.IsSet());
+
+    auto resultDequeue2 = queue.Dequeue();
+    EXPECT_FALSE(resultDequeue2.IsSet());
+
+    promise1.Set(1);
+    EXPECT_TRUE(resultDequeue1.IsSet());
+    EXPECT_EQ(resultDequeue1.Get().Value(), 1);
+
+    promise2.Set(2);
+    EXPECT_TRUE(resultDequeue2.IsSet());
+    EXPECT_EQ(resultDequeue2.Get().Value(), 2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NConcurrency
 

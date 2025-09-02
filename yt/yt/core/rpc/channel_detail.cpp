@@ -21,7 +21,7 @@ TChannelWrapper::TChannelWrapper(IChannelPtr underlyingChannel)
     YT_ASSERT(UnderlyingChannel_);
 }
 
-const TString& TChannelWrapper::GetEndpointDescription() const
+const std::string& TChannelWrapper::GetEndpointDescription() const
 {
     return UnderlyingChannel_->GetEndpointDescription();
 }
@@ -62,11 +62,16 @@ int TChannelWrapper::GetInflightRequestCount()
     return UnderlyingChannel_->GetInflightRequestCount();
 }
 
+const IMemoryUsageTrackerPtr& TChannelWrapper::GetChannelMemoryTracker()
+{
+    return UnderlyingChannel_->GetChannelMemoryTracker();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlying)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     if (!underlying) {
         return;
@@ -100,7 +105,7 @@ void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlyi
 
 void TClientRequestControlThunk::Cancel()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     auto guard = Guard(SpinLock_);
 
@@ -157,9 +162,9 @@ TFuture<void> TClientRequestControlThunk::SendStreamingFeedback(const TStreaming
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TClientRequestPerformanceProfiler::TPerformanceCounters
+struct TClientRequestPerformanceProfiler::TMethodPerformanceCounters
 {
-    TPerformanceCounters(const NProfiling::TProfiler& profiler)
+    TMethodPerformanceCounters(const NProfiling::TProfiler& profiler)
         : AckTimeCounter(profiler.Timer("/request_time/ack"))
         , ReplyTimeCounter(profiler.Timer("/request_time/reply"))
         , TimeoutTimeCounter(profiler.Timer("/request_time/timeout"))
@@ -171,8 +176,18 @@ struct TClientRequestPerformanceProfiler::TPerformanceCounters
         , CancelledRequestCounter(profiler.Counter("/cancelled_request_count"))
         , RequestMessageBodySizeCounter(profiler.Counter("/request_message_body_bytes"))
         , RequestMessageAttachmentSizeCounter(profiler.Counter("/request_message_attachment_bytes"))
-        , ResponseMessageBodySizeCounter(profiler.Counter("/response_message_body_bytes"))
-        , ResponseMessageAttachmentSizeCounter(profiler.Counter("/response_message_attachment_bytes"))
+        , ResponseMessageBodySizeCounter(profiler
+            .WithTag("recognized", "true")
+            .Counter("/response_message_body_bytes"))
+        , ResponseMessageAttachmentSizeCounter(profiler
+            .WithTag("recognized", "true")
+            .Counter("/response_message_attachment_bytes"))
+        , UnrecognizedResponseMessageBodySizeCounter(profiler
+            .WithTag("recognized", "false")
+            .Counter("/response_message_body_bytes"))
+        , UnrecognizedResponseMessageAttachmentSizeCounter(profiler
+            .WithTag("recognized", "false")
+            .Counter("/response_message_attachment_bytes"))
     { }
 
     NProfiling::TEventTimer AckTimeCounter;
@@ -189,20 +204,33 @@ struct TClientRequestPerformanceProfiler::TPerformanceCounters
     NProfiling::TCounter RequestMessageAttachmentSizeCounter;
     NProfiling::TCounter ResponseMessageBodySizeCounter;
     NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
+    NProfiling::TCounter UnrecognizedResponseMessageBodySizeCounter;
+    NProfiling::TCounter UnrecognizedResponseMessageAttachmentSizeCounter;
 };
 
-auto TClientRequestPerformanceProfiler::GetPerformanceCounters(
+const TClientRequestPerformanceProfiler::TMethodPerformanceCounters*
+TClientRequestPerformanceProfiler::FindPerformanceCounters(
     std::string service,
-    std::string method) -> const TPerformanceCounters*
+    std::string method)
 {
-    using TCountersMap = NConcurrency::TSyncMap<std::pair<std::string, std::string>, TPerformanceCounters>;
+    using TCountersMap = NConcurrency::TSyncMap<std::pair<std::string, std::string>, TMethodPerformanceCounters>;
+
+    return LeakySingleton<TCountersMap>()->Find(std::pair(service, method));
+}
+
+const TClientRequestPerformanceProfiler::TMethodPerformanceCounters*
+TClientRequestPerformanceProfiler::GetPerformanceCounters(
+    std::string service,
+    std::string method)
+{
+    using TCountersMap = NConcurrency::TSyncMap<std::pair<std::string, std::string>, TMethodPerformanceCounters>;
 
     auto [counter, _] = LeakySingleton<TCountersMap>()->FindOrInsert(std::pair(service, method), [&] {
-        auto profiler = RpcClientProfiler
+        auto profiler = RpcClientProfiler()
             .WithHot()
-            .WithTag("yt_service", TString(service))
-            .WithTag("method", TString(method), -1);
-        return TPerformanceCounters(profiler);
+            .WithTag("yt_service", service)
+            .WithTag("method", method, -1);
+        return TMethodPerformanceCounters(profiler);
     });
     return counter;
 }
@@ -221,8 +249,21 @@ void TClientRequestPerformanceProfiler::ProfileRequest(const TSharedRefArray& re
 void TClientRequestPerformanceProfiler::ProfileReply(const TSharedRefArray& responseMessage)
 {
     MethodCounters_->ReplyTimeCounter.Record(Timer_.GetElapsedTime());
-    MethodCounters_->ResponseMessageBodySizeCounter.Increment(GetMessageBodySize(responseMessage));
-    MethodCounters_->ResponseMessageAttachmentSizeCounter.Increment(GetTotalMessageAttachmentSize(responseMessage));
+    ProfileReplyWithoutContext(responseMessage, MethodCounters_, /*recognized*/ true);
+}
+
+void TClientRequestPerformanceProfiler::ProfileReplyWithoutContext(
+    const TSharedRefArray& responseMessage,
+    const TMethodPerformanceCounters* counters,
+    bool recognized)
+{
+    if (recognized) {
+        counters->ResponseMessageBodySizeCounter.Increment(GetMessageBodySize(responseMessage));
+        counters->ResponseMessageAttachmentSizeCounter.Increment(GetTotalMessageAttachmentSize(responseMessage));
+    } else {
+        counters->UnrecognizedResponseMessageBodySizeCounter.Increment(GetMessageBodySize(responseMessage));
+        counters->UnrecognizedResponseMessageAttachmentSizeCounter.Increment(GetTotalMessageAttachmentSize(responseMessage));
+    }
 }
 
 void TClientRequestPerformanceProfiler::ProfileAcknowledgement()

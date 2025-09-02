@@ -71,7 +71,7 @@ for module in MODULES.values():
     save_intrinsic_alias(module)
 
 
-class Aliases(ModuleAnalysis):
+class Aliases(ModuleAnalysis[GlobalDeclarations]):
     '''
     Gather aliasing informations across nodes
 
@@ -81,10 +81,11 @@ class Aliases(ModuleAnalysis):
 
     RetId = '@'
 
+    ResultType = dict
+
     def __init__(self):
-        self.result = dict()
+        super().__init__()
         self.aliases = None
-        super(Aliases, self).__init__(GlobalDeclarations)
 
     @staticmethod
     def dump(result, filter=None):
@@ -420,6 +421,21 @@ class Aliases(ModuleAnalysis):
         >>> Aliases.dump(result, filter=ast.Subscript)
         [a, b][c] => ['a', 'b']
 
+        Also work in case of a dict:
+
+        >>> module = ast.parse('def foo(a, b, c): return {a:b}[c]')
+        >>> result = pm.gather(Aliases, module)
+        >>> Aliases.dump(result, filter=ast.Subscript)
+        {a: b}[c] => ['b']
+
+        Even when built in several statements:
+        >>> module = ast.parse('def foo(a, b, c): d = {} ; d[a] = b; return d[c]')
+        >>> result = pm.gather(Aliases, module)
+        >>> Aliases.dump(result, filter=ast.Subscript)
+        d[a] => ['b']
+        d[c] => ['b']
+
+
         Moreover, in case of a tuple indexed by a constant value, we can
         further refine the aliasing information:
 
@@ -473,7 +489,7 @@ class Aliases(ModuleAnalysis):
 
     def visit_Name(self, node):
         if node.id not in self.aliases:
-            raise UnboundIdentifierError
+            raise UnboundIdentifierError(node.id)
         return self.add(node, self.aliases[node.id])
 
     def visit_Tuple(self, node):
@@ -544,6 +560,11 @@ class Aliases(ModuleAnalysis):
 
     # aliasing created by statements
 
+    def init_function_alias(self, node):
+        "each argument is bound to a different identifier"
+        self.aliases.update((arg.id, {arg})
+                            for arg in node.args.args)
+
     def visit_FunctionDef(self, node):
         '''
         Initialise aliasing default value before visiting.
@@ -558,8 +579,7 @@ class Aliases(ModuleAnalysis):
         self.aliases.update((k, {v})
                             for k, v in self.global_declarations.items())
 
-        self.aliases.update((arg.id, {arg})
-                            for arg in node.args.args)
+        self.init_function_alias(node)
 
         self.generic_visit(node)
         if Aliases.RetId in self.aliases:
@@ -612,6 +632,27 @@ class Aliases(ModuleAnalysis):
 
             node.return_alias = merge_return_aliases
 
+    def visit_Assert(self, node):
+        self.generic_visit(node)
+
+        if not isinstance(node.test, ast.Compare):
+            return
+        if len(node.test.ops) != 1:
+            return
+        op = node.test.ops[0]
+        comparator = node.test.comparators[0]
+
+        if not isinstance(node.test.left, ast.Name):
+            return
+        if not isinstance(comparator, ast.Name):
+            return
+
+        if isinstance(op, ast.IsNot):
+            left_aliases = self.aliases[node.test.left.id]
+            right_aliases = self.aliases[comparator.id]
+            self.aliases[node.test.left.id] = self.aliases[node.test.left.id].difference(right_aliases)
+            right_aliases.difference_update(left_aliases)
+
     def visit_Assign(self, node):
         r'''
         Assignment creates aliasing between lhs and rhs
@@ -626,8 +667,9 @@ class Aliases(ModuleAnalysis):
         Everyone points to the formal parameter 'a' \o/
         '''
         md.visit(self, node)
-        value_aliases = self.visit(node.value)
-        for t in node.targets:
+        value_aliases = self.visit(node.value) if node.value else {}
+        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+        for t in targets:
             if isinstance(t, ast.Name):
                 self.aliases[t.id] = set(value_aliases) or {t}
                 for alias in list(value_aliases):
@@ -635,8 +677,28 @@ class Aliases(ModuleAnalysis):
                         a_id = alias.id
                         self.aliases[a_id] = self.aliases[a_id].union((t,))
                 self.add(t, self.aliases[t.id])
+            elif isinstance(t, ast.Subscript):
+                def wrap(t, aliases):
+                    if isinstance(t, ast.Subscript):
+                        alias, wrapped = wrap(t.value, aliases)
+                        return alias, {ContainerOf(wrapped)}
+                    elif isinstance(t, ast.Name):
+                        return t, aliases
+                    else:
+                        raise NotImplementedError
+                try:
+                    alias, wrapped = wrap(t, value_aliases)
+                    self.aliases[alias.id] = self.aliases[alias.id].union(wrapped)
+                except NotImplementedError:
+                    ...
+                self.visit(t)
+                self.add(t, value_aliases)
             else:
                 self.visit(t)
+
+    def visit_AnnAssign(self, node):
+        self.visit_Assign(node)
+        self.visit(node.annotation)
 
     def visit_For(self, node):
         '''
@@ -786,3 +848,14 @@ class StrictAliases(Aliases):
 
     def get_unbound_value_set(self):
         return set()
+
+
+class InterproceduralAliases(Aliases):
+    """
+    Gather aliases while assuming two different parameters can point to the same
+    value
+    """
+
+    def init_function_alias(self, node):
+        self.aliases.update((arg.id, set(node.args.args))
+                            for arg in node.args.args)

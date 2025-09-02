@@ -955,14 +955,14 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
     std::vector<std::vector<TString>> result;
     for (TStringBuf record : StringSplitter(noComments).SplitByString(";;")) {
         record = StripString(record);
-        if (record.Empty()) {
+        if (record.empty()) {
             continue;
         }
         std::vector<TString> fields;
         for (TStringBuf field : StringSplitter(record).SplitByString("::")) {
             fields.emplace_back(StripString(field));
         }
-        if (static_cast<int>(fields.size()) != expectedFieldsCount) {
+        if (std::ssize(fields) != expectedFieldsCount) {
             ythrow yexception() << "Unexpected field count expected: " << expectedFieldsCount << " actual: " << fields.size();
         }
         result.push_back(fields);

@@ -29,10 +29,10 @@ public:
 
     using TClient::FlatQuery;
 
-    void FlatQuery(const TString& mkql) {
+    void FlatQuery(NActors::TTestActorRuntime* runtime, const TString& mkql) {
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
-        bool success = TClient::FlatQuery(mkql, opts, res);
+        bool success = TClient::FlatQuery(runtime, mkql, opts, res);
         UNIT_ASSERT(success);
     }
 
@@ -346,7 +346,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         txLocks.emplace_back(NMiniKQL::IEngineFlat::TTxLock{281474976710659, 72075186224037889, 2, 0, ssId, pathId});
         txLockId = 281474976710659;
     } else {
-        cs.Client.FlatQuery(getSetLocks(), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), getSetLocks(), res);
         ExtractResultLocks<TLocksVer>(res, txLocks);
         UNIT_ASSERT(txLocks.size() > 0);
         txLockId = txLocks[0].LockId;
@@ -386,10 +386,10 @@ void TestLock(const TLocksTestOptions& testOpts) {
             (return ret_)
         ))___";
     }
-    cs.Client.FlatQuery(Sprintf(breakLock, testOpts.Table, testOpts.BreakKey, (testOpts.Break ? "true" : "false") ));
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(breakLock, testOpts.Table, testOpts.BreakKey, (testOpts.Break ? "true" : "false") ));
 
     if (testOpts.Dup) {
-        cs.Client.FlatQuery(getSetLocks(), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), getSetLocks(), res);
         ExtractResultLocks<TLocksVer>(res, txLocks);
     }
 
@@ -432,7 +432,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         (return return_)
     ))___";
 
-    cs.Client.FlatQuery(Sprintf(commit, testOpts.Table,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(commit, testOpts.Table,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
         TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data(),
@@ -488,7 +488,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         (return ret_)
     ))___";
     TString checkUpdated = Sprintf(checkUpdatedT, testOpts.Table, testOpts.UpdateKey);
-    cs.Client.FlatQuery(checkUpdated, res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), checkUpdated, res);
 
     {
         TValue result = TValue::Create(res.GetValue(), res.GetType());
@@ -512,7 +512,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         ))
     ))___";
 
-    cs.Client.FlatQuery(Sprintf(eraseLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(eraseLocks,
         TLocksVer::TableName(),
         TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
         TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res);
@@ -530,7 +530,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         ))
     ))___";
 
-    cs.Client.FlatQuery(Sprintf(checkErased,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(checkErased,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
         TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res);
@@ -1134,7 +1134,7 @@ static void MultipleLocks() {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(q1, res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), q1, res);
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks1;
     ExtractResultLocks<TLocksVer>(res, locks1);
 
@@ -1151,7 +1151,7 @@ static void MultipleLocks() {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(someUpdate);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), someUpdate);
 
     const char * q2 = R"___((
         (let row0_ '('('key (Uint32 '42))))
@@ -1166,7 +1166,7 @@ static void MultipleLocks() {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(q2, res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), q2, res);
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
     ExtractResultLocks<TLocksVer>(res, locks2);
 
@@ -1195,7 +1195,7 @@ static void MultipleLocks() {
         TLocksVer::Key(locks2[1].LockId, locks2[1].DataShard, locks2[1].SchemeShard, locks2[1].PathId).data());
 
     { // select locks
-        cs.Client.FlatQuery(selectLocks, res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), selectLocks, res);
 
         TValue result = TValue::Create(res.GetValue(), res.GetType());
 
@@ -1231,12 +1231,12 @@ static void MultipleLocks() {
             (EraseRow locksTable_ lock_)
         ))
     ))___";
-    cs.Client.FlatQuery(Sprintf(eraseLock,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(eraseLock,
         TLocksVer::TableName(),
         TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res);
 
     { // select locks
-        cs.Client.FlatQuery(selectLocks, res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), selectLocks, res);
 
         TValue result = TValue::Create(res.GetValue(), res.GetType());
 
@@ -1278,7 +1278,7 @@ Y_UNIT_TEST(SetLockFail) {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(lockUpdate, opts, res, NMsgBusProxy::MSTATUS_REJECTED);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), lockUpdate, opts, res, NMsgBusProxy::MSTATUS_REJECTED);
 
     // lock+erase
     const char * lockErase = R"___((
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST(SetLockFail) {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(lockErase, opts, res, NMsgBusProxy::MSTATUS_REJECTED);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), lockErase, opts, res, NMsgBusProxy::MSTATUS_REJECTED);
 }
 
 template <typename TLocksVer>
@@ -1311,7 +1311,7 @@ static void SetLockNothing() {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(lockNothing, opts, res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), lockNothing, opts, res);
 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
     ExtractResultLocks<TLocksVer>(res, locks);
@@ -1340,7 +1340,7 @@ static void SetEraseSet() {
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(Sprintf(queryT, 0), res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(queryT, 0), res);
 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks1;
     ExtractResultLocks<TLocksVer>(res, locks1);
@@ -1357,11 +1357,11 @@ static void SetEraseSet() {
             (EraseRow locksTable_ lock_)
         ))
     ))___";
-    cs.Client.FlatQuery(Sprintf(eraseLock,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(eraseLock,
         TLocksVer::TableName(),
         TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res);
 
-    cs.Client.FlatQuery(Sprintf(queryT, locks1[0].LockId), res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(queryT, locks1[0].LockId), res);
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
     ExtractResultLocks<TLocksVer>(res, locks2);
 
@@ -1391,7 +1391,7 @@ static void SetEraseSet() {
         (let apply_ (Equal (Length goods_) (Uint64 '1)))
         (return (AsList (SetResult 'apply apply_)))
     ))";
-    cs.Client.FlatQuery(Sprintf(checkLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(checkLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(),
         locks1[0].Generation, locks1[0].Counter), res);
@@ -1449,7 +1449,7 @@ static void SetBreakSetEraseBreak() {
 
     // set first
     NKikimrMiniKQL::TResult res1;
-    cs.Client.FlatQuery(Sprintf(qSet, 0), res1);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qSet, 0), res1);
 
 #if 0
     {
@@ -1489,7 +1489,7 @@ static void SetBreakSetEraseBreak() {
 
     // check first
     NKikimrMiniKQL::TResult res2;
-    cs.Client.FlatQuery(Sprintf(qCheckLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(),
         l.Generation, l.Counter), res2);
@@ -1503,11 +1503,11 @@ static void SetBreakSetEraseBreak() {
     }
 
     // break first
-    cs.Client.FlatQuery(qBreak);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), qBreak);
 
     // check first broken
     NKikimrMiniKQL::TResult res3;
-    cs.Client.FlatQuery(Sprintf(qCheckLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(),
         l.Generation, l.Counter), res3);
@@ -1522,7 +1522,7 @@ static void SetBreakSetEraseBreak() {
 
     // set second
     NKikimrMiniKQL::TResult res4;
-    cs.Client.FlatQuery(Sprintf(qSet, 0), res4);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qSet, 0), res4);
     ExtractResultLocks<TLocksVer>(res4, locks);
 
     {
@@ -1540,11 +1540,11 @@ static void SetBreakSetEraseBreak() {
 
     // erase first
     NKikimrMiniKQL::TResult res5;
-    cs.Client.FlatQuery(Sprintf(qEraseLock,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qEraseLock,
         TLocksVer::TableName(), TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data()), res5);
 
     // check second
-    cs.Client.FlatQuery(Sprintf(qCheckLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(),
         locks[0].Generation, locks[0].Counter), res5);
@@ -1558,11 +1558,11 @@ static void SetBreakSetEraseBreak() {
     }
 
     // break second
-    cs.Client.FlatQuery(qBreak);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), qBreak);
 
     // check second
     NKikimrMiniKQL::TResult res6;
-    cs.Client.FlatQuery(Sprintf(qCheckLocks,
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(),
         locks[0].Generation, locks[0].Counter), res6);
@@ -1605,7 +1605,7 @@ Y_UNIT_TEST(PointSetBreak) {
     ))___";
 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i*2)); // 0, 2, 4...
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, i*2)); // 0, 2, 4...
     }
 
     const char * breakLock = R"___((
@@ -1619,7 +1619,7 @@ Y_UNIT_TEST(PointSetBreak) {
     ui32 retry = 2;
     for (ui32 r = 0; r < retry; ++r) {
         for (ui64 i = 0; i < NUM_LOTS; ++i) {
-            cs.Client.FlatQuery(Sprintf(breakLock, i*2)); // 0, 2, 4...
+            cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(breakLock, i*2)); // 0, 2, 4...
         }
     }
 }
@@ -1640,7 +1640,7 @@ Y_UNIT_TEST(PointSetNotBreak) {
     ))___";
 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i*2)); // 0, 2, 4...
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, i*2)); // 0, 2, 4...
     }
 
     const char * breakLock = R"___((
@@ -1654,7 +1654,7 @@ Y_UNIT_TEST(PointSetNotBreak) {
     ui32 retry = 2;
     for (ui32 r = 0; r < retry; ++r) {
         for (ui64 i = 0; i < NUM_LOTS; ++i) {
-            cs.Client.FlatQuery(Sprintf(breakLock, i*2+1)); // 1, 3, 5...
+            cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(breakLock, i*2+1)); // 1, 3, 5...
         }
     }
 }
@@ -1676,7 +1676,7 @@ static void PointSetRemove() {
 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i*2), res); // 0, 2, 4...
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, i*2), res); // 0, 2, 4...
         ExtractResultLocks<TLocksVer>(res, locks);
     }
 
@@ -1688,7 +1688,7 @@ static void PointSetRemove() {
         ))
     ))___";
     for (auto& lock : locks) {
-        cs.Client.FlatQuery(Sprintf(removeLock,
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(removeLock,
             TLocksVer::TableName(),
             TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()));
     }
@@ -1713,7 +1713,7 @@ Y_UNIT_TEST(RangeSetBreak) {
     ))___";
 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i, i+1)); // [0,1], [1,2], [2,3]
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, i, i+1)); // [0,1], [1,2], [2,3]
     }
 
     const char * breakLock = R"___((
@@ -1726,7 +1726,7 @@ Y_UNIT_TEST(RangeSetBreak) {
     ui32 retry = 2;
     for (ui32 r = 0; r < retry; ++r) {
         for (ui64 i = 0; i < NUM_LOTS; ++i) {
-            cs.Client.FlatQuery(Sprintf(breakLock, 2*i+1)); // 1, 3, 5...
+            cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(breakLock, 2*i+1)); // 1, 3, 5...
         }
     }
 }
@@ -1745,7 +1745,7 @@ Y_UNIT_TEST(RangeSetNotBreak) {
     ))___";
 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, 3*i, 3*i+1)); // [0,1], [3,4], [6,7]
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, 3*i, 3*i+1)); // [0,1], [3,4], [6,7]
     }
 
     const char * breakLock = R"___((
@@ -1758,7 +1758,7 @@ Y_UNIT_TEST(RangeSetNotBreak) {
     ui32 retry = 2;
     for (ui32 r = 0; r < retry; ++r) {
         for (ui64 i = 0; i < NUM_LOTS; ++i) {
-            cs.Client.FlatQuery(Sprintf(breakLock, 3*i+2)); // 2, 5, 8...
+            cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(breakLock, 3*i+2)); // 2, 5, 8...
         }
     }
 }
@@ -1779,7 +1779,7 @@ static void RangeSetRemove() {
 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, 2*i, 2*i+1), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, 2*i, 2*i+1), res);
         ExtractResultLocks<TLocksVer>(res, locks);
     }
 
@@ -1791,7 +1791,7 @@ static void RangeSetRemove() {
         ))
     ))___";
     for (auto& lock : locks) {
-        cs.Client.FlatQuery(Sprintf(removeLock,
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(removeLock,
             TLocksVer::TableName(),
             TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()));
     }
@@ -1810,8 +1810,14 @@ static void LocksLimit() {
 
     using TLock = TSysTables::TLocksTable::TLock;
 
-    ui32 limit = NDataShard::TLockLocker::LockLimit();
-    const ui32 factor = 100;
+    auto prevLimit = NDataShard::TLockLocker::LockLimit();
+    NDataShard::TLockLocker::SetLockLimit(20);
+    Y_DEFER {
+        NDataShard::TLockLocker::SetLockLimit(prevLimit);
+    };
+
+    const ui32 limit = NDataShard::TLockLocker::LockLimit();
+    const ui32 factor = 5;
 
     const char * query = R"((
         (let row0_ '('('key (Uint32 '%u))))
@@ -1829,14 +1835,14 @@ static void LocksLimit() {
     locks.reserve(limit * 2);
 
     for (ui32 i = 0; i < limit; ++i) {
-        cs.Client.FlatQuery(Sprintf(query, i%factor, 0), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(query, i%factor, 0), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         TLocksVer::PrintLock(locks.back());
         UNIT_ASSERT_VALUES_EQUAL(locks.back().Counter, i);
     }
 
     for (ui32 i = 0; i < factor; ++i) {
-        cs.Client.FlatQuery(Sprintf(query, i%factor, 0), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(query, i%factor, 0), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         TLocksVer::PrintLock(locks.back());
         UNIT_ASSERT(TLock::IsTooMuch(locks.back().Counter));
@@ -1844,7 +1850,7 @@ static void LocksLimit() {
 
     Cout << "setting same locks... " << Endl;
     for (ui32 i = 0; i < factor; ++i) {
-        cs.Client.FlatQuery(Sprintf(query, i%factor, locks[i].LockId), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(query, i%factor, locks[i].LockId), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         TLocksVer::PrintLock(locks.back());
         UNIT_ASSERT_VALUES_EQUAL(locks.back().LockId, locks[i].LockId);
@@ -1857,12 +1863,12 @@ static void LocksLimit() {
         (return (AsList (EraseRow '/dc-1/Dir/A key_)))
     ))";
     for (ui32 i = 0; i < factor; ++i) {
-        cs.Client.FlatQuery(Sprintf(erase, i%factor), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(erase, i%factor), res);
     }
 
     Cout << "evicting (first) locks... " << Endl;
     for (ui32 i = 0; i < factor; ++i) {
-        cs.Client.FlatQuery(Sprintf(query, i%factor, 0), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(query, i%factor, 0), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         TLocksVer::PrintLock(locks.back());
         UNIT_ASSERT_VALUES_EQUAL(locks.back().Counter, limit+i);
@@ -1870,7 +1876,7 @@ static void LocksLimit() {
 
     Cout << "resetting (first) locks... " << Endl;
     for (ui32 i = 0; i < factor; ++i) {
-        cs.Client.FlatQuery(Sprintf(query, i%factor, locks[i].LockId), res);
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(query, i%factor, locks[i].LockId), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         TLocksVer::PrintLock(locks.back());
         UNIT_ASSERT_VALUES_EQUAL(locks.back().LockId, locks[i].LockId);
@@ -1889,7 +1895,7 @@ static void LocksLimit() {
 
     Cout << "reading locks... " << Endl;
     for (const auto& lock : locks) {
-        cs.Client.FlatQuery(Sprintf(selectLocksT,
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(selectLocksT,
             TLocksVer::TableName(), TLocksVer::Columns(),
             TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()), res);
 
@@ -1916,9 +1922,13 @@ static void ShardLocks() {
     NKikimrMiniKQL::TResult res;
     TClient::TFlatQueryOptions opts;
 
+    auto prevLimit = NDataShard::TLockLocker::TotalRangesLimit();
+    NDataShard::TLockLocker::SetTotalRangesLimit(10);
+    Y_DEFER {
+        NDataShard::TLockLocker::SetTotalRangesLimit(prevLimit);
+    };
 
-    ui32 limit = NDataShard::TLockLocker::LockLimit();
-    //const ui32 factor = 100;
+    const ui32 limit = NDataShard::TLockLocker::TotalRangesLimit();
 
     const char * setLock = R"___((
         (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u))))
@@ -1932,15 +1942,17 @@ static void ShardLocks() {
     // Attach lots of ranges to a single lock.
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
     ui64 lockId = 0;
-    for (ui32 i = 0; i < limit + 1; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i * 10, i * 10 + 5, lockId), res);
+    for (ui32 i = 0; i < limit; ++i) {
+        Cout << "... reading range " << i << Endl;
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, i * 10, i * 10 + 5, lockId), res);
         ExtractResultLocks<TLocksVer>(res, locks);
         lockId = locks.back().LockId;
     }
 
-    // We now have too many rnages attached to locks and new lock
-    // will be forced to be shard lock.
-    cs.Client.FlatQuery(Sprintf(setLock, 0, 5, 0), res);
+    // We now have too many ranges attached to locks and the oldest lock
+    // will be forced to be a shard lock.
+    Cout << "... reading additional range with a new lock" << Endl;
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(setLock, 0, 5, 0), res);
     ExtractResultLocks<TLocksVer>(res, locks);
 
     // Now check shard lock is ok.
@@ -1953,7 +1965,8 @@ static void ShardLocks() {
         ))
     ))___";
     {
-        cs.Client.FlatQuery(Sprintf(checkLock,
+        Cout << "... checking the last lock (must be set)" << Endl;
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks.back().LockId,
                                                     locks.back().DataShard,
@@ -1969,20 +1982,23 @@ static void ShardLocks() {
         UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter);
     }
 
-    // Break locks by single row update.
+    // Upsert key 48, which does not conflict with either lock.
+    // However since the first lock is forced to be a shard lock it will break.
+    Cout << "... upserting key 48 (will break the first lock despite no conflicts)" << Endl;
     const char * lockUpdate = R"___((
-        (let row0_ '('('key (Uint32 '42))))
+        (let row0_ '('('key (Uint32 '48))))
         (let update_ '('('value (Uint32 '0))))
         (let ret_ (AsList
             (UpdateRow '/dc-1/Dir/A row0_ update_)
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(lockUpdate, opts, res);
+    cs.Client.FlatQuery(cs.Server.GetRuntime(), lockUpdate, opts, res);
 
-    // Check locks are broken.
+    // Check the last lock is not broken.
     {
-        cs.Client.FlatQuery(Sprintf(checkLock,
+        Cout << "... checking the last lock (must not be broken)" << Endl;
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks.back().LockId,
                                                     locks.back().DataShard,
@@ -1991,11 +2007,17 @@ static void ShardLocks() {
                                     TLocksVer::Columns()), res);
         TValue result = TValue::Create(res.GetValue(), res.GetType());
         TValue xres = result["Result"];
-        UNIT_ASSERT(!xres.HaveValue());
+        UNIT_ASSERT(xres.HaveValue());
+        auto lock = ExtractRowLock<TLocksVer>(xres);
+        UNIT_ASSERT_VALUES_EQUAL(lock.LockId, locks.back().LockId);
+        UNIT_ASSERT_VALUES_EQUAL(lock.Generation, locks.back().Generation);
+        UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter);
     }
 
+    // Check the first lock is broken.
     {
-        cs.Client.FlatQuery(Sprintf(checkLock,
+        Cout << "... checking the first lock (must be broken)" << Endl;
+        cs.Client.FlatQuery(cs.Server.GetRuntime(), Sprintf(checkLock,
                                     TLocksVer::TableName(),
                                     TLocksVer::Key(locks[0].LockId,
                                                     locks[0].DataShard,

@@ -28,9 +28,9 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_exists")("session_id", SharingTask->GetSessionId())("info", SharingTask->DebugString());
     } else {
         SharingTask->Confirm();
+        TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);
     }
 
-    TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);
 
     return true;
 }
@@ -47,15 +47,29 @@ void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
     if (!SessionExistsFlag) {
         AFL_VERIFY(!!TxPropose);
         TxPropose->Complete(ctx);
+        TxPropose.reset();
     }
-    TxPropose.release();
 }
 
-bool TSharingTransactionOperator::ExecuteOnProgress(TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+bool TSharingTransactionOperator::ProgressOnExecute(
+    TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    if (!SharingTask) {
+        return true;
+    }
+    if (!TxFinish) {
+        TxFinish = SharingTask->AckInitiatorFinished(&owner, SharingTask).DetachResult();
+    }
+    TxFinish->Execute(txc, NActors::TActivationContext::AsActorContext());
+
     return true;
 }
 
-bool TSharingTransactionOperator::CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) {
+bool TSharingTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+    if (!SharingTask) {
+        return true;
+    }
+    AFL_VERIFY(!!TxFinish);
+    TxFinish->Complete(ctx);
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         ctx.Send(subscriber, event.Release(), 0, 0);

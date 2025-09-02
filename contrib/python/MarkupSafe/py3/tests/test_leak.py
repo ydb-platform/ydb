@@ -1,28 +1,25 @@
-import gc
-import platform
+from __future__ import annotations
 
-import pytest
+import gc
 
 from markupsafe import escape
 
 
-@pytest.mark.skipif(
-    escape.__module__ == "markupsafe._native",
-    reason="only test memory leak with speedups",
-)
-def test_markup_leaks():
+def test_markup_leaks() -> None:
     counts = set()
+    # Try to start with a "clean" count. Works for PyPy but not 3.13 JIT.
+    gc.collect()
 
-    for _i in range(20):
-        for _j in range(1000):
+    for _ in range(20):
+        for _ in range(1000):
             escape("foo")
             escape("<foo>")
             escape("foo")
             escape("<foo>")
-
-        if platform.python_implementation() == "PyPy":
-            gc.collect()
 
         counts.add(len(gc.get_objects()))
 
-    assert len(counts) == 1
+    # Some implementations, such as PyPy and Python 3.13 JIT, end up with 2
+    # counts rather than one. Presumably this is internals stabilizing. A leak
+    # would presumably have a different count every loop.
+    assert len(counts) < 3

@@ -3,7 +3,7 @@
 
 import time
 
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
 
@@ -29,7 +29,7 @@ class TestYdsBase(object):
         topic = topic_path if topic_path else self.output_topic
         return read_stream(topic, messages_count, commit_after_processing, self.consumer_name)
 
-    def wait_until(self, predicate, wait_time=yatest_common.plain_or_under_sanitizer(10, 50)):
+    def wait_until(self, predicate, wait_time=plain_or_under_sanitizer(10, 50)):
         deadline = time.time() + wait_time
         while time.time() < deadline:
             if predicate():

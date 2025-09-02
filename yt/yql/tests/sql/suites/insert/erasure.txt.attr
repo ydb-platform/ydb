@@ -1,0 +1,10 @@
+{
+    "_yql_row_spec" = {
+        "Type"=["StructType";[
+            ["key";["DataType";"String"]];
+            ["subkey";["DataType";"String"]];
+            ["value";["DataType";"String"]];
+        ]]
+    };
+    "erasure_codec" = "lrc_12_2_2"
+}

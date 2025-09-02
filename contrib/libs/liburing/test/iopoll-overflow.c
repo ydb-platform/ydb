@@ -74,14 +74,15 @@ int main(int argc, char *argv[])
 	char *fname;
 	int ret, fd;
 
-	p.flags = IORING_SETUP_IOPOLL | IORING_SETUP_CQSIZE;
+	p.flags = IORING_SETUP_IOPOLL | IORING_SETUP_CQSIZE |
+			IORING_SETUP_SUBMIT_ALL;
 	p.cq_entries = 64;
 	ret = t_create_ring_params(64, &ring, &p);
-	if (ret == T_SETUP_SKIP)
-		return 0;
+	if (ret == T_SETUP_SKIP || ret == -EINVAL)
+		return T_EXIT_SKIP;
 	if (ret != T_SETUP_OK) {
 		fprintf(stderr, "ring create failed: %d\n", ret);
-		return 1;
+		return T_EXIT_FAIL;
 	}
 
 	if (argc > 1) {
@@ -96,7 +97,7 @@ int main(int argc, char *argv[])
 
 	fd = open(fname, O_RDONLY | O_DIRECT);
 	if (fd < 0) {
-		if (errno == EINVAL) {
+		if (errno == EINVAL || errno == EACCES || errno == EPERM) {
 			if (fname != argv[1])
 				unlink(fname);
 			return T_EXIT_SKIP;

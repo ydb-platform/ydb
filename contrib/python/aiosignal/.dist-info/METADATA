@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: aiosignal
-Version: 1.3.1
+Version: 1.4.0
 Summary: aiosignal: a list of registered asynchronous callbacks
 Home-page: https://github.com/aio-libs/aiosignal
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -17,20 +17,17 @@ Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Operating System :: POSIX
 Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Framework :: AsyncIO
-Requires-Python: >=3.7
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: frozenlist (>=1.1.0)
+Requires-Dist: frozenlist>=1.1.0
+Requires-Dist: typing-extensions>=4.2; python_version < "3.13"
+Dynamic: license-file
 
 =========
 aiosignal
@@ -40,8 +37,8 @@ aiosignal
    :target: https://github.com/aio-libs/aiosignal/actions?query=workflow%3ACI
    :alt: GitHub status for master branch
 
-.. image:: https://codecov.io/gh/aio-libs/aiosignal/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/aiosignal
+.. image:: https://codecov.io/gh/aio-libs/aiosignal/branch/master/graph/badge.svg?flag=pytest
+   :target: https://codecov.io/gh/aio-libs/aiosignal?flags[0]=pytest
    :alt: codecov.io status for master branch
 
 .. image:: https://badge.fury.io/py/aiosignal.svg
@@ -91,24 +88,11 @@ Installation
 
    $ pip install aiosignal
 
-The library requires Python 3.6 or newer.
-
 
 Documentation
 =============
 
 https://aiosignal.readthedocs.io/
-
-Communication channels
-======================
-
-*gitter chat* https://gitter.im/aio-libs/Lobby
-
-Requirements
-============
-
-- Python >= 3.6
-- frozenlist >= 1.0.0
 
 License
 =======

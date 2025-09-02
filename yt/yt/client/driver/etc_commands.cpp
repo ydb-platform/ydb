@@ -29,6 +29,16 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetCurrentUser())
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(ConvertToYsonString(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TAddMemberCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AddMember(
@@ -96,6 +106,9 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     for (auto staticFeature : StaticFeatures) {
         features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "require_password_in_authentication_commands",
+        BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
             .Item("features").Value(features)
@@ -109,7 +122,7 @@ void TCheckPermissionCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User);
     registrar.Parameter("permission", &TThis::Permission);
     registrar.Parameter("path", &TThis::Path);
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "columns",
         [] (TThis* command) -> auto& {
             return command->Options.Columns;
@@ -151,6 +164,26 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                         fluent
                             .Item().BeginMap()
                                 .Do([&] (auto fluent) { produceResult(fluent, result); })
+                            .EndMap();
+                    });
+            })
+            .DoIf(response.RlAcl.has_value(), [&] (auto fluent) {
+                fluent
+                    .Item("rl_acl")
+                    .DoListFor(*response.RlAcl, [&] (auto fluent, const auto& rlAce) {
+                        fluent
+                            .Item().BeginMap()
+                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rlAce.Expression)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
+                                // mechanism from too curious users.
+                                // EInapplicableExpressionMode::Ignore is not a good choice in the common case
+                                // from security perspective, but it may be necessary to be able to have
+                                // tables with completely different schemas in one directory.
+                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Deny, [&] (auto fluent) {
+                                    fluent
+                                        .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
+                                        .Value(rlAce.InapplicableExpressionMode);
+                                })
                             .EndMap();
                     });
             })
@@ -405,14 +438,15 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
 
 void TDiscoverProxiesCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("type", &TThis::Type)
-        .Default(EProxyType::Rpc);
+    registrar.Parameter("kind", &TThis::Kind)
+        .Alias("type")
+        .Default(EProxyKind::Rpc);
     registrar.Parameter("role", &TThis::Role)
-        .Default(DefaultRpcProxyRole);
+        .Optional();
     registrar.Parameter("address_type", &TThis::AddressType)
-        .Default(NApi::NRpcProxy::DefaultAddressType);
+        .Optional();
     registrar.Parameter("network_name", &TThis::NetworkName)
-        .Default(NApi::NRpcProxy::DefaultNetworkName);
+        .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)
         .Default(false);
 }
@@ -420,12 +454,25 @@ void TDiscoverProxiesCommand::Register(TRegistrar registrar)
 void TDiscoverProxiesCommand::DoExecute(ICommandContextPtr context)
 {
     TProxyDiscoveryRequest request{
-        .Type = Type,
-        .Role = Role,
-        .AddressType = AddressType,
+        .Kind = Kind,
         .NetworkName = NetworkName,
-        .IgnoreBalancers = IgnoreBalancers
+        .IgnoreBalancers = IgnoreBalancers,
     };
+
+    switch (request.Kind) {
+        case EProxyKind::Http:
+            request.Role = Role.value_or(DefaultHttpProxyRole);
+            request.AddressType = AddressType.value_or(NRpcProxy::EAddressType::Http);
+            break;
+        case EProxyKind::Rpc:
+            request.Role = Role.value_or(DefaultRpcProxyRole);
+            request.AddressType = AddressType.value_or(context->GetConfig()->DefaultRpcProxyAddressType);
+            break;
+        case EProxyKind::Grpc:
+            request.Role = Role.value_or(DefaultRpcProxyRole);
+            request.AddressType = AddressType.value_or(NRpcProxy::DefaultAddressType);
+            break;
+    }
 
     const auto& proxyDiscoveryCache = context->GetDriver()->GetProxyDiscoveryCache();
     auto response = WaitFor(proxyDiscoveryCache->Discover(request))

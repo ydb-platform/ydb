@@ -2,7 +2,7 @@
 #include "console_configs_provider.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -32,11 +32,15 @@ public:
             }
 
             if (Self->ClusterName != cluster) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << Self->ClusterName
+                    << " but got " << cluster;
             }
 
             if (Version != Self->YamlVersion) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << Self->YamlVersion
+                    << " but got " << Version;
             }
         } catch (const yexception& ex) {
             Error = true;
@@ -69,7 +73,7 @@ public:
 
         if (!Error && Modify) {
             Self->YamlVersion = 0;
-            Self->YamlConfig.clear();
+            Self->MainYamlConfig.clear();
             Self->YamlDropped = true;
 
             Self->VolatileYamlConfigs.clear();

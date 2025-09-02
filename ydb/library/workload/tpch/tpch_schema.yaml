@@ -1,0 +1,229 @@
+tables:
+  - name: customer
+    columns:
+      - name: c_acctbal
+        type: float_type
+        not_null: true
+      - name: c_address
+        type: string_type
+        not_null: true
+      - name: c_comment
+        type: string_type
+        not_null: true
+      - name: c_custkey
+        type: Int64
+        not_null: true
+      - name: c_mktsegment
+        type: string_type
+        not_null: true
+      - name: c_name
+        type: string_type
+        not_null: true
+      - name: c_nationkey
+        type: Int32
+        not_null: true
+      - name: c_phone
+        type: string_type
+        not_null: true
+    primary_key:
+      - c_custkey
+
+  - name: lineitem
+    columns:
+      - name: l_comment
+        type: string_type
+        not_null: true
+      - name: l_commitdate
+        type: date_type
+        not_null: true
+      - name: l_discount
+        type: float_type
+        not_null: true
+      - name: l_extendedprice
+        type: float_type
+        not_null: true
+      - name: l_linenumber
+        type: Int32
+        not_null: true
+      - name: l_linestatus
+        type: string_type
+        not_null: true
+      - name: l_orderkey
+        type: Int64
+        not_null: true
+      - name: l_partkey
+        type: Int64
+        not_null: true
+      - name: l_quantity
+        type: float_type
+        not_null: true
+      - name: l_receiptdate
+        type: date_type
+        not_null: true
+      - name: l_returnflag
+        type: string_type
+        not_null: true
+      - name: l_shipdate
+        type: date_type
+        not_null: true
+      - name: l_shipinstruct
+        type: string_type
+        not_null: true
+      - name: l_shipmode
+        type: string_type
+        not_null: true
+      - name: l_suppkey
+        type: Int64
+        not_null: true
+      - name: l_tax
+        type: float_type
+        not_null: true
+    primary_key:
+      - l_orderkey
+      - l_linenumber
+    partition_by:
+      - l_orderkey
+
+  - name: nation
+    columns:
+      - name: n_comment
+        type: string_type
+        not_null: true
+      - name: n_name
+        type: string_type
+        not_null: true
+      - name: n_nationkey
+        type: Int32
+        not_null: true
+      - name: n_regionkey
+        type: Int32
+        not_null: true
+    primary_key:
+      - n_nationkey
+    partitioning: 1
+
+  - name: orders
+    columns:
+      - name: o_clerk
+        type: string_type
+        not_null: true
+      - name: o_comment
+        type: string_type
+        not_null: true
+      - name: o_custkey
+        type: Int64
+        not_null: true
+      - name: o_orderdate
+        type: date_type
+        not_null: true
+      - name: o_orderkey
+        type: Int64
+        not_null: true
+      - name: o_orderpriority
+        type: string_type
+        not_null: true
+      - name: o_orderstatus
+        type: string_type
+        not_null: true
+      - name: o_shippriority
+        type: Int32
+        not_null: true
+      - name: o_totalprice
+        type: float_type
+        not_null: true
+    primary_key:
+      - o_orderkey
+
+  - name: part
+    columns:
+      - name: p_brand
+        type: string_type
+        not_null: true
+      - name: p_comment
+        type: string_type
+        not_null: true
+      - name: p_container
+        type: string_type
+        not_null: true
+      - name: p_mfgr
+        type: string_type
+        not_null: true
+      - name: p_name
+        type: string_type
+        not_null: true
+      - name: p_partkey
+        type: Int64
+        not_null: true
+      - name: p_retailprice
+        type: float_type
+        not_null: true
+      - name: p_size
+        type: Int32
+        not_null: true
+      - name: p_type
+        type: string_type
+        not_null: true
+    primary_key:
+      - p_partkey
+
+  - name: partsupp
+    columns:
+      - name: ps_availqty
+        type: Int32
+        not_null: true
+      - name: ps_comment
+        type: string_type
+        not_null: true
+      - name: ps_partkey
+        type: Int64
+        not_null: true
+      - name: ps_suppkey
+        type: Int64
+        not_null: true
+      - name: ps_supplycost
+        type: float_type
+        not_null: true
+    primary_key:
+      - ps_partkey
+      - ps_suppkey
+
+  - name: region
+    columns:
+      - name: r_comment
+        type: string_type
+        not_null: true
+      - name: r_name
+        type: string_type
+        not_null: true
+      - name: r_regionkey
+        type: Int32
+        not_null: true
+    primary_key:
+      - r_regionkey
+    partitioning: 1
+
+  - name: supplier
+    columns:
+      - name: s_acctbal
+        type: float_type
+        not_null: true
+      - name: s_address
+        type: string_type
+        not_null: true
+      - name: s_comment
+        type: string_type
+        not_null: true
+      - name: s_name
+        type: string_type
+        not_null: true
+      - name: s_nationkey
+        type: Int32
+        not_null: true
+      - name: s_phone
+        type: string_type
+        not_null: true
+      - name: s_suppkey
+        type: Int64
+        not_null: true
+    primary_key:
+      - s_suppkey

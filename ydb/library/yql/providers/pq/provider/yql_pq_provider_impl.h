@@ -2,16 +2,13 @@
 
 #include "yql_pq_provider.h"
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/providers/common/transform/yql_exec.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 
 #include <util/generic/ptr.h>
 
 namespace NYql {
-
-TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
-TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state);
 

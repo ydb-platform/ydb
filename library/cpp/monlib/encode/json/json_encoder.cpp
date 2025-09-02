@@ -198,7 +198,7 @@ namespace NMonitoring {
                 if (Style_ != EJsonStyle::Cloud) {
                     return;
                 }
-                if (CurrentMetricName_.Empty()) {
+                if (CurrentMetricName_.empty()) {
                     ythrow yexception() << "label '" << MetricNameLabel_ << "' is not defined";
                 }
                 Buf_.WriteKey("name");
@@ -272,6 +272,14 @@ namespace NMonitoring {
                 }
                 Buf_.BeginObject();
                 WriteMetricType(type);
+            }
+
+            void OnMemOnly(bool isMemOnly) override {
+                State_.Expect(TEncoderState::EState::METRIC);
+                if (isMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(isMemOnly);
+                }
             }
 
             void OnMetricEnd() override {
@@ -493,6 +501,7 @@ namespace NMonitoring {
                 Buf_.WriteKey(TStringBuf("labels"));
                 WriteLabels(metric.Labels, false);
 
+                WriteFlags(metric);
                 metric.TimeSeries.SortByTs();
                 if (metric.TimeSeries.Size() == 1) {
                     const auto& point = metric.TimeSeries[0];
@@ -529,6 +538,13 @@ namespace NMonitoring {
 
                 if (!isCommon) {
                     WriteName();
+                }
+            }
+
+            void WriteFlags(const TMetric& metric) {
+                if (metric.IsMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(true);
                 }
             }
 

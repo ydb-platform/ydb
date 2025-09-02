@@ -3,7 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>

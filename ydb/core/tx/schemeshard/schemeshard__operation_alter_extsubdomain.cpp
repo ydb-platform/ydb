@@ -1,8 +1,11 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
 
@@ -358,7 +361,7 @@ void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperat
         context.DbChanges.PersistShard(shardIdx);
 
         // Path
-        path.DomainInfo()->AddInternalShard(shardIdx);
+        path.DomainInfo()->AddInternalShard(shardIdx, context.SS);
         path.Base()->IncShardsInside(1);
 
         // Extsubdomain data
@@ -397,7 +400,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
 
         auto ev = CreateEvCreateTablet(path, shardIdx, context);
-        auto rootHiveId = context.SS->GetGlobalHive(context.Ctx);
+        auto rootHiveId = context.SS->GetGlobalHive();
 
         LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
 
@@ -471,7 +474,7 @@ public:
         );
 
         auto rootHiveId = TTabletId(record.GetOrigin());
-        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive(context.Ctx));
+        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive());
 
         TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -495,7 +498,7 @@ public:
         {
             auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, context.SS);
 
             subdomain->SetTenantHiveIDPrivate(createdTabletId);
 
@@ -554,33 +557,6 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-
-        return true;
-    }
-};
-
-class TEmptyPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
-    }
-
-public:
-    TEmptyPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
         return true;
     }
@@ -789,7 +765,7 @@ public:
             Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
             TSubDomainInfo::TConstPtr subDomain = context.SS->SubDomains.at(pathId);
 
-            const TTabletId hiveToSync = context.SS->ResolveHive(pathId, context.Ctx);
+            const TTabletId hiveToSync = context.SS->ResolveHive(pathId);
 
             auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -814,7 +790,7 @@ public:
     }
 
     bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
-        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin()); 
+        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"
             << ", from hive: " << hive);
@@ -936,21 +912,23 @@ public:
         // Create or derive alter.
         // (We could have always created new alter from a current subdomainInfo but
         // we need to take into account possible version increase from CreateHive suboperation.)
-        auto createAlterFrom = [&inputSettings, &delta](auto prototype) {
+        auto createAlterFrom = [&inputSettings](auto prototype, const TStoragePools& additionalPools) {
             return MakeIntrusive<TSubDomainInfo>(
                 *prototype,
                 inputSettings.GetPlanResolution(),
                 inputSettings.GetTimeCastBucketsPerMediator(),
-                delta.StoragePoolsAdded
+                additionalPools
             );
         };
         TSubDomainInfo::TPtr alter = [&delta, &subdomainInfo, &createAlterFrom, &context]() {
             if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
                 Y_ABORT_UNLESS(subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo->GetAlter());
+                //NOTE: existing alter already has all storage pools that combined operation wanted to add,
+                // should not add them second time when deriving alter from alter
+                return createAlterFrom(subdomainInfo->GetAlter(), {});
             } else {
                 Y_ABORT_UNLESS(!subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo);
+                return createAlterFrom(subdomainInfo, delta.StoragePoolsAdded);
             }
         }();
 
@@ -959,6 +937,9 @@ public:
         }
         if (inputSettings.HasDatabaseQuotas()) {
             alter->SetDatabaseQuotas(inputSettings.GetDatabaseQuotas());
+        }
+        if (inputSettings.HasSchemeLimits()) {
+            alter->MergeSchemeLimits(inputSettings.GetSchemeLimits());
         }
 
         if (const auto& auditSettings = subdomainInfo->GetAuditSettings()) {
@@ -1084,7 +1065,13 @@ ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState 
 }
 
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+    //NOTE: Accepting ESchemeOpAlterSubDomain operation for an ExtSubDomain is a special compatibility case
+    // for those old subdomains that at the time went through migration to a separate tenants.
+    // Console tablet holds records about types of the subdomains but they hadn't been updated
+    // at the migration time. So Console still thinks that old subdomains are plain subdomains
+    // whereas they had been migrated to the extsubdomains.
+    // This compatibility case should be upholded until Console records would be updated.
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
         << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst

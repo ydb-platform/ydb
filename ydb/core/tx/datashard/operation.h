@@ -74,7 +74,7 @@ struct TStepOrder {
     }
 
     ETxOrder CheckOrder(const TStepOrder& stepTxId) const {
-        Y_ABORT_UNLESS(*this != stepTxId); // avoid self checks
+        Y_ENSURE(*this != stepTxId); // avoid self checks
         if (!Step && !stepTxId.Step) // immediate vs immediate
             return ETxOrder::Any;
         if (!Step || !stepTxId.Step) // planned vs immediate
@@ -261,7 +261,7 @@ public:
     bool HasReadOnlyFlag() const { return HasFlag(TTxFlags::ReadOnly); }
     void SetReadOnlyFlag(bool val = true)
     {
-        Y_ABORT_UNLESS(!val || !IsGlobalWriter());
+        Y_ENSURE(!val || !IsGlobalWriter());
         SetFlag(TTxFlags::ReadOnly, val);
     }
     void ResetReadOnlyFlag() { ResetFlag(TTxFlags::ReadOnly); }
@@ -286,7 +286,7 @@ public:
 
     bool HasGlobalWriterFlag() const { return HasFlag(TTxFlags::GlobalWriter); }
     void SetGlobalWriterFlag(bool val = true) {
-        Y_ABORT_UNLESS(!val || !IsReadOnly());
+        Y_ENSURE(!val || !IsReadOnly());
         SetFlag(TTxFlags::GlobalWriter, val);
     }
     void ResetGlobalWriterFlag() { ResetFlag(TTxFlags::GlobalWriter); }
@@ -452,12 +452,6 @@ private:
 struct TRSData {
     TString Body;
     ui64 Origin = 0;
-
-    explicit TRSData(const TString &body = TString(),
-                     ui64 origin = 0)
-        : Body(body)
-        , Origin(origin)
-    {}
 };
 
 struct TInputOpData {
@@ -857,7 +851,7 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
-    NWilson::TTraceId GetTraceId() const noexcept {
+    NWilson::TTraceId GetTraceId() const {
         return OperationSpan.GetTraceId();
     }
 
@@ -882,6 +876,12 @@ public:
      * the given operation wasn't planned yet.
      */
     virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
+
+
+    // CommittingOps book keeping
+    const std::optional<TRowVersion>& GetCommittingOpsVersion() const { return CommittingOpsVersion; }
+    void SetCommittingOpsVersion(const TRowVersion& version) { CommittingOpsVersion = version; }
+    void ResetCommittingOpsVersion() { CommittingOpsVersion.reset(); }
 
 protected:
     TOperation()
@@ -956,8 +956,10 @@ private:
 
     static NMiniKQL::IEngineFlat::TValidationInfo EmptyKeysInfo;
 
+    std::optional<TRowVersion> CommittingOpsVersion;
+
 public:
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> CachedMvccVersion;
 
 public:
     // Orbit used for tracking operation progress

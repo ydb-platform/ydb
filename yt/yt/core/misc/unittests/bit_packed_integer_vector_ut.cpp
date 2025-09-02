@@ -18,10 +18,10 @@ size_t Compress(const std::vector<T> &data, std::vector<ui64> *buffer)
     }
 
     auto size = CompressedUnsignedVectorSizeInWords(maxValue, data.size());
-    // NB: initialize with zeros!
+    // NB: Initialize with zeros!
     buffer->resize(size, 0);
 
-    return BitPackUnsignedVector(MakeRange(data), maxValue, buffer->data());
+    return BitPackUnsignedVector(TRange(data), maxValue, buffer->data());
 }
 
 template <class T, class TReader>

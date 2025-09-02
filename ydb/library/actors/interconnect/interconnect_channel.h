@@ -15,6 +15,10 @@
 #include "packet.h"
 #include "event_holder_pool.h"
 
+namespace NInterconnect {
+    class IZcGuard;
+}
+
 namespace NActors {
 #pragma pack(push, 1)
 
@@ -59,10 +63,9 @@ namespace NActors {
 
     class TEventOutputChannel : public TInterconnectLoggingBase {
     public:
-        TEventOutputChannel(TEventHolderPool& pool, ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
+        TEventOutputChannel(ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
                 std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params)
             : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
-            , Pool(pool)
             , PeerNodeId(peerNodeId)
             , ChannelId(id)
             , Metrics(std::move(metrics))
@@ -73,8 +76,8 @@ namespace NActors {
         ~TEventOutputChannel() {
         }
 
-        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev) {
-            TEventHolder& event = Pool.Allocate(Queue);
+        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev, TEventHolderPool& pool) {
+            TEventHolder& event = pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
             if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
@@ -85,9 +88,9 @@ namespace NActors {
             return std::make_pair(bytes, &event);
         }
 
-        void DropConfirmed(ui64 confirm);
+        void DropConfirmed(ui64 confirm, TEventHolderPool& pool);
 
-        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed);
+        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial);
 
         bool IsEmpty() const {
             return Queue.empty();
@@ -105,9 +108,8 @@ namespace NActors {
             return OutputQueueSize;
         }
 
-        void NotifyUndelivered();
+        void ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg);
 
-        TEventHolderPool& Pool;
         const ui32 PeerNodeId;
         const ui16 ChannelId;
         std::shared_ptr<IInterconnectMetrics> Metrics;
@@ -142,11 +144,11 @@ namespace NActors {
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
 
-        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
 
-        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 
         void AccountTraffic() {
             if (const ui64 amount = std::exchange(UnaccountedTraffic, 0)) {

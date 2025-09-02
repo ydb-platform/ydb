@@ -41,7 +41,7 @@ public:
         if (mon) {
             auto *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "memory_tracker", "Memory tracker",
-                false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                false, TActivationContext::ActorSystem(), SelfId());
         }
 
         Collect();

@@ -39,6 +39,7 @@ namespace NKikimr {
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
+        FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
@@ -74,6 +75,8 @@ namespace NKikimr {
         ReplPrefetchDataSize = 32 << 20;
         ReplMaxResponseSize = 10 << 20;
         ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
+        ReplMaxDonorNotReadyDuration = TDuration::Minutes(10);
+        ReplMaxDonorNotReadyCount = 100;
         HandoffMaxWaitQueueSize = 10000;
         HandoffMaxWaitQueueByteSize = 32u << 20u;
         HandoffMaxInFlightSize = 1000;
@@ -81,7 +84,11 @@ namespace NKikimr {
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
 
-        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
+        if (const auto& perf = VDiskPerformance.find(baseInfo.DeviceType); perf != VDiskPerformance.end()) {
+            ReplMaxTimeToMakeProgress = perf->second.ReplMaxTimeToMakeProgress;
+        } else {
+            ReplMaxTimeToMakeProgress = TDuration::Minutes(180);
+        }
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms
@@ -125,6 +132,9 @@ namespace NKikimr {
 
     }
 
+    const ui32 TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce = 2u;
+    const ui32 TVDiskConfig::TinyDiskHullCompSortedPartsNum = 2u;
+
     void TVDiskConfig::SetupHugeBytes() {
         switch (BaseInfo.DeviceType) {
             case NPDisk::DEVICE_TYPE_SSD:
@@ -135,9 +145,7 @@ namespace NKikimr {
                 MinHugeBlobInBytes = 512u << 10u;
                 break;
         }
-        OldMinHugeBlobInBytes = MinHugeBlobInBytes; // preserved to migrate entry point state correctly 
         MilestoneHugeBlobInBytes = 512u << 10u;  // for compatibility reasons it must be 512KB
-
     }
 
     void TVDiskConfig::Merge(const NKikimrBlobStorage::TVDiskConfig &update) {

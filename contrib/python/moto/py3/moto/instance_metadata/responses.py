@@ -1,14 +1,26 @@
 import datetime
 import json
+from typing import Any
 from urllib.parse import urlparse
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
+from moto.core.utils import utcnow
 
 
 class InstanceMetadataResponse(BaseResponse):
+    def __init__(self) -> None:
+        super().__init__(service_name=None)
+
+    def backends(self) -> None:
+        pass
+
     def metadata_response(
-        self, request, full_url, headers
-    ):  # pylint: disable=unused-argument
+        self,
+        request: Any,  # pylint: disable=unused-argument
+        full_url: str,
+        headers: Any,
+    ) -> TYPE_RESPONSE:
         """
         Mock response for localhost metadata
 
@@ -16,7 +28,7 @@ class InstanceMetadataResponse(BaseResponse):
         """
 
         parsed_url = urlparse(full_url)
-        tomorrow = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        tomorrow = utcnow() + datetime.timedelta(days=1)
         credentials = dict(
             AccessKeyId="test-key",
             SecretAccessKey="test-secret-key",
@@ -41,6 +53,6 @@ class InstanceMetadataResponse(BaseResponse):
             result = json.dumps(credentials)
         else:
             raise NotImplementedError(
-                "The {0} metadata path has not been implemented".format(path)
+                f"The {path} metadata path has not been implemented"
             )
         return 200, headers, result

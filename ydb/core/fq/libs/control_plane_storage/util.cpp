@@ -5,37 +5,6 @@
 
 namespace NFq {
 
-TRetryLimiter::TRetryLimiter(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate)
-    : RetryCount(retryCount), RetryCounterUpdatedAt(retryCounterUpdatedAt), RetryRate(retryRate) {
-}
-
-void TRetryLimiter::Assign(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate) {
-    RetryCount = retryCount;
-    RetryCounterUpdatedAt = retryCounterUpdatedAt;
-    RetryRate = retryRate;
-}
-
-bool TRetryLimiter::UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicyItem& policy, const TInstant now) {
-    auto lastPeriod = lastSeenAt - RetryCounterUpdatedAt;
-    if (lastPeriod >= policy.RetryPeriod) {
-        RetryRate = 0.0;
-    } else {
-        RetryRate += 1.0;
-        auto rate = lastPeriod / policy.RetryPeriod * policy.RetryCount;
-        if (RetryRate > rate) {
-            RetryRate -= rate;
-        } else {
-            RetryRate = 0.0;
-        }
-    }
-    bool shouldRetry = RetryRate < policy.RetryCount;
-    if (shouldRetry) {
-        RetryCount++;
-        RetryCounterUpdatedAt = now;
-    }
-    return shouldRetry;
-}
-
 bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 {
     return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
@@ -145,6 +114,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
             policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             auto& policy = *policyMapping.MutablePolicy();
             policy.SetRetryCount(10);
+            policy.SetRetryLimit(40);
             policy.SetRetryPeriod("1m");
             policy.SetBackoffPeriod("1s");
         }
@@ -179,6 +149,7 @@ bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request)
         || !request.issues().empty()
         || !request.transient_issues().empty()
         || request.statistics()
+        || request.timeline()
         || !request.result_set_meta().empty()
         || request.ast()
         || request.ast_compressed().data()

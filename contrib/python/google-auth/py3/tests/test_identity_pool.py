@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import datetime
 import http.client as http_client
 import json
@@ -19,6 +20,7 @@ import os
 import urllib
 
 import mock
+from OpenSSL import crypto
 import pytest  # type: ignore
 
 from google.auth import _helpers, external_account
@@ -49,6 +51,13 @@ import yatest.common as yc
 DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "data")
 SUBJECT_TOKEN_TEXT_FILE = os.path.join(DATA_DIR, "external_subject_token.txt")
 SUBJECT_TOKEN_JSON_FILE = os.path.join(DATA_DIR, "external_subject_token.json")
+TRUST_CHAIN_WITH_LEAF_FILE = os.path.join(DATA_DIR, "trust_chain_with_leaf.pem")
+TRUST_CHAIN_WITHOUT_LEAF_FILE = os.path.join(DATA_DIR, "trust_chain_without_leaf.pem")
+TRUST_CHAIN_WRONG_ORDER_FILE = os.path.join(DATA_DIR, "trust_chain_wrong_order.pem")
+CERT_FILE = os.path.join(DATA_DIR, "public_cert.pem")
+KEY_FILE = os.path.join(DATA_DIR, "privatekey.pem")
+OTHER_CERT_FILE = os.path.join(DATA_DIR, "other_cert.pem")
+
 SUBJECT_TOKEN_FIELD_NAME = "access_token"
 
 with open(SUBJECT_TOKEN_TEXT_FILE) as fh:
@@ -57,6 +66,20 @@ with open(SUBJECT_TOKEN_TEXT_FILE) as fh:
 with open(SUBJECT_TOKEN_JSON_FILE) as fh:
     JSON_FILE_CONTENT = json.load(fh)
     JSON_FILE_SUBJECT_TOKEN = JSON_FILE_CONTENT.get(SUBJECT_TOKEN_FIELD_NAME)
+
+with open(CERT_FILE, "rb") as f:
+    CERT_FILE_CONTENT = base64.b64encode(
+        crypto.dump_certificate(
+            crypto.FILETYPE_ASN1, crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+        )
+    ).decode("utf-8")
+
+with open(OTHER_CERT_FILE, "rb") as f:
+    OTHER_CERT_FILE_CONTENT = base64.b64encode(
+        crypto.dump_certificate(
+            crypto.FILETYPE_ASN1, crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+        )
+    ).decode("utf-8")
 
 TOKEN_URL = "https://sts.googleapis.com/v1/token"
 TOKEN_INFO_URL = "https://sts.googleapis.com/v1/introspect"
@@ -179,6 +202,30 @@ class TestCredentials(object):
     CREDENTIAL_SOURCE_JSON_URL = {
         "url": CREDENTIAL_URL,
         "format": {"type": "json", "subject_token_field_name": "access_token"},
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE = {
+        "certificate": {"use_default_certificate_config": "true"}
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT = {
+        "certificate": {"certificate_config_location": "path/to/config"}
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WITH_LEAF = {
+        "certificate": {
+            "use_default_certificate_config": "true",
+            "trust_chain_path": TRUST_CHAIN_WITH_LEAF_FILE,
+        }
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WITHOUT_LEAF = {
+        "certificate": {
+            "use_default_certificate_config": "true",
+            "trust_chain_path": TRUST_CHAIN_WITHOUT_LEAF_FILE,
+        }
+    }
+    CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WRONG_ORDER = {
+        "certificate": {
+            "use_default_certificate_config": "true",
+            "trust_chain_path": TRUST_CHAIN_WRONG_ORDER_FILE,
+        }
     }
     SUCCESS_RESPONSE = {
         "access_token": "ACCESS_TOKEN",
@@ -678,6 +725,40 @@ class TestCredentials(object):
 
         assert excinfo.match(r"Ambiguous credential_source")
 
+    def test_constructor_invalid_options_url_and_certificate(self):
+        credential_source = {
+            "url": self.CREDENTIAL_URL,
+            "certificate": {"certificate": {"use_default_certificate_config": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
+    def test_constructor_invalid_options_file_and_certificate(self):
+        credential_source = {
+            "file": SUBJECT_TOKEN_TEXT_FILE,
+            "certificate": {"certificate": {"use_default_certificate": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
+    def test_constructor_invalid_options_url_file_and_certificate(self):
+        credential_source = {
+            "file": SUBJECT_TOKEN_TEXT_FILE,
+            "url": self.CREDENTIAL_URL,
+            "certificate": {"certificate": {"use_default_certificate": True}},
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Ambiguous credential_source")
+
     def test_constructor_invalid_options_environment_id(self):
         credential_source = {"url": self.CREDENTIAL_URL, "environment_id": "aws1"}
 
@@ -717,7 +798,7 @@ class TestCredentials(object):
         )
 
     def test_constructor_invalid_credential_source_format_type(self):
-        credential_source = {"format": {"type": "xml"}}
+        credential_source = {"file": "test.txt", "format": {"type": "xml"}}
 
         with pytest.raises(ValueError) as excinfo:
             self.make_credentials(credential_source=credential_source)
@@ -725,7 +806,7 @@ class TestCredentials(object):
         assert excinfo.match(r"Invalid credential_source format 'xml'")
 
     def test_constructor_missing_subject_token_field_name(self):
-        credential_source = {"format": {"type": "json"}}
+        credential_source = {"file": "test.txt", "format": {"type": "json"}}
 
         with pytest.raises(ValueError) as excinfo:
             self.make_credentials(credential_source=credential_source)
@@ -733,6 +814,27 @@ class TestCredentials(object):
         assert excinfo.match(
             r"Missing subject_token_field_name for JSON credential_source format"
         )
+
+    def test_constructor_default_and_file_location_certificate(self):
+        credential_source = {
+            "certificate": {
+                "use_default_certificate_config": True,
+                "certificate_config_location": "test",
+            }
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Invalid certificate configuration")
+
+    def test_constructor_no_default_or_file_location_certificate(self):
+        credential_source = {"certificate": {"use_default_certificate_config": False}}
+
+        with pytest.raises(ValueError) as excinfo:
+            self.make_credentials(credential_source=credential_source)
+
+        assert excinfo.match(r"Invalid certificate configuration")
 
     def test_info_with_workforce_pool_user_project(self):
         credentials = self.make_credentials(
@@ -780,6 +882,36 @@ class TestCredentials(object):
             "token_url": TOKEN_URL,
             "token_info_url": TOKEN_INFO_URL,
             "credential_source": self.CREDENTIAL_SOURCE_JSON_URL,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
+        }
+
+    def test_info_with_certificate_credential_source(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": TOKEN_URL,
+            "token_info_url": TOKEN_INFO_URL,
+            "credential_source": self.CREDENTIAL_SOURCE_CERTIFICATE,
+            "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
+        }
+
+    def test_info_with_non_default_certificate_credential_source(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT.copy()
+        )
+
+        assert credentials.info == {
+            "type": "external_account",
+            "audience": AUDIENCE,
+            "subject_token_type": SUBJECT_TOKEN_TYPE,
+            "token_url": TOKEN_URL,
+            "token_info_url": TOKEN_INFO_URL,
+            "credential_source": self.CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT,
             "universe_domain": DEFAULT_UNIVERSE_DOMAIN,
         }
 
@@ -845,6 +977,127 @@ class TestCredentials(object):
         subject_token = credentials.retrieve_subject_token(None)
 
         assert subject_token == JSON_FILE_SUBJECT_TOKEN
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_default(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE
+        )
+
+        subject_token = credentials.retrieve_subject_token(None)
+
+        assert subject_token == json.dumps([CERT_FILE_CONTENT])
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_non_default_path(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_NOT_DEFAULT
+        )
+
+        subject_token = credentials.retrieve_subject_token(None)
+
+        assert subject_token == json.dumps([CERT_FILE_CONTENT])
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_trust_chain_with_leaf(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WITH_LEAF
+        )
+
+        subject_token = credentials.retrieve_subject_token(None)
+        assert subject_token == json.dumps([CERT_FILE_CONTENT, OTHER_CERT_FILE_CONTENT])
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_trust_chain_without_leaf(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WITHOUT_LEAF
+        )
+
+        subject_token = credentials.retrieve_subject_token(None)
+        assert subject_token == json.dumps([CERT_FILE_CONTENT, OTHER_CERT_FILE_CONTENT])
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_trust_chain_invalid_order(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WRONG_ORDER
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials.retrieve_subject_token(None)
+
+        assert excinfo.match(
+            "The leaf certificate must be at the top of the trust chain file"
+        )
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_trust_chain_file_does_not_exist(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+
+        credentials = self.make_credentials(
+            credential_source={
+                "certificate": {
+                    "use_default_certificate_config": "true",
+                    "trust_chain_path": "fake.pem",
+                }
+            }
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials.retrieve_subject_token(None)
+
+        assert excinfo.match("Trust chain file 'fake.pem' was not found.")
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=(CERT_FILE, KEY_FILE),
+    )
+    def test_retrieve_subject_token_certificate_invalid_trust_chain_file(
+        self, mock_get_workload_cert_and_key_paths
+    ):
+
+        credentials = self.make_credentials(
+            credential_source={
+                "certificate": {
+                    "use_default_certificate_config": "true",
+                    "trust_chain_path": SUBJECT_TOKEN_TEXT_FILE,
+                }
+            }
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials.retrieve_subject_token(None)
+
+        assert excinfo.match("Error loading PEM certificates from the trust chain file")
 
     def test_retrieve_subject_token_json_file_invalid_field_name(self):
         credential_source = {
@@ -1485,4 +1738,29 @@ class TestCredentials(object):
             used_scopes=SCOPES,
             scopes=SCOPES,
             default_scopes=None,
+        )
+
+    @mock.patch(
+        "google.auth.transport._mtls_helper._get_workload_cert_and_key_paths",
+        return_value=("cert", "key"),
+    )
+    def test_get_mtls_certs(self, mock_get_workload_cert_and_key_paths):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+
+        cert, key = credentials._get_mtls_cert_and_key_paths()
+        assert cert == "cert"
+        assert key == "key"
+
+    def test_get_mtls_certs_invalid(self):
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_TEXT.copy()
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            credentials._get_mtls_cert_and_key_paths()
+
+        assert excinfo.match(
+            'The credential is not configured to use mtls requests. The credential should include a "certificate" section in the credential source.'
         )

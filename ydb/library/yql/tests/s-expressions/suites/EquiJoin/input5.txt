@@ -1,2 +1,0 @@
-{"payload_right"="ccc";"id"=1;};
-{"payload_right"="ddd";"id"=3;};

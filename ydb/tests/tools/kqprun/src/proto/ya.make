@@ -1,0 +1,10 @@
+PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+
+ONLY_TAGS(CPP_PROTO)
+
+SRCS(
+    storage_meta.proto
+)
+
+END()

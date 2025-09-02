@@ -1,14 +1,29 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
+
+namespace {
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    NKikimr::InitAwsAPI();
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    NKikimr::ShutdownAwsAPI();
+}
+
+}
 
 Y_UNIT_TEST_SUITE(TBackupTests) {
     using TFillFn = std::function<void(TTestBasicRuntime&)>;

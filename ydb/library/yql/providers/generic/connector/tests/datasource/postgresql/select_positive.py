@@ -2,7 +2,7 @@ import datetime
 import itertools
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
@@ -254,8 +254,8 @@ class Factory:
                 ],
             ],
             data_out_=None,
-            data_source_kind=EDataSourceKind.POSTGRESQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.POSTGRESQL,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -295,8 +295,8 @@ class Factory:
                     3,
                 ],
             ],
-            data_source_kind=EDataSourceKind.POSTGRESQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.POSTGRESQL,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -346,8 +346,8 @@ class Factory:
                     42,
                 ],
             ],
-            data_source_kind=EDataSourceKind.POSTGRESQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.POSTGRESQL,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -391,8 +391,8 @@ class Factory:
                     3,
                 ],
             ],
-            data_source_kind=EDataSourceKind.POSTGRESQL,
-            protocol=EProtocol.NATIVE,
+            data_source_kind=EGenericDataSourceKind.POSTGRESQL,
+            protocol=EGenericProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -438,7 +438,7 @@ class Factory:
             ['two'],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+        data_source_kind = EGenericDataSourceKind.POSTGRESQL
 
         test_case_name = 'pushdown'
 
@@ -447,7 +447,7 @@ class Factory:
                 name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_1,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = 1'),
@@ -458,7 +458,7 @@ class Factory:
                 name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_2,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = col_int64'),
@@ -490,7 +490,7 @@ class Factory:
             [None],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+        data_source_kind = EGenericDataSourceKind.POSTGRESQL
 
         test_case_name = 'json'
 
@@ -499,7 +499,7 @@ class Factory:
                 name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_1,
-                protocol=EProtocol.NATIVE,
+                protocol=EGenericProtocol.NATIVE,
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,

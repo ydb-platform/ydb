@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;

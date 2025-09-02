@@ -1,0 +1,14 @@
+--- contrib/libs/protobuf/src/google/protobuf/stubs/common.h    (index)
++++ contrib/libs/protobuf/src/google/protobuf/stubs/common.h    (working tree)
+@@ -124,6 +124,11 @@ void StrongReference(const T& var) {
+ }
+ 
+ }  // namespace internal
++
++// This is at the end of the file instead of the beginning to work around a bug
++// in some versions of MSVC.
++using string = TProtoStringType;
++
+ }  // namespace protobuf
+ }  // namespace google
+ 

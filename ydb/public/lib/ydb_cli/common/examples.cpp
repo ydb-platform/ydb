@@ -46,8 +46,9 @@ TExampleSet TExampleSetBuilder::Build() {
 void TCommandWithExamples::AddExamplesOption(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption("help-ex", "Print usage with examples")
         .HasArg(NLastGetopt::NO_ARGUMENT)
-        .IfPresentDisableCompletion()
-        .Handler(&NLastGetopt::PrintUsageAndExit);
+        .GetOpt()
+        .Handler(&NLastGetopt::PrintUsageAndExit)
+        .IfPresentDisableCompletion();
 }
 
 void TCommandWithExamples::AddOptionExamples(const TString& optionName, TExampleSet&& examples) {
@@ -85,7 +86,7 @@ void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) 
     }
 
     for (const auto& [optionName, examples] : OptionExamples) {
-        NLastGetopt::TOpt* opt = config.Opts->FindLongOption(optionName);
+        NLastGetopt::TOpt* opt = config.Opts->GetOpts().FindLongOption(optionName);
         if (!opt) {
             continue;
         }
@@ -108,7 +109,7 @@ void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) 
     if (CommandExamples.Examples.size()) {
         TStringStream descr;
         PrintExamples(descr, CommandExamples.Examples);
-        config.Opts->AddSection(CommandExamples.Title ? CommandExamples.Title
+        config.Opts->GetOpts().AddSection(CommandExamples.Title ? CommandExamples.Title
                 : (CommandExamples.Examples.size() == 1 ? "Example" : "Examples"),
             descr.Str());
     }

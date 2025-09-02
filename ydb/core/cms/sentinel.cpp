@@ -8,6 +8,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -18,6 +19,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+
 
 namespace NKikimr::NCms {
 
@@ -41,16 +43,87 @@ namespace NKikimr::NCms {
 
 namespace NSentinel {
 
+/// TNodeStatusComputer
+
+ui32 TNodeStatusComputer::GetCurrentNodeState() const {
+    return (ui32)(ActualState == ENodeState::PRETTY_GOOD ? ENodeState::GOOD : ActualState);
+}
+
+bool TNodeStatusComputer::Compute() {
+    if (DefinitelyBad() || DefinitelyGood()) {
+        if(ActualState != CurrentState) {
+            ActualState = CurrentState;
+            return true;
+        }
+        return false;
+    }
+    if (MaybeBad()) {
+        ActualState = ENodeState::MAY_BE_BAD;
+        return false;
+    }
+    if (PrettyGood()) {
+        ActualState = ENodeState::PRETTY_GOOD;
+        return false;
+    }
+    if (MaybeGood()) {
+        ActualState = ENodeState::MAY_BE_GOOD;
+        return false;
+    }
+    return false;
+}
+
+void TNodeStatusComputer::AddState(ENodeState newState) {
+    if (newState == CurrentState) {
+        if (StateCounter != Max<ui64>()) {
+            StateCounter++;
+        }
+    } else {
+        CurrentState = newState;
+        StateCounter = 1;
+    }
+}
+
 /// TPDiskStatusComputer
 
-TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
+TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
     : DefaultStateLimit(defaultStateLimit)
+    , GoodStateLimit(goodStateLimit)
     , StateLimits(stateLimits)
     , StateCounter(0)
 {
 }
 
-void TPDiskStatusComputer::AddState(EPDiskState state) {
+bool IsGoodState(EPDiskState state) {
+    switch (state) {
+        case NKikimrBlobStorage::TPDiskState::Unknown:
+            return false;
+        case NKikimrBlobStorage::TPDiskState::Initial:
+        case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+        case NKikimrBlobStorage::TPDiskState::Normal:
+            return true;
+        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
+        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
+        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+        case NKikimrBlobStorage::TPDiskState::OpenFileError:
+        case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
+        case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+        case NKikimrBlobStorage::TPDiskState::Stopped:
+        case NKikimrBlobStorage::TPDiskState::Reserved15:
+        case NKikimrBlobStorage::TPDiskState::Reserved16:
+        case NKikimrBlobStorage::TPDiskState::Reserved17:
+        case NKikimrBlobStorage::TPDiskState::Missing:
+        case NKikimrBlobStorage::TPDiskState::Timeout:
+        case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
+            return false;
+    }
+}
+
+void TPDiskStatusComputer::AddState(EPDiskState state, bool isNodeLocked) {
     if (StateCounter && state == State) {
         if (StateCounter != Max<ui64>()) {
             ++StateCounter;
@@ -58,6 +131,12 @@ void TPDiskStatusComputer::AddState(EPDiskState state) {
     } else {
         PrevState = std::exchange(State, state);
         StateCounter = 1;
+    }
+
+    if (!isNodeLocked && !IsGoodState(state)) {
+        // If node is not locked (i.e. it is not in maintenance mode),
+        // then we should remember that we had a bad state recently
+        HadBadStateRecently = true;
     }
 }
 
@@ -81,12 +160,18 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
             << " State# " << State
             << " StateCounter# " << StateCounter
             << " current# " << current;
-        switch (PrevState) {
-            case NKikimrBlobStorage::TPDiskState::Unknown:
-                return current;
-            default:
-                return EPDiskStatus::INACTIVE;
+
+        if (PrevState == NKikimrBlobStorage::TPDiskState::Unknown) {
+            return current;
         }
+
+        if (IsGoodState(PrevState) && State == NKikimrBlobStorage::TPDiskState::Normal) {
+            if (!HadBadStateRecently && (StateCounter >= GoodStateLimit)) {
+                return EPDiskStatus::ACTIVE;
+            }
+        }
+
+        return EPDiskStatus::INACTIVE;
     }
 
     reason = TStringBuilder()
@@ -99,6 +184,7 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
 
     switch (State) {
         case NKikimrBlobStorage::TPDiskState::Normal:
+            HadBadStateRecently = false;
             return EPDiskStatus::ACTIVE;
         default:
             return EPDiskStatus::FAULTY;
@@ -125,21 +211,25 @@ void TPDiskStatusComputer::SetForcedStatus(EPDiskStatus status) {
     ForcedStatus = status;
 }
 
+bool TPDiskStatusComputer::HasForcedStatus() const {
+    return ForcedStatus.Defined();
+}
+
 void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
 
 /// TPDiskStatus
 
-TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatusComputer(defaultStateLimit, stateLimits)
+TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits)
     , Current(initialStatus)
     , ChangingAllowed(true)
 {
 }
 
-void TPDiskStatus::AddState(EPDiskState state) {
-    TPDiskStatusComputer::AddState(state);
+void TPDiskStatus::AddState(EPDiskState state, bool isNodeLocked) {
+    TPDiskStatusComputer::AddState(state, isNodeLocked);
 }
 
 bool TPDiskStatus::IsChanged() const {
@@ -194,14 +284,15 @@ void TPDiskStatus::DisallowChanging() {
 
 /// TPDiskInfo
 
-TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, stateLimits)
+TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits)
+    , ActualStatus(initialStatus)
 {
     Touch();
 }
 
-void TPDiskInfo::AddState(EPDiskState state) {
-    TPDiskStatus::AddState(state);
+void TPDiskInfo::AddState(EPDiskState state, bool isNodeLocked) {
+    TPDiskStatus::AddState(state, isNodeLocked);
     Touch();
 }
 
@@ -219,23 +310,32 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 {
 }
 
-void TClusterMap::AddPDisk(const TPDiskID& id) {
+void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
-    const auto& location = State->Nodes[id.NodeId].Location;
+    const auto& node = State->Nodes.at(id.NodeId);
+    const auto& location = node.Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
+    ByPile[node.PileId.Defined() ? ToString(*node.PileId) : ""].insert(id);
     NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
+
+    if (!inGoodState) {
+        BadByNode[ToString(id.NodeId)].insert(id);
+    }
 }
 
 /// TGuardian
 
-TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
+TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio,
+                     ui32 roomRatio, ui32 rackRatio, ui32 pileRatio, ui32 faultyPDisksThresholdPerNode)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
     , RackRatio(rackRatio)
+    , PileRatio(pileRatio)
+    , FaultyPDisksThresholdPerNode(faultyPDisksThresholdPerNode)
 {
 }
 
@@ -295,6 +395,45 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
             });
+        }
+    }
+
+    for (const auto& kv : ByPile) {
+        Y_ABORT_UNLESS(all.ByPile.contains(kv.first));
+
+        if (kv.first && !CheckRatio(kv, all.ByPile, PileRatio)) {
+            LOG_IGNORED(Pile);
+            for (auto& pdisk : kv.second) {
+                disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::RATIO_BY_PILE);
+            }
+            EraseNodesIf(result, [&pile = kv.second](const TPDiskID& id) {
+                return pile.contains(id);
+            });
+        }
+    }
+
+    if (FaultyPDisksThresholdPerNode != 0) {
+        // If the number of FAULTY PDisks on a node — including those already FAULTY or about to be marked FAULTY —
+        // exceeds this threshold, no additional disks on the same node will be marked as FAULTY,
+        // except for those explicitly marked as FAULTY by the user via the replace devices command.
+        for (const auto& kv : BadByNode) {
+            if (kv.first) {
+                auto it = all.BadByNode.find(kv.first);
+                ui32 currentCount = it != all.BadByNode.end() ? it->second.size() : 0;
+
+                if (currentCount > FaultyPDisksThresholdPerNode) {
+                    for (const auto& pdisk : kv.second) {
+                        disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::TOO_MANY_FAULTY_PER_NODE);
+                        result.erase(pdisk);
+                    }
+                    auto disallowedPdisks = disallowed | std::views::keys;
+                    issuesBuilder
+                        << "Ignore state updates due to FaultyPDisksThresholdPerNode"
+                        << ": changed# " << kv.second.size()
+                        << ", total# " << currentCount
+                        << ", affected pdisks# " << JoinSeq(", ", disallowedPdisks) << Endl;
+                }
+            }
         }
     }
 
@@ -423,20 +562,29 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
         }
 
         if (record.HasState()) {
-            SentinelState->Nodes.clear();
+            std::unordered_set<ui32> nodesToDelete;
+            for (const auto& [nodeId, _] : SentinelState->Nodes) {
+                nodesToDelete.insert(nodeId);
+            }
             for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
                     THashSet<NKikimrCms::EMarker> markers;
                     for (auto marker : host.GetMarkers()) {
                         markers.insert(static_cast<NKikimrCms::EMarker>(marker));
                     }
-
-                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
-                        .Host = host.GetName(),
-                        .Location = NActors::TNodeLocation(host.GetLocation()),
-                        .Markers = std::move(markers),
-                    });
+                    auto &node = SentinelState->Nodes[host.GetNodeId()];
+                    nodesToDelete.erase(host.GetNodeId());
+                    node.Host = host.GetName();
+                    node.Location = NActors::TNodeLocation(host.GetLocation());
+                    node.PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing();
+                    node.Markers = std::move(markers);
+                    node.BadStateLimit = Config.StateStorageSelfHealConfig.NodeBadStateLimit;
+                    node.GoodStateLimit = Config.StateStorageSelfHealConfig.NodeGoodStateLimit;
+                    node.PrettyGoodStateLimit = Config.StateStorageSelfHealConfig.NodePrettyGoodStateLimit;
                 }
+            }
+            for (const auto nodeId : nodesToDelete) {
+                SentinelState->Nodes.erase(nodeId);
             }
         }
 
@@ -471,7 +619,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     continue;
                 }
 
-                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.StateLimits));
+                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
@@ -540,6 +688,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             case NKikimrBlobStorage::TPDiskState::OpenFileError:
             case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
             case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+            case NKikimrBlobStorage::TPDiskState::Stopped:
                 return state;
             default:
                 LOG_C("Unknown pdisk state: " << (ui32)state);
@@ -565,7 +714,29 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         Reply();
     }
 
+    bool IsNodeLocked(ui32 nodeId) const {
+        const auto& clusterInfo = CmsState->ClusterInfo;
+
+        if (clusterInfo && clusterInfo->HasNode(nodeId)) {
+            const auto& node = clusterInfo->Node(nodeId);
+            TErrorInfo unused;
+            if (node.IsLocked(unused, TDuration::Zero(), TInstant::Zero(), TDuration::Zero())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void MarkNode(ui32 nodeId, TNodeInfo::ENodeState status) {
+        auto node = SentinelState->Nodes.find(nodeId);
+        if (node != SentinelState->Nodes.end()) {
+            node->second.AddState(status);
+        }
+    }
+
     void MarkNodePDisks(ui32 nodeId, EPDiskState state, bool skipTouched = false) {
+        bool isNodeLocked = IsNodeLocked(nodeId);
         auto it = SentinelState->PDisks.lower_bound(TPDiskID(nodeId, 0));
         while (it != SentinelState->PDisks.end() && it->first.NodeId == nodeId) {
             if (skipTouched && it->second->IsTouched()) {
@@ -574,7 +745,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             }
 
             Y_ABORT_UNLESS(!it->second->IsTouched());
-            it->second->AddState(state);
+            it->second->AddState(state, isNodeLocked);
             ++it;
         }
     }
@@ -603,11 +774,14 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
+        MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
+
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
                 << ": nodeId# " << nodeId);
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing);
         } else {
+            const bool isNodeLocked = IsNodeLocked(nodeId);
             for (const auto& info : record.GetPDiskStateInfo()) {
                 auto it = SentinelState->PDisks.find(TPDiskID(nodeId, info.GetPDiskId()));
                 if (it == SentinelState->PDisks.end()) {
@@ -620,7 +794,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                     << ", original# " << (ui32)info.GetState()
                     << ", safeState# " << safeState);
 
-                it->second->AddState(safeState);
+                it->second->AddState(safeState, isNodeLocked);
             }
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
@@ -645,6 +819,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 << ": nodeId# " << nodeId);
             return;
         }
+
+        MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
 
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId
@@ -671,6 +847,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             const ui32 nodeId = *SentinelState->StateUpdaterWaitNodes.begin();
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
+            MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
             AcceptNodeReply(nodeId);
         }
 
@@ -689,9 +866,9 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        for (const auto& [id, _] : SentinelState->PDisks) {
-            if (SentinelState->StateUpdaterWaitNodes.insert(id.NodeId).second) {
-                RequestPDiskState(id.NodeId);
+        for (const auto& [nodeId, _] : SentinelState->Nodes) {
+            if (SentinelState->StateUpdaterWaitNodes.insert(nodeId).second) {
+                RequestPDiskState(nodeId);
             }
         }
 
@@ -875,7 +1052,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         TClusterMap all(SentinelState);
-        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
+        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.PileRatio, Config.FaultyPDisksThresholdPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
         for (auto& pdisk : SentinelState->PDisks) {
@@ -890,18 +1067,20 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
-            if (it->second.HasFaultyMarker()) {
-                info.SetForcedStatus(EPDiskStatus::FAULTY);
+            bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
+
+            if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
+                hasGoodState = false;
+                info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
                 info.ResetForcedStatus();
             }
-
-            all.AddPDisk(id);
+            all.AddPDisk(id, hasGoodState);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
-                    changed.AddPDisk(id);
+                    changed.AddPDisk(id, hasGoodState);
                 }
             } else {
                 info.AllowChanging();
@@ -963,6 +1142,31 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
 
         SendBSCRequests();
+        SendDistconfRequest();
+    }
+
+    void SendDistconfRequest() {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
+        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
+        updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
+        updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
+        for (auto& [nodeId, node] : SentinelState->Nodes) {
+            SentinelState->NeedSelfHealStateStorage |= node.Compute();
+            auto* nodeState = updateRequest->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(node.GetCurrentNodeState());
+        }
+        if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
+            SentinelState->LastStateStorageSelfHeal = Now();
+        }
+        if (SentinelState->NeedSelfHealStateStorage
+            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealConfig.RelaxTime)) {
+            SentinelState->NeedSelfHealStateStorage = false;
+            LOG_D("Sending self heal request");
+            SentinelState->LastStateStorageSelfHeal = Now();
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        }
     }
 
     void SendBSCRequests() {

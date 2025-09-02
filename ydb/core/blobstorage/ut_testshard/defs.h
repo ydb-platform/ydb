@@ -20,5 +20,5 @@
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <library/cpp/testing/unittest/registar.h>

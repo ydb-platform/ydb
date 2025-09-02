@@ -13,7 +13,11 @@ namespace NYT::NBus {
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_GLOBAL(const NLogging::TLogger, BusLogger, "Bus");
-inline const NProfiling::TProfiler BusProfiler("/bus");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, BusProfiler, "/bus");
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(IMessageHandler)
 
 using TConnectionId = TGuid;
 using TPacketId = TGuid;

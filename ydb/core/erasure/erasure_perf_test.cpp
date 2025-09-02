@@ -1,5 +1,4 @@
 #include "erasure.h"
-#include "erasure_rope.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ymath.h>
@@ -226,7 +225,7 @@ Y_UNIT_TEST_SUITE(TErasurePerfTest) {
 }
 
 inline TRope RopeFromStringReference(TString string) {
-    if (string.Empty()) {
+    if (string.empty()) {
         return TRope();
     }
     return TRope(std::move(string));

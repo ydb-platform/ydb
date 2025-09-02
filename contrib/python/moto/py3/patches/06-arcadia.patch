@@ -1,0 +1,12 @@
+--- contrib/python/moto/py3/moto/kms/utils.py	(index)
++++ contrib/python/moto/py3/moto/kms/utils.py	(working tree)
+@@ -11,8 +11,8 @@ from cryptography.exceptions import InvalidSignature
+ from cryptography.hazmat.backends import default_backend
+ from cryptography.hazmat.primitives.ciphers import algorithms, Cipher, modes
+ from cryptography.hazmat.primitives import hashes, serialization
+-from cryptography.hazmat.primitives._asymmetric import AsymmetricPadding
+ from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
++from cryptography.hazmat.primitives.asymmetric.padding import AsymmetricPadding
+ 
+ 
+ from .exceptions import (

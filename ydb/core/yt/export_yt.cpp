@@ -3,13 +3,19 @@
 #include "export_yt.h"
 #include "yt_wrapper.h"
 
-#include <contrib/ydb/core/protos/flat_scheme_op.pb.h>
-#include <contrib/ydb/library/services/services.pb.h>
-#include <contrib/ydb/core/tablet_flat/flat_row_state.h>
-#include <contrib/ydb/core/tx/datashard/export_common.h>
-#include <contrib/ydb/library/binary_json/read.h>
-#include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
+#if __has_include("ydb/core/protos/flat_scheme_op.deps.pb.h")
+    #include <ydb/core/protos/flat_scheme_op.deps.pb.h> // Y_IGNORE
+#endif
+#include <ydb/library/services/services.pb.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tx/datashard/export_common.h>
+#include <ydb/core/tx/datashard/type_serialization.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <yt/yt/client/table_client/config.h>
 #include <yt/yt/client/table_client/name_table.h>
@@ -99,8 +105,6 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
         TVector<TColumnSchema> schema;
 
         for (const auto& [_, column] : columns) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
             schema.emplace_back(column.Name, ConvertType(column.Type.GetTypeId()));
         }
 
@@ -129,6 +133,7 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             || error.FindMatching(NYT::NTableClient::EErrorCode::FormatCannotRepresentRow)
             || error.FindMatching(NYT::NTableClient::EErrorCode::IncompatibleSchemas)
             // Cypress errors
+            || error.FindMatching(NYT::NYTree::EErrorCode::ResolveError)
             || error.FindMatching(NYT::NYTree::EErrorCode::MaxChildCountViolation)
             || error.FindMatching(NYT::NYTree::EErrorCode::MaxStringLengthViolation)
             || error.FindMatching(NYT::NYTree::EErrorCode::MaxAttributeSizeViolation)
@@ -158,12 +163,16 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
                 return {};
             }
 
-            return NYT::TError(NCustomErrorCodes::InvalidNodeType, TStringBuilder() << "Invalid type of " << path
-                << ": expected \"" << expected << "\""
-                << ", actual \"" << actual << "\"");
+            return NYT::TError(
+                NCustomErrorCodes::InvalidNodeType,
+                "Invalid type of %v"
+                ": expected %Qv"
+                ", actual %Qv",
+                path,
+                expected,
+                actual);
         } catch (const yexception& ex) {
-            return NYT::TError(TStringBuilder() << "Error while checking type of " << path
-                << ": " << ex.what());
+            return NYT::TError("Error while checking type of %v: %v", path, ex.what());
         }
     }
 
@@ -189,12 +198,12 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
                 opts.Attributes = std::move(attrs);
             }
 
-            Send(Client, new TEvYtWrapper::TEvCreateNodeRequest(DstPath.GetPath(), EObjectType::Table, opts));
+            Send(Client, new TEvYtWrapper::TEvCreateNodeRequest(DstPath->GetPath(), EObjectType::Table, opts));
         } else {
             TGetNodeOptions opts;
             opts.Attributes = TVector<TString>{"type"};
 
-            Send(Client, new TEvYtWrapper::TEvGetNodeRequest(DstPath.GetPath(), opts));
+            Send(Client, new TEvYtWrapper::TEvGetNodeRequest(DstPath->GetPath(), opts));
         }
     }
 
@@ -217,7 +226,7 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             return;
         }
 
-        Send(Client, new TEvYtWrapper::TEvCreateTableWriterRequest(DstPath, TableWriterOptions()));
+        Send(Client, new TEvYtWrapper::TEvCreateTableWriterRequest(*DstPath, TableWriterOptions()));
     }
 
     void Handle(TEvYtWrapper::TEvGetNodeResponse::TPtr& ev) {
@@ -231,11 +240,11 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
             return;
         }
 
-        if (!CheckResult(CheckNodeType(DstPath.GetPath(), result.Value(), "table"), TStringBuf("CheckNodeType"))) {
+        if (!CheckResult(CheckNodeType(DstPath->GetPath(), result.Value(), "table"), TStringBuf("CheckNodeType"))) {
             return;
         }
 
-        Send(Client, new TEvYtWrapper::TEvCreateTableWriterRequest(DstPath, TableWriterOptions()));
+        Send(Client, new TEvYtWrapper::TEvCreateTableWriterRequest(*DstPath, TableWriterOptions()));
     }
 
     void Handle(TEvYtWrapper::TEvCreateTableWriterResponse::TPtr& ev) {
@@ -394,7 +403,7 @@ public:
             ui32 retries)
         : ServerName(serverName)
         , Token(token)
-        , DstPath(TRichYPath::Parse(dstPath))
+        , DstPathStr(dstPath)
         , UseTypeV3(useTypeV3)
         , Schema(GenTableSchema(columns))
         , Retries(retries)
@@ -407,6 +416,16 @@ public:
             << ": self# " << SelfId()
             << ", attempt# " << Attempt);
 
+        Become(&TThis::StateWork);
+
+        if (!DstPath) {
+            try {
+                DstPath.ConstructInPlace(DstPathStr);
+            } catch (const NYT::TErrorException& ex) {
+                return Finish(false, ex.what());
+            }
+        }
+
         NameTable.Reset();
         Last = false;
 
@@ -417,9 +436,7 @@ public:
         }
 
         Client = RegisterWithSameMailbox(CreateYtWrapper(ServerName, Token));
-        Send(Client, new TEvYtWrapper::TEvNodeExistsRequest(DstPath.GetPath(), TNodeExistsOptions()));
-
-        Become(&TThis::StateWork);
+        Send(Client, new TEvYtWrapper::TEvNodeExistsRequest(DstPath->GetPath(), TNodeExistsOptions()));
     }
 
     STATEFN(StateWork) {
@@ -442,7 +459,7 @@ public:
 private:
     const TString ServerName;
     const TString Token;
-    const TRichYPath DstPath;
+    const TString DstPathStr;
     const bool UseTypeV3;
     const TTableSchema Schema;
     const ui32 Retries;
@@ -452,6 +469,7 @@ private:
     TActorId Writer;
     TActorId Scanner;
 
+    TMaybe<TRichYPath> DstPath;
     TNameTablePtr NameTable;
     bool Last;
     TMaybe<TString> Error;
@@ -460,7 +478,7 @@ private:
 
 class TYtBuffer: public IBuffer {
     struct TColumn {
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
         int Id; // in name table
     };
 
@@ -472,20 +490,25 @@ class TYtBuffer: public IBuffer {
 
         int i = 0;
         for (const auto& [tag, column] : columns) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-            result[tag] = {column.Type.GetTypeId(), i++};
+            result[tag] = {column.Type, i++};
         }
 
         return result;
     }
 
-    static TUnversionedValue ConvertValue(NScheme::TTypeId type, const TCell& cell, int id, bool useTypeV3, TString& buffer) {
+    static TUnversionedValue ConvertValue(
+        NScheme::TTypeInfo type,
+        const TCell& cell,
+        int id,
+        bool useTypeV3,
+        TString& buffer,
+        TString& error)
+    {
         if (cell.IsNull()) {
             return MakeUnversionedNullValue(id);
         }
 
-        switch (type) {
+        switch (type.GetTypeId()) {
         case NScheme::NTypeIds::Int32:
             return MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
         case NScheme::NTypeIds::Uint32:
@@ -509,9 +532,19 @@ class TYtBuffer: public IBuffer {
             return MakeUnversionedDoubleValue(cell.AsValue<double>(), id);
         case NScheme::NTypeIds::Float:
             return MakeUnversionedDoubleValue(cell.AsValue<float>(), id);
+        case NScheme::NTypeIds::Pg:
+            if (auto pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
+                pgResult.Error)
+            {
+                error.swap(*pgResult.Error);
+                return {};
+            } else {
+                buffer.swap(pgResult.Str);
+                return MakeUnversionedStringValue(buffer, id);
+            }
         default:
             if (useTypeV3) {
-                switch (type) {
+                switch (type.GetTypeId()) {
                 case NScheme::NTypeIds::Date:
                     return MakeUnversionedUint64Value(cell.AsValue<ui16>(), id);
                 case NScheme::NTypeIds::Datetime:
@@ -527,7 +560,7 @@ class TYtBuffer: public IBuffer {
                 case NScheme::NTypeIds::Interval64:
                     return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
                 case NScheme::NTypeIds::Decimal:
-                    buffer = NDataShard::DecimalToString(cell.AsValue<std::pair<ui64, i64>>());
+                    buffer = NDataShard::DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type);
                     return MakeUnversionedStringValue(buffer, id);
                 case NScheme::NTypeIds::DyNumber:
                     buffer = NDataShard::DyNumberToString(cell.AsBuf());
@@ -579,7 +612,12 @@ public:
             const auto& cell = (*row)[i];
 
             TString buffer;
-            const auto value = ConvertValue(column.Type, cell, column.Id, UseTypeV3, buffer);
+            TString error;
+            const auto value = ConvertValue(column.Type, cell, column.Id, UseTypeV3, buffer, error);
+            if (!error.empty()) {
+                ErrorString.swap(error);
+                return false;
+            }
 
             rowBuilder.AddValue(value);
             BytesRead += cell.Size();
@@ -613,7 +651,7 @@ public:
     }
 
     TString GetError() const override {
-        Y_ABORT("unreachable");
+        return ErrorString;
     }
 
 private:
@@ -627,6 +665,8 @@ private:
     TVector<TUnversionedOwningRow> Buffer;
     ui64 BytesRead;
     ui64 BytesSent;
+
+    TString ErrorString;
 
 }; // TYtBuffer
 

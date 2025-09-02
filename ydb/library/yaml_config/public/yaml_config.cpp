@@ -128,45 +128,49 @@ TYamlConfigModel ParseConfig(NFyaml::TDocument& doc) {
     auto root = doc.Root().Map();
     res.Config = root.at("config");
 
-    auto allowedLabels = root.at("allowed_labels").Map();
+    if (root.Has("allowed_labels")) {
+        auto allowedLabels = root.at("allowed_labels").Map();
 
-    for (auto it = allowedLabels.begin(); it != allowedLabels.end(); ++it) {
-        auto type = it->Value().Map().at("type");
-        if (!type || type.Type() != NFyaml::ENodeType::Scalar) {
-            ythrow TYamlConfigEx() << "Label type should be Scalar";
-        }
+        for (auto it = allowedLabels.begin(); it != allowedLabels.end(); ++it) {
+            auto type = it->Value().Map().at("type");
+            if (!type || type.Type() != NFyaml::ENodeType::Scalar) {
+                ythrow TYamlConfigEx() << "Label type should be Scalar";
+            }
 
-        EYamlConfigLabelTypeClass classType;
+            EYamlConfigLabelTypeClass classType;
 
-        if (auto classIt = ClassMapping.find(type.Scalar()); classIt != ClassMapping.end()) {
-            classType = classIt->second;
-        } else {
-            ythrow TYamlConfigEx() << "Unsupported label type: " << type.Scalar();
-        }
+            if (auto classIt = ClassMapping.find(type.Scalar()); classIt != ClassMapping.end()) {
+                classType = classIt->second;
+            } else {
+                ythrow TYamlConfigEx() << "Unsupported label type: " << type.Scalar();
+            }
 
-        auto label = res.AllowedLabels.try_emplace(
-            it->Key().Scalar(),
-            TLabelType{classType, TSet<TString>{""}});
+            auto label = res.AllowedLabels.try_emplace(
+                it->Key().Scalar(),
+                TLabelType{classType, TSet<TString>{""}});
 
-        if (auto labelDesc = it->Value().Map()["values"]; labelDesc) {
-            auto values = labelDesc.Map();
-            for(auto it2 = values.begin(); it2 != values.end(); ++it2) {
-                label.first->second.Values.insert(it2->Key().Scalar());
+            if (auto labelDesc = it->Value().Map()["values"]; labelDesc) {
+                auto values = labelDesc.Map();
+                for(auto it2 = values.begin(); it2 != values.end(); ++it2) {
+                    label.first->second.Values.insert(it2->Key().Scalar());
+                }
             }
         }
     }
 
-    auto selectorConfig = root.at("selector_config").Sequence();
+    if (root.Has("selector_config")) {
+        auto selectorConfig = root.at("selector_config").Sequence();
 
-    for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
-        TYamlConfigModel::TSelectorModel selector;
+        for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
+            TYamlConfigModel::TSelectorModel selector;
 
-        auto selectorRoot = it->Map();
-        selector.Description = selectorRoot.at("description").Scalar();
-        selector.Config = selectorRoot.at("config");
-        selector.Selector = ParseSelector(selectorRoot.at("selector"));
+            auto selectorRoot = it->Map();
+            selector.Description = selectorRoot.at("description").Scalar();
+            selector.Config = selectorRoot.at("config");
+            selector.Selector = ParseSelector(selectorRoot.at("selector"));
 
-        res.Selectors.push_back(selector);
+            res.Selectors.push_back(selector);
+        }
     }
 
     return res;
@@ -355,16 +359,22 @@ TDocumentConfig Resolve(
     res.first.Resolve();
 
     auto rootMap = res.first.Root().Map();
-    auto config = rootMap.at("config");
-    auto selectorConfig = rootMap.at("selector_config").Sequence();
+    auto config = res.first.Root();
 
-    for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
-        auto selectorMap = it->Map();
-        auto desc = selectorMap.at("description").Scalar();
-        auto selectorNode = selectorMap.at("selector");
-        auto selector = ParseSelector(selectorNode);
-        if (Fit(selector, labels)) {
-            Apply(config, selectorMap.at("config"));
+    if (rootMap.Has("config")) {
+        config = rootMap.at("config");
+        if (rootMap.Has("selector_config")) {
+            auto selectorConfig = rootMap.at("selector_config").Sequence();
+
+            for (auto it = selectorConfig.begin(); it != selectorConfig.end(); ++it) {
+                auto selectorMap = it->Map();
+                auto desc = selectorMap.at("description").Scalar();
+                auto selectorNode = selectorMap.at("selector");
+                auto selector = ParseSelector(selectorNode);
+                if (Fit(selector, labels)) {
+                    Apply(config, selectorMap.at("config"));
+                }
+            }
         }
     }
 
@@ -588,6 +598,10 @@ void ValidateVolatileConfig(NFyaml::TDocument& doc) {
 
 void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig) {
     auto configRoot = config.Root();
+    if (!configRoot.Map().Has("selector_config")) {
+        configRoot.Map().Append(config.Buildf("selector_config"), config.Buildf("[]"));
+    }
+
     auto volatileConfigRoot = volatileConfig.Root();
 
     auto seq = volatileConfigRoot.Sequence();
@@ -600,6 +614,9 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
 
 void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatileConfig) {
     auto configRoot = config.Root();
+    if (!configRoot.Map().Has("selector_config")) {
+        configRoot.Map().Append(config.Buildf("selector_config"), config.Buildf("[]"));
+    }
 
     auto seq = volatileConfig.Sequence();
     auto selectors = configRoot.Map().at("selector_config").Sequence();
@@ -609,22 +626,81 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatile
     }
 }
 
+void AppendDatabaseConfig(NFyaml::TDocument& config, NFyaml::TDocument& databaseConfig) {
+    auto configRoot = config.Root();
+    if (!configRoot.Map().Has("selector_config")) {
+        configRoot.Map().Append(config.Buildf("selector_config"), config.Buildf("[]"));
+    }
+
+    auto databaseConfigRoot = databaseConfig.Root();
+
+    auto selectors = configRoot.Map().at("selector_config").Sequence();
+    selectors.Append(config.Buildf(R"(
+description: Implicit DatabaseConfig node
+selector: {}
+)"));
+    auto node = databaseConfigRoot.Map()["config"].Copy(config);
+    selectors.at(0).Map().Append(config.Buildf("config"), node);
+}
+
 ui64 GetVersion(const TString& config) {
-    auto metadata = GetMetadata(config);
+    auto metadata = GetMainMetadata(config);
     return metadata.Version.value_or(0);
 }
 
-TMetadata GetMetadata(const TString& config) {
+struct TMetadataDocument {
+    NFyaml::TDocument Doc;
+    NFyaml::TMapping Node;
+
+    TMetadataDocument(const TString& yaml)
+        : Doc(NFyaml::TDocument::Parse(yaml))
+        , Node(Doc.Root().Map().at("metadata").Map())
+    {}
+};
+
+std::optional<TMetadataDocument> GetMetadataDoc(const TString& config) {
     if (config.empty()) {
         return {};
     }
 
-    auto doc = NFyaml::TDocument::Parse(config);
+    try {
+        return TMetadataDocument(config);
+    } catch(const NFyaml::TFyamlEx&) {
+        return {};
+    }
+}
 
-    if (auto node = doc.Root().Map()["metadata"]; node) {
-        auto versionNode = node.Map()["version"];
-        auto clusterNode = node.Map()["cluster"];
-        return TMetadata{
+TMainMetadata GetMainMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node["version"];
+        auto clusterNode = doc->Node["cluster"];
+        return TMainMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
+TDatabaseMetadata GetDatabaseMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto databaseNode = doc->Node["database"];
+        auto versionNode = doc->Node["version"];
+        return TDatabaseMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Database = databaseNode ? std::optional{databaseNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
+TStorageMetadata GetStorageMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node["version"];
+        auto clusterNode = doc->Node["cluster"];
+        return TStorageMetadata{
             .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
             .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
         };
@@ -634,16 +710,10 @@ TMetadata GetMetadata(const TString& config) {
 }
 
 TVolatileMetadata GetVolatileMetadata(const TString& config) {
-    if (config.empty()) {
-        return {};
-    }
-
-    auto doc = NFyaml::TDocument::Parse(config);
-
-    if (auto node = doc.Root().Map().at("metadata"); node) {
-        auto versionNode = node.Map().at("version");
-        auto clusterNode = node.Map().at("cluster");
-        auto idNode = node.Map().at("id");
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node.at("version");
+        auto clusterNode = doc->Node.at("cluster");
+        auto idNode = doc->Node.at("id");
         return TVolatileMetadata{
             .Version = versionNode ? std::make_optional(FromString<ui64>(versionNode.Scalar())) : std::nullopt,
             .Cluster = clusterNode ? std::make_optional(clusterNode.Scalar()) : std::nullopt,
@@ -669,7 +739,7 @@ TString ReplaceMetadata(const TString& config, const std::function<void(TStringS
             auto end = pair.Value().EndMark().InputPos;
             sstr << config.substr(0, begin);
             serializeMetadata(sstr);
-            if (end < config.length() && config[end] == ':') {
+            if (end < config.length() && (config[end] == ':' || config[end] == '"')) {
                 end = end + 1;
             }
             sstr << config.substr(end, TString::npos);
@@ -685,15 +755,37 @@ TString ReplaceMetadata(const TString& config, const std::function<void(TStringS
             }
         }
     }
-    return sstr.Str();
 
+    return sstr.Str();
 }
 
-TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
+TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata) {
     auto serializeMetadata = [&](TStringStream& sstr) {
         sstr
           << "metadata:"
           << "\n  kind: MainConfig"
+          << "\n  cluster: \"" << *metadata.Cluster << "\""
+          << "\n  version: " << *metadata.Version;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
+TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: DatabaseConfig"
+          << "\n  database: \"" << *metadata.Database << "\""
+          << "\n  version: " << *metadata.Version;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: StorageConfig"
           << "\n  cluster: \"" << *metadata.Cluster << "\""
           << "\n  version: " << *metadata.Version;
     };
@@ -729,6 +821,19 @@ bool IsMainConfig(const TString& config) {
     return IsConfigKindEquals(config, "MainConfig");
 }
 
+bool IsStorageConfig(const TString& config) {
+    return IsConfigKindEquals(config, "StorageConfig");
+}
+
+bool IsDatabaseConfig(const TString& config) {
+    return IsConfigKindEquals(config, "DatabaseConfig");
+}
+
+bool IsStaticConfig(const TString& config) {
+    auto doc = NFyaml::TDocument::Parse(config);
+    return !doc.Root().Map().Has("metadata");
+}
+
 TString StripMetadata(const TString& config) {
     auto doc = NFyaml::TDocument::Parse(config);
 
@@ -749,6 +854,49 @@ TString StripMetadata(const TString& config) {
     }
 
     return sstr.Str();
+}
+
+std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const TString& config) {
+    try {
+        auto doc = NFyaml::TDocument::Parse(config);
+        auto metadata = doc.Root().Map().at("metadata").Map();
+        // if we have metadata, but do not have kind
+        // we suppose it is MainConfig
+        // later we will remove this behaviour
+        // but we need it for compatibility for now
+        if (!metadata.Has("kind")) {
+            return GetMainMetadata(config);
+        }
+
+        auto kind = metadata.at("kind").Scalar();
+        if (kind == "MainConfig") {
+            return GetMainMetadata(config);
+        } else if (kind == "DatabaseConfig") {
+            return GetDatabaseMetadata(config);
+        } else {
+            return TError {
+                .Error = TString("Unknown kind: ") + kind,
+            };
+        }
+    } catch (yexception& e) {
+        return TError {
+            .Error = e.what(),
+        };
+    }
+}
+
+TString UpgradeMainConfigVersion(const TString& config) {
+    auto metadata = GetMainMetadata(config);
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
+    return ReplaceMetadata(config, metadata);
+}
+
+TString UpgradeStorageConfigVersion(const TString& config) {
+    auto metadata = GetStorageMetadata(config);
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
+    return ReplaceMetadata(config, metadata);
 }
 
 } // namespace NKikimr::NYamlConfig

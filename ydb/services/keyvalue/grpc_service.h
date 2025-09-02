@@ -3,7 +3,8 @@
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 
 namespace NKikimr::NGRpcService {
@@ -17,11 +18,6 @@ public:
     ~TKeyValueGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
-
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
@@ -31,7 +27,6 @@ private:
     NActors::TActorId GRpcRequestProxyId;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
-    NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService

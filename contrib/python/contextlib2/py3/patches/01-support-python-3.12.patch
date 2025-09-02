@@ -1,0 +1,8 @@
+--- contrib/python/contextlib2/py3/contextlib2/__init__.py	(index)
++++ contrib/python/contextlib2/py3/contextlib2/__init__.py	(working tree)
+@@ -179,0 +180,2 @@ class _GeneratorContextManager(_GeneratorContextManagerBase,
++            if traceback is not None:
++                value = value.with_traceback(traceback)
+@@ -181 +183 @@ class _GeneratorContextManager(_GeneratorContextManagerBase,
+-                self.gen.throw(type, value, traceback)
++                self.gen.throw(value)

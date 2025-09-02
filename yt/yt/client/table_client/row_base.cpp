@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NTableClient {
 
@@ -24,7 +24,7 @@ TColumnFilter::TColumnFilter()
     : Universal_(true)
 { }
 
-TColumnFilter::TColumnFilter(const std::initializer_list<int>& indexes)
+TColumnFilter::TColumnFilter(std::initializer_list<int> indexes)
     : Universal_(false)
     , Indexes_(indexes.begin(), indexes.end())
 { }

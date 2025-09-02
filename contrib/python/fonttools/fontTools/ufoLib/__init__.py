@@ -1,57 +1,58 @@
-import os
-from copy import deepcopy
-from os import fsdecode
-import logging
-import zipfile
-import enum
-from collections import OrderedDict
-import fs
-import fs.base
-import fs.subfs
-import fs.errors
-import fs.copy
-import fs.osfs
-import fs.zipfs
-import fs.tempfs
-import fs.tools
-from fontTools.misc import plistlib
-from fontTools.ufoLib.validators import *
-from fontTools.ufoLib.filenames import userNameToFileName
-from fontTools.ufoLib.converters import convertUFO1OrUFO2KerningToUFO3Kerning
-from fontTools.ufoLib.errors import UFOLibError
-from fontTools.ufoLib.utils import numberTypes, _VersionTupleEnumMixin
-
 """
 A library for importing .ufo files and their descendants.
-Refer to http://unifiedfontobject.com for the UFO specification.
+Refer to http://unifiedfontobject.org for the UFO specification.
 
-The UFOReader and UFOWriter classes support versions 1, 2 and 3
-of the specification.
+The main interfaces are the :class:`.UFOReader` and :class:`.UFOWriter`
+classes, which support versions 1, 2, and 3 of the UFO specification.
 
-Sets that list the font info attribute names for the fontinfo.plist
-formats are available for external use. These are:
-	fontInfoAttributesVersion1
-	fontInfoAttributesVersion2
-	fontInfoAttributesVersion3
+Set variables are available for external use that list the font
+info attribute names for the `fontinfo.plist` formats. These are:
 
-A set listing the fontinfo.plist attributes that were deprecated
+- :obj:`.fontInfoAttributesVersion1`
+- :obj:`.fontInfoAttributesVersion2`
+- :obj:`.fontInfoAttributesVersion3`
+
+A set listing the `fontinfo.plist` attributes that were deprecated
 in version 2 is available for external use:
-	deprecatedFontInfoAttributesVersion2
 
-Functions that do basic validation on values for fontinfo.plist
+- :obj:`.deprecatedFontInfoAttributesVersion2`
+
+Functions that do basic validation on values for `fontinfo.plist`
 are available for external use. These are
-	validateFontInfoVersion2ValueForAttribute
-	validateFontInfoVersion3ValueForAttribute
+
+- :func:`.validateFontInfoVersion2ValueForAttribute`
+- :func:`.validateFontInfoVersion3ValueForAttribute`
 
 Value conversion functions are available for converting
-fontinfo.plist values between the possible format versions.
-	convertFontInfoValueForAttributeFromVersion1ToVersion2
-	convertFontInfoValueForAttributeFromVersion2ToVersion1
-	convertFontInfoValueForAttributeFromVersion2ToVersion3
-	convertFontInfoValueForAttributeFromVersion3ToVersion2
+`fontinfo.plist` values between the possible format versions.
+
+- :func:`.convertFontInfoValueForAttributeFromVersion1ToVersion2`
+- :func:`.convertFontInfoValueForAttributeFromVersion2ToVersion1`
+- :func:`.convertFontInfoValueForAttributeFromVersion2ToVersion3`
+- :func:`.convertFontInfoValueForAttributeFromVersion3ToVersion2`
 """
 
+import enum
+import logging
+import os
+import zipfile
+from collections import OrderedDict
+from copy import deepcopy
+from os import fsdecode
+
+from fontTools.misc import filesystem as fs
+from fontTools.misc import plistlib
+from fontTools.ufoLib.converters import convertUFO1OrUFO2KerningToUFO3Kerning
+from fontTools.ufoLib.errors import UFOLibError
+from fontTools.ufoLib.filenames import userNameToFileName
+from fontTools.ufoLib.utils import _VersionTupleEnumMixin, numberTypes
+from fontTools.ufoLib.validators import *
+
+# client code can check this to see if the upstream `fs` package is being used
+haveFS = fs._haveFS
+
 __all__ = [
+    "haveFS",
     "makeUFOPath",
     "UFOLibError",
     "UFOReader",
@@ -180,7 +181,7 @@ class _UFOBaseIO:
                 return
             self.fs.writebytes(fileName, data)
         else:
-            with self.fs.openbin(fileName, mode="w") as fp:
+            with self.fs.open(fileName, mode="wb") as fp:
                 try:
                     plistlib.dump(obj, fp)
                 except Exception as e:
@@ -197,8 +198,12 @@ class _UFOBaseIO:
 
 
 class UFOReader(_UFOBaseIO):
-    """
-    Read the various components of the .ufo.
+    """Read the various components of a .ufo.
+
+    Attributes:
+        path: An :class:`os.PathLike` object pointing to the .ufo.
+        validate: A boolean indicating if the data read should be
+          validated. Defaults to `True`.
 
     By default read data is validated. Set ``validate`` to
     ``False`` to not validate the data.
@@ -404,7 +409,7 @@ class UFOReader(_UFOBaseIO):
         path = fsdecode(path)
         try:
             if encoding is None:
-                return self.fs.openbin(path)
+                return self.fs.open(path, mode="rb")
             else:
                 return self.fs.open(path, mode="r", encoding=encoding)
         except fs.errors.ResourceNotFound:
@@ -646,7 +651,7 @@ class UFOReader(_UFOBaseIO):
         The returned string is empty if the file is missing.
         """
         try:
-            with self.fs.open(FEATURES_FILENAME, "r", encoding="utf-8") as f:
+            with self.fs.open(FEATURES_FILENAME, "r", encoding="utf-8-sig") as f:
                 return f.read()
         except fs.errors.ResourceNotFound:
             return ""
@@ -810,7 +815,7 @@ class UFOReader(_UFOBaseIO):
                 # systems often have hidden directories
                 continue
             if validate:
-                with imagesFS.openbin(path.name) as fp:
+                with imagesFS.open(path.name, "rb") as fp:
                     valid, error = pngValidator(fileObj=fp)
                 if valid:
                     result.append(path.name)
@@ -880,20 +885,27 @@ class UFOReader(_UFOBaseIO):
 
 
 class UFOWriter(UFOReader):
-    """
-    Write the various components of the .ufo.
+    """Write the various components of a .ufo.
+
+    Attributes:
+        path: An :class:`os.PathLike` object pointing to the .ufo.
+        formatVersion: the UFO format version as a tuple of integers (major, minor),
+            or as a single integer for the major digit only (minor is implied to be 0).
+            By default, the latest formatVersion will be used; currently it is 3.0,
+            which is equivalent to formatVersion=(3, 0).
+        fileCreator: The creator of the .ufo file. Defaults to
+            `com.github.fonttools.ufoLib`.
+        structure: The internal structure of the .ufo file: either `ZIP` or `PACKAGE`.
+        validate: A boolean indicating if the data read should be validated. Defaults
+            to `True`.
 
     By default, the written data will be validated before writing. Set ``validate`` to
     ``False`` if you do not want to validate the data. Validation can also be overriden
-    on a per method level if desired.
+    on a per-method level if desired.
 
-    The ``formatVersion`` argument allows to specify the UFO format version as a tuple
-    of integers (major, minor), or as a single integer for the major digit only (minor
-    is implied as 0). By default the latest formatVersion will be used; currently it's
-    3.0, which is equivalent to formatVersion=(3, 0).
-
-    An UnsupportedUFOFormat exception is raised if the requested UFO formatVersion is
-    not supported.
+    Raises:
+        UnsupportedUFOFormat: An exception indicating that the requested UFO
+            formatVersion is not supported.
     """
 
     def __init__(
@@ -969,18 +981,16 @@ class UFOWriter(UFOReader):
                             % len(rootDirs)
                         )
                     else:
-                        # 'ClosingSubFS' ensures that the parent filesystem is closed
-                        # when its root subdirectory is closed
-                        self.fs = parentFS.opendir(
-                            rootDirs[0], factory=fs.subfs.ClosingSubFS
-                        )
+                        rootDir = rootDirs[0]
                 else:
                     # if the output zip file didn't exist, we create the root folder;
                     # we name it the same as input 'path', but with '.ufo' extension
                     rootDir = os.path.splitext(os.path.basename(path))[0] + ".ufo"
                     parentFS = fs.zipfs.ZipFS(path, write=True, encoding="utf-8")
                     parentFS.makedir(rootDir)
-                    self.fs = parentFS.opendir(rootDir, factory=fs.subfs.ClosingSubFS)
+                # 'ClosingSubFS' ensures that the parent filesystem is closed
+                # when its root subdirectory is closed
+                self.fs = parentFS.opendir(rootDir, factory=fs.subfs.ClosingSubFS)
             else:
                 self.fs = fs.osfs.OSFS(path, create=True)
             self._fileStructure = structure

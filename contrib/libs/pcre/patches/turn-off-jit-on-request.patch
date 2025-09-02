@@ -1,0 +1,32 @@
+From: Дмитрий Потапов <orivej@yandex-team.ru>
+Date: Sun, 14 Feb 2021 19:43:48 +0300
+Subject: [PATCH] Conditional PCRE JIT compilation.
+
+PCRE JIT adds ≈104KB to binary size which can be critical for embedded software, so we need turn off switch which can be overriden in ya.make.
+
+REVIEW: 1640869
+
+--- a/config.h
++++ b/config.h
+@@ -293,8 +293,10 @@
+    backward compatibility; new code need not use it. */
+ #define STDC_HEADERS 1
+
++#ifdef ARCADIA_PCRE_ENABLE_JIT
+ /* Define to any value to enable support for Just-In-Time compiling. */
+ #define SUPPORT_JIT /**/
++#endif
+
+ /* Define to any value to allow pcregrep to be linked with libbz2, so that it
+    is able to handle .bz2 files. */
+@@ -319,8 +321,10 @@
+ /* Define to any value to enable the 8 bit PCRE library. */
+ #define SUPPORT_PCRE8 /**/
+
++#ifdef ARCADIA_PCRE_ENABLE_JIT
+ /* Define to any value to enable JIT support in pcregrep. */
+ #define SUPPORT_PCREGREP_JIT /**/
++#endif
+
+ /* Define to any value to enable support for Unicode properties. */
+ #define SUPPORT_UCP /**/

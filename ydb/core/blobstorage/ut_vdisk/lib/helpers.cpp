@@ -394,7 +394,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     bool Started = false;
     // how many deadline statuses we got
     ui64 RequestDeadlines = 0;
-    ui32 MinREALHugeBlobInBytes = 0;
+    ui32 MinHugeBlobInBytes = 0;
 
     ui64 LastBatchSize = 0;
 
@@ -413,8 +413,8 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->IsConnected && !Started) {
             // put logo blob
-            MinREALHugeBlobInBytes = ev->Get()->CostModel->MinREALHugeBlobInBytes;
-            Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+            MinHugeBlobInBytes = ev->Get()->CostModel->MinHugeBlobInBytes;
+            Y_ABORT_UNLESS(MinHugeBlobInBytes);
             SendPut(ctx);
             Started = true;
         }
@@ -451,7 +451,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
             TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 ui64 cookieValue = Step;
-                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, nullptr, NWilson::TTraceId());
+                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, false, false, nullptr, NWilson::TTraceId());
                 putCount++;
 
                 Step++;
@@ -485,12 +485,12 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
         Y_ABORT_UNLESS(status == NKikimrProto::OK || noTimeout && status == NKikimrProto::DEADLINE,
             "Event# %s", ev->Get()->ToString().data());
 
-        Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+        Y_ABORT_UNLESS(MinHugeBlobInBytes);
 
         switch (status) {
         case NKikimrProto::OK:
             for (auto &item : record.GetItems()) {
-                Y_ABORT_UNLESS(item.GetStatus() == (MsgData.size() < MinREALHugeBlobInBytes ? NKikimrProto::OK : NKikimrProto::ERROR));
+                Y_ABORT_UNLESS(item.GetStatus() == (MsgData.size() < MinHugeBlobInBytes ? NKikimrProto::OK : NKikimrProto::ERROR));
             }
             break;
         case NKikimrProto::DEADLINE:
@@ -1154,7 +1154,7 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
                         ui64 syncedLsn = info.SyncStates[j].SyncedLsn;
                         auto ri = [] { return TString("no internals"); };
                         NSyncLog::EReadWhatsNext whatsNext;
-                        whatsNext = NSyncLog::WhatsNext(syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
+                        whatsNext = NSyncLog::WhatsNext("", syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
                         if (whatsNext != NSyncLog::EWnDiskSynced)
                             return false;
                     }
@@ -1819,7 +1819,7 @@ class TSyncRunActor : public TActor<TSyncRunActor> {
     std::shared_ptr<TSyncRunner::TReturnValue> ReturnValue;
 
     void Handle(TEvRunActor::TPtr &ev, const TActorContext &ctx) {
-        ctx.ExecutorThread.RegisterActor(ev->Get()->Actor.Release());
+        ctx.Register(ev->Get()->Actor.Release());
     }
 
     void HandleDone(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
@@ -1885,7 +1885,7 @@ TSyncTestBase::TSyncTestBase(TConfiguration *conf)
 {}
 
 void TSyncTestBase::Bootstrap(const TActorContext &ctx) {
-    SyncRunner.Reset(new TSyncRunner(ctx.ExecutorThread.ActorSystem, Conf));
+    SyncRunner.Reset(new TSyncRunner(ctx.ActorSystem(), Conf));
     Scenario(ctx);
     AtomicIncrement(Conf->SuccessCount);
     Conf->SignalDoneEvent();
@@ -2082,5 +2082,3 @@ NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID
     return new TManyPutsToCorrespondingVDisksActor(notifyID, conf, dataSet, hndl, inFlight);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-

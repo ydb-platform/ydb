@@ -1,0 +1,2 @@
+keep:
+  - blinker/_saferef.py  # Пока сохраняем, как обновим mitmproxy, можно будет удалить

@@ -5,7 +5,6 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <yt/yt/core/misc/range.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/sliding_window.h>
 
@@ -14,6 +13,7 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -32,6 +32,7 @@ class TAttachmentsInputStream
 {
 public:
     TAttachmentsInputStream(
+        TRequestId requestId,
         TClosure readCallback,
         IInvokerPtr compressionInvoker,
         std::optional<TDuration> timeout = {});
@@ -46,6 +47,7 @@ public:
     DEFINE_SIGNAL(void(), Aborted);
 
 private:
+    const TRequestId RequestId_;
     const TClosure ReadCallback_;
     const IInvokerPtr CompressionInvoker_;
     const std::optional<TDuration> Timeout_;
@@ -81,6 +83,7 @@ private:
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
+    std::vector<TErrorAttribute> GetErrorAttributes() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAttachmentsInputStream)
@@ -92,6 +95,7 @@ class TAttachmentsOutputStream
 {
 public:
     TAttachmentsOutputStream(
+        TRequestId requestId,
         NCompression::ECodec codec,
         IInvokerPtr compressionInvoker,
         TClosure pullCallback,
@@ -109,6 +113,7 @@ public:
     DEFINE_SIGNAL(void(), Aborted);
 
 private:
+    const TRequestId RequestId_;
     const NCompression::ECodec Codec_;
     const IInvokerPtr CompressionInvoker_;
     const TClosure PullCallback_;
@@ -130,7 +135,7 @@ private:
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    std::atomic<size_t> CompressionSequenceNumber_ = {0};
+    std::atomic<size_t> CompressionSequenceNumber_ = 0;
     TSlidingWindow<TWindowPacket> Window_;
     TError Error_;
     TRingQueue<TSharedRef> DataQueue_;
@@ -153,6 +158,7 @@ private:
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
+    std::vector<TErrorAttribute> GetErrorAttributes() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAttachmentsOutputStream)
@@ -265,6 +271,16 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
     TCallback<void(TSharedRef)> metaHandler);
 
+//! This variant additionally allows non-trivial response of streaming request to be handled.
+//! TODO(arkady-e1ppa): Introduce IAsyncZeroCopyOutputStream<TRet> which |Close| returns
+//! TFuture<TRet> instead of TFuture<void> as a way to transfer data via rsp
+//! use it here.
+template <class TRequestMessage, class TResponse>
+TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
+    TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
+    TCallback<void(TSharedRef)> metaHandler,
+    TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Handles an incoming streaming request that uses the #CreateRpcClientInputStream
@@ -290,11 +306,10 @@ void HandleOutputStreamingRequest(
     const NConcurrency::IAsyncZeroCopyOutputStreamPtr& output,
     bool feedbackEnabled = false);
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc
 
 #define STREAM_INL_H_
 #include "stream-inl.h"
 #undef STREAM_INL_H_
-

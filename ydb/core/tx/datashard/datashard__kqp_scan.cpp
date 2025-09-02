@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
@@ -29,7 +30,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TKqpScanResult : public IDestructable {};
 
-class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
+class TKqpScan : public TActor<TKqpScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
@@ -91,7 +92,7 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             default:
-                Y_ABORT("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ENSURE(false, "TKqpScan: unexpected event " << Hex(ev->GetTypeRewrite()));
         }
     }
 
@@ -182,9 +183,9 @@ private:
     }
 
 private:
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
-        Y_ABORT_UNLESS(scheme);
-        Y_ABORT_UNLESS(driver);
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
+        Y_ENSURE(scheme);
+        Y_ENSURE(driver);
 
         Driver = driver;
         ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -215,7 +216,7 @@ private:
         return startConfig;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+    EScan Seek(TLead& lead, ui64 seq) final {
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
@@ -258,10 +259,10 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LastKey = TOwnedCellVec(key);
 
-        Y_ABORT_UNLESS(SkipNullKeys.size() <= key.size());
+        Y_ENSURE(SkipNullKeys.size() <= key.size());
         for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
             if (SkipNullKeys[i] && key[i].IsNull()) {
                 return EScan::Feed;
@@ -297,7 +298,7 @@ private:
         return EScan::Feed; // sent by rows limit, can send one more batch
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
             "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
             << " table: " << TablePath
@@ -313,7 +314,7 @@ private:
         return EScan::Reset;
     }
 
-    EScan PageFault() noexcept override final {
+    EScan PageFault() override final {
         ++PageFaults;
         if (Result && !Result->Rows.empty()) {
             bool sent = SendResult(/* pageFault */ true);
@@ -331,14 +332,14 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
+        auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
-            << ", table: " << TablePath << ", reason: " << (int) abort
+            << ", table: " << TablePath << ", reason: " << status
             << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
 
-        if (abort != EAbort::None || AbortEvent) {
+        if (status != EStatus::Done || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
@@ -350,9 +351,13 @@ private:
                 }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
-                ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
-                    << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort));
+                ev->Record.SetStatus(status == NTable::EStatus::Exception
+                    ? Ydb::StatusIds::INTERNAL_ERROR
+                    : Ydb::StatusIds::ABORTED);
+                TStringBuilder error;
+                auto issueId = status == NTable::EStatus::Exception ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                auto issue = NYql::YqlIssue({}, issueId, TStringBuilder()
+                    << "Table " << TablePath << " scan failed, reason: " << status);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 
@@ -377,7 +382,15 @@ private:
         return new TKqpScanResult();
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
+    }
+
+    void Describe(IOutputStream& out) const final {
         out << "TExecuteKqpScanTxUnit, TKqpScan";
     }
 
@@ -421,7 +434,7 @@ private:
         }
     }
 
-    bool SendResult(bool pageFault, bool finish = false) noexcept {
+    bool SendResult(bool pageFault, bool finish = false) {
         if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= ChunksLimiter.GetRemainedBytes() ||
             (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
         {
@@ -456,14 +469,14 @@ private:
                 if (finish) {
                     bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
                     bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return false;
@@ -471,7 +484,7 @@ private:
             }
 
             if (!finish) {
-                Y_ABORT_UNLESS(ChunksLimiter.Take(sendBytes));
+                Y_ENSURE(ChunksLimiter.Take(sendBytes));
                 Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             }
 
@@ -597,7 +610,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto tableInfo = infoIt->second; // copy table info ptr here
     auto& tableColumns = tableInfo->Columns;
-    Y_ABORT_UNLESS(request.GetColumnTags().size() == request.GetColumnTypes().size());
+    Y_ENSURE(request.GetColumnTags().size() == request.GetColumnTypes().size());
 
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
@@ -617,8 +630,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
             return;
         }
 
-        // TODO: support pg types
-        if (column->Type.GetTypeId() != request.GetColumnTypes(i)) {
+        const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(request.GetColumnTypes(i), &request.GetColumnTypeInfos(i));
+        if (column->Type != typeInfoMod.TypeInfo || column->TypeMod != typeInfoMod.TypeMod) {
             reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());

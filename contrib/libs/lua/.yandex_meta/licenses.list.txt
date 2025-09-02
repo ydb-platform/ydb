@@ -1,0 +1,107 @@
+====================COPYRIGHT====================
+#define LUA_COPYRIGHT	LUA_RELEASE "  Copyright (C) 1994-2015 Lua.org, PUC-Rio"
+#define LUA_AUTHORS	"R. Ierusalimschy, L. H. de Figueiredo, W. Celes"
+
+
+====================COPYRIGHT====================
+* Copyright (C) 1994-2015 Lua.org, PUC-Rio.
+
+
+====================COPYRIGHT====================
+Copyright &copy; 1994&ndash;2015 Lua.org, PUC-Rio.
+
+
+====================COPYRIGHT====================
+Copyright &copy; 2011&ndash;2015 Lua.org, PUC-Rio.
+Freely available under the terms of the
+<A HREF="http://www.lua.org/license.html">Lua license</A>.
+
+
+====================MIT====================
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+** Lua standard libraries
+** See Copyright Notice in lua.h
+
+
+====================MIT====================
+** See Copyright Notice in lua.h
+
+
+====================MIT====================
+-- Please see LICENCE.txt for details.
+
+
+====================MIT====================
+-- This module is released under the MIT License (MIT).
+
+
+====================MIT====================
+<A HREF="http://www.lua.org/license.html">this</A>.
+
+
+====================MIT====================
+Freely available under the terms of the
+<A HREF="http://www.lua.org/license.html">Lua license</A>.
+
+
+====================MIT====================
+Freely available under the terms of the
+<a href="http://www.lua.org/license.html">Lua license</a>.
+
+
+====================MIT====================
+Lua is
+<A HREF="#license">free software</A>
+
+
+====================MIT====================
+Lua is free software distributed under the terms of the
+<A HREF="http://www.opensource.org/licenses/mit-license.html">MIT license</A>
+reproduced below;
+it may be used for any purpose, including commercial purposes,
+at absolutely no cost without having to ask us.
+
+The only requirement is that if you do use Lua,
+then you should give us credit by including the appropriate copyright notice somewhere in your product or its documentation.
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+<P>
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+<P>
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

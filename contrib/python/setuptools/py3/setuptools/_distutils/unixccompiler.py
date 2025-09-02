@@ -22,11 +22,11 @@ import shlex
 import sys
 
 from . import sysconfig
-from .compat import consolidate_linker_args
 from ._log import log
 from ._macos_compat import compiler_fixup
 from ._modified import newer
 from .ccompiler import CCompiler, gen_lib_options, gen_preprocess_options
+from .compat import consolidate_linker_args
 from .errors import CompileError, DistutilsExecError, LibError, LinkError
 
 # XXX Things not currently handled:
@@ -118,9 +118,12 @@ class UnixCCompiler(CCompiler):
         'preprocessor': None,
         'compiler': ["cc"],
         'compiler_so': ["cc"],
-        'compiler_cxx': ["cc"],
+        'compiler_cxx': ["c++"],
+        'compiler_so_cxx': ["c++"],
         'linker_so': ["cc", "-shared"],
+        'linker_so_cxx': ["c++", "-shared"],
         'linker_exe': ["cc"],
+        'linker_exe_cxx': ["c++", "-shared"],
         'archiver': ["ar", "-cr"],
         'ranlib': None,
     }
@@ -144,6 +147,9 @@ class UnixCCompiler(CCompiler):
     xcode_stub_lib_format = dylib_lib_format
     if sys.platform == "cygwin":
         exe_extension = ".exe"
+        shared_lib_extension = ".dll.a"
+        dylib_lib_extension = ".dll"
+        dylib_lib_format = "cyg%s%s"
 
     def preprocess(
         self,
@@ -184,13 +190,19 @@ class UnixCCompiler(CCompiler):
 
     def _compile(self, obj, src, ext, cc_args, extra_postargs, pp_opts):
         compiler_so = compiler_fixup(self.compiler_so, cc_args + extra_postargs)
+        compiler_so_cxx = compiler_fixup(self.compiler_so_cxx, cc_args + extra_postargs)
         try:
-            self.spawn(compiler_so + cc_args + [src, '-o', obj] + extra_postargs)
+            if self.detect_language(src) == 'c++':
+                self.spawn(
+                    compiler_so_cxx + cc_args + [src, '-o', obj] + extra_postargs
+                )
+            else:
+                self.spawn(compiler_so + cc_args + [src, '-o', obj] + extra_postargs)
         except DistutilsExecError as msg:
             raise CompileError(msg)
 
     def create_static_lib(
-        self, objects, output_libname, output_dir=None, debug=0, target_lang=None
+        self, objects, output_libname, output_dir=None, debug=False, target_lang=None
     ):
         objects, output_dir = self._fix_object_args(objects, output_dir)
 
@@ -223,7 +235,7 @@ class UnixCCompiler(CCompiler):
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -253,7 +265,13 @@ class UnixCCompiler(CCompiler):
                 # building an executable or linker_so (with shared options)
                 # when building a shared library.
                 building_exe = target_desc == CCompiler.EXECUTABLE
-                linker = (self.linker_exe if building_exe else self.linker_so)[:]
+                linker = (
+                    self.linker_exe
+                    if building_exe
+                    else (
+                        self.linker_so_cxx if target_lang == "c++" else self.linker_so
+                    )
+                )[:]
 
                 if target_lang == "c++" and self.compiler_cxx:
                     env, linker_ne = _split_env(linker)
@@ -362,28 +380,12 @@ class UnixCCompiler(CCompiler):
 
         return os.path.join(match.group(1), dir[1:]) if apply_root else dir
 
-    def find_library_file(self, dirs, lib, debug=0):
-        r"""
+    def find_library_file(self, dirs, lib, debug=False):
+        """
         Second-guess the linker with not much hard
         data to go on: GCC seems to prefer the shared library, so
         assume that *all* Unix C compilers do,
         ignoring even GCC's "-static" option.
-
-        >>> compiler = UnixCCompiler()
-        >>> compiler._library_root = lambda dir: dir
-        >>> monkeypatch = getfixture('monkeypatch')
-        >>> monkeypatch.setattr(os.path, 'exists', lambda d: 'existing' in d)
-        >>> dirs = ('/foo/bar/missing', '/foo/bar/existing')
-        >>> compiler.find_library_file(dirs, 'abc').replace('\\', '/')
-        '/foo/bar/existing/libabc.dylib'
-        >>> compiler.find_library_file(reversed(dirs), 'abc').replace('\\', '/')
-        '/foo/bar/existing/libabc.dylib'
-        >>> monkeypatch.setattr(os.path, 'exists',
-        ...     lambda d: 'existing' in d and '.a' in d)
-        >>> compiler.find_library_file(dirs, 'abc').replace('\\', '/')
-        '/foo/bar/existing/libabc.a'
-        >>> compiler.find_library_file(reversed(dirs), 'abc').replace('\\', '/')
-        '/foo/bar/existing/libabc.a'
         """
         lib_names = (
             self.library_filename(lib, lib_type=type)

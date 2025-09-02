@@ -71,6 +71,7 @@ struct TModifyRowsOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IDynamicTableTransaction
+    : public virtual TRefCounted
 {
     virtual ~IDynamicTableTransaction() = default;
 
@@ -106,7 +107,7 @@ struct IDynamicTableTransaction
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong) = 0;
 
     virtual void ModifyRows(
@@ -115,6 +116,8 @@ struct IDynamicTableTransaction
         TSharedRange<TRowModification> modifications,
         const TModifyRowsOptions& options = {}) = 0;
 };
+
+DEFINE_REFCOUNTED_TYPE(IDynamicTableTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
 

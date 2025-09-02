@@ -94,7 +94,7 @@ Status ProtoServerReflection::ServerReflectionInfo(
 void ProtoServerReflection::FillErrorResponse(const Status& status,
                                               ErrorResponse* error_response) {
   error_response->set_error_code(status.error_code());
-  error_response->set_error_message(TProtoStringType(status.error_message()));
+  error_response->set_error_message(status.error_message());
 }
 
 Status ProtoServerReflection::ListService(ServerContext* /*context*/,
@@ -104,7 +104,7 @@ Status ProtoServerReflection::ListService(ServerContext* /*context*/,
   }
   for (const auto& value : *services_) {
     ServiceResponse* service_response = response->add_service();
-    service_response->set_name(TProtoStringType(value));
+    service_response->set_name(value);
   }
   return Status::OK;
 }
@@ -185,7 +185,7 @@ Status ProtoServerReflection::GetAllExtensionNumbers(
   for (const auto& value : extensions) {
     response->add_extension_number(value->number());
   }
-  response->set_base_type_name(TProtoStringType(type));
+  response->set_base_type_name(type);
   return Status::OK;
 }
 

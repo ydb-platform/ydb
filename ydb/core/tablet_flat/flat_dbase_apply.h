@@ -14,6 +14,7 @@ namespace NTable {
         using TFamily = TScheme::TFamily;
         using ECodec = NPage::ECodec;
         using ECache = NPage::ECache;
+        using ECacheMode = NPage::ECacheMode;
 
         explicit TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState = nullptr);
 
@@ -33,7 +34,7 @@ namespace NTable {
         bool AddTable(const TString& name, ui32 id);
         bool DropTable(ui32 id);
         bool AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-        bool AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null = { });
+        bool AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
         bool DropColumn(ui32 table, ui32 id);
         bool AddColumnToFamily(ui32 table, ui32 column, ui32 family);
         bool AddColumnToKey(ui32 table, ui32 column);
@@ -44,12 +45,12 @@ namespace NTable {
         bool SetExecutorLogFlushPeriod(TDuration flushPeriod);
         bool SetExecutorLimitInFlyTx(ui32 limitTxInFly);
         bool SetExecutorResourceProfile(const TString &name);
-        bool SetCompactionPolicy(ui32 tableId, const NKikimrSchemeOp::TCompactionPolicy& newPolicy);
+        bool SetCompactionPolicy(ui32 tableId, const NKikimrCompaction::TCompactionPolicy& newPolicy);
 
-        TTable* Table(ui32 tid) const noexcept
+        TTable* Table(ui32 tid) const
         {
             auto* table = Scheme.GetTableInfo(tid);
-            Y_ABORT_UNLESS(table, "Acccessing table that doesn't exist");
+            Y_ENSURE(table, "Acccessing table that doesn't exist");
             return table;
         }
 
@@ -83,9 +84,9 @@ namespace NTable {
             return false;
         }
 
-        void PreserveTable(ui32 tid) noexcept;
-        void PreserveExecutor() noexcept;
-        void PreserveRedo() noexcept;
+        void PreserveTable(ui32 tid);
+        void PreserveExecutor();
+        void PreserveRedo();
 
     public:
         TScheme &Scheme;

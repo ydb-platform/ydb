@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 UPDATE episodes
 SET title="test Episode 2"
 WHERE
@@ -42,6 +42,4 @@ COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
-
-COMMIT;
 ```

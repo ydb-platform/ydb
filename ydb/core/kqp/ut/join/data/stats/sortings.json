@@ -1,0 +1,16 @@
+{
+    "/Root/bank_document": {
+        "n_rows": 10,
+        "byte_size": 100    },
+    "/Root/bank_document/ix_bank_document_exec_dt_accounts/indexImplTable": {
+        "n_rows": 10,
+        "byte_size": 100    },
+    "/Root/bank_sub_document": {
+        "n_rows": 100,
+        "byte_size": 100
+    },
+    "/Root/bank_sub_document/IX_BANK_SUB_DOCUMENT_DOCUMENT_ID/indexImplTable": {
+        "n_rows": 100,
+        "byte_size": 100
+    }
+}

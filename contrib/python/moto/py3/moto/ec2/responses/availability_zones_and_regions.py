@@ -1,14 +1,15 @@
-from moto.core.responses import BaseResponse
+from ._base_response import EC2BaseResponse
 
 
-class AvailabilityZonesAndRegions(BaseResponse):
-    def describe_availability_zones(self):
+class AvailabilityZonesAndRegions(EC2BaseResponse):
+    def describe_availability_zones(self) -> str:
         self.error_on_dryrun()
-        zones = self.ec2_backend.describe_availability_zones()
+        filters = self._filters_from_querystring()
+        zones = self.ec2_backend.describe_availability_zones(filters)
         template = self.response_template(DESCRIBE_ZONES_RESPONSE)
         return template.render(zones=zones)
 
-    def describe_regions(self):
+    def describe_regions(self) -> str:
         self.error_on_dryrun()
         region_names = self._get_multi_param("RegionName")
         regions = self.ec2_backend.describe_regions(region_names)
@@ -38,6 +39,7 @@ DESCRIBE_ZONES_RESPONSE = """<DescribeAvailabilityZonesResponse xmlns="http://ec
           <zoneState>available</zoneState>
           <regionName>{{ zone.region_name }}</regionName>
           <zoneId>{{ zone.zone_id }}</zoneId>
+          <zoneType>{{ zone.zone_type }}</zoneType>
           <messageSet/>
        </item>
    {% endfor %}

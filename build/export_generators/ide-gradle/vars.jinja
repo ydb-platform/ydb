@@ -1,0 +1,4 @@
+{%- include "[generator]/common_vars.jinja" -%}
+
+{%- set mainClass = target.app_main_class -%}
+{%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}

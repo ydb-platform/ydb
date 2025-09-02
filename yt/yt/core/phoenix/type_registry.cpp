@@ -8,13 +8,13 @@
 
 #include <util/system/type_name.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
 
-static constexpr auto& Logger = PhoenixLogger;
+constinit const auto Logger = PhoenixLogger;
 
 class TTypeRegistry
     : public ITypeRegistry
@@ -99,5 +99,5 @@ ITypeRegistry* ITypeRegistry::Get()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 

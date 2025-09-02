@@ -104,6 +104,39 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
     NTransactionClient::TTimestamp Timestamp;
 };
 
+class TSerializableGetOrderedTabletSafeTrimRowCountRequest
+    : public TGetOrderedTabletSafeTrimRowCountRequest
+    , public NYTree::TYsonStruct
+{
+public:
+    REGISTER_YSON_STRUCT(TSerializableGetOrderedTabletSafeTrimRowCountRequest);
+
+    static void Register(TRegistrar registrar);
+};
+
+using TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr =
+    TIntrusivePtr<TSerializableGetOrderedTabletSafeTrimRowCountRequest>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRegisterShuffleChunksOptions
+    : public TTimeoutOptions
+{
+    bool OverwriteExistingWriterData = false;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFetchShuffleChunksOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TForsakeChaosCoordinatorOptions
+    : public TTimeoutOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Provides a set of private APIs.
@@ -173,6 +206,23 @@ struct IInternalClient
         NObjectClient::TObjectId leaseId,
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
+
+    virtual TFuture<void> RegisterShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
+        std::optional<int> writerIndex,
+        const TRegisterShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        int partitionIndex,
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TFetchShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosCoordinator(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId coordiantorCellId,
+        const TForsakeChaosCoordinatorOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

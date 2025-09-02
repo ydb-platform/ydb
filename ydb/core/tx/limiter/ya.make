@@ -1,0 +1,3 @@
+RECURSE(
+    grouped_memory
+)

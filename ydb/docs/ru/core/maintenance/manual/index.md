@@ -4,19 +4,16 @@
 
 * Изменение конфигурации:
 
-  * [{#T}](cluster_expansion.md).
+  * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
   * [{#T}](adding_storage_groups.md).
-  * [{#T}](../../devops/manual/state-storage-move.md)
-  * [{#T}](../../devops/manual/static-group-move.md)
 
 * Обслуживание:
 
-  * [{#T}](node_restarting.md).
+  * [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md).
   * [{#T}](scrubbing.md).
   * [{#T}](selfheal.md).
-  * [{#T}](../../devops/manual/decommissioning.md).
+  * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
   * [{#T}](moving_vdisks.md).
-  * [{#T}](replacing_nodes.md).
 
 * Решение проблем:
 

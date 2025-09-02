@@ -1,4 +1,3 @@
-import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/datashard_load.proto";
@@ -42,6 +41,7 @@ message TEvLoadTestRequest {
             optional uint32 MaxWriteBytesInFlight = 5;
             optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 6;
             optional uint32 DelayAfterCompletionSec = 7;
+            optional uint32 CollectedBlobsPerMille = 8;
         }
 
         message TRequestInfo {

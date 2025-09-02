@@ -1,37 +1,41 @@
-import sys
+# cython: freethreading_compatible = True
+# distutils: language = c++
+
+from cpython.bool cimport PyBool_FromLong
+from libcpp.atomic cimport atomic
+
+import copy
 import types
 from collections.abc import MutableSequence
 
 
 cdef class FrozenList:
+    __class_getitem__ = classmethod(types.GenericAlias)
 
-    if sys.version_info >= (3, 9):
-        __class_getitem__ = classmethod(types.GenericAlias)
-    else:
-        @classmethod
-        def __class_getitem__(cls):
-            return cls
-
-    cdef readonly bint frozen
+    cdef atomic[bint] _frozen
     cdef list _items
 
     def __init__(self, items=None):
-        self.frozen = False
+        self._frozen.store(False)
         if items is not None:
             items = list(items)
         else:
             items = []
         self._items = items
 
+    @property
+    def frozen(self):
+        return PyBool_FromLong(self._frozen.load())
+
     cdef object _check_frozen(self):
-        if self.frozen:
+        if self._frozen.load():
             raise RuntimeError("Cannot modify frozen list.")
 
     cdef inline object _fast_len(self):
         return len(self._items)
 
     def freeze(self):
-        self.frozen = True
+        self._frozen.store(True)
 
     def __getitem__(self, index):
         return self._items[index]
@@ -110,14 +114,35 @@ cdef class FrozenList:
         return self._items.count(item)
 
     def __repr__(self):
-        return '<FrozenList(frozen={}, {!r})>'.format(self.frozen,
+        return '<FrozenList(frozen={}, {!r})>'.format(self._frozen.load(),
                                                       self._items)
 
     def __hash__(self):
-        if self.frozen:
+        if self._frozen.load():
             return hash(tuple(self._items))
         else:
             raise RuntimeError("Cannot hash unfrozen list.")
+
+    def __deepcopy__(self, memo):
+        cdef FrozenList new_list
+        obj_id = id(self)
+
+        # Return existing copy if already processed (circular reference)
+        if obj_id in memo:
+            return memo[obj_id]
+
+        # Create new instance and register immediately
+        new_list = self.__class__([])
+        memo[obj_id] = new_list
+
+        # Deep copy items
+        new_list._items[:] = [copy.deepcopy(item, memo) for item in self._items]
+
+        # Preserve frozen state
+        if self._frozen.load():
+            new_list.freeze()
+
+        return new_list
 
 
 MutableSequence.register(FrozenList)

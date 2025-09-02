@@ -147,6 +147,10 @@ namespace NActors {
 
         for (const auto& [key, value] : Items) {
             switch (key) {
+                case TKeys::BridgePileName:
+                    // just ignore it
+                    break;
+
                 case TKeys::DataCenter:
                     memcpy(&dataCenterId, value.data(), Min<size_t>(sizeof(dataCenterId), value.length()));
                     break;
@@ -176,6 +180,21 @@ namespace NActors {
         }
 
         return {dataCenterId, moduleId, rackId, unitId};
+    }
+
+
+    TString TEvInterconnect::TEvGetNode::ToString() const {
+        return TStringBuilder() << ToStringHeader() << " {"
+            << " NodeId: " << NodeId
+            << " Deadline: " << Deadline
+        << " }";
+    }
+
+    TString TEvInterconnect::TEvResolveNode::ToString() const {
+        return TStringBuilder() << ToStringHeader() << " {"
+            << " NodeId: " << NodeId
+            << " Deadline: " << Deadline
+        << " }";
     }
 
 } // NActors

@@ -32,10 +32,7 @@ class LocalNodeDeclarations(NodeAnalysis):
     ['b', 'c']
     """
 
-    def __init__(self):
-        """ Initialize empty set as the result. """
-        self.result = set()
-        super(LocalNodeDeclarations, self).__init__()
+    ResultType = set
 
     def visit_Name(self, node):
         """ Any node with Store context is a new declaration. """
@@ -58,10 +55,8 @@ class LocalNameDeclarations(NodeAnalysis):
     ['a', 'b', 'foo']
     """
 
-    def __init__(self):
-        """ Initialize empty set as the result. """
-        self.result = set()
-        super(LocalNameDeclarations, self).__init__()
+    """ Initialize empty set as the result. """
+    ResultType = set
 
     def visit_Name(self, node):
         """ Any node with Store or Param context is a new identifier. """

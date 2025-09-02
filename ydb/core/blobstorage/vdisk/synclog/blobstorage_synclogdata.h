@@ -8,7 +8,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -280,7 +279,7 @@ namespace NKikimr {
                 TVector<ui32> &&chunksToDeleteDelayed,
                 ui64 recoveryLogConfirmedLsn);
 
-            void Serialize(const TDeltaToDiskRecLog &delta, bool oldFormat);
+            void Serialize(const TDeltaToDiskRecLog &delta);
             TString GetSerializedData() const { return SerializedData; }
             TEntryPointDbgInfo GetEntryPointDbgInfo() const { return EntryPointDbgInfo; }
 
@@ -292,7 +291,7 @@ namespace NKikimr {
             TString SerializedData;
             TEntryPointDbgInfo EntryPointDbgInfo;
 
-            static TString Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb, bool oldFormat);
+            static TString Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb);
         };
 
         ////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,6 @@
 #include "schemas.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYTree;
 
@@ -10,9 +10,6 @@ void TFieldSchema::Register(TRegistrar registrar)
 {
     registrar.Parameter("name", &TThis::Name);
     registrar.Parameter("tag", &TThis::Tag);
-    registrar.Parameter("deprecated", &TThis::Deprecated)
-        .Default(false)
-        .DontSerializeDefault();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,5 +35,5 @@ void TUniverseSchema::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 

@@ -5,6 +5,8 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <bit>
+
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
@@ -147,7 +149,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             // calculate sets of disks
             TVector<ui32> goodMask, badMask;
             for (ui32 mask = 0; mask < numMasks; ++mask) {
-                (PopCount(mask) <= numHandoff ? goodMask : badMask).push_back(mask);
+                (static_cast<ui32>(std::popcount(mask)) <= numHandoff ? goodMask : badMask).push_back(mask);
             }
 
             auto createGroupVDisks = [&](ui32 domainMask, ui32 vdiskMask) {

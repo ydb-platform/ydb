@@ -27,7 +27,7 @@ struct TFakeKeyComparator {
                 return false;
             Y_ASSERT(av.Type() == bv.Type());
             // pg types are not supported
-            int res = CompareTypedCells(TCell(&av), TCell(&bv), NScheme::TTypeInfo(av.Type(), {}));
+            int res = CompareTypedCells(TCell(&av), TCell(&bv), NScheme::TTypeInfo(av.Type()));
             if (res)
                 return res < 0;
         }
@@ -51,7 +51,7 @@ struct TFakeVal {
 
     TCell Read(
             TArrayRef<const TFakeTableCell> key, const TColumn &col)
-                const noexcept
+                const
     {
         if (col.KeyOrder != Max<ui32>()) {
             return *key[col.KeyOrder]; /* has no default values */
@@ -279,7 +279,7 @@ public:
         Y_UNUSED(flags);
     }
 
-    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) noexcept override {
+    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override {
         if (!key) {
             return new TFakeDbIterator(GetScheme(), root, tags, Tables[root].begin(), Tables[root].end());
         }

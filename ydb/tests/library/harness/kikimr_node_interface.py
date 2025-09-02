@@ -2,7 +2,7 @@
 import abc
 import signal
 
-from ydb.tests.library.harness import kikimr_monitoring as monitoring
+from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 
 class NodeInterface(object):
@@ -41,7 +41,7 @@ class NodeInterface(object):
 
     @property
     def monitor(self):
-        return monitoring.KikimrMonitor(self.host, self.mon_port)
+        return KikimrMonitor(self.host, self.mon_port)
 
     @abc.abstractproperty
     def cwd(self):

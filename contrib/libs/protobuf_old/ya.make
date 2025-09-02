@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+LD_PLUGIN(protoherobora.py)
+
 LICENSE(
     BSD-3-Clause AND
     Protobuf-License

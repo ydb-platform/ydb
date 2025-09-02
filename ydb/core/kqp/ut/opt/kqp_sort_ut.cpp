@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         auto result = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+        UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -42,6 +42,74 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ImaginarySortReverse, InvertPkOverSort) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto queryTemplate = R"(
+                create table TestTable (
+                    ns Utf8,
+                    key Utf8,
+                    value Int64,
+
+                    PRIMARY KEY(%s)
+                );
+            )";
+
+            auto query = InvertPkOverSort ? Sprintf(queryTemplate, "ns, key") :  Sprintf(queryTemplate, "key, ns");
+
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                upsert into TestTable  (ns, key, value) VALUES ("a", "2", 1);
+                upsert into TestTable  (ns, key, value) VALUES ("b", "1", 0);
+            )";
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                SELECT `ns`, `key`, `value` FROM `TestTable` ORDER BY `key` DESC, `ns` DESC LIMIT 10000
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["a"];["2"];[1]];
+                [["b"];["1"];[0]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(explainResult.GetStatus(), EStatus::SUCCESS);
+            if (InvertPkOverSort) {
+                UNIT_ASSERT_C(!explainResult.GetAst().contains("('\"Reverse\")"), explainResult.GetAst());
+            } else {
+                UNIT_ASSERT_C(explainResult.GetAst().contains("('\"Reverse\")"), explainResult.GetAst());
+            }
+        }
+
+        {
+            TString query = R"(
+                SELECT `ns`, `key`, `value` FROM `TestTable` ORDER BY `key` DESC, `ns` DESC LIMIT 10000
+            )";
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["a"];["2"];[1]];
+                [["b"];["1"];[0]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ReverseOptimizedWithPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -57,7 +125,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         auto result = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+        UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -92,7 +160,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -130,7 +198,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(!result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -167,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -205,9 +273,9 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("'\"ItemsLimit\""), result.GetAst());
 
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -248,7 +316,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -260,7 +328,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT(read.IsDefined());
             UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("'\"ItemsLimit\""), result.GetAst());
         }
 
         {
@@ -288,9 +356,9 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("'\"ItemsLimit\""), result.GetAst());
 
-            UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("('\"Reverse\")"), result.GetAst());
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -449,7 +517,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_C(result.GetAst().Contains("ItemsLimit"), result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().contains("ItemsLimit"), result.GetAst());
         }
 
         {
@@ -713,7 +781,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().contains("KiPartialTake"), result.GetAst());
         }
 
         {
@@ -756,7 +824,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
+            UNIT_ASSERT_C(!result.GetAst().contains("KiPartialTake"), result.GetAst());
         }
 
         {
@@ -786,7 +854,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             .AddNullableColumn("Value1", EPrimitiveType::Int32)
             .AddNullableColumn("Value2", EPrimitiveType::String)
             .AddNullableColumn("Value3", EPrimitiveType::Uint32)
-            .SetPrimaryKeyColumns(TVector<TString>{"Key"})
+            .SetPrimaryKeyColumns({"Key"})
             .Build();
 
         auto createSettings = TCreateTableSettings()
@@ -932,7 +1000,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $value AS Int32;
 
             SELECT *
-            FROM `/Root/TwoShard`
+            FROM `/Root/TwoShard` VIEW PRIMARY KEY
             WHERE Value2 != $value
             LIMIT $limit;
         )";
@@ -1128,10 +1196,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST(UnionAllSortLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

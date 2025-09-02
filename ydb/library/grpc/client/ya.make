@@ -1,16 +1,12 @@
 LIBRARY()
 
 SRCS(
-    grpc_client_low.cpp
+    grpc_client_low.h
+    grpc_common.h
 )
 
 PEERDIR(
-    contrib/libs/grpc
-    library/cpp/deprecated/atomic
+    ydb/public/sdk/cpp/src/library/grpc/client
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

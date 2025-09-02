@@ -18,36 +18,48 @@
 This document contains changes of oneTBB compared to the last release.
 
 ## Table of Contents <!-- omit in toc -->
-- [New Features](#new_features)
+- [New Features](new-features)
+- [Preview Features](#preview-features)
 - [Known Limitations](#known-limitations)
-- [Fixed Issues](#fixed-issues)
-- [Open-source Contributions Integrated](#open-source-contributions-integrated)
+- [Issues Fixed](#issues-fixed)
+- [Open-Source Contributions Integrated](#open-source-contributions-integrated)
 
-## :white_check_mark: New Features
-- Improved support and use of the latest C++ standards for parallel_sort that allows using this algorithm with user-defined and standard library-defined objects with modern semantics.
-- The following features are now fully functional: task_arena extensions, collaborative_call_once, adaptive mutexes, heterogeneous overloads for concurrent_hash_map, and task_scheduler_handle.
-- Added support for Windows* Server 2022 and Python 3.10.
+## :tada: New Features
+- The oneTBB repository migrated to the new [UXL Foundation](https://github.com/uxlfoundation/oneTBB) organization.
+- ``blocked_nd_range`` is now a fully supported feature.
+- Introduced the ``ONETBB_SPEC_VERSION`` macro to specify the version of oneAPI specification implemented by the current version of the library.
+
+
+## :rocket: Preview Features
+- Added the explicit deduction guides to ``blocked_nd_range`` to support C++17 Class Template Argument Deduction.
+- Extended ``task_arena`` API to select TBB workers leave policy and to hint the start and the end of parallel computations.
+
 
 ## :rotating_light: Known Limitations
-- An application using Parallel STL algorithms in libstdc++ versions 9 and 10 may fail to compile due to incompatible interface changes between earlier versions of Threading Building Blocks (TBB) and oneAPI Threading Building Blocks (oneTBB). Disable support for Parallel STL algorithms by defining PSTL_USE_PARALLEL_POLICIES (in libstdc++ 9) or _GLIBCXX_USE_TBB_PAR_BACKEND (in libstdc++ 10) macro to zero before inclusion of the first standard header file in each translation unit.
-- On Linux* OS, if oneAPI Threading Building Blocks (oneTBB) or Threading Building Blocks (TBB) are installed in a system folder like /usr/lib64, the application may fail to link due to the order in which the linker searches for libraries. Use the -L linker option to specify the correct location of oneTBB library. This issue does not affect the program execution.
-- The oneapi::tbb::info namespace interfaces might unexpectedly change the process affinity mask on Windows* OS systems (see https://github.com/open-mpi/hwloc/issues/366 for details) when using hwloc version lower than 2.5.
+- The ``oneapi::tbb::info`` namespace interfaces might unexpectedly change the process affinity mask on Windows* OS systems (see https://github.com/open-mpi/hwloc/issues/366 for details) when using hwloc version lower than 2.5.
 - Using a hwloc version other than 1.11, 2.0, or 2.5 may cause an undefined behavior on Windows OS. See https://github.com/open-mpi/hwloc/issues/477 for details.
-- The NUMA topology may be detected incorrectly on Windows OS machines where the number of NUMA node threads exceeds the size of 1 processor group.
+- The NUMA topology may be detected incorrectly on Windows* OS machines where the number of NUMA node threads exceeds the size of 1 processor group.
 - On Windows OS on ARM64*, when compiling an application using oneTBB with the Microsoft* Compiler, the compiler issues a warning C4324 that a structure was padded due to the alignment specifier. Consider suppressing the warning by specifying /wd4324 to the compiler command line.
-- oneTBB does not support fork(), to work-around the issue, consider using task_scheduler_handle to join oneTBB worker threads before using fork().
-- C++ exception handling mechanism on Windows* OS on ARM64* might corrupt memory if an exception is thrown from any oneTBB parallel algorithm (see Windows* OS on ARM64* compiler issue: https://developercommunity.visualstudio.com/t/ARM64-incorrect-stack-unwinding-for-alig/1544293).
+- C++ exception handling mechanism on Windows* OS on ARM64* might corrupt memory if an exception is thrown from any oneTBB parallel algorithm (see Windows* OS on ARM64* compiler issue: https://developercommunity.visualstudio.com/t/ARM64-incorrect-stack-unwinding-for-alig/1544293.
+- When CPU resource coordination is enabled, tasks from a lower-priority ``task_arena`` might be executed before tasks from a higher-priority ``task_arena``.
+- Using oneTBB on WASM* may cause applications to run in a single thread. See [Limitations of WASM Support](https://github.com/uxlfoundation/oneTBB/blob/master/WASM_Support.md#limitations).
 
-## :hammer: Fixed Issues
-- Memory allocator crash on a system with an incomplete /proc/meminfo (GitHub* [#584](https://github.com/oneapi-src/oneTBB/issues/584)).
-- Incorrect blocking of task stealing (GitHub* #[478](https://github.com/oneapi-src/oneTBB/issues/478)).
-- Hang due to incorrect decrement of a limiter_node (GitHub* [#634](https://github.com/oneapi-src/oneTBB/issues/634)).
-- Memory corruption in some rare cases when passing big messages in a flow graph (GitHub* [#639](https://github.com/oneapi-src/oneTBB/issues/639)).
-- Possible deadlock in a throwable flow graph node with a lightweight policy. The lightweight policy is now ignored for functors that can throw exceptions (GitHub* [#420](https://github.com/oneapi-src/oneTBB/issues/420)).
-- Crash when obtaining a range from empty ordered and unordered containers (GitHub* [#641](https://github.com/oneapi-src/oneTBB/issues/641)).
-- Deadlock in a concurrent_vector resize() that could happen when the new size is less than the previous size (GitHub* [#733](https://github.com/oneapi-src/oneTBB/issues/733)).
+> **_NOTE:_**  To see known limitations that impact all versions of oneTBB, refer to [oneTBB Documentation](https://uxlfoundation.github.io/oneTBB/main/intro/limitations.html).
 
-## :octocat: Open-source Contributions Integrated
-- Improved aligned memory allocation. Contributed by Andrey Semashev (https://github.com/oneapi-src/oneTBB/pull/671).
-- Optimized usage of atomic_fence on IA-32 and Intel(R) 64 architectures. Contributed by Andrey Semashev (https://github.com/oneapi-src/oneTBB/pull/328).
-- Fixed incorrect definition of the assignment operator in containers. Contributed by Andrey Semashev (https://github.com/oneapi-src/oneTBB/issues/372).
+
+## :hammer: Issues Fixed
+- Fixed deadlock when using `tbb::concurrent_vector::grow_by()` (https://github.com/uxlfoundation/oneTBB/issues/1531).
+- Fixed assertion in the Debug version of oneTBB on systems with multiple processor groups.
+- Fixed issues with Flow Graph priorities when using limited concurrency nodes (https://github.com/uxlfoundation/oneTBB/issues/1595).
+- Improved support of ``tbb::task_arena::constraints`` functionality on Windows* systems with multiple processor groups.
+- Fixed ``concurrent_queue`` and ``concurrent_bounded_queue`` capacity preserving on copying, moving, and swapping (https://github.com/uxlfoundation/oneTBB/issues/1598).
+- Fixed ``parallel_for_each`` compilation issues on GCC 9 in C++20 mode (https://github.com/uxlfoundation/oneTBB/issues/1552).
+
+
+## :octocat: Open-Source Contributions Integrated
+- Fixed linkage errors when the application is built with the hidden symbols visibility. Contributed by Vladislav Shchapov (https://github.com/uxlfoundation/oneTBB/pull/1114).
+- On Linux* OS, for external thread, determined stack size using POSIX* API instead of relying on the stack size of a worker thread. Contributed by bongkyu7-kim (https://github.com/uxlfoundation/oneTBB/pull/1485).
+- Added a CMake option to use relative paths instead of full paths in debug information. Contributed by Fang Xu (https://github.com/uxlfoundation/oneTBB/pull/1401).
+- Improved OpenBSD* support by removing the use of direct syscalls. Contributed by Brad Smith (https://github.com/uxlfoundation/oneTBB/pull/1499).
+- Fixed build issues on ARM64* when using Bazel. Contributed by snadampal (https://github.com/uxlfoundation/oneTBB/pull/1571).
+- Suppressed deprecation warnings for CMake versions earlier than 3.10 when using the latest CMake. Contributed by Vladislav Shchapov (https://github.com/uxlfoundation/oneTBB/pull/1585).

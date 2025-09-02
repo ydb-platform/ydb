@@ -220,7 +220,7 @@ struct GlobalEnv {
       }
     }
     // if (!FilesToAdd.empty() || Job->ExitCode != 0)
-    Printf("#%zd: cov: %zd ft: %zd corp: %zd exec/s %zd "
+    Printf("#%zd: cov: %zd ft: %zd corp: %zd exec/s: %zd "
            "oom/timeout/crash: %zd/%zd/%zd time: %zds job: %zd dft_time: %d\n",
            NumRuns, Cov.size(), Features.size(), Files.size(),
            Stats.average_exec_per_sec, NumOOMs, NumTimeouts, NumCrashes,
@@ -349,7 +349,7 @@ void FuzzWithFork(Random &Rand, const FuzzingOptions &Options,
                         &NewFeatures, Env.Cov, &NewCov, CFPath,
                         /*Verbose=*/false, /*IsSetCoverMerge=*/false);
     Env.Features.insert(NewFeatures.begin(), NewFeatures.end());
-    Env.Cov.insert(NewFeatures.begin(), NewFeatures.end());
+    Env.Cov.insert(NewCov.begin(), NewCov.end());
     RemoveFile(CFPath);
   }
 

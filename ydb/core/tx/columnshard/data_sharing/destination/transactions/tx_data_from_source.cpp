@@ -6,8 +6,20 @@ namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     using namespace NKikimr::NColumnShard;
-    TDbWrapper dbWrapper(txc.DB, nullptr);
+
+    NIceDb::TNiceDb db(txc.DB);
+    for (auto info : SchemeHistory) {
+        info.SaveToLocalDb(db);
+    }
+
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+
+    for (auto& info : SchemeHistory) {
+        index.RegisterOldSchemaVersion(info.GetSnapshot(), info.GetProto().GetId(), info.GetSchema());
+    }
+
+    TDbWrapper dbWrapper(txc.DB, nullptr);
+
     {
         ui64* lastPortionPtr = index.GetLastPortionPointer();
         for (auto&& i : PortionsByPathId) {
@@ -21,10 +33,9 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            p->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         }
     }
-    NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
         .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()));
     return true;
@@ -35,23 +46,22 @@ void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 }
 
-TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, const THashMap<ui64, NEvents::TPathIdData>& portionsByPathId, const TTabletId sourceTabletId)
-    : TBase(self)
+TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<TInternalPathId, NEvents::TPathIdData>&& portionsByPathId, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId)
+    : TBase(self, "data_from_source")
     , Session(session)
-    , PortionsByPathId(portionsByPathId)
-    , SourceTabletId(sourceTabletId)
-{
+    , PortionsByPathId(std::move(portionsByPathId))
+    , SchemeHistory(std::move(schemas))
+    , SourceTabletId(sourceTabletId) {
     for (auto&& i : PortionsByPathId) {
         for (ui32 p = 0; p < i.second.GetPortions().size();) {
-            if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), i.second.GetPortions()[p])) {
+            if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), *i.second.GetPortions()[p])) {
                 ++p;
             } else {
                 i.second.MutablePortions()[p] = std::move(i.second.MutablePortions().back());
-                i.second.MutablePortions()[p].ResetShardingVersion();
+                i.second.MutablePortions()[p]->MutablePortionInfo().ResetShardingVersion();
                 i.second.MutablePortions().pop_back();
             }
         }
     }
 }
-
 }

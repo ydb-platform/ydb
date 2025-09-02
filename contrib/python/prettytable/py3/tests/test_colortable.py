@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from prettytable import PrettyTable
-from prettytable.colortable import RESET_CODE, ColorTable, Theme
+from prettytable.colortable import RESET_CODE, ColorTable, Theme, Themes
 
 
 @pytest.fixture
@@ -94,3 +94,95 @@ class TestFormatCode:
     def test_multiple(self) -> None:
         assert Theme.format_code("30;42") == "\x1b[30;42m"
         assert Theme.format_code("\x1b[30;42m") == "\x1b[30;42m"
+
+
+class TestColorTableRendering:
+    """Tests for the rendering of the color table
+
+    Methods
+    -------
+    test_color_table_rendering
+        Tests the color table rendering using the default alignment (`'c'`)
+    """
+
+    @pytest.mark.parametrize(
+        ["with_title", "with_header"],
+        [
+            (False, True),  # the default
+            (True, True),  # titled
+            (True, False),  # titled, no header
+            (True, True),  # both title and header
+        ],
+    )
+    def test_color_table_rendering(self, with_title: bool, with_header: bool) -> None:
+        """Tests the color table rendering using the default alignment (`'c'`)"""
+        chars = {
+            "+": "\x1b[36m+\x1b[0m\x1b[96m",
+            "-": "\x1b[34m-\x1b[0m\x1b[96m",
+            "|": "\x1b[34m|\x1b[0m\x1b[96m",
+            " ": " ",
+        }
+
+        plus = chars.get("+")
+        minus = chars.get("-")
+        pipe = chars.get("|")
+        space = chars.get(" ")
+
+        # +-----------------------+
+        # |        Efforts        |
+        # +---+---+---+---+---+---+
+        # | A | B | C | D | E | f |
+        # +---+---+---+---+---+---+
+        # | 1 | 2 | 3 | 4 | 5 | 6 |
+        # +---+---+---+---+---+---+
+
+        header = (
+            plus + minus * 23 + plus,
+            pipe + space * 8 + "Efforts" + space * 8 + pipe,
+            (plus + minus * 3) * 6 + plus,
+        )
+
+        body = (
+            "".join(pipe + space + char + space for char in "ABCDEF") + pipe,
+            (plus + minus * 3) * 6 + plus,
+            "".join(pipe + space + char + space for char in "123456") + pipe,
+            (plus + minus * 3) * 6 + plus,
+        )
+
+        if with_title:
+            header_str = str("\n".join(header))
+        else:
+            header_str = str(header[2])
+        if with_header:
+            body_str = str("\n".join(body))
+        else:
+            body_str = str("\n".join(body[2:]))
+
+        table = ColorTable(
+            ("A", "B", "C", "D", "E", "F"),
+            theme=Themes.OCEAN,
+        )
+
+        if with_title:
+            table.title = "Efforts"
+        table.header = with_header
+        table.add_row([1, 2, 3, 4, 5, 6])
+
+        expected = header_str + "\n" + body_str + "\x1b[0m"
+        result = str(table)
+
+        assert expected == result
+
+    def test_all_themes(self) -> None:
+        """Tests rendering with all available themes"""
+        table = ColorTable(
+            ("A", "B", "C", "D", "E", "F"),
+        )
+        table.title = "Theme Test"
+        table.add_row([1, 2, 3, 4, 5, 6])
+
+        for theme_name, theme in vars(Themes).items():
+            if isinstance(theme, Theme):
+                table.theme = theme
+                result = str(table)
+                assert result  # Simple check to ensure rendering doesn't fail

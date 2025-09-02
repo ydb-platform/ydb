@@ -9,8 +9,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/dq/common/dq_resource_quoter.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>

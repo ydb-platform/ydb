@@ -9,6 +9,12 @@ void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescrip
     proto.SetType(Type);
 }
 
+void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TOlapColumnDescription& proto) const {
+    proto.SetName(Name);
+    proto.SetType(Type);
+    proto.SetNotNull(true);
+}
+
 void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
     switch (Mode) {
     case MODE_NONE:
@@ -21,15 +27,15 @@ void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTa
         Y_ABORT("Unexpected mode");
     }
 
-    switch (Consistency) {
-    case CONSISTENCY_UNKNOWN:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN);
+    switch (ConsistencyLevel) {
+    case CONSISTENCY_LEVEL_UNKNOWN:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN);
         break;
-    case CONSISTENCY_STRONG:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG);
+    case CONSISTENCY_LEVEL_GLOBAL:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
         break;
-    case CONSISTENCY_WEAK:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    case CONSISTENCY_LEVEL_ROW:
+        proto.SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
         break;
     default:
         Y_ABORT("Unexpected consistency");
@@ -39,7 +45,7 @@ void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTa
 TTestTableDescription::TReplicationConfig TTestTableDescription::TReplicationConfig::Default() {
     return TReplicationConfig{
         .Mode = MODE_READ_ONLY,
-        .Consistency = CONSISTENCY_WEAK,
+        .ConsistencyLevel = CONSISTENCY_LEVEL_ROW,
     };
 }
 
@@ -63,8 +69,26 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& prot
     }
 }
 
+void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TColumnTableDescription& proto) const {
+    proto.SetName(Name);
+
+    for (const auto& keyColumn : KeyColumns) {
+        proto.MutableSchema()->AddKeyColumnNames(keyColumn);
+    }
+
+    for (const auto& column : Columns) {
+        column.SerializeTo(*proto.MutableSchema()->AddColumns());
+    }
+}
+
 THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc) {
     auto result = MakeHolder<NKikimrSchemeOp::TTableDescription>();
+    desc.SerializeTo(*result);
+    return result;
+}
+
+THolder<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc) {
+    auto result = MakeHolder<NKikimrSchemeOp::TColumnTableDescription>();
     desc.SerializeTo(*result);
     return result;
 }

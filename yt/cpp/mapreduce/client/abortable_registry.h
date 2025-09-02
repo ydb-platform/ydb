@@ -1,10 +1,10 @@
 #pragma once
 
-#include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/common/fwd.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/interface/common.h>
 
 #include <util/str_stl.h>
 #include <util/system/mutex.h>
@@ -31,13 +31,17 @@ class TTransactionAbortable
     : public IAbortable
 {
 public:
-    TTransactionAbortable(const TClientContext& context, const TTransactionId& transactionId);
+    TTransactionAbortable(
+        const IRawClientPtr& rawClient,
+        const TClientContext& context,
+        const TTransactionId& transactionId);
     void Abort() override;
     TString GetType() const override;
 
 private:
-    TClientContext Context_;
-    TTransactionId TransactionId_;
+    const IRawClientPtr RawClient_;
+    const TClientContext Context_;
+    const TTransactionId TransactionId_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,13 +50,16 @@ class TOperationAbortable
     : public IAbortable
 {
 public:
-    TOperationAbortable(IClientRetryPolicyPtr clientRetryPolicy, TClientContext context, const TOperationId& operationId);
+    TOperationAbortable(
+        IRawClientPtr rawClient,
+        IClientRetryPolicyPtr clientRetryPolicy,
+        const TOperationId& operationId);
     void Abort() override;
     TString GetType() const override;
 
 private:
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
-    const TClientContext Context_;
     const TOperationId OperationId_;
 };
 

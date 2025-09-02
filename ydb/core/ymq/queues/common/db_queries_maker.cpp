@@ -74,7 +74,7 @@ namespace NKikimr::NSQS {
             GetDlqStateKeys()                       // 19
         );
     }
-    
+
     TString TDbQueriesMaker::operator() (EQueryId id) const {
         return FillQuery(GetQueryById(id));
     }

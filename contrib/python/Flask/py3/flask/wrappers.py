@@ -8,7 +8,7 @@ from . import json
 from .globals import current_app
 from .helpers import _split_blueprint_path
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from werkzeug.routing import Rule
 
 
@@ -25,7 +25,7 @@ class Request(RequestBase):
     specific ones.
     """
 
-    json_module = json
+    json_module: t.Any = json
 
     #: The internal URL rule that matched the request.  This can be
     #: useful to inspect which methods are allowed for the URL from

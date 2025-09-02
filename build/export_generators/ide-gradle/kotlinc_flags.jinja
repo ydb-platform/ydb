@@ -1,0 +1,67 @@
+{%- if with_kotlin -%}
+
+{%-     if target.kotlinc.flags|length or (with_kapt and target.kapt.opts|length) %}
+
+tasks.compileKotlin.configure {
+    compilerOptions {
+{%-         if target.kotlinc.flags|length -%}
+{%-             for kotlinc_flag in target.kotlinc.flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-             endfor -%}
+{%-         endif -%}
+{%-         if with_kapt and (target.kapt.opts|length) -%}
+{%-             for kapt_opt in target.kapt.opts|reject('eq', '-P')|unique %}
+        freeCompilerArgs.add("-P")
+        freeCompilerArgs.add("{{ kapt_opt|replace(export_root, "$baseBuildDir") }}")
+{%-             endfor -%}
+{%-         endif %}
+    }
+}
+{%      endif -%}
+
+{%-     set extra_kotlinc_flags = extra_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-     set extra_kapt_opts = extra_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('opts')|map(attribute='opts')|sum -%}
+{%-     if target.kotlinc.flags|length -%}
+{%-         if extra_kotlinc_flags|length -%}
+{%-             set extra_kotlinc_flags = target.kotlinc.flags + extra_kotlinc_flags -%}
+{%-         else -%}
+{%-             set extra_kotlinc_flags = target.kotlinc.flags -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if extra_kotlinc_flags|length or ((with_kapt or with_test_kapt) and extra_kapt_opts|length) %}
+
+tasks.compileTestKotlin.configure {
+    compilerOptions {
+{%-         if extra_kotlinc_flags|length -%}
+{%-             for kotlinc_flag in extra_kotlinc_flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-             endfor -%}
+{%-         endif -%}
+{%-         if (with_kapt or with_test_kapt) and (extra_kapt_opts|length) -%}
+{%-             set extra_kapt_opts = extra_kapt_opts|reject('eq', '-P')|unique -%}
+{#-             Use only first value for sources, classes, stubs (may be many tests with different values) -#}
+{%-             set extra_kapt_opts_sources = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:sources=')|first -%}
+{%-             if extra_kapt_opts_sources %}
+        freeCompilerArgs.add("-P")
+        freeCompilerArgs.add("{{ extra_kapt_opts_sources|replace(export_root, "$baseBuildDir") }}")
+{%-             endif -%}
+{%-             set extra_kapt_opts_classes = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:classes=')|first -%}
+{%-             if extra_kapt_opts_classes %}
+        freeCompilerArgs.add("-P")
+        freeCompilerArgs.add("{{ extra_kapt_opts_classes|replace(export_root, "$baseBuildDir") }}")
+{%-             endif -%}
+{%-             set extra_kapt_opts_stubs = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:stubs=')|first -%}
+{%-             if extra_kapt_opts_stubs %}
+        freeCompilerArgs.add("-P")
+        freeCompilerArgs.add("{{ extra_kapt_opts_stubs|replace(export_root, "$baseBuildDir") }}")
+{%-             endif -%}
+{%-             set extra_kapt_opts = extra_kapt_opts|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:sources=')|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:classes=')|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:stubs=') -%}
+{%-             for kapt_opt in extra_kapt_opts %}
+        freeCompilerArgs.add("-P")
+        freeCompilerArgs.add("{{ kapt_opt|replace(export_root, "$baseBuildDir") }}")
+{%-             endfor -%}
+{%-         endif %}
+    }
+}
+{%      endif -%}
+{%- endif -%}

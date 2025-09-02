@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -26,7 +27,9 @@
 #include "mvp.h"
 #include "oidc_client.h"
 
-using namespace NMVP;
+NActors::IActor* CreateMemProfiler();
+
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -42,7 +45,7 @@ TString AddSchemeToUserToken(const TString& token, const TString& scheme) {
 const ui16 TMVP::DefaultHttpPort = 8788;
 const ui16 TMVP::DefaultHttpsPort = 8789;
 
-const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
+const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
     static const TString mvpName("MVP");
     static const TString grpcName("GRPC");
@@ -65,8 +68,6 @@ const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
 void TMVP::OnTerminate(int) {
     AtomicSet(Quit, true);
 }
-
-NActors::IActor* CreateMemProfiler();
 
 int TMVP::Init() {
     ActorSystem.Start();
@@ -225,9 +226,15 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     }
 
     SecretName = oidc["secret_name"].as<std::string>("");
+    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
+    OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
+    OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
+    OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
+    OpenIdConnectSettings.ImpersonateUrlPath = oidc["impersonate_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH);
+    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = oidc["whoami_extended_info_endpoint"].as<std::string>("");
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -264,9 +271,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 
@@ -283,6 +287,14 @@ void TMVP::TryGetGenericOptionsFromConfig(
             HttpsPort = server["https_port"].as<ui16>(0);
         }
     }
+
+    if (generic["access_service_type"]) {
+        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
+        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
+            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+        }
+    }
+    OpenIdConnectSettings.InitRequestTimeoutsByPath();
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
@@ -350,6 +362,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
             }
+            if (!tokens.HasAccessServiceType()) {
+                tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
+            }
             TokensConfig = tokens;
         } else {
             ythrow yexception() << "Invalid ydb token file format";
@@ -400,7 +415,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100));
     setup->LocalServices.emplace_back(LoggerSettings->LoggerActorId, NActors::TActorSetupCmd(loggerActor, NActors::TMailboxType::HTSwap, 0));
+    setup->LocalServices.emplace_back(NActors::MakePollerActorId(), NActors::TActorSetupCmd(NActors::CreatePollerActor(), NActors::TMailboxType::HTSwap, 0));
     return setup;
 }
 
 TAtomic TMVP::Quit = false;
+
+} // NMVP::NOIDC

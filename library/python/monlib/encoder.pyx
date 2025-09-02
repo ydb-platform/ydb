@@ -8,6 +8,13 @@ import sys
 from datetime import datetime
 from os import dup
 
+if sys.version_info.major >= 3:
+    from datetime import timezone
+    EPOCH_AWARE = datetime.fromtimestamp(0, tz=timezone.utc)
+    EPOCH_NAIVE = EPOCH_AWARE.replace(tzinfo=None)
+else:
+    EPOCH_NAIVE = datetime.utcfromtimestamp(0)
+
 
 cdef extern from "util/stream/fwd.h" nogil:
     cdef cppclass TAdaptivelyBuffered[T]:
@@ -73,6 +80,15 @@ cdef class Encoder:
 
         return wrapper
 
+    @staticmethod
+    cdef Encoder create_prometheus(object stream, bytes metricNameLabel):
+        cdef Encoder wrapper = Encoder.__new__(Encoder)
+        wrapper._make_stream(stream)
+
+        wrapper.__wrapped = EncoderPrometheus(wrapper.__stream.Get(), TStringBuf(metricNameLabel))
+
+        return wrapper
+
 
 cpdef Encoder create_json_encoder(object stream, int indent):
     return Encoder.create_json(stream, indent)
@@ -119,13 +135,14 @@ def dump(registry, fp, format='spack', **kwargs):
 
     :param registry: Metric registry object
     :param fp: File descriptor to serialize to
-    :param format: Format to serialize to (allowed values: spack). Default: json
+    :param format: Format to serialize to (allowed values: spack, json, prometheus). Default: json
 
     Keyword arguments:
     :param time_precision: Time precision (spack)
     :param compression: Compression codec (spack)
     :param indent: Pretty-print indentation for object members and arrays (json)
     :param timestamp: Metric timestamp datetime
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: Nothing
     """
     if not hasattr(fp, 'fileno'):
@@ -138,7 +155,10 @@ def dump(registry, fp, format='spack', **kwargs):
     elif format == 'json':
         indent = int(kwargs.get('indent', 0))
         encoder = Encoder.create_json(fp, indent)
-    timestamp = kwargs.get('timestamp', datetime.utcfromtimestamp(0))
+    elif format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(fp, metric_name_label)
+    timestamp = kwargs.get('timestamp', EPOCH_NAIVE)
 
     registry.accept(timestamp, encoder)
     encoder.close()
@@ -150,13 +170,14 @@ def dumps(registry, format='spack', **kwargs):
     adjusted using kwargs, which may differ depending on the selected format.
 
     :param registry: Metric registry object
-    :param format: Format to serialize to (allowed values: spack). Default: json
+    :param format: Format to serialize to (allowed values: spack, json, prometheus). Default: json
 
     Keyword arguments:
     :param time_precision: Time precision (spack)
     :param compression: Compression codec (spack)
     :param indent: Pretty-print indentation for object members and arrays (json)
     :param timestamp: Metric timestamp datetime
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: A string of the specified format
     """
     if format == 'spack':
@@ -166,7 +187,10 @@ def dumps(registry, format='spack', **kwargs):
     elif format == 'json':
         indent = int(kwargs.get('indent', 0))
         encoder = Encoder.create_json(None, indent)
-    timestamp = kwargs.get('timestamp', datetime.utcfromtimestamp(0))
+    elif format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(None, metric_name_label)
+    timestamp = kwargs.get('timestamp', EPOCH_NAIVE)
 
     registry.accept(timestamp, encoder)
     encoder.close()
@@ -176,13 +200,16 @@ def dumps(registry, format='spack', **kwargs):
     return s
 
 
-def load(fp, from_format='spack', to_format='json'):
+def load(fp, from_format='spack', to_format='json', **kwargs):
     """
     Converts metrics from one format to another.
 
     :param fp: File to load data from
     :param from_format: Source string format (allowed values: json, spack, unistat). Default: spack
     :param to_format: Target format (allowed values: json, spack). Default: json
+
+    Keyword arguments:
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: a string containing metrics in the specified format
     """
     if from_format == to_format:
@@ -198,6 +225,9 @@ def load(fp, from_format='spack', to_format='json'):
         encoder = Encoder.create_json(None, 0)
     elif to_format == 'spack':
         encoder = Encoder.create_spack(None, SECONDS, IDENTITY)
+    elif to_format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(None, metric_name_label)
     else:
         raise ValueError('Unsupported format ' + to_format)
 
@@ -219,13 +249,16 @@ def load(fp, from_format='spack', to_format='json'):
     return s
 
 
-def loads(s, from_format='spack', to_format='json', compression=Compression.Identity):
+def loads(s, from_format='spack', to_format='json', compression=Compression.Identity, **kwargs):
     """
     Converts metrics from one format to another.
 
     :param s: String to load from
     :param from_format: Source string format (allowed values: json, spack, unistat). Default: spack
     :param to_format: Target format (allowed values: json, spack). Default: json
+
+    Keyword arguments:
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: a string containing metrics in the specified format
     """
     if from_format == to_format:
@@ -241,6 +274,9 @@ def loads(s, from_format='spack', to_format='json', compression=Compression.Iden
     elif to_format == 'spack':
         comp = Compression.to_native(compression)
         encoder = Encoder.create_spack(None, SECONDS, comp)
+    elif to_format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(None, metric_name_label)
     else:
         raise ValueError('Unsupported format ' + to_format)
 

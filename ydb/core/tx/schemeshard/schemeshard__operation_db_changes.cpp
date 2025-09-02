@@ -1,7 +1,6 @@
 #include "schemeshard__operation_db_changes.h"
-#include "schemeshard_impl.h"
 
-#include <ydb/core/tx/tx_processing.h>
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -24,6 +23,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     for (const auto& pId : AlterIndexes) {
         ss->PersistTableIndexAlterData(db, pId);
+    }
+
+    for (const auto& pId : Sequences) {
+        ss->PersistSequence(db, pId);
+    }
+
+    for (const auto& pId : AlterSequences) {
+        ss->PersistSequenceAlter(db, pId);
     }
 
     for (const auto& pId : ApplyIndexes) {
@@ -96,6 +103,18 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     for (const auto& [pathId, pqGroup] : AddPersQueueGroupAlter) {
         ss->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);
+    }
+
+    for (const auto& pId : SysViews) {
+        ss->PersistSysView(db, pId);
+    }
+
+    for (const auto& op : LongIncrementalRestoreOps) {
+        ss->PersistLongIncrementalRestoreOp(db, op);
+    }
+
+    for (const auto& id : IncrementalBackups) {
+        ss->PersistIncrementalBackup(db, id);
     }
 }
 

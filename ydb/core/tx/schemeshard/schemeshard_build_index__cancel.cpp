@@ -1,7 +1,7 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -10,7 +10,7 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxCancel: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCancelRequest, TEvIndexBuilder::TEvCancelResponse> {
 public:
     explicit TTxCancel(TSelf* self, TEvIndexBuilder::TEvCancelRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CANCEL_INDEX_BUILD)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetIndexBuildId()), ev, TXTYPE_CANCEL_INDEX_BUILD)
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
@@ -27,49 +27,47 @@ public:
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
 
-        TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
-
-        if (!Self->IndexBuilds.contains(indexBuildId)) {
+        const auto* indexBuildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        if (!indexBuildInfoPtr) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found"
             );
         }
-
-        TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainPathId) {
+        auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found in database <" << record.GetDatabaseName() << ">"
             );
         }
 
-        if (indexBuildInfo->IsFinished()) {
+        if (indexBuildInfo.IsFinished()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> has been finished already"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> has been finished already"
             );
         }
 
-        if (indexBuildInfo->IsCancellationRequested()) {
+        if (indexBuildInfo.IsCancellationRequested()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> canceling already"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> canceling already"
             );
         }
 
-        if (indexBuildInfo->State > TIndexBuildInfo::EState::Filling) {
+        if (indexBuildInfo.State > TIndexBuildInfo::EState::Filling) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> are almost done, cancellation has no sense"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> are almost done, cancellation has no sense"
             );
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        indexBuildInfo->CancelRequested = true;
+        indexBuildInfo.CancelRequested = true;
         Self->PersistBuildIndexCancelRequest(db, indexBuildInfo);
 
-        Progress(indexBuildInfo->Id);
+        Progress(indexBuildInfo.Id);
 
         return Reply();
     }

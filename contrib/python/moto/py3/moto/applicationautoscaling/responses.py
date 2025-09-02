@@ -1,24 +1,32 @@
 from moto.core.responses import BaseResponse
+from typing import Any, Dict
 import json
 from .models import (
     applicationautoscaling_backends,
     ScalableDimensionValueSet,
     ServiceNamespaceValueSet,
+    ApplicationAutoscalingBackend,
+    FakeScalableTarget,
+    FakeApplicationAutoscalingPolicy,
+    FakeScheduledAction,
 )
 from .exceptions import AWSValidationException
 
 
 class ApplicationAutoScalingResponse(BaseResponse):
-    @property
-    def applicationautoscaling_backend(self):
-        return applicationautoscaling_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="application-autoscaling")
 
-    def describe_scalable_targets(self):
+    @property
+    def applicationautoscaling_backend(self) -> ApplicationAutoscalingBackend:
+        return applicationautoscaling_backends[self.current_account][self.region]
+
+    def describe_scalable_targets(self) -> str:
         self._validate_params()
         service_namespace = self._get_param("ServiceNamespace")
         resource_ids = self._get_param("ResourceIds")
         scalable_dimension = self._get_param("ScalableDimension")
-        max_results = self._get_int_param("MaxResults", 50)
+        max_results = self._get_int_param("MaxResults") or 50
         marker = self._get_param("NextToken")
         all_scalable_targets = (
             self.applicationautoscaling_backend.describe_scalable_targets(
@@ -33,7 +41,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         targets = [_build_target(t) for t in scalable_targets_resp]
         return json.dumps({"ScalableTargets": targets, "NextToken": next_token})
 
-    def register_scalable_target(self):
+    def register_scalable_target(self) -> str:
         """Registers or updates a scalable target."""
         self._validate_params()
         self.applicationautoscaling_backend.register_scalable_target(
@@ -47,7 +55,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps({})
 
-    def deregister_scalable_target(self):
+    def deregister_scalable_target(self) -> str:
         """Deregisters a scalable target."""
         self._validate_params()
         self.applicationautoscaling_backend.deregister_scalable_target(
@@ -57,7 +65,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps({})
 
-    def put_scaling_policy(self):
+    def put_scaling_policy(self) -> str:
         policy = self.applicationautoscaling_backend.put_scaling_policy(
             policy_name=self._get_param("PolicyName"),
             service_namespace=self._get_param("ServiceNamespace"),
@@ -71,7 +79,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps({"PolicyARN": policy.policy_arn, "Alarms": []})  # ToDo
 
-    def describe_scaling_policies(self):
+    def describe_scaling_policies(self) -> str:
         (
             next_token,
             policy_page,
@@ -79,15 +87,16 @@ class ApplicationAutoScalingResponse(BaseResponse):
             service_namespace=self._get_param("ServiceNamespace"),
             resource_id=self._get_param("ResourceId"),
             scalable_dimension=self._get_param("ScalableDimension"),
-            max_results=self._get_param("MaxResults"),
+            max_results=self._get_int_param("MaxResults"),
             next_token=self._get_param("NextToken"),
         )
-        response_obj = {"ScalingPolicies": [_build_policy(p) for p in policy_page]}
-        if next_token:
-            response_obj["NextToken"] = next_token
+        response_obj = {
+            "ScalingPolicies": [_build_policy(p) for p in policy_page],
+            "NextToken": next_token,
+        }
         return json.dumps(response_obj)
 
-    def delete_scaling_policy(self):
+    def delete_scaling_policy(self) -> str:
         self.applicationautoscaling_backend.delete_scaling_policy(
             policy_name=self._get_param("PolicyName"),
             service_namespace=self._get_param("ServiceNamespace"),
@@ -96,7 +105,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps({})
 
-    def _validate_params(self):
+    def _validate_params(self) -> None:
         """Validate parameters.
         TODO Integrate this validation with the validation in models.py
         """
@@ -107,27 +116,23 @@ class ApplicationAutoScalingResponse(BaseResponse):
         message = None
         if dimension is not None and dimension not in dimensions:
             messages.append(
-                "Value '{}' at 'scalableDimension' "
-                "failed to satisfy constraint: Member must satisfy enum value set: "
-                "{}".format(dimension, dimensions)
+                f"Value '{dimension}' at 'scalableDimension' failed to satisfy constraint: Member must satisfy enum value set: {dimensions}"
             )
         namespaces = [n.value for n in ServiceNamespaceValueSet]
         if namespace is not None and namespace not in namespaces:
             messages.append(
-                "Value '{}' at 'serviceNamespace' "
-                "failed to satisfy constraint: Member must satisfy enum value set: "
-                "{}".format(namespace, namespaces)
+                f"Value '{namespace}' at 'serviceNamespace' failed to satisfy constraint: Member must satisfy enum value set: {namespaces}"
             )
         if len(messages) == 1:
-            message = "1 validation error detected: {}".format(messages[0])
+            message = f"1 validation error detected: {messages[0]}"
         elif len(messages) > 1:
-            message = "{} validation errors detected: {}".format(
-                len(messages), "; ".join(messages)
+            message = (
+                f'{len(messages)} validation errors detected: {"; ".join(messages)}'
             )
         if message:
             raise AWSValidationException(message)
 
-    def delete_scheduled_action(self):
+    def delete_scheduled_action(self) -> str:
         params = json.loads(self.body)
         service_namespace = params.get("ServiceNamespace")
         scheduled_action_name = params.get("ScheduledActionName")
@@ -141,7 +146,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps(dict())
 
-    def put_scheduled_action(self):
+    def put_scheduled_action(self) -> str:
         params = json.loads(self.body)
         service_namespace = params.get("ServiceNamespace")
         schedule = params.get("Schedule")
@@ -165,7 +170,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         )
         return json.dumps(dict())
 
-    def describe_scheduled_actions(self):
+    def describe_scheduled_actions(self) -> str:
         params = json.loads(self.body)
         scheduled_action_names = params.get("ScheduledActionNames")
         service_namespace = params.get("ServiceNamespace")
@@ -185,7 +190,7 @@ class ApplicationAutoScalingResponse(BaseResponse):
         return json.dumps(response_obj)
 
 
-def _build_target(t):
+def _build_target(t: FakeScalableTarget) -> Dict[str, Any]:
     return {
         "CreationTime": t.creation_time,
         "ServiceNamespace": t.service_namespace,
@@ -198,7 +203,7 @@ def _build_target(t):
     }
 
 
-def _build_policy(p):
+def _build_policy(p: FakeApplicationAutoscalingPolicy) -> Dict[str, Any]:
     response = {
         "PolicyARN": p.policy_arn,
         "PolicyName": p.policy_name,
@@ -217,7 +222,7 @@ def _build_policy(p):
     return response
 
 
-def _build_scheduled_action(a):
+def _build_scheduled_action(a: FakeScheduledAction) -> Dict[str, Any]:
     response = {
         "ScheduledActionName": a.scheduled_action_name,
         "ScheduledActionARN": a.arn,

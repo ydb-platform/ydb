@@ -7,8 +7,8 @@
 #include "liburing.h"
 #include "int_flags.h"
 #include "setup.h"
-#include "liburing/compat.h"
 #include "liburing/io_uring.h"
+#include <stdio.h>
 
 #define KERN_MAX_ENTRIES	32768
 #define KERN_MAX_CQ_ENTRIES	(2 * KERN_MAX_ENTRIES)
@@ -60,7 +60,7 @@ static int get_sq_cq_entries(unsigned entries, struct io_uring_params *p,
 	return 0;
 }
 
-static void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
+void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
 {
 	if (sq->ring_sz)
 		__sys_munmap(sq->ring_ptr, sq->ring_sz);
@@ -68,9 +68,9 @@ static void io_uring_unmap_rings(struct io_uring_sq *sq, struct io_uring_cq *cq)
 		__sys_munmap(cq->ring_ptr, cq->ring_sz);
 }
 
-static void io_uring_setup_ring_pointers(struct io_uring_params *p,
-					 struct io_uring_sq *sq,
-					 struct io_uring_cq *cq)
+void io_uring_setup_ring_pointers(struct io_uring_params *p,
+				  struct io_uring_sq *sq,
+				  struct io_uring_cq *cq)
 {
 	sq->khead = sq->ring_ptr + p->sq_off.head;
 	sq->ktail = sq->ring_ptr + p->sq_off.tail;
@@ -96,18 +96,25 @@ static void io_uring_setup_ring_pointers(struct io_uring_params *p,
 	cq->ring_entries = *cq->kring_entries;
 }
 
-static int io_uring_mmap(int fd, struct io_uring_params *p,
-			 struct io_uring_sq *sq, struct io_uring_cq *cq)
+static size_t params_sqes_size(const struct io_uring_params *p, unsigned sqes)
 {
-	size_t size;
+	sqes <<= io_uring_sqe_shift_from_flags(p->flags);
+	return sqes * sizeof(struct io_uring_sqe);
+}
+
+static size_t params_cq_size(const struct io_uring_params *p, unsigned cqes)
+{
+	cqes <<= io_uring_cqe_shift_from_flags(p->flags);
+	return cqes * sizeof(struct io_uring_cqe);
+}
+
+int io_uring_mmap(int fd, struct io_uring_params *p, struct io_uring_sq *sq,
+		  struct io_uring_cq *cq)
+{
 	int ret;
 
-	size = sizeof(struct io_uring_cqe);
-	if (p->flags & IORING_SETUP_CQE32)
-		size += sizeof(struct io_uring_cqe);
-
 	sq->ring_sz = p->sq_off.array + p->sq_entries * sizeof(unsigned);
-	cq->ring_sz = p->cq_off.cqes + p->cq_entries * size;
+	cq->ring_sz = p->cq_off.cqes + params_cq_size(p, p->cq_entries);
 
 	if (p->features & IORING_FEAT_SINGLE_MMAP) {
 		if (cq->ring_sz > sq->ring_sz)
@@ -133,11 +140,9 @@ static int io_uring_mmap(int fd, struct io_uring_params *p,
 		}
 	}
 
-	size = sizeof(struct io_uring_sqe);
-	if (p->flags & IORING_SETUP_SQE128)
-		size += 64;
-	sq->sqes = __sys_mmap(0, size * p->sq_entries, PROT_READ | PROT_WRITE,
-			      MAP_SHARED | MAP_POPULATE, fd, IORING_OFF_SQES);
+	sq->sqes = __sys_mmap(0, params_sqes_size(p, p->sq_entries),
+			      PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
+			      fd, IORING_OFF_SQES);
 	if (IS_ERR(sq->sqes)) {
 		ret = PTR_ERR(sq->sqes);
 err:
@@ -162,6 +167,12 @@ __cold int io_uring_queue_mmap(int fd, struct io_uring_params *p,
 	return io_uring_mmap(fd, p, &ring->sq, &ring->cq);
 }
 
+static size_t io_uring_sqes_size(const struct io_uring *ring)
+{
+	return (ring->sq.ring_entries << io_uring_sqe_shift(ring)) *
+	       sizeof(struct io_uring_sqe);
+}
+
 /*
  * Ensure that the mmap'ed rings aren't available to a child after a fork(2).
  * This uses madvise(..., MADV_DONTFORK) on the mmap'ed ranges.
@@ -174,10 +185,7 @@ __cold int io_uring_ring_dontfork(struct io_uring *ring)
 	if (!ring->sq.ring_ptr || !ring->sq.sqes || !ring->cq.ring_ptr)
 		return -EINVAL;
 
-	len = sizeof(struct io_uring_sqe);
-	if (ring->flags & IORING_SETUP_SQE128)
-		len += 64;
-	len *= ring->sq.ring_entries;
+	len = io_uring_sqes_size(ring);
 	ret = __sys_madvise(ring->sq.sqes, len, MADV_DONTFORK);
 	if (ret < 0)
 		return ret;
@@ -200,6 +208,8 @@ __cold int io_uring_ring_dontfork(struct io_uring *ring)
 /* FIXME */
 static size_t huge_page_size = 2 * 1024 * 1024;
 
+#define KRING_SIZE	64
+
 /*
  * Returns negative for error, or number of bytes used in the buffer on success
  */
@@ -218,14 +228,15 @@ static int io_uring_alloc_huge(unsigned entries, struct io_uring_params *p,
 	if (ret)
 		return ret;
 
-	sqes_mem = sq_entries * sizeof(struct io_uring_sqe);
-	sqes_mem = (sqes_mem + page_size - 1) & ~(page_size - 1);
-	ring_mem = cq_entries * sizeof(struct io_uring_cqe);
-	if (p->flags & IORING_SETUP_CQE32)
-		ring_mem *= 2;
+	ring_mem = KRING_SIZE;
+
+	sqes_mem = params_sqes_size(p, sq_entries);
 	if (!(p->flags & IORING_SETUP_NO_SQARRAY))
-		ring_mem += sq_entries * sizeof(unsigned);
-	mem_used = sqes_mem + ring_mem;
+		sqes_mem += sq_entries * sizeof(unsigned);
+	sqes_mem = (sqes_mem + page_size - 1) & ~(page_size - 1);
+
+	ring_mem += sqes_mem + params_cq_size(p, cq_entries);
+	mem_used = ring_mem;
 	mem_used = (mem_used + page_size - 1) & ~(page_size - 1);
 
 	/*
@@ -355,6 +366,13 @@ int __io_uring_queue_init_params(unsigned entries, struct io_uring *ring,
 	} else {
 		ring->ring_fd = fd;
 	}
+	/*
+	 * IOPOLL always needs to enter, except if SQPOLL is set as well.
+	 * Use an internal flag to check for this.
+	 */
+	if ((ring->flags & (IORING_SETUP_IOPOLL|IORING_SETUP_SQPOLL)) ==
+			IORING_SETUP_IOPOLL)
+		ring->int_flags |= INT_FLAG_CQ_ENTER;
 
 	return ret;
 }
@@ -426,20 +444,10 @@ __cold void io_uring_queue_exit(struct io_uring *ring)
 {
 	struct io_uring_sq *sq = &ring->sq;
 	struct io_uring_cq *cq = &ring->cq;
-	size_t sqe_size;
 
-	if (!sq->ring_sz) {
-		sqe_size = sizeof(struct io_uring_sqe);
-		if (ring->flags & IORING_SETUP_SQE128)
-			sqe_size += 64;
-		__sys_munmap(sq->sqes, sqe_size * sq->ring_entries);
+	if (!(ring->int_flags & INT_FLAG_APP_MEM)) {
+		__sys_munmap(sq->sqes, io_uring_sqes_size(ring));
 		io_uring_unmap_rings(sq, cq);
-	} else {
-		if (!(ring->int_flags & INT_FLAG_APP_MEM)) {
-			__sys_munmap(sq->sqes,
-				*sq->kring_entries * sizeof(struct io_uring_sqe));
-			io_uring_unmap_rings(sq, cq);
-		}
 	}
 
 	/*
@@ -492,34 +500,55 @@ __cold void io_uring_free_probe(struct io_uring_probe *probe)
 	free(probe);
 }
 
-static size_t npages(size_t size, long page_size)
-{
-	size--;
-	size /= page_size;
-	return __fls((int) size);
-}
-
-#define KRING_SIZE	320
-
 static size_t rings_size(struct io_uring_params *p, unsigned entries,
 			 unsigned cq_entries, long page_size)
 {
 	size_t pages, sq_size, cq_size;
 
-	cq_size = sizeof(struct io_uring_cqe);
-	if (p->flags & IORING_SETUP_CQE32)
-		cq_size += sizeof(struct io_uring_cqe);
-	cq_size *= cq_entries;
+	/*
+	 * CQ ring size is number of pages that we need for the
+	 * struct io_uring_cqe entries, which may be 16b (default) or
+	 * 32b if the ring is setup with IORING_SETUP_CQE32. We also need
+	 * room for the head/tail parts.
+	 */
+	cq_size = params_cq_size(p, cq_entries);
 	cq_size += KRING_SIZE;
-	cq_size = (cq_size + 63) & ~63UL;
-	pages = (size_t) 1 << npages(cq_size, page_size);
+	cq_size = (cq_size + page_size - 1) & ~(page_size - 1);
+	pages = (size_t) cq_size / page_size;
 
-	sq_size = sizeof(struct io_uring_sqe);
-	if (p->flags & IORING_SETUP_SQE128)
-		sq_size += 64;
-	sq_size *= entries;
-	pages += (size_t) 1 << npages(sq_size, page_size);
+	sq_size = params_sqes_size(p, entries);
+	sq_size = (sq_size + page_size - 1) & ~(page_size - 1);
+	pages += sq_size / page_size;
 	return pages * page_size;
+}
+
+ssize_t io_uring_memory_size_params(unsigned entries, struct io_uring_params *p)
+{
+	unsigned sq, cq;
+	long page_size;
+	ssize_t ret;
+
+	if (!entries)
+		return -EINVAL;
+	if (entries > KERN_MAX_ENTRIES) {
+		if (!(p->flags & IORING_SETUP_CLAMP))
+			return -EINVAL;
+		entries = KERN_MAX_ENTRIES;
+	}
+
+	ret = get_sq_cq_entries(entries, p, &sq, &cq);
+	if (ret)
+		return ret;
+
+	page_size = get_page_size();
+	return rings_size(p, sq, cq, page_size);
+}
+
+ssize_t io_uring_memory_size(unsigned entries, unsigned ring_flags)
+{
+	struct io_uring_params p = { .flags = ring_flags, };
+
+	return io_uring_memory_size_params(entries, &p);
 }
 
 /*
@@ -535,10 +564,7 @@ __cold ssize_t io_uring_mlock_size_params(unsigned entries,
 {
 	struct io_uring_params lp;
 	struct io_uring ring;
-	unsigned cq_entries, sq;
-	long page_size;
 	ssize_t ret;
-	int cret;
 
 	memset(&lp, 0, sizeof(lp));
 
@@ -560,20 +586,7 @@ __cold ssize_t io_uring_mlock_size_params(unsigned entries,
 	if (lp.features & IORING_FEAT_NATIVE_WORKERS)
 		return 0;
 
-	if (!entries)
-		return -EINVAL;
-	if (entries > KERN_MAX_ENTRIES) {
-		if (!(p->flags & IORING_SETUP_CLAMP))
-			return -EINVAL;
-		entries = KERN_MAX_ENTRIES;
-	}
-
-	cret = get_sq_cq_entries(entries, p, &sq, &cq_entries);
-	if (cret)
-		return cret;
-
-	page_size = get_page_size();
-	return rings_size(p, sq, cq_entries, page_size);
+	return io_uring_memory_size_params(entries, p);
 }
 
 /*
@@ -592,7 +605,7 @@ __cold ssize_t io_uring_mlock_size(unsigned entries, unsigned flags)
 #if defined(__hppa__)
 static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 					  unsigned int nentries, int bgid,
-					  unsigned int flags, int *ret)
+					  unsigned int flags, int *err)
 {
 	struct io_uring_buf_ring *br;
 	struct io_uring_buf_reg reg;
@@ -605,10 +618,10 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	reg.bgid = bgid;
 	reg.flags = IOU_PBUF_RING_MMAP;
 
-	*ret = 0;
+	*err = 0;
 	lret = io_uring_register_buf_ring(ring, &reg, flags);
 	if (lret) {
-		*ret = lret;
+		*err = lret;
 		return NULL;
 	}
 
@@ -617,7 +630,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_POPULATE, ring->ring_fd, off);
 	if (IS_ERR(br)) {
-		*ret = PTR_ERR(br);
+		*err = PTR_ERR(br);
 		return NULL;
 	}
 
@@ -626,7 +639,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 #else
 static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 					  unsigned int nentries, int bgid,
-					  unsigned int flags, int *ret)
+					  unsigned int flags, int *err)
 {
 	struct io_uring_buf_ring *br;
 	struct io_uring_buf_reg reg;
@@ -638,7 +651,7 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
 			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (IS_ERR(br)) {
-		*ret = PTR_ERR(br);
+		*err = PTR_ERR(br);
 		return NULL;
 	}
 
@@ -646,11 +659,11 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 	reg.ring_entries = nentries;
 	reg.bgid = bgid;
 
-	*ret = 0;
+	*err = 0;
 	lret = io_uring_register_buf_ring(ring, &reg, flags);
 	if (lret) {
 		__sys_munmap(br, ring_size);
-		*ret = lret;
+		*err = lret;
 		br = NULL;
 	}
 
@@ -661,11 +674,11 @@ static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
 struct io_uring_buf_ring *io_uring_setup_buf_ring(struct io_uring *ring,
 						  unsigned int nentries,
 						  int bgid, unsigned int flags,
-						  int *ret)
+						  int *err)
 {
 	struct io_uring_buf_ring *br;
 
-	br = br_setup(ring, nentries, bgid, flags, ret);
+	br = br_setup(ring, nentries, bgid, flags, err);
 	if (br)
 		io_uring_buf_ring_init(br);
 

@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/set.h>
@@ -15,6 +16,11 @@ class TTablet : public TActor<TTablet> {
     using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo;
     using ETabletState = TTabletStateInfo::ETabletState;
 
+    struct TRequestAddr {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+
     struct TStateStorageInfo {
         TActorId ProxyID;
 
@@ -22,13 +28,11 @@ class TTablet : public TActor<TTablet> {
         ui32 KnownStep;
         TActorId CurrentLeader;
 
-        ui32 SignatureSz;
-        TArrayHolder<ui64> Signature;
+        TEvStateStorage::TSignature Signature;
 
         TStateStorageInfo()
             : KnownGeneration(0)
             , KnownStep(0)
-            , SignatureSz(0)
         {}
 
         void Update(const TEvStateStorage::TEvInfo *msg) {
@@ -46,13 +50,6 @@ class TTablet : public TActor<TTablet> {
             } else {
                 // happens?
             }
-        }
-
-        void MergeSignature(ui64 *sig, ui32 sigsz) {
-            Y_ABORT_UNLESS(sigsz == SignatureSz);
-            for (ui32 i = 0; i != sigsz; ++i)
-                if (const ui64 x = sig[i])
-                    Signature[i] = x;
         }
     } StateStorageInfo;
 
@@ -92,6 +89,8 @@ class TTablet : public TActor<TTablet> {
 
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
+
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
 
         size_t ByteSize;
 
@@ -150,6 +149,7 @@ class TTablet : public TActor<TTablet> {
         ui64 StreamCounter;
         ui64 EpochGenStep;
         ui64 RebuildGraphCookie;
+        ui64 LastCookie = 0;
 
         TFollowerInfo()
             : RetryRound(0)
@@ -169,6 +169,7 @@ class TTablet : public TActor<TTablet> {
     } FollowerInfo;
 
     void NextFollowerAttempt();
+    void SendFollowerAttach(const TActorId& leader);
 
     enum class EFollowerSyncState {
         NeedSync, // follower known but not connected, blocks gc
@@ -177,7 +178,9 @@ class TTablet : public TActor<TTablet> {
         Ignore, // could not connect to follower for too long. ignore for gc
     };
 
-    struct TLeaderInfo {
+    struct TLeaderInfo : public TIntrusiveListItem<TLeaderInfo> {
+        const TActorId FollowerId;
+        TActorId InterconnectSession;
         ui32 FollowerAttempt;
         ui64 StreamCounter;
 
@@ -186,11 +189,14 @@ class TTablet : public TActor<TTablet> {
         ui64 SyncAttempt;
         THolder<TSchedulerCookieHolder> SyncCookieHolder;
 
+        ui64 LastCookie = 0;
+
         ui32 ConfirmedGCStep;
         bool PresentInList;
 
-        TLeaderInfo(EFollowerSyncState syncState = EFollowerSyncState::Pending)
-            : FollowerAttempt(Max<ui32>())
+        explicit TLeaderInfo(const TActorId& followerId, EFollowerSyncState syncState)
+            : FollowerId(followerId)
+            , FollowerAttempt(Max<ui32>())
             , StreamCounter(0)
             , SyncState(syncState)
             , LastSyncAttempt(TInstant::Zero())
@@ -214,6 +220,7 @@ class TTablet : public TActor<TTablet> {
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
+    TString TabletVersionInfo;
     TInstant BoostrapTime;
     TInstant ActivateTime;
     bool Leader;
@@ -221,7 +228,16 @@ class TTablet : public TActor<TTablet> {
     ui32 DiscoveredLastBlocked;
     ui32 GcInFly;
     ui32 GcInFlyStep;
+    ui32 GcConfirmedStep;
     ui32 GcNextStep;
+
+    // retry failed GC logic
+    ui32 GcTryCounter;
+    TBackoffTimer GcBackoffTimer;
+    bool GcPendingRetry;
+    ui32 GcFailCount;
+
+    TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
@@ -250,6 +266,34 @@ class TTablet : public TActor<TTablet> {
     ui32 BlobStorageErrorStep = Max<ui32>();
     TString BlobStorageErrorReason;
     bool BlobStorageErrorReported = false;
+
+    // Leader confirmation requests
+    THashMap<ui64, TRequestAddr> ConfirmLeaderRequests;
+    ui64 ConfirmLeaderCounter = 0;
+
+    struct TTabletStateSubscriber : public TIntrusiveListItem<TTabletStateSubscriber> {
+        TActorId ActorId;
+        ui64 Cookie;
+        ui64 SeqNo;
+        TActorId InterconnectSession;
+    };
+
+    struct TInterconnectSession {
+        TActorId ActorId;
+        TIntrusiveList<TTabletStateSubscriber> TabletStateSubscribers;
+        TIntrusiveList<TLeaderInfo> Followers;
+        bool Connected = false;
+    };
+
+    struct TInterconnectPending {
+        ui64 LastCookie = 0;
+        TIntrusiveList<TLeaderInfo> Followers;
+    };
+
+    THashMap<TActorId, TTabletStateSubscriber> TabletStateSubscribers;
+    THashMap<TActorId, TInterconnectSession> InterconnectSessions;
+    THashMap<ui32, TInterconnectPending> InterconnectPending;
+    ui64 LastInterconnectSubscribeCookie = 0;
 
     ui64 TabletID() const;
 
@@ -282,6 +326,7 @@ class TTablet : public TActor<TTablet> {
     void HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev);
     void HandleByFollower(TEvTablet::TEvFollowerAuxUpdate::TPtr &ev);
     void HandleByFollower(TEvTablet::TEvFollowerRefresh::TPtr &ev);
+    void HandleByFollower(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleByFollower(TEvents::TEvUndelivered::TPtr &ev);
     void HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev);
@@ -295,6 +340,7 @@ class TTablet : public TActor<TTablet> {
     void HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev);
     void HandleByLeader(TEvTabletBase::TEvTrySyncFollower::TPtr &ev);
     void HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev);
+    void HandleByLeader(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void HandleByLeader(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleByLeader(TEvents::TEvUndelivered::TPtr &ev);
 
@@ -312,6 +358,11 @@ class TTablet : public TActor<TTablet> {
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev);
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
 
+    void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
+    void Handle(TEvTabletBase::TEvLogGcRetry::TPtr& ev);
+
+    void Handle(TEvTablet::TEvConfirmLeader::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
     bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
     void Handle(TEvTablet::TEvAux::TPtr &ev);
@@ -319,12 +370,14 @@ class TTablet : public TActor<TTablet> {
 
     // next funcs return next correct iterator
     TMap<TActorId, TLeaderInfo>::iterator EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt);
-    TMap<TActorId, TLeaderInfo>::iterator HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt);
+    TMap<TActorId, TLeaderInfo>::iterator HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt, bool permanent = false);
+    void HandleFollowerDisconnect(TLeaderInfo* follower);
 
     void TrySyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt);
     void DoSyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt);
 
     void GcLogChannel(ui32 step);
+    void RetryGcRequests();
 
     bool ProgressCommitQueue();
     void ProgressFollowerQueue();
@@ -359,6 +412,17 @@ class TTablet : public TActor<TTablet> {
 
     void SendIntrospectionData();
 
+    void Handle(TEvTablet::TEvTabletStateSubscribe::TPtr& ev);
+    void Handle(TEvTablet::TEvTabletStateUnsubscribe::TPtr& ev);
+    void SendTabletStateUpdate(const TTabletStateSubscriber& subscriber, NKikimrTabletBase::TEvTabletStateUpdate::EState state);
+    void SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::EState state);
+    TInterconnectSession& SubscribeInterconnectSession(const TActorId& sessionId);
+    void InterconnectSessionConnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie);
+    void InterconnectSessionDisconnected(const TActorId& sessionId);
+    void InterconnectSessionDisconnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie);
+    void TabletStateUndelivered(const TActorId& actorId, ui64 cookie);
+    void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
+
     STATEFN(StateResolveStateStorage) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoResolve);
@@ -373,6 +437,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerDetach, HandleByLeader);
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -393,6 +460,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerDetach, HandleByLeader);
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -414,6 +484,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -435,6 +508,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -456,6 +532,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
             hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -477,6 +556,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
             hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -498,6 +580,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
             hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
@@ -506,6 +591,7 @@ class TTablet : public TActor<TTablet> {
     STATEFN(StateActivePhase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTablet::TEvCommit, Handle);
+            hFunc(TEvTablet::TEvConfirmLeader, Handle);
             hFunc(TEvTablet::TEvAux, Handle);
             hFunc(TEvTablet::TEvPreCommit, Handle);
             hFunc(TEvTablet::TEvTabletActive, HandleByLeader);
@@ -527,9 +613,15 @@ class TTablet : public TActor<TTablet> {
             cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             hFunc(TEvTabletPipe::TEvConnect, Handle);
             hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvBlobStorage::TEvGetBlockResult, Handle);
+            hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
+            sFunc(TEvTabletBase::TEvLogGcRetry, RetryGcRequests);
         }
     }
 
@@ -559,6 +651,11 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTabletBase::TEvFollowerRetry, HandleFollowerRetry);
             hFunc(TEvTabletBase::TEvTryBuildFollowerGraph, HandleByFollower);
             hFunc(TEvTabletBase::TEvRebuildGraphResult, HandleByFollower);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByFollower);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByFollower);
+            hFunc(TEvents::TEvUndelivered, HandleByFollower);
             hFunc(TEvTabletPipe::TEvConnect, Handle);
             hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
             hFunc(TEvTablet::TEvFeatures, HandleFeatures);
@@ -580,6 +677,9 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvTablet::TEvUpdateConfig, Handle);
             hFunc(TEvTabletBase::TEvTryBuildFollowerGraph, HandleByFollower);
             hFunc(TEvTabletBase::TEvRebuildGraphResult, HandleByFollower);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByFollower);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByFollower);
             hFunc(TEvents::TEvUndelivered, HandleByFollower);
             hFunc(TEvTabletPipe::TEvConnect, HandleByFollower);

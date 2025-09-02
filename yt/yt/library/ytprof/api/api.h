@@ -16,16 +16,16 @@ namespace NYT::NYTProf {
 
 struct TProfilerTag final
 {
-    TString Name;
-    std::optional<TString> StringValue;
+    std::string Name;
+    std::optional<std::string> StringValue;
     std::optional<i64> IntValue;
 
-    TProfilerTag(const TString& name, const TString& value)
+    TProfilerTag(const std::string& name, const std::string& value)
         : Name(name)
         , StringValue(value)
     { }
 
-    TProfilerTag(const TString& name, i64 value)
+    TProfilerTag(const std::string& name, i64 value)
         : Name(name)
         , IntValue(value)
     { }
@@ -41,7 +41,7 @@ std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags();
 
 // Hooks for yt/yt/core fibers.
 void* AcquireFiberTagStorage();
-std::vector<std::pair<TString, std::variant<TString, i64>>> ReadFiberTags(void* storage);
+std::vector<std::pair<std::string, std::variant<std::string, i64>>> ReadFiberTags(void* storage);
 void ReleaseFiberTagStorage(void* storage);
 TCpuInstant GetTraceContextTimingCheckpoint();
 

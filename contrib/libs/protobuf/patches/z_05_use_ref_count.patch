@@ -1,0 +1,14 @@
+--- contrib/libs/protobuf/src/google/protobuf/arenastring.cc   (5de6c47c971aa5c751f17043b8ddf45bcc6daee0)
++++ contrib/libs/protobuf/src/google/protobuf/arenastring.cc   (c7e1b2fc457f6c68ed50780be734651758d4f548)
+@@ -96,9 +96,10 @@ class ScopedCheckPtrInvariants {
+ #endif  // NDEBUG || !GOOGLE_PROTOBUF_INTERNAL_DONATE_STEAL
+
+ // Creates a heap allocated TProtoStringType value.
+-inline TaggedStringPtr CreateString(absl::string_view value) {
++template <typename TArg>
++inline TaggedStringPtr CreateString(const TArg& value) {
+   TaggedStringPtr res;
+-  res.SetAllocated(new TProtoStringType(value.data(), value.length()));
++  res.SetAllocated(new TProtoStringType(value));
+   return res;
+ }

@@ -119,7 +119,7 @@ class AbstractRemoteCommandExecutionSafetyWarden(SafetyWarden):
 
 
 class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
-    def __init__(self, targets, log_file_name, list_of_markers, lines_after=10, username=None, only_count=False):
+    def __init__(self, targets, log_file_name, list_of_markers, lines_after=10, username=None, only_count=False, cut=True):
         name = "GrepLogFileForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
             markers=list_of_markers, targets=targets
         )
@@ -133,15 +133,15 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
                 log_file_name,
             ]
         )
-
-        remote_command.extend(
-            [
-                '|',
-                'cut',
-                '-c',
-                '1-260'
-            ]
-        )
+        if cut:
+            remote_command.extend(
+                [
+                    '|',
+                    'cut',
+                    '-c',
+                    '1-260'
+                ]
+            )
 
         if only_count:
             remote_command.extend(
@@ -157,7 +157,7 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
 class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
     def __init__(
             self, list_of_hosts, log_file_pattern, list_of_markers, lines_after=1, username=None,
-            modification_days=1, only_count=False,
+            modification_days=1, only_count=False, cut=True
     ):
         name = "GrepGzippedLogFilesForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
             markers=list_of_markers, targets=list_of_hosts
@@ -190,15 +190,15 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSa
         remote_command.extend(
             construct_list_of_grep_pattern_arguments(list_of_markers)
         )
-
-        remote_command.extend(
-            [
-                '|',
-                'cut',
-                '-c',
-                '1-260'
-            ]
-        )
+        if cut:
+            remote_command.extend(
+                [
+                    '|',
+                    'cut',
+                    '-c',
+                    '1-260'
+                ]
+            )
 
         if only_count:
             remote_command.extend(

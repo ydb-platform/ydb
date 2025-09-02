@@ -1,0 +1,20 @@
+--- contrib/libs/protobuf/src/google/protobuf/port_def.inc      (61c97633ad4150fc3855f71a23e0b8d90f4c4f42)
++++ contrib/libs/protobuf/src/google/protobuf/port_def.inc      (305db98d5191470c880de9745e55b395d24b997b)
+@@ -383,6 +383,17 @@ static_assert(PROTOBUF_CPLUSPLUS_MIN(201402L), "Protobuf only supports C++14 and
+ #endif
+ # define PROTOBUF_DEPRECATED_ENUM
+
++// External libs can define New macro, but absl will broke...
++#ifdef New
++#undef New
++#endif
++#ifdef Poison
++#undef Poison
++#endif
++#ifdef rename
++#undef rename
++#endif
++
+ #if defined(__clang__)
+ #define PROTOBUF_IGNORE_DEPRECATION_START                     \
+   _Pragma("clang diagnostic push")                                  \

@@ -63,6 +63,7 @@ namespace NKikimr {
             hdr->Lsn = lsn;
             rec->TabletId = tabletId;
             rec->Channel = channel;
+            rec->Reserved = 0;
             rec->Gen = gen;
             rec->GenCounter = genCounter;
             rec->CollectGeneration = collGen;

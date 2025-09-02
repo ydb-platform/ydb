@@ -2,8 +2,6 @@ UNITTEST()
 
 SIZE(MEDIUM)
 
-TIMEOUT(600)
-
 PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/crypto

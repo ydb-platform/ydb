@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 PEERDIR(
     ydb/public/api/protos
@@ -11,7 +11,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 TEST_SRCS(
@@ -23,11 +22,9 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

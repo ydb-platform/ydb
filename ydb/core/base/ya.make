@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    auth.h
+    auth.cpp
     actor_activity_names.cpp
     appdata.h
     appdata.cpp
@@ -9,8 +11,11 @@ SRCS(
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
+    bridge.h
+    bridge.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_grouptype.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -20,16 +25,22 @@ SRCS(
     event_filter.cpp
     event_filter.h
     events.h
+    feature_flags.h
+    feature_flags_service.cpp
+    feature_flags_service.h
     group_stat.cpp
     group_stat.h
     hive.h
     interconnect_channels.h
+    kmeans_clusters.cpp
+    local_user_token.cpp
+    local_user_token.h
     localdb.cpp
     localdb.h
     location.h
     logoblob.cpp
     logoblob.h
-    memobserver.h
+    memory_controller_iface.h
     nameservice.h
     path.cpp
     pool_stats_collector.cpp
@@ -37,6 +48,7 @@ SRCS(
     resource_profile.h
     row_version.cpp
     row_version.h
+    runtime_feature_flags.h
     services_assert.cpp
     shared_quota.h
     statestorage.cpp
@@ -48,6 +60,7 @@ SRCS(
     statestorage_monitoring.cpp
     statestorage_proxy.cpp
     statestorage_replica.cpp
+    statestorage_ringwalker.h
     storage_pools.cpp
     storage_pools.h
     subdomain.h
@@ -68,7 +81,7 @@ SRCS(
     tx_processing.h
     tx_processing.cpp
     user_registry.h
-    blobstorage_grouptype.cpp
+    wilson_tracing_control.cpp
 )
 
 PEERDIR(
@@ -77,16 +90,23 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/protos
     ydb/library/actors/wilson
+    ydb/library/aclib
     library/cpp/deprecated/enum_codegen
+    library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/time_provider
+    ydb/core/audit/audit_config
+    ydb/core/base/generated
     ydb/core/base/services
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
+    ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out
     ydb/library/aclib
@@ -95,7 +115,7 @@ PEERDIR(
     ydb/library/pretty_types_print/protobuf
     ydb/library/ydb_issue
     ydb/public/api/protos/out
-    ydb/library/yql/minikql
+    yql/essentials/minikql
     library/cpp/deprecated/atomic
 )
 
@@ -105,9 +125,16 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+
 END()
+
+RECURSE(
+    generated
+)
 
 RECURSE_FOR_TESTS(
     ut
+    ut_auth
     ut_board_subscriber
 )

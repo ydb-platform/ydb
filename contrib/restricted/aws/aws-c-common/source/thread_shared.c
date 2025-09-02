@@ -40,8 +40,8 @@ void aws_thread_increment_unjoined_count(void) {
 void aws_thread_decrement_unjoined_count(void) {
     aws_mutex_lock(&s_managed_thread_lock);
     --s_unjoined_thread_count;
-    aws_mutex_unlock(&s_managed_thread_lock);
     aws_condition_variable_notify_one(&s_managed_thread_signal);
+    aws_mutex_unlock(&s_managed_thread_lock);
 }
 
 size_t aws_thread_get_managed_thread_count(void) {
@@ -106,7 +106,7 @@ int aws_thread_join_all_managed(void) {
             aws_condition_variable_wait_for_pred(
                 &s_managed_thread_signal,
                 &s_managed_thread_lock,
-                wait_ns,
+                (int64_t)wait_ns,
                 s_one_or_fewer_managed_threads_unjoined,
                 NULL);
         } else {

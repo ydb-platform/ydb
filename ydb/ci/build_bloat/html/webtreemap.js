@@ -68,8 +68,8 @@
     var dom = document.createElement('div');
     dom.style.zIndex = 1;
     dom.className = 'webtreemap-node webtreemap-level' + Math.min(level, 4);
-    if (tree.data['$symbol']) {
-        dom.className += ' webtreemap-type-' + tree.data['$symbol'];
+    if (tree.type) {
+        dom.className += ' webtreemap-type-' + tree.type;
     }
     if (tree.children) {
         dom.className += ' webtreemap-aggregate';
@@ -131,12 +131,12 @@
     // bad.  Result is [start,end) covering the best run for this span.
     // http://scholar.google.com/scholar?cluster=5972512107845615474
     var node = nodes[start];
-    var rmin = node.data['$area'];  // Smallest seen child so far.
+    var rmin = node.size;  // Smallest seen child so far.
     var rmax = rmin;                // Largest child.
     var rsum = 0;                   // Sum of children in this span.
     var last_score = 0;             // Best score yet found.
     for (var end = start; node = nodes[end]; ++end) {
-      var size = node.data['$area'];
+      var size = node.size;
       if (size < rmin)
         rmin = size;
       if (size > rmax)
@@ -162,7 +162,7 @@
     if (!('children' in tree))
       return;
   
-    var total = tree.data['$area'];
+    var total = tree.size;
   
     // XXX why do I need an extra -1/-2 here for width/height to look right?
     var x1 = 0, y1 = 0, x2 = width - 1, y2 = height - 2;
@@ -208,7 +208,7 @@
         } else {
           child.dom.style.zIndex = 1;
         }
-        var size = child.data['$area'];
+        var size = child.size;
         var frac = size / rsum;
         if (ysplit) {
           width = rsum / space;

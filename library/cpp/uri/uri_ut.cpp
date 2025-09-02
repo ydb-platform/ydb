@@ -794,7 +794,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test_NonRfcUrls) {
             TUri url;
-            const long flags = TFeature::FeaturesRobot;
+            const ui64 flags = TFeature::FeaturesRobot;
             for (size_t i = 0;; ++i) {
                 const TStringBuf& buf = NonRfcUrls[i];
                 if (!buf.IsInited())
@@ -809,7 +809,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test_CheckParseException) {
             TUri url;
-            const long flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
+            const ui64 flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
             for (size_t i = 0;; ++i) {
                 const TStringBuf& buf = CheckParseException[i];
                 if (!buf.IsInited())
@@ -840,7 +840,7 @@ namespace NUri {
                 uri.Parse("http://srv.net:80/print", TFeature::FeaturesRecommended);
                 TString s = uri.PrintS(TUri::FlagPort);
                 Cdbg << uri.PrintS() << ',' << uri.PrintS(TUri::FlagPort) << Endl;
-                UNIT_ASSERT(s.Empty());
+                UNIT_ASSERT(s.empty());
             }
         }
 

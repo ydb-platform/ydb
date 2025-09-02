@@ -1,12 +1,36 @@
 #include "zstd.h"
-
-#include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
-namespace NYql {
+#include <util/generic/size_literals.h>
 
-namespace NZstd {
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#define ZSTD_STATIC_LINKING_ONLY
+#include <contrib/libs/zstd/include/zstd.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NZstd {
+
+namespace {
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+    ::ZSTD_DStream *const ZCtx_;
+    size_t Offset_;
+    size_t Size_;
+    bool Finished_ = false;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source), ZCtx_(::ZSTD_createDStream())
@@ -34,13 +58,13 @@ bool TReadBuffer::nextImpl() {
             zIn.pos = Offset_ = 0;
             if (!zIn.size) {
                 // end of stream, need to check that there is no uncompleted blocks
-                YQL_ENSURE(!returnCode, "Incomplete block.");
+                YQL_ENSURE_CODELINE(!returnCode, NYql::NDqProto::StatusIds::BAD_REQUEST, "Incomplete block.");
                 Finished_ = true;
                 break;
             }
         }
         returnCode = ::ZSTD_decompressStream(ZCtx_, &zOut, &zIn);
-        YQL_ENSURE(!::ZSTD_isError(returnCode), "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(returnCode), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
         if (!returnCode) {
             // The frame is over, prepare to (maybe) start a new frame
             ::ZSTD_initDStream(ZCtx_);
@@ -57,15 +81,13 @@ bool TReadBuffer::nextImpl() {
     }
 }
 
-namespace {
-
 class TCompressor : public TOutputQueue<> {
 public:
     TCompressor(int level)
         : ZCtx_(::ZSTD_createCStream())
     {
         const auto ret = ::ZSTD_initCStream(ZCtx_, level);
-        YQL_ENSURE(!::ZSTD_isError(ret), "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(ret), NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
     }
 
     ~TCompressor() {
@@ -134,12 +156,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(ZSTD_defaultCLevel()));
 }
 
-}
-
-}
+} // namespace NYql::NZstd

@@ -49,7 +49,7 @@
  %define PS     8
  %define LOG_PS 3
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -73,15 +73,15 @@
  %define func(x) proc_frame x
  %macro FUNC_SAVE 0
 	alloc_stack	stack_size
-	save_reg	r12,  9*16 + 0*8
-	save_reg	r15,  9*16 + 3*8
+	save_reg	r12,  0*8
+	save_reg	r15,  1*8
 	end_prolog
 	mov	arg4, arg(4)
  %endmacro
 
  %macro FUNC_RESTORE 0
-	mov	r12,  [rsp + 9*16 + 0*8]
-	mov	r15,  [rsp + 9*16 + 3*8]
+	mov	r12,  [rsp + 0*8]
+	mov	r15,  [rsp + 1*8]
 	add	rsp, stack_size
  %endmacro
 %endif
@@ -104,8 +104,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -128,13 +128,8 @@ default rel
 section .text
 
 align 16
-global gf_vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_vect_dot_prod_avx512, function
 func(gf_vect_dot_prod_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_vect_dot_prod_avx512)
-%endif
-
 	FUNC_SAVE
 	xor	pos, pos
 	mov	tmp, 0x0f

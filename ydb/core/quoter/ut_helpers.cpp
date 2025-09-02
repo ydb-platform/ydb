@@ -41,6 +41,7 @@ void TKesusQuoterTestSetup::SetupLogging() {
     Server->GetRuntime()->SetLogPriority(NKikimrServices::KESUS_TABLET, NActors::NLog::PRI_TRACE);
     Server->GetRuntime()->SetLogPriority(NKikimrServices::QUOTER_SERVICE, NActors::NLog::PRI_TRACE);
     Server->GetRuntime()->SetLogPriority(NKikimrServices::QUOTER_PROXY, NActors::NLog::PRI_TRACE);
+    Server->GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_TRACE);
 }
 
 void TKesusQuoterTestSetup::RegisterQuoterService() {

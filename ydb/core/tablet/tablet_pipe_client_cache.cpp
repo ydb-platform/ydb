@@ -1,5 +1,4 @@
 #include "tablet_pipe_client_cache.h"
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/core/util/cache.h>
 #include <util/generic/map.h>
 #include <util/system/mutex.h>
@@ -86,13 +85,13 @@ namespace NTabletPipe {
                 }
             }
 
-            ActorSystem = ctx.ExecutorThread.ActorSystem;
+            ActorSystem = ctx.ActorSystem();
             TActorId clientId;
             if (PipeFactory) {
                 clientId = PipeFactory->CreateClient(ctx, tabletId, PipeClientConfig);
             } else {
                 IActor* client = CreateClient(ctx.SelfID, tabletId, PipeClientConfig);
-                clientId = ctx.ExecutorThread.RegisterActor(client);
+                clientId = ctx.Register(client);
             }
             Container->Insert(tabletId, TClientCacheEntry(clientId, 0), currentClient);
             return clientId;

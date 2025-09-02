@@ -182,7 +182,12 @@ ILoggerPtr GetLogger()
     return Logger;
 }
 
+void SetUseCoreLog()
+{
+    auto guard = TWriteGuard(LoggerMutex);
+    Logger = nullptr;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }
-

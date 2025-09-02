@@ -38,19 +38,6 @@ private:
     THolder<TEvDataShard::TEvGetShardStateResult> Result;
 };
 
-class TDataShard::TTxInit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxInit(TDataShard* ds);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
-private:
-    bool CreateScheme(TTransactionContext &txc);
-    bool ReadEverything(TTransactionContext &txc);
-private:
-    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
-};
-
 class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev);
@@ -123,7 +110,7 @@ public:
              NWilson::TSpan &&datashardTransactionSpan);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    
+    TTxType GetTxType() const override { return TXTYPE_WRITE; }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
@@ -309,16 +296,6 @@ public:
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
-};
-
-class TDataShard::TTxExecuteMvccStateChange: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxExecuteMvccStateChange(TDataShard* ds);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_EXECUTE_MVCC_STATE_CHANGE; }
-private:
-    bool ActivateWaitingOps = false;
 };
 
 }

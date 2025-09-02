@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract.h"
+#include "fetch_database.h"
 #include "modification_controller.h"
 #include "preparation_controller.h"
 #include "restore.h"
@@ -57,6 +58,7 @@ protected:
     typename IObjectOperationsManager<TObject>::TPtr Manager;
     const IOperationsManager::TInternalModificationContext Context;
     std::vector<NInternal::TTableRecord> Patches;
+    std::vector<TModificationStage::TPtr> Preconditions;
     NInternal::TTableRecords RestoreObjectIds;
     const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
     virtual bool PrepareRestoredObjects(std::vector<TObject>& objects) const = 0;
@@ -111,6 +113,7 @@ public:
             hFunc(NRequest::TEvRequestFailed, Handle);
             hFunc(TEvRestoreProblem, Handle);
             hFunc(TEvAlterPreparationProblem, Handle);
+            hFunc(TEvFetchDatabaseResponse, Handle);
             default:
                 break;
         }
@@ -120,12 +123,36 @@ public:
         InitState();
         if (!Patches.size()) {
             ExternalController->OnAlteringProblem("no patches");
-            return TBase::PassAway();
+            return this->PassAway();
         }
         if (!BuildRestoreObjectIds()) {
-            return TBase::PassAway();
+            return this->PassAway();
         }
 
+        if (!AppData()->FeatureFlags.GetEnableMetadataObjectsOnServerless() && Context.GetActivityType() != IOperationsManager::EActivityType::Drop) {
+            TBase::Register(CreateDatabaseFetcherActor(Context.GetExternalData().GetDatabase()));
+        } else {
+            CreateSession();
+        }
+    }
+
+    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
+        TString errorMessage;
+        if (const auto& errorString = ev->Get()->GetErrorString()) {
+            errorMessage = TStringBuilder() << "Cannot fetch database '" << Context.GetExternalData().GetDatabase() << "': " << *errorString;
+        } else if (ev->Get()->GetServerless()) {
+            errorMessage = TStringBuilder() << "Objects " << TObject::GetTypeId() << " are disabled for serverless domains. Please contact your system administrator to enable it";
+        }
+
+        if (errorMessage) {
+            auto g = TBase::PassAwayGuard();
+            ExternalController->OnAlteringProblem(errorMessage);
+        } else {
+            CreateSession();
+        }
+    }
+
+    void CreateSession() const {
         TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogCreateSession>(
             NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
@@ -146,25 +173,26 @@ public:
         Y_ABORT_UNLESS(TransactionId);
         std::vector<TObject> objects = std::move(ev->Get()->MutableObjects());
         if (!PrepareRestoredObjects(objects)) {
-            TBase::PassAway();
+            this->PassAway();
         } else {
-            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context);
+            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, TAlterOperationContext(SessionId, TransactionId, RestoreObjectIds));
         }
     }
 
     void Handle(typename TEvAlterPreparationFinished<TObject>::TPtr& ev) {
+        Preconditions = Manager->GetPreconditions(ev->Get()->GetObjects(), Context);
         NInternal::TTableRecords records;
         records.InitColumns(Manager->GetSchema().GetYDBColumns());
         records.ReserveRows(ev->Get()->GetObjects().size());
         for (auto&& i : ev->Get()->GetObjects()) {
             if (!records.AddRecordNativeValues(i.SerializeToRecord())) {
                 ExternalController->OnAlteringProblem("unexpected serialization inconsistency");
-                return TBase::PassAway();
+                return this->PassAway();
             }
         }
         if (!ProcessPreparedObjects(std::move(records))) {
             ExternalController->OnAlteringProblem("cannot process prepared objects");
-            return TBase::PassAway();
+            return this->PassAway();
         }
     }
 
@@ -183,6 +211,15 @@ public:
         ExternalController->OnAlteringProblem("cannot restore objects: " + ev->Get()->GetErrorMessage());
     }
 
+    void PassAway() override {
+        if (SessionId) {
+            NMetadata::NRequest::TDialogDeleteSession::TRequest deleteRequest;
+            deleteRequest.set_session_id(SessionId);
+            TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogDeleteSession>(deleteRequest, UserToken, TBase::SelfId()));
+        }
+
+        TBase::PassAway();
+    }
 };
 
 template <class TObject>
@@ -235,8 +272,8 @@ public:
             if (!trPatch) {
                 TBase::ExternalController->OnAlteringProblem("cannot found patch for object");
                 return false;
-            } else if (!trObject.TakeValuesFrom(*trPatch)) {
-                TBase::ExternalController->OnAlteringProblem("cannot patch object");
+            } else if (const TConclusionStatus& status = objectPatched.MergeRecords(trObject, *trPatch); status.IsFail()) {
+                TBase::ExternalController->OnAlteringProblem(status.GetErrorMessage());
                 return false;
             } else if (!TObject::TDecoder::DeserializeFromRecord(objectPatched, trObject)) {
                 TBase::ExternalController->OnAlteringProblem("cannot parse object after patch");

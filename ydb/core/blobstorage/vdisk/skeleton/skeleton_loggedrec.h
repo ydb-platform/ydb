@@ -50,7 +50,8 @@ namespace NKikimr {
     public:
         TLoggedRecVPut(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvBlobStorage::TEvVPutResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId);
+                ui64 recipientCookie, NWilson::TTraceId traceId, NKikimrBlobStorage::EPutHandleClass handleClass,
+                const TVDiskID& vdiskId, const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;
@@ -63,6 +64,7 @@ namespace NKikimr {
         TActorId Recipient;
         ui64 RecipientCookie;
         NWilson::TSpan Span;
+        NKikimrBlobStorage::EPutHandleClass HandleClass;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +74,8 @@ namespace NKikimr {
     public:
         TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> result, const TActorId &recipient,
-                ui64 recipientCookie, NWilson::TTraceId traceId);
+                ui64 recipientCookie, NWilson::TTraceId traceId, NKikimrBlobStorage::EPutHandleClass handleClass,
+                const TVDiskID& vdiskId, const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
         NWilson::TTraceId GetTraceId() const;
@@ -93,7 +96,8 @@ namespace NKikimr {
     class TLoggedRecVPutHuge : public ILoggedRec {
     public:
         TLoggedRecVPutHuge(TLsnSeg seg, bool confirmSyncLogAlso, const TActorId &hugeKeeperId,
-                TEvHullLogHugeBlob::TPtr ev);
+                TEvHullLogHugeBlob::TPtr ev,  const TVDiskID& vdiskId,
+                const TIntrusivePtr<TVDiskConfig>& config, const TVDiskContextPtr& vctx);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:

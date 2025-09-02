@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/digest/multi.h>
 
@@ -26,7 +26,12 @@ struct TTenantInfo {
 
     using TPtr = std::shared_ptr<TTenantInfo>;
 
-    THashMap<TString /* subject type */, THashMap<TString /* subject id */, TString /* vtenant */>> SubjectMapping;
+    struct TMapping {
+        TString Vtenant;
+        TMaybe<TString> NodeIds;
+    };
+
+    THashMap<TString /* subject type */, THashMap<TString /* subject id */, TMapping /* mapping */>> SubjectMapping;
     TVector<TString> CommonVTenants;
     THashMap<TString /* vtenant */, TString /* tenant */> TenantMapping;
     THashMap<TString /* tenant */, ui32 /* state */> TenantState;
@@ -39,23 +44,34 @@ struct TTenantInfo {
         : ComputeConfig(computeConfig)
     {}
 
+    struct TMapResult {
+        TString TenantName;
+        TMaybe<TString> NodeIds;
+    };
     // this method must be thread safe
-    TString Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
+    TMapResult Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
         auto pinTenants = ComputeConfig.GetPinTenantNames(queryType, scope);
         if (pinTenants) {
-            return pinTenants[MultiHash(cloudId) % pinTenants.size()];
+            return TMapResult{pinTenants[MultiHash(cloudId) % pinTenants.size()], Nothing()};
         }
 
-        auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
-        auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
-        if (!vTenant && CommonVTenants.size()) {
-            vTenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
+        TMapping empty;
+        auto it = SubjectMapping.find(SUBJECT_TYPE_SCOPE);
+        auto vTenant = it == SubjectMapping.end() ? empty : it->second.Value(scope, empty);
+
+        if (!vTenant.Vtenant) {
+            auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
+            vTenant = it == SubjectMapping.end() ? empty : it->second.Value(cloudId, empty);
         }
 
-        auto tenant = vTenant ? TenantMapping.Value(vTenant, DefaultTenantName) : DefaultTenantName;
+        if (!vTenant.Vtenant && CommonVTenants.size()) {
+            vTenant.Vtenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
+        }
+
+        auto tenant = vTenant.Vtenant ? TenantMapping.Value(vTenant.Vtenant, DefaultTenantName) : DefaultTenantName;
         // CPS_LOG_D("AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant);
         // Cerr << "AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant << Endl;
-        return tenant;
+        return TMapResult{tenant, vTenant.NodeIds};
     }
 };
 

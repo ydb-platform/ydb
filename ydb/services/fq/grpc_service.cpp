@@ -1,5 +1,6 @@
 #include "grpc_service.h"
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -17,19 +18,6 @@ TGRpcFederatedQueryService::TGRpcFederatedQueryService(NActors::TActorSystem *sy
 void TGRpcFederatedQueryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcFederatedQueryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcFederatedQueryService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcFederatedQueryService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
 void TGRpcFederatedQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {

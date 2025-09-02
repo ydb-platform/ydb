@@ -3,7 +3,7 @@
 #include "type_traits.h"
 
 #include <util/generic/maybe.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 
@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <memory>
 
 namespace NFq {
@@ -63,6 +63,8 @@ struct TEvControlPlaneProxy {
         EvModifyBindingResponse,
         EvDeleteBindingRequest,
         EvDeleteBindingResponse,
+        EvDeleteFolderResourcesRequest,
+        EvDeleteFolderResourcesResponse,
         EvEnd,
     };
 
@@ -392,6 +394,68 @@ struct TEvControlPlaneProxy {
 
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
     };
+
+    struct TEvDeleteFolderResourcesResponse : NActors::TEventLocal<TEvDeleteFolderResourcesResponse, EvDeleteFolderResourcesResponse> {
+        static constexpr bool Auditable = false;
+        TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result, const TString& subjectType)
+            : Result(result)
+            , SubjectType(subjectType)
+        {
+        }
+
+        TEvDeleteFolderResourcesResponse(const NYql::TIssues& issues, const TString& subjectType)
+            : Issues(issues)
+            , SubjectType(subjectType)
+        {
+        }
+
+        Ydb::Operations::Operation Result;
+        NYql::TIssues Issues;
+        TString SubjectType;
+    };
+    struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
+
+        TEvDeleteFolderResourcesRequest(const TString& scope,
+                                 const TString& user,
+                                 const TString& token,
+                                 const TVector<TString>& permissions,
+                                 TMaybe<TQuotaMap> quotas     = Nothing(),
+                                 TTenantInfo::TPtr tenantInfo = nullptr)
+            : Scope(scope)
+            , User(user)
+            , Token(token)
+            , Permissions(permissions)
+            , Quotas(std::move(quotas))
+            , TenantInfo(tenantInfo)
+            , ComputeYDBOperationWasPerformed(false)
+            , ControlPlaneYDBOperationWasPerformed(false) { }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.size()
+                    + User.size()
+                    + Token.size()
+                    + CloudId.size();
+        }
+
+        TString Scope;
+        TString CloudId;
+        TString FolderId;
+        TString User;
+        TString Token;
+        TVector<TString> Permissions;
+        TMaybe<TQuotaMap> Quotas;
+        TTenantInfo::TPtr TenantInfo;
+        TString SubjectType;
+        bool ComputeYDBOperationWasPerformed;
+        bool ControlPlaneYDBOperationWasPerformed;
+        std::unique_ptr<TEvDeleteFolderResourcesResponse> Response;
+        std::shared_ptr<NYdb::NTable::TTableClient> YDBClient;
+        TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
+        bool RequestValidationPassed = false;
+    };
+
+
 };
 
 NActors::TActorId ControlPlaneProxyActorId();

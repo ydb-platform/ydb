@@ -9,7 +9,7 @@
 
 namespace NYT {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TClientContext
 {
@@ -22,6 +22,9 @@ struct TClientContext
     bool UseTLS = false;
     TConfigPtr Config = TConfig::Get();
     TMaybe<TString> ProxyAddress;
+    TMaybe<TString> RpcProxyRole;
+    TMaybe<TString> JobProxySocketPath;
+    TString MultiproxyTargetCluster;
 };
 
 bool operator==(const TClientContext& lhs, const TClientContext& rhs);

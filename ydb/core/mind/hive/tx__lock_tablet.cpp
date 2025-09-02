@@ -16,6 +16,7 @@ private:
 
     TSideEffects SideEffects;
     TActorId PreviousOwner;
+    bool Success = true;
 
 public:
     TTxLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie, THive* hive)
@@ -43,6 +44,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to an invalid owner actor"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -53,6 +55,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << ", which doesn't exist"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -62,6 +65,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to " << OwnerActor << ", which is on a different node"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -71,6 +75,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to restore lock to tablet " << TabletId << ", which has expired"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -86,7 +91,7 @@ public:
         ui32 flags = 0;
         if (PreviousOwner && PreviousOwner != OwnerActor) {
             // Notify previous owner that its lock ownership has been lost
-            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId, NKikimrHive::LOCK_LOST_REASON_NEW_LOCK));
         }
 
         if (tablet->IsLockedToActor()) {
@@ -95,6 +100,10 @@ public:
                 follower.InitiateStop(SideEffects);
             }
             tablet->InitiateStop(SideEffects);
+            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                tablet->BecomeUnknown(tablet->Hive.FindNode(tablet->LockedToActor.NodeId()));
+            }
         }
         if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
             // Lock is still valid, watch for node disconnections
@@ -106,7 +115,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        if (Success) {
+            BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        } else {
+            BLOG_NOTICE("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        }
         SideEffects.Complete(ctx);
     }
 

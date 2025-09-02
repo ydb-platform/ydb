@@ -47,17 +47,17 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         const auto* snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
-        TString secretValue;
-        if (!snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId), secretValue)) {
-            return Reply(false, TStringBuilder() << "Secret '" << SecretName << "' not found");
+        auto secretValue = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId));
+        if (secretValue.IsFail()) {
+            return Reply(false, secretValue.GetErrorMessage());
         }
 
-        Reply(secretValue);
+        Reply(secretValue.DetachResult());
     }
 
     template <typename... Args>
     void Reply(Args&&... args) {
-        Send(Parent, new TEvPrivate::TEvResolveSecretResult(ReplicationId, std::forward<Args>(args)...));
+        Send(Parent, new TEvPrivate::TEvResolveSecretResult(ReplicationId, std::forward<Args>(args)...), 0, Cookie);
         PassAway();
     }
 
@@ -66,11 +66,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER;
     }
 
-    explicit TSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName)
+    explicit TSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName, const ui64 cookie)
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
         , SecretName(secretName)
+        , Cookie(cookie)
         , LogPrefix("SecretResolver", ReplicationId)
     {
     }
@@ -106,6 +107,7 @@ private:
     const ui64 ReplicationId;
     const TPathId PathId;
     const TString SecretName;
+    const ui64 Cookie;
     const TActorLogPrefix LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
@@ -113,8 +115,8 @@ private:
 
 }; // TSecretResolver
 
-IActor* CreateSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName) {
-    return new TSecretResolver(parent, rid, pathId, secretName);
+IActor* CreateSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName, const ui64 cookie) {
+    return new TSecretResolver(parent, rid, pathId, secretName, cookie);
 }
 
 }

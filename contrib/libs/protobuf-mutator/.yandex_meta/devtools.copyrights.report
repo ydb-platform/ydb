@@ -1,0 +1,66 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05bdd09fb9fdb384a61f2eb54df462d6
+BELONGS ya.make
+    License text:
+        // Copyright 2016 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/field_instance.h [1:1]
+        src/mutator.cc [1:1]
+        src/mutator.h [1:1]
+        src/weighted_reservoir_sampler.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6499e2ad737f62db5558c81fbd2749a7
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        port/protobuf.h [1:1]
+        src/binary_format.cc [1:1]
+        src/binary_format.h [1:1]
+        src/libfuzzer/libfuzzer_macro.cc [1:1]
+        src/libfuzzer/libfuzzer_macro.h [1:1]
+        src/libfuzzer/libfuzzer_mutator.cc [1:1]
+        src/libfuzzer/libfuzzer_mutator.h [1:1]
+        src/random.h [1:1]
+        src/text_format.cc [1:1]
+        src/text_format.h [1:1]
+        src/utf8_fix.cc [1:1]
+        src/utf8_fix.h [1:1]

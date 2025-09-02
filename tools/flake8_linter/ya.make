@@ -6,10 +6,10 @@ IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/tools/flake8_linter/bin/ya.make)
 ENDIF()
 
+RECURSE(
+    bin
+)
 IF (NOT OPENSOURCE)
-    RECURSE(
-        bin
-    )
 
     RECURSE_FOR_TESTS(
         bin/tests

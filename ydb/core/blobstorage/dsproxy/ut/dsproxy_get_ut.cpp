@@ -36,7 +36,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
     const ui32 groupId = 0;
     const ui32 domainCount = groupType.BlobSubgroupSize();
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
 
     const ui64 maxQueryCount = 32;
@@ -71,7 +71,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
             TEvBlobStorage::TEvGet ev(queriesA, queryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, false, false);
             ev.IsVerboseNoDataEnabled = isVerboseNoDataEnabled;
-            TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+            TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
             TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
             logCtx.LogAcc.IsLogEnabled = false;
@@ -245,7 +245,7 @@ public:
     void Init() {
         SendVPuts.clear();
         Group.Clear();
-        Group.ConstructInPlace(GroupId, ErasureSpecies, DomainCount, 1);
+        Group.ConstructInPlace(GroupId, ErasureSpecies, DomainCount, 1, 1);
         GroupQueues = Group->MakeGroupQueues();
         BlobSet.Clear();
         BlobSet.ConstructInPlace();
@@ -324,7 +324,7 @@ private:
         TEvBlobStorage::TEvGet ev(queriesA, queryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, IsRestore, false);
         ev.IsVerboseNoDataEnabled = IsVerboseNoDataEnabled;
-        TGetImpl getImpl(Group->GetInfo(), GroupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group->GetInfo(), GroupQueues, &ev, nullptr, TAccelerationParams{});
         ClearCounters();
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
@@ -423,7 +423,7 @@ public:
 
     TGetSimulator(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains,
             ui32 drivesPerFailDomain)
-        : Group(groupId, erasureSpecies, failDomains, drivesPerFailDomain)
+        : Group(groupId, erasureSpecies, failDomains, 1, drivesPerFailDomain)
         , GroupQueues(Group.MakeGroupQueues())
     {}
 
@@ -452,7 +452,7 @@ public:
     TAutoPtr<TEvBlobStorage::TEvGetResult> Simulate(TEvBlobStorage::TEvGet *ev) {
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-        TGetImpl getImpl(Group.GetInfo(), GroupQueues, ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), GroupQueues, ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -532,7 +532,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
 
     const ui32 isRestore = 0;
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
     TBlobTestSet blobSet;
     blobSet.AddBlobs(blobs);
@@ -563,7 +563,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
 
     TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
     TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -672,7 +672,7 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
 
     const ui32 isRestore = 0;
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
     TBlobTestSet blobSet;
     blobSet.AddBlobs(blobs);
@@ -703,7 +703,7 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
 
     TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+    TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
     TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
     TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -939,7 +939,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
                     for (ui64 it = 0; it < 100; ++it, ++seed) {
                         SetRandomSeed(seed);
-                        TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+                        TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
                         TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
                         TBlobTestSet blobSet;
                         blobSet.AddBlobs(blobs);
@@ -974,7 +974,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
                         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
 
-                        TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr);
+                        TGetImpl getImpl(group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
                         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
                         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
                         TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
@@ -1192,7 +1192,7 @@ class TTestPossibleBlobLost {
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         getImpl.GenerateInitialRequests(logCtx, vGets);
         return vGets.size();
@@ -1207,7 +1207,7 @@ public:
         , DomainCount(GroupType.BlobSubgroupSize())
         , MaxQueryCount(maxQueryCount)
         , BlobSize(blobSize)
-        , Group(0, ErasureSpecies, DomainCount, 1)
+        , Group(0, ErasureSpecies, DomainCount, 1, 1)
         , ErroneousVDisks(Group.GetInfo()->Type.BlobSubgroupSize(), NKikimrProto::OK)
     {
         BlobSet.GenerateSet(0, MaxQueryCount, BlobSize);
@@ -1257,7 +1257,7 @@ public:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         getImpl.GenerateInitialRequests(logCtx, vGets);
@@ -1404,7 +1404,7 @@ protected:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         getImpl.GenerateInitialRequests(logCtx, vGets);
         return vGets.size();
@@ -1415,7 +1415,7 @@ public:
     TTestNoDataRegression(EMode mode)
         : GroupType(ErasureSpecies)
         , DomainCount(GroupType.BlobSubgroupSize())
-        , Group(0, ErasureSpecies, DomainCount, 1)
+        , Group(0, ErasureSpecies, DomainCount, 1, 1)
         , Mode(mode)
     {
         BlobSet.GenerateSet(0, MaxQueryCount, BlobSize);
@@ -1469,7 +1469,7 @@ public:
         TEvBlobStorage::TEvGet ev(queriesA, MaxQueryCount, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::Discover, true, false);
         ev.IsVerboseNoDataEnabled = false;
-        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr);
+        TGetImpl getImpl(Group.GetInfo(), groupQueues, &ev, nullptr, TAccelerationParams{});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         getImpl.GenerateInitialRequests(logCtx, vGets);

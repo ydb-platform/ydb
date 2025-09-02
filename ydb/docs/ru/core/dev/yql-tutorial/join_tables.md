@@ -1,10 +1,10 @@
 # Объединение таблиц с помощью JOIN
 
-Объедините колонки исходных таблиц `seasons` и `series` и выведите все сезоны сериала IT Crowd в результирующей таблице с помощью оператора [JOIN](../../yql/reference/syntax/join.md).
+Объедините колонки исходных таблиц `seasons` и `series` и выведите все сезоны сериала IT Crowd в результирующей таблице с помощью оператора [JOIN](../../yql/reference/syntax/select/join.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     sa.title AS season_title,    -- sa и sr — это «связующие названия»,
     sr.title AS series_title,    -- алиасы таблиц, объявленные ниже с помощью AS.
@@ -20,8 +20,6 @@ WHERE sa.series_id = 1
 ORDER BY                         -- Cортировка результатов.
     sr.series_id,
     sa.season_id                 -- ORDER BY сортирует значения по одному
-;                                -- или нескольким столбцам. 
+;                                -- или нескольким столбцам.
                                  -- Столбцы перечисляются через запятую.
-
-COMMIT;
 ```

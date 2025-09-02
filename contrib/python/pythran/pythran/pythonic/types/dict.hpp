@@ -21,28 +21,21 @@ PYTHONIC_NS_BEGIN
 namespace types
 {
   /// item implementation
-
   template <class I>
-  item_iterator_adaptator<I>::item_iterator_adaptator(I const &i) : I(i)
+  item_iterator_adaptator<I>::item_iterator_adaptator(I const &i) : base(i)
   {
   }
-
   template <class I>
   typename item_iterator_adaptator<I>::value_type
   item_iterator_adaptator<I>::operator*() const
   {
-    auto &&tmp = I::operator*();
+    auto &&tmp = *base;;
     return pythonic::types::make_tuple(tmp.first, tmp.second);
   }
 
   /// key_iterator_adaptator implementation
   template <class I>
-  key_iterator_adaptator<I>::key_iterator_adaptator() : I()
-  {
-  }
-
-  template <class I>
-  key_iterator_adaptator<I>::key_iterator_adaptator(I const &i) : I(i)
+  key_iterator_adaptator<I>::key_iterator_adaptator(I const &i) : base(i)
   {
   }
 
@@ -50,17 +43,12 @@ namespace types
   typename key_iterator_adaptator<I>::value_type
   key_iterator_adaptator<I>::operator*() const
   {
-    return (*this)->first;
+    return base->first;
   }
 
   /// value_iterator_adaptator implementation
   template <class I>
-  value_iterator_adaptator<I>::value_iterator_adaptator() : I()
-  {
-  }
-
-  template <class I>
-  value_iterator_adaptator<I>::value_iterator_adaptator(I const &i) : I(i)
+  value_iterator_adaptator<I>::value_iterator_adaptator(I const &i) : base(i)
   {
   }
 
@@ -68,7 +56,7 @@ namespace types
   typename value_iterator_adaptator<I>::value_type
   value_iterator_adaptator<I>::operator*() const
   {
-    return (*this)->second;
+    return base->second;
   }
 
   template <class D>
@@ -302,7 +290,7 @@ namespace types
 
   // dict interface
   template <class K, class V>
-  dict<K, V>::operator bool()
+  dict<K, V>::operator bool() const
   {
     return !data->empty();
   }

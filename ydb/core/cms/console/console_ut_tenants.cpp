@@ -2093,6 +2093,166 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                 )
         );
     }
+
+    Y_UNIT_TEST(TestScaleRecommenderPolicies) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        // Create tenant with scale recommender policies
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                            target_tracking_policy {
+                                average_cpu_utilization_percent: 60
+                            }
+                        }
+                    )"
+                )
+        );
+        RestartTenantPool(runtime);
+
+        // Check that tenant was successfully created
+        CheckTenantStatus(runtime, TENANT1_1_NAME, false, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {});
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, R"(
+                policies {
+                    target_tracking_policy {
+                        average_cpu_utilization_percent: 60
+                    }
+                }
+            )"
+        );
+
+        // Check persistence after creation
+        RestartConsole(runtime);
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, R"(
+                policies {
+                    target_tracking_policy {
+                        average_cpu_utilization_percent: 60
+                    }
+                }
+            )"
+        );
+
+        // Alter tenant scale recommender policies
+        AlterScaleRecommenderPolicies(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, R"(
+                policies {
+                    target_tracking_policy {
+                        average_cpu_utilization_percent: 70
+                    }
+                }
+            )"
+        );
+
+        // Check that tenant was successfully altered
+        CheckTenantStatus(runtime, TENANT1_1_NAME, false, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {});
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, R"(
+                policies {
+                    target_tracking_policy {
+                        average_cpu_utilization_percent: 70
+                    }
+                }
+            )"
+        );
+
+        // Check persistence after altering
+        RestartConsole(runtime);
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, R"(
+                policies {
+                    target_tracking_policy {
+                        average_cpu_utilization_percent: 70
+                    }
+                }
+            )"
+        );
+
+        // Reset tenant scale recommender policies
+        AlterScaleRecommenderPolicies(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "");
+
+        // Check that tenant's scale recommender policies was successfully reset
+        CheckTenantStatus(runtime, TENANT1_1_NAME, false, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {});
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, "");
+
+        // Check persistence after resetting
+        RestartConsole(runtime);
+        CheckTenantScaleRecommenderPolicies(runtime, TENANT1_1_NAME, "");
+    }
+
+    Y_UNIT_TEST(TestScaleRecommenderPoliciesValidation) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                            target_tracking_policy {
+                                average_cpu_utilization_percent: 60
+                            }
+                        }
+                        policies {
+                            target_tracking_policy {
+                                average_cpu_utilization_percent: 50
+                            }
+                        }
+                    )"
+                )
+        );
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                            target_tracking_policy {
+                                average_cpu_utilization_percent: 100
+                            }
+                        }
+                    )"
+                )
+        );
+        
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                            target_tracking_policy {
+                                average_cpu_utilization_percent: 0
+                            }
+                        }
+                    )"
+                )
+        );
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                            target_tracking_policy {
+                            }
+                        }
+                    )"
+                )
+        );
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithScaleRecommenderPolicies(R"(
+                        policies {
+                        }
+                    )"
+                )
+        );
+    }
 }
 
 } // namespace NKikimr

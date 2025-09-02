@@ -18,6 +18,8 @@ public:
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
+    IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
+
 private:
     bool NameAssignmentInProcess = false;
     TActorId StreamCreator;

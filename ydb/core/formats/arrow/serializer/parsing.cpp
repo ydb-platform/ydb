@@ -7,6 +7,18 @@ std::string CompressionToString(const arrow::Compression::type compression) {
     return arrow::util::Codec::GetCodecAsString(compression);
 }
 
+std::string CompressionToString(const NKikimrSchemeOp::EColumnCodec compression) {
+    switch (compression) {
+        case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+            return "off";
+        case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+            return "zstd";
+        case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+            return "lz4";
+    }
+    return "";
+}
+
 std::optional<arrow::Compression::type> CompressionFromString(const std::string& compressionStr) {
     auto result = arrow::util::Codec::GetCompressionType(compressionStr);
     if (!result.ok()) {

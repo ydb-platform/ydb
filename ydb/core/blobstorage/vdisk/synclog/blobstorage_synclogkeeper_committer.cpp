@@ -3,7 +3,6 @@
 #include "blobstorage_synclog_public_events.h"
 
 #include <ydb/core/base/blobstorage_grouptype.h>
-#include <ydb/core/base/compile_time_flags.h>
 
 using namespace NKikimrServices;
 
@@ -35,8 +34,7 @@ namespace NKikimr {
 
             void GenerateCommit(const TActorContext &ctx) {
                 // serialize
-                const bool oldFormat = !KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT;
-                EntryPointSerializer.Serialize(Delta, oldFormat);
+                EntryPointSerializer.Serialize(Delta);
 
                 // lsn
                 TLsnSeg seg = SlCtx->LsnMngr->AllocLsnForLocalUse();
@@ -148,7 +146,7 @@ namespace NKikimr {
 
             void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
-                Y_ABORT_UNLESS(ev->Get()->Results.size() == 1);
+                Y_VERIFY_S(ev->Get()->Results.size() == 1, SlCtx->VCtx->VDiskLogPrefix);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
                 TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
                 ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,

@@ -680,7 +680,7 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId()));
             }
         }
     }
@@ -740,7 +740,7 @@ void TReplicaCombinationTest::MigratedPathRecreation() {
     UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
     UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 }
 
 void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
@@ -786,7 +786,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                  << " PathID: " <<  TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
                  << " deleted: " <<  ev->Get()->GetRecord().GetIsDeletion()
                  << " version: " << ev->Get()->GetRecord().GetVersion()
-                 << " domainId: " << PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
+                 << " domainId: " << TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId())
                  << Endl;
 
             if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
@@ -810,7 +810,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsRight.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsRight.GetSuperId()), TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 
                 continue;
             }
@@ -829,7 +829,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsLeft.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsLeft.GetSuperId()), TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId()));
 
                 continue;
             }
@@ -879,7 +879,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), TPathId::FromProto(ev->Get()->GetRecord().GetPathSubdomainPathId()));
             }
         }
     }

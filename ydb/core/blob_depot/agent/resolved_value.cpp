@@ -3,16 +3,36 @@
 namespace NKikimr::NBlobDepot {
 
     TResolvedValue::TLink::TLink(const NKikimrBlobDepot::TResolvedValueChain& link)
-        : BlobId(LogoBlobIDFromLogoBlobID(link.GetBlobId()))
-        , GroupId(link.GetGroupId())
-        , SubrangeBegin(link.GetSubrangeBegin())
-        , SubrangeEnd(link.HasSubrangeEnd() ? link.GetSubrangeEnd() : BlobId.BlobSize())
+        : SubrangeBegin(link.GetSubrangeBegin())
+        , SubrangeEnd(link.GetSubrangeEnd())
     {
-        Y_DEBUG_ABORT_UNLESS(link.HasBlobId() && link.HasGroupId());
+        std::optional<ui32> length;
+        if (link.HasBlobId() && link.HasGroupId()) {
+            const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(link.GetBlobId());
+            Blob.emplace(blobId, link.GetGroupId());
+            Y_VERIFY_S(!length || *length == blobId.BlobSize(), SingleLineProto(link));
+            length.emplace(blobId.BlobSize());
+        }
+        if (link.HasS3Locator()) {
+            S3Locator.emplace(TS3Locator::FromProto(link.GetS3Locator()));
+            Y_VERIFY_S(!length || *length == S3Locator->Len, SingleLineProto(link));
+            length.emplace(S3Locator->Len);
+        }
+        if (!link.HasSubrangeEnd()) {
+            Y_VERIFY_S(length, SingleLineProto(link));
+            SubrangeEnd = *length;
+        }
     }
 
     void TResolvedValue::TLink::Output(IOutputStream& s) const {
-        s << BlobId << '@' << GroupId << '{' << SubrangeBegin << '-' << SubrangeEnd - 1 << '}';
+        if (Blob) {
+            const auto& [blobId, groupId] = *Blob;
+            s << blobId << '@' << groupId;
+        }
+        if (S3Locator) {
+            s << S3Locator->ToString();
+        }
+        s << '{' << SubrangeBegin << '-' << SubrangeEnd - 1 << '}';
     }
 
     TString TResolvedValue::TLink::ToString() const {

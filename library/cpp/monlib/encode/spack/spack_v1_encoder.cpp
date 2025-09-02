@@ -68,6 +68,10 @@ namespace NMonitoring {
                 TBufferedEncoderBase::OnLogHistogram(time, snapshot);
             }
 
+            void OnMemOnly(bool isMemOnly) override {
+                TBufferedEncoderBase::OnMemOnly(isMemOnly);
+            }
+
             void Close() override {
                 if (Closed_) {
                     return;
@@ -128,8 +132,8 @@ namespace NMonitoring {
                     ui8 typesByte = PackTypes(metric);
                     Out_->Write(&typesByte, sizeof(typesByte));
 
-                    // TODO: implement
-                    ui8 flagsByte = 0x00;
+                    // (5.2) flags byte
+                    ui8 flagsByte = metric.IsMemOnly & 0x01;
                     Out_->Write(&flagsByte, sizeof(flagsByte));
 
                     // v1.2 format addition — metric name
@@ -143,10 +147,10 @@ namespace NMonitoring {
                         WriteVarUInt32(Out_, it->Value->Index);
                     }
 
-                    // (5.2) labels
+                    // (5.3) labels
                     WriteLabels(metric.Labels, MetricName_);
 
-                    // (5.3) values
+                    // (5.4) values
                     switch (metric.TimeSeries.Size()) {
                         case 0:
                             break;
@@ -312,7 +316,7 @@ namespace NMonitoring {
         EMetricsMergingMode mergingMode,
         TStringBuf metricNameLabel
     ) {
-        Y_ENSURE(!metricNameLabel.Empty(), "metricNameLabel can't be empty");
+        Y_ENSURE(!metricNameLabel.empty(), "metricNameLabel can't be empty");
         return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_02, metricNameLabel);
     }
 }

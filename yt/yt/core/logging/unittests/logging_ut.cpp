@@ -3,6 +3,8 @@
 #include "yt/yt/core/misc/string_builder.h"
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/async_semaphore.h>
+
 #include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/log_manager.h>
 #include <yt/yt/core/logging/log_writer.h>
@@ -10,11 +12,13 @@
 #include <yt/yt/core/logging/file_log_writer.h>
 #include <yt/yt/core/logging/fluent_log.h>
 #include <yt/yt/core/logging/stream_log_writer.h>
+#include <yt/yt/core/logging/structured_log.h>
 #include <yt/yt/core/logging/random_access_gzip.h>
 #include <yt/yt/core/logging/compression.h>
 #include <yt/yt/core/logging/zstd_compression.h>
 #include <yt/yt/core/logging/config.h>
 #include <yt/yt/core/logging/formatter.h>
+#include <yt/yt/core/logging/system_log_event_provider.h>
 
 #include <yt/yt/core/json/json_parser.h>
 
@@ -25,6 +29,10 @@
 
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/range_formatters.h>
+
+#include <yt/yt/library/coredumper/coredumper.h>
+
+#include <yt/yt/library/safe_assert/safe_assert.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -49,6 +57,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NYson;
 using namespace NJson;
+using namespace NCoreDump;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -191,6 +200,7 @@ protected:
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TPlainTextLogFormatter>(),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -222,14 +232,14 @@ TEST_F(TLoggingTest, ReloadOnSighup)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -270,14 +280,14 @@ TEST_F(TLoggingTest, ReloadOnRename)
         watch_period = 1000;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -316,6 +326,7 @@ TEST_F(TLoggingTest, FileWriter)
 
     auto writer = CreateFileLogWriter(
         std::make_unique<TPlainTextLogFormatter>(),
+        CreateDefaultSystemLogEventProvider(writerConfig),
         "test_writer",
         writerConfig,
         this);
@@ -369,9 +380,13 @@ TEST_F(TLoggingTest, ZstdCompression)
 TEST_F(TLoggingTest, StreamWriter)
 {
     TStringStream stringOutput;
+    auto config = New<TLogWriterConfig>();
+    auto eventProvider = CreateDefaultSystemLogEventProvider(config);
     auto writer = CreateStreamLogWriter(
         std::make_unique<TPlainTextLogFormatter>(),
+        std::move(eventProvider),
         "test_writer",
+        std::move(config),
         &stringOutput);
 
     WritePlainTextEvent(writer);
@@ -435,22 +450,22 @@ TEST_F(TLoggingTest, LogManager)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
             {
-                "min_level" = "error";
-                "writers" = [ "error" ];
+                min_level = "error";
+                writers = [ "error" ];
             };
         ];
-        "writers" = {
-            "error" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            error = {
+                file_name = "%v";
+                type = "file";
             };
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", errorFile.Name(), infoFile.Name()));
@@ -479,14 +494,14 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "debug";
-                "writers" = [ "debug" ];
+                min_level = debug;
+                writers = [ debug ];
             };
         ];
-        "writers" = {
-            "debug" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            debug = {
+                file_name = "%v";
+                type = file;
             };
         };
     })", debugFile.Name()));
@@ -526,7 +541,8 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             writerConfig->FileName = logFile.Name();
 
             auto writer = CreateFileLogWriter(
-                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, /*enableControllMessages*/ true, enableSourceLocation),
+                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, enableSourceLocation),
+                CreateDefaultSystemLogEventProvider(writerConfig),
                 "test_writer",
                 writerConfig,
                 this);
@@ -576,6 +592,7 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -596,6 +613,80 @@ TEST_F(TLoggingTest, StructuredLogging)
     }
 }
 
+TEST_F(TLoggingTest, SlogMacroLogging)
+{
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    min_level = info;
+                    writers = [ test ];
+                };
+            ];
+            writers = {
+                test = {
+                    format = "%v";
+                    file_name = "%v";
+                    type = "file";
+                };
+            };
+        })", format, logFile.Name()));
+
+        YT_SLOG_EVENT(Logger(), ELogLevel::Info, "test_message", ("tag1", "value1"), ("tag2", 2));
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
+        EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "info");
+        EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+        EXPECT_EQ(message->GetChildOrThrow("tag1")->AsString()->GetValue(), "value1");
+        EXPECT_EQ(message->GetChildOrThrow("tag2")->AsInt64()->GetValue(), 2);
+    }
+}
+
+TEST_F(TLoggingTest, SlogMacroConstexprLogging)
+{
+    // This test is to demonstrate that the slog macros allow constexpr
+    // construction of log messages, just not completely dynamic construction.
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    min_level = info;
+                    writers = [ "test" ];
+                };
+            ];
+            writers = {
+                test = {
+                    format = "%v";
+                    file_name = "%v";
+                    type = "file";
+                };
+            };
+        })", format, logFile.Name()));
+
+        constexpr auto messageSelector = [](bool first) {
+            return first ? "this" : "that";
+        };
+
+        YT_SLOG_EVENT(Logger(), ELogLevel::Info, messageSelector(true));
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "this");
+    }
+}
+
 TEST_F(TLoggingTest, UnstructuredLogging)
 {
     TLogEvent event;
@@ -613,6 +704,7 @@ TEST_F(TLoggingTest, UnstructuredLogging)
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -659,13 +751,14 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
     auto formatter = std::make_unique<TStructuredLogFormatter>(
         ELogFormat::Json,
         /*commonFields*/ THashMap<TString, INodePtr>{},
-        /*enableControlMessages*/ true,
         /*enableSourceLocation*/ false,
         /*enableSystemFields*/ true,
+        /*enableHostField*/ false,
         jsonFormat);
 
     auto writer = CreateFileLogWriter(
         std::move(formatter),
+        CreateDefaultSystemLogEventProvider(writerConfig),
         "test_writer",
         writerConfig,
         this);
@@ -684,25 +777,67 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
     EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
 }
 
+TEST_F(TLoggingTest, StructuredLoggingWithLoggerTags)
+{
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    family = structured;
+                    min_level = info;
+                    writers = [ test ];
+                };
+            ];
+            writers = {
+                test = {
+                    format = "%v";
+                    file_name = "%v";
+                    type = file;
+                };
+            };
+            structured_validation_sampling_rate = 1.0;
+        })", format, logFile.Name()));
+
+        auto logger = Logger()
+            .WithStructuredTag("key1", "value1")
+            .WithStructuredTag("key2", "value2");
+        LogStructuredEventFluently(logger, ELogLevel::Info)
+            .Item("key3").Value("value3");
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("key1")->AsString()->GetValue(), "value1");
+        EXPECT_EQ(message->GetChildOrThrow("key2")->AsString()->GetValue(), "value2");
+        EXPECT_EQ(message->GetChildOrThrow("key3")->AsString()->GetValue(), "value3");
+        EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), FormatEnum(ELogLevel::Info));
+        EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+    }
+}
+
 TEST_F(TLoggingTest, StructuredLoggingWithValidator)
 {
     TTempFile logFile(GenerateLogFileName());
     Configure(Format(R"({
         rules = [
             {
-                "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                family = structured;
+                min_level = info;
+                writers = [ test ];
             };
         ];
-        "writers" = {
-            "test" = {
-                "format" = "structured";
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            test = {
+                format = structured;
+                file_name = "%v";
+                type = file;
             };
         };
-        "structured_validation_sampling_rate" = 1.0;
+        structured_validation_sampling_rate = 1.0;
     })", logFile.Name()));
 
     auto logger = Logger().WithStructuredValidator([] (const TYsonString& yson) {
@@ -740,19 +875,19 @@ TEST_F(TLoggingTest, StructuredValidationWithSamplingRate)
     Configure(Format(R"({
         rules = [
             {
-                "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                family = structured;
+                min_level = info;
+                writers = [ test ];
             };
         ];
-        "writers" = {
-            "test" = {
-                "file_name" = "%v";
-                "format" = "structured";
-                "type" = "file";
+        writers = {
+            test = {
+                file_name = "%v";
+                format = structured;
+                type = file;
             }
         };
-        "structured_validation_sampling_rate" = 0.5;
+        structured_validation_sampling_rate = 0.5;
     })", logFile.Name()));
     EXPECT_NEAR(TLogManager::Get()->GetCategory("Test")->StructuredValidationSamplingRate, 0.5, 0.001);
 
@@ -798,20 +933,18 @@ TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBuiltinRotationTest
-    : public ::testing::TestWithParam<bool>
+    : public ::testing::TestWithParam<std::pair<bool, bool>>
     , public TLoggingTestBase
 {
 protected:
-    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false)
+    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false, bool keepFirst = false)
     {
-        auto files = NFS::EnumerateFiles("./");
+        auto files = NFS::EnumerateFiles("./", /*depth*/ 1, /*sortByName*/ true);
         std::erase_if(files, [&] (const TString& fileName) {
             return !fileName.StartsWith(fileNamePrefix);
         });
-        if (reverse) {
-            std::sort(files.begin(), files.end(), std::greater<TString>());
-        } else {
-            std::sort(files.begin(), files.end());
+        if (reverse || keepFirst) {
+            std::reverse(files.begin() + (keepFirst ? 1 : 0), files.end());
         }
         return files;
     }
@@ -820,33 +953,38 @@ protected:
 
 TEST_P(TBuiltinRotationTest, All)
 {
-    bool useTimestampSuffix = GetParam();
+    auto [useTimestampSuffix, useLogrotateCompatibleTimestampSuffix] = GetParam();
     auto logFileNamePrefix = GenerateLogFileName();
 
     // To ensure that renumeration of rotated files works.
-    const int RotationDepth = useTimestampSuffix ? 2 : 12;
+    const int RotationDepth = useTimestampSuffix || useLogrotateCompatibleTimestampSuffix ? 2 : 12;
 
     Configure(Format(R"({
         rotation_check_period = 1000;
         flush_period = 100;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "use_timestamp_suffix" = %v;
-                "type" = "file";
-                "rotation_policy" = {
-                    "max_segment_count_to_keep" = %v;
-                    "max_segment_size" = 10;
+        writers = {
+            info = {
+                file_name = "%v";
+                use_timestamp_suffix = %v;
+                use_logrotate_compatible_timestamp_suffix = %v;
+                type = "file";
+                rotation_policy = {
+                    max_segment_count_to_keep = %v;
+                    max_segment_size = 10;
                 };
             };
         };
-    })", logFileNamePrefix, ConvertToYsonString(useTimestampSuffix).AsStringBuf(), RotationDepth));
+    })",
+        logFileNamePrefix,
+        ConvertToYsonString(useTimestampSuffix).AsStringBuf(),
+        ConvertToYsonString(useLogrotateCompatibleTimestampSuffix).AsStringBuf(),
+        RotationDepth));
 
     std::vector<TString> messages;
     for (int index = 0; index < RotationDepth + 3; ++index) {
@@ -856,7 +994,7 @@ TEST_P(TBuiltinRotationTest, All)
         // Wait until the message hits the file.
         WaitForPredicate([&] {
             YT_LOG_INFO(message);
-            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             if (files.empty()) {
                 return false;
             }
@@ -865,15 +1003,22 @@ TEST_P(TBuiltinRotationTest, All)
 
         // Wait until the file is rotated.
         WaitForPredicate([&] {
-            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             EXPECT_FALSE(files.empty());
+            if (files.empty()) {
+                return true;
+            }
             auto lines = ReadPlainTextEvents(files[0]);
             return lines.empty();
         });
     }
 
-    auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix);
-    EXPECT_EQ(RotationDepth + 1, ssize(files));
+    auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
+    ASSERT_EQ(RotationDepth + 1, ssize(files));
+    if (useLogrotateCompatibleTimestampSuffix) {
+        EXPECT_EQ(files[0], logFileNamePrefix);
+        EXPECT_THAT(files[1], ::testing::ContainsRegex(R"(\.\d{8}-\d{6}$)"));
+    }
     // Current file is empty, previous file must contain the last logged message.
     for (int index = 1; index < ssize(files); ++index) {
         EXPECT_TRUE(CheckPlainTextLogFileContains(files[index], messages[messages.size() - index]));
@@ -882,8 +1027,9 @@ TEST_P(TBuiltinRotationTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TBuiltinRotationTest,
 ::testing::Values(
-    true,
-    false));
+    std::pair(true, false),
+    std::pair(false, true),
+    std::pair(false, false)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1051,14 +1197,14 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
             };
         };
     })", logFile.Name()));
@@ -1071,26 +1217,87 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
     YT_LOG_FATAL("FATAL");
 }
 
-// Windows does not support request tracing for now.
-#ifndef _win_
-TEST_F(TLoggingTest, RequestSuppression)
+TEST_F(TLoggingTest, LogFatalIsSafe)
 {
     TTempFile logFile(GenerateLogFileName());
 
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
             };
         };
-        "request_suppression_timeout" = 100;
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Info message");
+
+    struct TCoreDumper
+        : public ICoreDumper
+    {
+        bool SafeCoreDumped = false;
+
+        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        {
+            SafeCoreDumped = true;
+            return TCoreDump{
+                .Path = "",
+                .WrittenEvent = VoidFuture,
+            };
+        }
+        const NYTree::IYPathServicePtr& CreateOrchidService() const override
+        {
+            YT_UNIMPLEMENTED();
+        }
+    };
+
+    auto coreDumper = New<TCoreDumper>();
+    auto guard = CreateSafeAssertionGuard(
+        coreDumper,
+        New<TAsyncSemaphore>(100),
+        /*coreNotes*/ {}
+    );
+
+    std::optional<TString> exceptionExpression;
+
+    try {
+        YT_LOG_FATAL("Fatal message");
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
+    EXPECT_TRUE(coreDumper->SafeCoreDumped);
+}
+
+// Windows does not support request tracing for now.
+#ifndef _win_
+TEST_F(TLoggingTest, SupressedRequests)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+        request_suppression_timeout = 100;
     })", logFile.Name()));
 
     {
@@ -1114,10 +1321,77 @@ TEST_F(TLoggingTest, RequestSuppression)
 }
 #endif
 
+TEST_F(TLoggingTest, SuppressedMessages)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+        suppressed_messages = ["Suppressed message"];
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Suppressed message 1");
+    YT_LOG_INFO("Suppressed message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    EXPECT_EQ(1, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Good message") != TString::npos);
+}
+
+TEST_F(TLoggingTest, MessageLevelOverride)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = file;
+            };
+        };
+        message_level_overrides = {
+            "Overridden message" = "info";
+        };
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Overridden message 1");
+    YT_LOG_TRACE("Overridden message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    for (auto l : lines) Cerr << l << Endl;
+    EXPECT_EQ(3, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Overridden message 1") != TString::npos);
+    EXPECT_TRUE(lines[1].find("Overridden message 2") != TString::npos);
+    EXPECT_TRUE(lines[2].find("Good message") != TString::npos);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoggingTagsTest
-    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, TString>>
+    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool, TString>>
 { };
 
 TEST_P(TLoggingTagsTest, All)
@@ -1125,7 +1399,8 @@ TEST_P(TLoggingTagsTest, All)
     auto hasMessageTag = std::get<0>(GetParam());
     auto hasLoggerTag = std::get<1>(GetParam());
     auto hasTraceContext = std::get<2>(GetParam());
-    auto expected = std::get<3>(GetParam());
+    auto hasThreadMessageTag = std::get<3>(GetParam());
+    auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
     if (hasTraceContext) {
@@ -1136,6 +1411,10 @@ TEST_P(TLoggingTagsTest, All)
     if (hasLoggerTag) {
         logger = logger.WithTag("LoggerTag");
     }
+
+    auto threadLocalTagGuard = hasThreadMessageTag
+        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag"))
+        : std::nullopt;
 
     if (hasMessageTag) {
         EXPECT_EQ(
@@ -1157,14 +1436,22 @@ TEST_P(TLoggingTagsTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TLoggingTagsTest,
     ::testing::Values(
-        std::tuple(false, false, false, "Log message"),
-        std::tuple(false, false,  true, "Log message (TraceContextTag)"),
-        std::tuple(false,  true, false, "Log message (LoggerTag)"),
-        std::tuple(false,  true,  true, "Log message (LoggerTag, TraceContextTag)"),
-        std::tuple( true, false, false, "Log message (Value: 123)"),
-        std::tuple( true, false,  true, "Log message (Value: 123, TraceContextTag)"),
-        std::tuple( true,  true, false, "Log message (Value: 123, LoggerTag)"),
-        std::tuple( true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag)")));
+        std::tuple(false, false, false, false, "Log message"),
+        std::tuple(false, false, false,  true, "Log message (ThreadLocalTag)"),
+        std::tuple(false, false,  true, false, "Log message (TraceContextTag)"),
+        std::tuple(false, false,  true,  true, "Log message (TraceContextTag, ThreadLocalTag)"),
+        std::tuple(false,  true, false, false, "Log message (LoggerTag)"),
+        std::tuple(false,  true, false,  true, "Log message (LoggerTag, ThreadLocalTag)"),
+        std::tuple(false,  true,  true, false, "Log message (LoggerTag, TraceContextTag)"),
+        std::tuple(false,  true,  true,  true, "Log message (LoggerTag, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true, false, false, false, "Log message (Value: 123)"),
+        std::tuple( true, false, false,  true, "Log message (Value: 123, ThreadLocalTag)"),
+        std::tuple( true, false,  true, false, "Log message (Value: 123, TraceContextTag)"),
+        std::tuple( true, false,  true,  true, "Log message (Value: 123, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true,  true, false, false, "Log message (Value: 123, LoggerTag)"),
+        std::tuple( true,  true, false,  true, "Log message (Value: 123, LoggerTag, ThreadLocalTag)"),
+        std::tuple( true,  true,  true, false, "Log message (Value: 123, LoggerTag, TraceContextTag)"),
+        std::tuple( true,  true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag, ThreadLocalTag)")));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1187,15 +1474,15 @@ protected:
         Configure(Format(R"({
             rules = [
                 {
-                    "min_level" = "info";
-                    "max_level" = "info";
-                    "writers" = [ "info" ];
+                    min_level = info;
+                    max_level = info;
+                    writers = [ info ];
                 };
             ];
-            "writers" = {
-                "info" = {
-                    "file_name" = "%v";
-                    "type" = "file";
+            writers = {
+                info = {
+                    file_name = "%v";
+                    type = file;
                 };
             };
         })", fileName));
@@ -1204,7 +1491,7 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1215,7 +1502,7 @@ protected:
         auto lines = ReadPlainTextEvents(fileName);
         EXPECT_EQ(N, std::ssize(lines));
         for (int i = 0; i < N; ++i) {
-            auto expected = Format("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            auto expected = Format("%v", TRange(Chunks_.data(), Chunks_.data() + i));
             auto actual = lines[i];
             EXPECT_NE(TString::npos, actual.find(expected));
         }
@@ -1252,12 +1539,11 @@ TEST_F(TLoggingTest, Anchors)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTestWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TTestWriterConfig)
 
-class TTestWriterConfig
+struct TTestWriterConfig
     : public TYsonStruct
 {
-public:
     int Padding;
 
     REGISTER_YSON_STRUCT(TTestWriterConfig);
@@ -1376,10 +1662,10 @@ TEST_F(TCustomWriterTest, UnknownWriterType)
     EXPECT_THROW_WITH_SUBSTRING(
         {
             Configure(R"({
-                "rules" = [];
-                "writers" = {
-                    "custom" = {
-                        "type" = "unknown";
+                rules = [];
+                writers = {
+                    custom = {
+                        type = unknown;
                     };
                 };
             })");
@@ -1392,11 +1678,11 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
     EXPECT_THROW_WITH_SUBSTRING(
         {
             Configure(Format(R"({
-                "rules" = [];
-                "writers" = {
-                    "custom" = {
-                        "type" = "%v";
-                        "padding" = -10;
+                rules = [];
+                writers = {
+                    custom = {
+                        type = "%v";
+                        padding = -10;
                     };
                 };
             })", CustomWriterType));
@@ -1409,14 +1695,14 @@ TEST_F(TCustomWriterTest, Write)
     Configure(Format(R"({
         "rules" = [
             {
-                "min_level" = "info";
-                "writers" = [ "custom" ];
+                min_level = info;
+                writers = [ custom ];
             }
         ];
-        "writers" = {
-            "custom" = {
-                "type" = "%v";
-                "padding" = 2;
+        writers = {
+            custom = {
+                type = "%v";
+                padding = 2;
             };
         };
     })", CustomWriterType));

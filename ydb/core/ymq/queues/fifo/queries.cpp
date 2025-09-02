@@ -2,6 +2,9 @@
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/queues/common/db_queries_defs.h>
 
+#include <ydb/core/ymq/actor/cfg/cfg.h>
+
+#include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
 
 namespace NKikimr::NSQS {
 namespace {
@@ -519,6 +522,8 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let name     (Parameter 'NAME (DataType 'Utf8)))
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
 
         (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
@@ -539,11 +544,129 @@ const char* const InternalGetQueueAttributesQuery = R"__(
 
         (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
 
+        (let tags
+            (If (Not (Exists attrsRead))
+                (Utf8 '"{}")
+                (block '(
+                    (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+
+                    (let queuesRow '(
+                        '('Account userName)
+                        '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
+
+                    (let queuesRowSelect '('QueueName 'Tags))
+                    (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
+
+                    (let str (Coalesce (Member queuesRowRead 'Tags) (Utf8 '"{}")))
+                    (return (If (Equal (Utf8 '"") str)
+                                (Utf8 '"{}")
+                                str))))))
+
         (return (AsList
             (SetResult 'queueExists (Exists attrsRead))
-            (SetResult 'attrs attrsRead)))
+            (SetResult 'attrs attrsRead)
+            (SetResult 'tags tags)))
     )
 )__";
+
+TString GenerateTagQueueQuery() {
+    bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
+    TString result = R"__(
+        (
+            (let name     (Parameter 'NAME (DataType 'Utf8)))
+            (let userName (Parameter 'USER_NAME (DataType 'Utf8)))
+            (let tags     (Parameter 'TAGS (DataType 'Utf8)))
+            (let oldTags  (Parameter 'OLD_TAGS (DataType 'Utf8)))
+
+            (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
+
+            (let queuesRow '(
+                '('Account userName)
+                '('QueueName (Utf8 '")__" QUEUE_NAME_PARAM R"__("))))
+
+            (let queuesSelect '(
+                'CustomQueueName
+                'Tags))
+
+            (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
+    )__";
+
+    if (isCloudEventsEnabled) {
+        result += R"__(
+                (let cloudEventsCreatedAt               (Parameter 'CLOUD_EVENT_NOW (DataType 'Uint64)))
+                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+                (let cloudEventsQueueName               (Coalesce (Member queuesRead 'CustomQueueName) (Utf8 '"{}")))
+                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8)))
+                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8)))
+                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8)))
+                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8)))
+                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8)))
+                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8)))
+                (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8)))
+        )__";
+
+        result += TStringBuilder() << "(let cloudEventsTable '/" << ROOT_PARAM << "/" << NCloudEvents::TProcessor::EventTableName << ")";
+
+        result += R"__(
+                (let cloudEventsRow '(
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
+
+                (let cloudEventsUpdate '(
+                    '('QueueName cloudEventsQueueName)
+                    '('Type cloudEventsType)
+                    '('CloudId cloudEventsCloudId)
+                    '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
+                    '('UserSID cloudEventsUserSID)
+                    '('MaskedToken cloudEventsMaskedToken)
+                    '('AuthType cloudEventsAuthType)
+                    '('PeerName cloudEventsPeerName)
+                    '('RequestId cloudEventsRequestId)
+                    '('Labels cloudEventsQueueTags)))
+        )__";
+    }
+
+    result += R"__(
+            (let curTags
+                (block '(
+                    (let str (Coalesce (Member queuesRead 'Tags) (Utf8 '"{}")))
+                    (return (If (Equal (Utf8 '"") str)
+                                (Utf8 '"{}")
+                                str)))))
+
+            (let queuesRowUpdate '(
+                '('Tags tags)))
+
+            (return
+                (If (Equal oldTags curTags)
+                    (AsList
+                        (UpdateRow queuesTable queuesRow queuesRowUpdate)
+    )__";
+
+    if (isCloudEventsEnabled) {
+        result += R"__(
+                            (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate)
+        )__";
+    }
+
+    result += R"__(
+                        (SetResult 'updated (Bool 'true))
+                    )
+
+                    (AsList
+                        (SetResult 'updated (Bool 'false))
+                    )
+                )
+            )
+        )
+    )__";
+
+    return result;
+}
 
 const char* const ListQueuesQuery = R"__(
     (
@@ -1533,44 +1656,48 @@ const char* const GetStateQuery = R"__(
 
 const char* GetFifoQueryById(size_t id) {
     switch (id) {
-    case DELETE_MESSAGE_ID:
-        return DeleteMessageQuery;
-    case LOCK_GROUP_ID:
-        return LockGroupsQuery;
-    case READ_MESSAGE_ID:
-        return ReadMessageQuery;
-    case WRITE_MESSAGE_ID:
-        return WriteMessageQuery;
-    case PURGE_QUEUE_ID:
-        return PurgeQueueQuery;
-    case CHANGE_VISIBILITY_ID:
-        return ChangeMessageVisibilityQuery;
-    case CLEANUP_DEDUPLICATION_ID:
-        return DeduplicationCleanupQuery;
-    case CLEANUP_READS_ID:
-        return ReadsCleanupQuery;
-    case LIST_QUEUES_ID:
-        return ListQueuesQuery;
-    case SET_QUEUE_ATTRIBUTES_ID:
-        return SetQueueAttributesQuery;
-    case SET_RETENTION_ID:
-        return SetRetentionQuery;
-    case INTERNAL_GET_QUEUE_ATTRIBUTES_ID:
-        return InternalGetQueueAttributesQuery;
-    case PURGE_QUEUE_STAGE2_ID:
-        return PurgeQueueStage2Query;
-    case GET_MESSAGE_COUNT_METRIC_ID:
-        return GetMessageCountMetricsQuery;
-    case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID:
-        return GetOldestMessageTimestampMetricsQuery;
-    case GET_RETENTION_OFFSET_ID:
-        return GetRetentionOffsetQuery;
-    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID:
-        return ListDeadLetterSourceQueuesQuery;
-    case READ_OR_REDRIVE_MESSAGE_ID:
-        return ReadOrRedriveMessageQuery;
-    case GET_STATE_ID:
-        return GetStateQuery;
+        case DELETE_MESSAGE_ID:
+            return DeleteMessageQuery;
+        case LOCK_GROUP_ID:
+            return LockGroupsQuery;
+        case READ_MESSAGE_ID:
+            return ReadMessageQuery;
+        case WRITE_MESSAGE_ID:
+            return WriteMessageQuery;
+        case PURGE_QUEUE_ID:
+            return PurgeQueueQuery;
+        case CHANGE_VISIBILITY_ID:
+            return ChangeMessageVisibilityQuery;
+        case CLEANUP_DEDUPLICATION_ID:
+            return DeduplicationCleanupQuery;
+        case CLEANUP_READS_ID:
+            return ReadsCleanupQuery;
+        case LIST_QUEUES_ID:
+            return ListQueuesQuery;
+        case SET_QUEUE_ATTRIBUTES_ID:
+            return SetQueueAttributesQuery;
+        case SET_RETENTION_ID:
+            return SetRetentionQuery;
+        case INTERNAL_GET_QUEUE_ATTRIBUTES_ID:
+            return InternalGetQueueAttributesQuery;
+        case PURGE_QUEUE_STAGE2_ID:
+            return PurgeQueueStage2Query;
+        case GET_MESSAGE_COUNT_METRIC_ID:
+            return GetMessageCountMetricsQuery;
+        case GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID:
+            return GetOldestMessageTimestampMetricsQuery;
+        case GET_RETENTION_OFFSET_ID:
+            return GetRetentionOffsetQuery;
+        case LIST_DEAD_LETTER_SOURCE_QUEUES_ID:
+            return ListDeadLetterSourceQueuesQuery;
+        case READ_OR_REDRIVE_MESSAGE_ID:
+            return ReadOrRedriveMessageQuery;
+        case GET_STATE_ID:
+            return GetStateQuery;
+        case TAG_QUEUE_ID: {
+            const static TString s = GenerateTagQueueQuery();
+            return s.c_str();
+        }
     }
 
     return nullptr;

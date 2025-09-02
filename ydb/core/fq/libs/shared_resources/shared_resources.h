@@ -1,13 +1,11 @@
 #pragma once
 #include <ydb/library/db_pool/db_pool.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-
-#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NFq {
 

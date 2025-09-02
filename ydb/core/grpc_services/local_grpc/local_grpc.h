@@ -23,7 +23,7 @@ public:
     }
 
     void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details = "") override {
-        NYql::TIssue issue{TStringBuilder() << "grpc code: " << code << ", msg: " << msg << " (" << details << ")"};
+        NYql::TIssue issue{TStringBuilder() << "grpc code: " << static_cast<i32>(code) << ", msg: " << msg << " (" << details << ")"};
         issue.SetCode(code, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
         RaiseIssue(issue);
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -54,6 +54,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
+    TString GetEndpointId() const override { return {}; }
+
     google::protobuf::Arena* GetArena() override {
         return &Arena_;
     }
@@ -73,7 +75,7 @@ public:
     }
     void FinishStreamingOk() override {}
     TAsyncFinishResult GetFinishFuture() override { return {}; }
-    TString GetPeer() const override { return "localhost"; }
+    TString GetPeer() const override { return {}; }
     bool SslServer() const override { return false; }
     bool IsClientLost() const override { return false; }
     bool IsStreamCall() const override { return false; }
@@ -127,11 +129,6 @@ public:
     }
 
     const NProtoBuf::Message* GetRequest() const override {
-        return &Request_;
-    }
-
-    //! Get mutable pointer to the request's message.
-    NProtoBuf::Message* GetRequestMut() override {
         return &Request_;
     }
 

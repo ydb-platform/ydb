@@ -1,0 +1,187 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 03af5a3e74f77a31b0cec0862d4d7dd1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        // Copyright (C) 2002 Gary Powell (gwpowell@hotmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/algorithm.hpp [2:3]
+        include/boost/lambda/numeric.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 208a2831e190f76f08f28a8052c15716
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2002 Joel de Guzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/closures.hpp [5:5]
+        include/boost/lambda/if.hpp [3:5]
+        include/boost/lambda/loops.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55ca623f968febd6fd79198819a49b60
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        // Copyright (C) 2002 Gary Powell (gwpowell@hotmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/algorithm.hpp [2:3]
+        include/boost/lambda/numeric.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d1d86a114f64cfc33bd34acca8b1a34
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2000 Gary Powell (powellg@amazon.com)
+        // Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/casts.hpp [3:4]
+        include/boost/lambda/construct.hpp [3:4]
+        include/boost/lambda/core.hpp [3:4]
+        include/boost/lambda/detail/control_constructs_common.hpp [3:4]
+        include/boost/lambda/if.hpp [3:5]
+        include/boost/lambda/loops.hpp [3:5]
+        include/boost/lambda/switch.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a16207ab3c7903af5e26c274ec5b9d4d
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2009 Steven Watanabe
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/detail/suppress_unused.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d9b8b05a31819f01ee9a3e7db2208124
+BELONGS ya.make
+    License text:
+        // Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        // Copyright (C) 2000 Gary Powell (gary.powell@sierra.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/detail/member_ptr.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd20af87a7fdf9f589db31af1358ab8c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2000 Gary Powell (gwpowell@hotmail.com)
+        // Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/exceptions.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6223a18ba26579ca79a1e3b6d297844
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2000 Gary Powell (powellg@amazon.com)
+        // Copyright (C) 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/casts.hpp [3:4]
+        include/boost/lambda/construct.hpp [3:4]
+        include/boost/lambda/control_structures.hpp [2:2]
+        include/boost/lambda/core.hpp [3:4]
+        include/boost/lambda/detail/actions.hpp [3:3]
+        include/boost/lambda/detail/arity_code.hpp [3:3]
+        include/boost/lambda/detail/bind_functions.hpp [3:3]
+        include/boost/lambda/detail/control_constructs_common.hpp [3:4]
+        include/boost/lambda/detail/function_adaptors.hpp [3:3]
+        include/boost/lambda/detail/lambda_config.hpp [3:3]
+        include/boost/lambda/detail/lambda_functor_base.hpp [3:3]
+        include/boost/lambda/detail/lambda_functors.hpp [3:3]
+        include/boost/lambda/detail/lambda_fwd.hpp [3:3]
+        include/boost/lambda/detail/lambda_traits.hpp [3:3]
+        include/boost/lambda/detail/member_ptr.hpp [3:4]
+        include/boost/lambda/detail/operator_actions.hpp [3:3]
+        include/boost/lambda/detail/operator_lambda_func_base.hpp [3:3]
+        include/boost/lambda/detail/operator_return_type_traits.hpp [3:3]
+        include/boost/lambda/detail/operators.hpp [3:3]
+        include/boost/lambda/detail/ret.hpp [3:3]
+        include/boost/lambda/detail/return_type_traits.hpp [3:3]
+        include/boost/lambda/detail/select_functions.hpp [3:3]
+        include/boost/lambda/exceptions.hpp [3:4]
+        include/boost/lambda/if.hpp [3:5]
+        include/boost/lambda/lambda.hpp [2:2]
+        include/boost/lambda/loops.hpp [3:5]
+        include/boost/lambda/switch.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f9749f4e13e703364be469134935d614
+BELONGS ya.make
+    License text:
+        // Copyright (C) 1999-2001 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+        //                         Gary Powell (gwpowell@hotmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/bind.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff57d62db593b2575f4cc431df71e1d1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/lambda/detail/is_instance_of.hpp [3:3]

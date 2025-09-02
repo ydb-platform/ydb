@@ -6,7 +6,7 @@ import os
 import pytest
 import time
 
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
@@ -18,8 +18,8 @@ M = 1024 * 1024
 G = 1024 * 1024 * 1024
 DEFAULT_LIMIT = 8 * G
 DEFAULT_DELTA = 30 * M
-DEFAULT_WAIT_TIME = yatest_common.plain_or_under_sanitizer(10, 50)
-LONG_WAIT_TIME = yatest_common.plain_or_under_sanitizer(60, 300)
+DEFAULT_WAIT_TIME = plain_or_under_sanitizer(10, 50)
+LONG_WAIT_TIME = plain_or_under_sanitizer(60, 300)
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def kikimr(request):
     kikimr.stop()
 
 
-def wait_until(predicate, wait_time=DEFAULT_WAIT_TIME, wait_step=yatest_common.plain_or_under_sanitizer(0.5, 2)):
+def wait_until(predicate, wait_time=DEFAULT_WAIT_TIME, wait_step=plain_or_under_sanitizer(0.5, 2)):
     deadline = time.time() + wait_time
     while time.time() < deadline:
         if predicate():

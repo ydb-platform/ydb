@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 UPSERT INTO episodes
 (
     series_id,
@@ -27,6 +27,4 @@ COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
-
-COMMIT;
 ```

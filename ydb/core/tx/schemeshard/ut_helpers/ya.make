@@ -20,8 +20,10 @@ PEERDIR(
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_proxy
     ydb/public/lib/scheme_types
-    ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/client/ydb_driver
+    yql/essentials/public/issue
+    ydb/public/lib/deprecated/kicli
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(
@@ -31,6 +33,7 @@ SRCS(
     helpers.h
     ls_checks.cpp
     ls_checks.h
+    shred_helpers.cpp
     test_env.cpp
     test_env.h
     test_with_reboots.h

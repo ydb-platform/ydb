@@ -1,89 +1,113 @@
 import time
 import json
-import uuid
 import datetime
 
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
-from moto.core import BaseBackend, BaseModel
-from moto.core.utils import BackendDict
+from moto.core import BaseBackend, BackendDict, BaseModel
+from moto.core.utils import utcnow
+from moto.moto_api._internal import mock_random
 from .exceptions import (
     SecretNotFoundException,
     SecretHasNoValueException,
     InvalidParameterException,
     ResourceExistsException,
     ResourceNotFoundException,
+    SecretStageVersionMismatchException,
     InvalidRequestException,
     ClientError,
 )
-from .utils import random_password, secret_arn, get_secret_name_from_arn
-from .list_secrets.filters import filter_all, tag_key, tag_value, description, name
+from .utils import random_password, secret_arn, get_secret_name_from_partial_arn
+from .list_secrets.filters import (
+    filter_all,
+    tag_key,
+    tag_value,
+    description_filter,
+    name_filter,
+)
 
 
 _filter_functions = {
     "all": filter_all,
-    "name": name,
-    "description": description,
+    "name": name_filter,
+    "description": description_filter,
     "tag-key": tag_key,
     "tag-value": tag_value,
 }
 
 
-def filter_keys():
+def filter_keys() -> List[str]:
     return list(_filter_functions.keys())
 
 
-def _matches(secret, filters):
+def _matches(secret: "FakeSecret", filters: List[Dict[str, Any]]) -> bool:
     is_match = True
 
     for f in filters:
         # Filter names are pre-validated in the resource layer
         filter_function = _filter_functions.get(f["Key"])
-        is_match = is_match and filter_function(secret, f["Values"])
+        is_match = is_match and filter_function(secret, f["Values"])  # type: ignore
 
     return is_match
 
 
 class SecretsManager(BaseModel):
-    def __init__(self, region_name):
+    def __init__(self, region_name: str):
         self.region = region_name
 
 
 class FakeSecret:
     def __init__(
         self,
-        region_name,
-        secret_id,
-        secret_string=None,
-        secret_binary=None,
-        description=None,
-        tags=None,
-        kms_key_id=None,
-        version_id=None,
-        version_stages=None,
-        last_changed_date=None,
-        created_date=None,
+        account_id: str,
+        region_name: str,
+        secret_id: str,
+        secret_version: Dict[str, Any],
+        version_id: str,
+        secret_string: Optional[str] = None,
+        secret_binary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[Dict[str, str]]] = None,
+        kms_key_id: Optional[str] = None,
+        version_stages: Optional[List[str]] = None,
+        last_changed_date: Optional[int] = None,
+        created_date: Optional[int] = None,
     ):
         self.secret_id = secret_id
         self.name = secret_id
-        self.arn = secret_arn(region_name, secret_id)
+        self.arn = secret_arn(account_id, region_name, secret_id)
         self.secret_string = secret_string
         self.secret_binary = secret_binary
         self.description = description
         self.tags = tags or []
         self.kms_key_id = kms_key_id
-        self.version_id = version_id
         self.version_stages = version_stages
         self.last_changed_date = last_changed_date
         self.created_date = created_date
+        # We should only return Rotation details after it's been requested
+        self.rotation_requested = False
         self.rotation_enabled = False
         self.rotation_lambda_arn = ""
         self.auto_rotate_after_days = 0
-        self.deleted_date = None
+        self.deleted_date: Optional[float] = None
+        self.policy: Optional[str] = None
+        self.next_rotation_date: Optional[int] = None
+        self.last_rotation_date: Optional[int] = None
+
+        self.versions: Dict[str, Dict[str, Any]] = {}
+        if secret_string or secret_binary:
+            self.versions = {version_id: secret_version}
+            self.set_default_version_id(version_id)
+        else:
+            self.set_default_version_id(None)
 
     def update(
-        self, description=None, tags=None, kms_key_id=None, last_changed_date=None
-    ):
+        self,
+        description: Optional[str] = None,
+        tags: Optional[List[Dict[str, str]]] = None,
+        kms_key_id: Optional[str] = None,
+        last_changed_date: Optional[int] = None,
+    ) -> None:
         self.description = description
         self.tags = tags or []
         if last_changed_date is not None:
@@ -92,74 +116,102 @@ class FakeSecret:
         if kms_key_id is not None:
             self.kms_key_id = kms_key_id
 
-    def set_versions(self, versions):
-        self.versions = versions
-
-    def set_default_version_id(self, version_id):
+    def set_default_version_id(self, version_id: Optional[str]) -> None:
         self.default_version_id = version_id
 
-    def reset_default_version(self, secret_version, version_id):
+    def reset_default_version(
+        self, secret_version: Dict[str, Any], version_id: str
+    ) -> None:
         # remove all old AWSPREVIOUS stages
         for old_version in self.versions.values():
             if "AWSPREVIOUS" in old_version["version_stages"]:
                 old_version["version_stages"].remove("AWSPREVIOUS")
 
-        # set old AWSCURRENT secret to AWSPREVIOUS
-        previous_current_version_id = self.default_version_id
-        self.versions[previous_current_version_id]["version_stages"] = ["AWSPREVIOUS"]
+        if self.default_version_id:
+            # set old AWSCURRENT secret to AWSPREVIOUS
+            previous_current_version_id = self.default_version_id
+            self.versions[previous_current_version_id]["version_stages"] = [
+                "AWSPREVIOUS"
+            ]
 
         self.versions[version_id] = secret_version
         self.default_version_id = version_id
 
-    def remove_version_stages_from_old_versions(self, version_stages):
+    def remove_version_stages_from_old_versions(
+        self, version_stages: List[str]
+    ) -> None:
         for version_stage in version_stages:
             for old_version in self.versions.values():
                 if version_stage in old_version["version_stages"]:
                     old_version["version_stages"].remove(version_stage)
 
-    def delete(self, deleted_date):
+    def delete(self, deleted_date: float) -> None:
         self.deleted_date = deleted_date
 
-    def restore(self):
+    def restore(self) -> None:
         self.deleted_date = None
 
-    def is_deleted(self):
+    def is_deleted(self) -> bool:
         return self.deleted_date is not None
 
-    def to_short_dict(self, include_version_stages=False, version_id=None):
+    def to_short_dict(
+        self,
+        include_version_stages: bool = False,
+        version_id: Optional[str] = None,
+        include_version_id: bool = True,
+    ) -> str:
         if not version_id:
             version_id = self.default_version_id
         dct = {
             "ARN": self.arn,
             "Name": self.name,
-            "VersionId": version_id,
         }
-        if include_version_stages:
+        if include_version_id and version_id:
+            dct["VersionId"] = version_id
+        if version_id and include_version_stages:
             dct["VersionStages"] = self.versions[version_id]["version_stages"]
         return json.dumps(dct)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         version_id_to_stages = self._form_version_ids_to_stages()
 
-        return {
+        dct: Dict[str, Any] = {
             "ARN": self.arn,
             "Name": self.name,
-            "Description": self.description or "",
             "KmsKeyId": self.kms_key_id,
-            "RotationEnabled": self.rotation_enabled,
-            "RotationLambdaARN": self.rotation_lambda_arn,
-            "RotationRules": {"AutomaticallyAfterDays": self.auto_rotate_after_days},
-            "LastRotatedDate": None,
             "LastChangedDate": self.last_changed_date,
             "LastAccessedDate": None,
+            "NextRotationDate": self.next_rotation_date,
             "DeletedDate": self.deleted_date,
-            "Tags": self.tags,
-            "VersionIdsToStages": version_id_to_stages,
-            "SecretVersionsToStages": version_id_to_stages,
             "CreatedDate": self.created_date,
         }
+        if self.tags:
+            dct["Tags"] = self.tags
+        if self.description:
+            dct["Description"] = self.description
+        if self.versions:
+            dct.update(
+                {
+                    # Key used by describe_secret
+                    "VersionIdsToStages": version_id_to_stages,
+                    # Key used by list_secrets
+                    "SecretVersionsToStages": version_id_to_stages,
+                }
+            )
+        if self.rotation_requested:
+            dct.update(
+                {
+                    "RotationEnabled": self.rotation_enabled,
+                    "RotationLambdaARN": self.rotation_lambda_arn,
+                    "RotationRules": {
+                        "AutomaticallyAfterDays": self.auto_rotate_after_days
+                    },
+                    "LastRotatedDate": self.last_rotation_date,
+                }
+            )
+        return dct
 
-    def _form_version_ids_to_stages(self):
+    def _form_version_ids_to_stages(self) -> Dict[str, str]:
         version_id_to_stages = {}
         for key, value in self.versions.items():
             version_id_to_stages[key] = value["version_stages"]
@@ -167,65 +219,115 @@ class FakeSecret:
         return version_id_to_stages
 
 
-class SecretsStore(dict):
-    def __setitem__(self, key, value):
-        new_key = get_secret_name_from_arn(key)
-        super().__setitem__(new_key, value)
+class SecretsStore(Dict[str, FakeSecret]):
+    # Parameters to this dictionary can be three possible values:
+    # names, full ARNs, and partial ARNs
+    # Every retrieval method should check which type of input it receives
 
-    def __getitem__(self, key):
-        new_key = get_secret_name_from_arn(key)
-        return super().__getitem__(new_key)
+    def __setitem__(self, key: str, value: FakeSecret) -> None:
+        super().__setitem__(key, value)
 
-    def __contains__(self, key):
-        new_key = get_secret_name_from_arn(key)
-        return dict.__contains__(self, new_key)
+    def __getitem__(self, key: str) -> FakeSecret:
+        for secret in dict.values(self):
+            if secret.arn == key or secret.name == key:
+                return secret
+        name = get_secret_name_from_partial_arn(key)
+        return super().__getitem__(name)
 
-    def get(self, key, *args, **kwargs):
-        new_key = get_secret_name_from_arn(key)
-        return super().get(new_key, *args, **kwargs)
+    def __contains__(self, key: str) -> bool:  # type: ignore
+        for secret in dict.values(self):
+            if secret.arn == key or secret.name == key:
+                return True
+        name = get_secret_name_from_partial_arn(key)
+        return dict.__contains__(self, name)  # type: ignore
 
-    def pop(self, key, *args, **kwargs):
-        new_key = get_secret_name_from_arn(key)
-        return super().pop(new_key, *args, **kwargs)
+    def get(self, key: str) -> Optional[FakeSecret]:  # type: ignore
+        for secret in dict.values(self):
+            if secret.arn == key or secret.name == key:
+                return secret
+        name = get_secret_name_from_partial_arn(key)
+        return super().get(name)
+
+    def pop(self, key: str) -> Optional[FakeSecret]:  # type: ignore
+        for secret in dict.values(self):
+            if secret.arn == key or secret.name == key:
+                key = secret.name
+        name = get_secret_name_from_partial_arn(key)
+        return super().pop(name, None)
 
 
 class SecretsManagerBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
         self.secrets = SecretsStore()
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(
+        service_region: str, zones: List[str]
+    ) -> List[Dict[str, str]]:
         """Default VPC endpoint services."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "secretsmanager"
         )
 
-    def _is_valid_identifier(self, identifier):
+    def _is_valid_identifier(self, identifier: str) -> bool:
         return identifier in self.secrets
 
-    def _unix_time_secs(self, dt):
+    def _unix_time_secs(self, dt: datetime.datetime) -> float:
         epoch = datetime.datetime.utcfromtimestamp(0)
         return (dt - epoch).total_seconds()
 
-    def _client_request_token_validator(self, client_request_token):
+    def _client_request_token_validator(self, client_request_token: str) -> None:
         token_length = len(client_request_token)
         if token_length < 32 or token_length > 64:
             msg = "ClientRequestToken must be 32-64 characters long."
             raise InvalidParameterException(msg)
 
-    def _from_client_request_token(self, client_request_token):
-        version_id = client_request_token
-        if version_id:
-            self._client_request_token_validator(version_id)
+    def _from_client_request_token(self, client_request_token: Optional[str]) -> str:
+        if client_request_token:
+            self._client_request_token_validator(client_request_token)
+            return client_request_token
         else:
-            version_id = str(uuid.uuid4())
-        return version_id
+            return str(mock_random.uuid4())
 
-    def get_secret_value(self, secret_id, version_id, version_stage):
+    def cancel_rotate_secret(self, secret_id: str) -> str:
         if not self._is_valid_identifier(secret_id):
             raise SecretNotFoundException()
 
+        secret = self.secrets[secret_id]
+        if secret.is_deleted():
+            raise InvalidRequestException(
+                "You tried to perform the operation on a secret that's currently marked deleted."
+            )
+
+        if not secret.rotation_lambda_arn:
+            # This response doesn't make much sense for  `CancelRotateSecret`, but this is what AWS has documented ...
+            # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_CancelRotateSecret.html
+            raise InvalidRequestException(
+                (
+                    "You tried to enable rotation on a secret that doesn't already have a Lambda function ARN configured"
+                    "and you didn't include such an ARN as a parameter in this call."
+                )
+            )
+
+        secret.rotation_enabled = False
+        return secret.to_short_dict()
+
+    def get_secret_value(
+        self, secret_id: str, version_id: str, version_stage: str
+    ) -> Dict[str, Any]:
+        if not self._is_valid_identifier(secret_id):
+            raise SecretNotFoundException()
+
+        if version_id and version_stage:
+            versions_dict = self.secrets[secret_id].versions
+            if (
+                version_id in versions_dict
+                and version_stage not in versions_dict[version_id]["version_stages"]
+            ):
+                raise SecretStageVersionMismatchException()
+
+        version_id_provided = version_id is not None
         if not version_id and version_stage:
             # set version_id to match version_stage
             versions_dict = self.secrets[secret_id].versions
@@ -244,15 +346,13 @@ class SecretsManagerBackend(BaseBackend):
             )
 
         secret = self.secrets[secret_id]
-        version_id = version_id or secret.default_version_id
+        version_id = version_id or secret.default_version_id or "AWSCURRENT"
 
         secret_version = secret.versions.get(version_id)
         if not secret_version:
+            _type = "staging label" if not version_id_provided else "VersionId"
             raise ResourceNotFoundException(
-                "An error occurred (ResourceNotFoundException) when calling the GetSecretValue operation: Secrets "
-                "Manager can't find the specified secret value for VersionId: {}".format(
-                    version_id
-                )
+                f"Secrets Manager can't find the specified secret value for {_type}: {version_id}"
             )
 
         response_data = {
@@ -279,12 +379,13 @@ class SecretsManagerBackend(BaseBackend):
 
     def update_secret(
         self,
-        secret_id,
-        secret_string=None,
-        secret_binary=None,
-        client_request_token=None,
-        kms_key_id=None,
-    ):
+        secret_id: str,
+        secret_string: Optional[str] = None,
+        secret_binary: Optional[str] = None,
+        client_request_token: Optional[str] = None,
+        kms_key_id: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> str:
 
         # error if secret does not exist
         if secret_id not in self.secrets:
@@ -298,9 +399,9 @@ class SecretsManagerBackend(BaseBackend):
 
         secret = self.secrets[secret_id]
         tags = secret.tags
-        description = secret.description
+        description = description or secret.description
 
-        secret = self._add_secret(
+        secret, new_version = self._add_secret(
             secret_id,
             secret_string=secret_string,
             secret_binary=secret_binary,
@@ -310,18 +411,18 @@ class SecretsManagerBackend(BaseBackend):
             kms_key_id=kms_key_id,
         )
 
-        return secret.to_short_dict()
+        return secret.to_short_dict(include_version_id=new_version)
 
     def create_secret(
         self,
-        name,
-        secret_string=None,
-        secret_binary=None,
-        description=None,
-        tags=None,
-        kms_key_id=None,
-        client_request_token=None,
-    ):
+        name: str,
+        secret_string: Optional[str] = None,
+        secret_binary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[Dict[str, str]]] = None,
+        kms_key_id: Optional[str] = None,
+        client_request_token: Optional[str] = None,
+    ) -> str:
 
         # error if secret exists
         if name in self.secrets.keys():
@@ -329,7 +430,7 @@ class SecretsManagerBackend(BaseBackend):
                 "A resource with the ID you requested already exists."
             )
 
-        secret = self._add_secret(
+        secret, new_version = self._add_secret(
             name,
             secret_string=secret_string,
             secret_binary=secret_binary,
@@ -339,19 +440,19 @@ class SecretsManagerBackend(BaseBackend):
             version_id=client_request_token,
         )
 
-        return secret.to_short_dict()
+        return secret.to_short_dict(include_version_id=new_version)
 
     def _add_secret(
         self,
-        secret_id,
-        secret_string=None,
-        secret_binary=None,
-        description=None,
-        tags=None,
-        kms_key_id=None,
-        version_id=None,
-        version_stages=None,
-    ):
+        secret_id: str,
+        secret_string: Optional[str] = None,
+        secret_binary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[Dict[str, str]]] = None,
+        kms_key_id: Optional[str] = None,
+        version_id: Optional[str] = None,
+        version_stages: Optional[List[str]] = None,
+    ) -> Tuple[FakeSecret, bool]:
 
         if version_stages is None:
             version_stages = ["AWSCURRENT"]
@@ -369,19 +470,23 @@ class SecretsManagerBackend(BaseBackend):
         if secret_binary is not None:
             secret_version["secret_binary"] = secret_binary
 
+        new_version = secret_string is not None or secret_binary is not None
+
         update_time = int(time.time())
         if secret_id in self.secrets:
             secret = self.secrets[secret_id]
 
             secret.update(description, tags, kms_key_id, last_changed_date=update_time)
 
-            if "AWSCURRENT" in version_stages:
-                secret.reset_default_version(secret_version, version_id)
-            else:
-                secret.remove_version_stages_from_old_versions(version_stages)
-                secret.versions[version_id] = secret_version
+            if new_version:
+                if "AWSCURRENT" in version_stages:
+                    secret.reset_default_version(secret_version, version_id)
+                else:
+                    secret.remove_version_stages_from_old_versions(version_stages)
+                    secret.versions[version_id] = secret_version
         else:
             secret = FakeSecret(
+                account_id=self.account_id,
                 region_name=self.region_name,
                 secret_id=secret_id,
                 secret_string=secret_string,
@@ -391,21 +496,21 @@ class SecretsManagerBackend(BaseBackend):
                 kms_key_id=kms_key_id,
                 last_changed_date=update_time,
                 created_date=update_time,
+                version_id=version_id,
+                secret_version=secret_version,
             )
-            secret.set_versions({version_id: secret_version})
-            secret.set_default_version_id(version_id)
             self.secrets[secret_id] = secret
 
-        return secret
+        return secret, new_version
 
     def put_secret_value(
         self,
-        secret_id,
-        secret_string,
-        secret_binary,
-        client_request_token,
-        version_stages,
-    ):
+        secret_id: str,
+        secret_string: str,
+        secret_binary: str,
+        client_request_token: str,
+        version_stages: List[str],
+    ) -> str:
 
         if not self._is_valid_identifier(secret_id):
             raise SecretNotFoundException()
@@ -416,7 +521,7 @@ class SecretsManagerBackend(BaseBackend):
 
         version_id = self._from_client_request_token(client_request_token)
 
-        secret = self._add_secret(
+        secret, _ = self._add_secret(
             secret_id,
             secret_string,
             secret_binary,
@@ -428,7 +533,7 @@ class SecretsManagerBackend(BaseBackend):
 
         return secret.to_short_dict(include_version_stages=True, version_id=version_id)
 
-    def describe_secret(self, secret_id):
+    def describe_secret(self, secret_id: str) -> Dict[str, Any]:
         if not self._is_valid_identifier(secret_id):
             raise SecretNotFoundException()
 
@@ -438,12 +543,11 @@ class SecretsManagerBackend(BaseBackend):
 
     def rotate_secret(
         self,
-        secret_id,
-        client_request_token=None,
-        rotation_lambda_arn=None,
-        rotation_rules=None,
-    ):
-
+        secret_id: str,
+        client_request_token: Optional[str] = None,
+        rotation_lambda_arn: Optional[str] = None,
+        rotation_rules: Optional[Dict[str, Any]] = None,
+    ) -> str:
         rotation_days = "AutomaticallyAfterDays"
 
         if not self._is_valid_identifier(secret_id):
@@ -468,6 +572,10 @@ class SecretsManagerBackend(BaseBackend):
                         "RotationRules.AutomaticallyAfterDays " "must be within 1-1000."
                     )
                     raise InvalidParameterException(msg)
+
+                self.secrets[secret_id].next_rotation_date = int(time.time()) + (
+                    int(rotation_period) * 86400
+                )
 
         secret = self.secrets[secret_id]
 
@@ -495,25 +603,33 @@ class SecretsManagerBackend(BaseBackend):
             # Pending is not present in any version
             pass
 
-        old_secret_version = secret.versions[secret.default_version_id]
+        if secret.versions:
+            old_secret_version = secret.versions[secret.default_version_id]  # type: ignore
 
-        if client_request_token:
-            self._client_request_token_validator(client_request_token)
-            new_version_id = client_request_token
-        else:
-            new_version_id = str(uuid.uuid4())
+            if client_request_token:
+                self._client_request_token_validator(client_request_token)
+                new_version_id = client_request_token
+            else:
+                new_version_id = str(mock_random.uuid4())
 
-        # We add the new secret version as "pending". The previous version remains
-        # as "current" for now. Once we've passed the new secret through the lambda
-        # rotation function (if provided) we can then update the status to "current".
-        self._add_secret(
-            secret_id,
-            old_secret_version["secret_string"],
-            description=secret.description,
-            tags=secret.tags,
-            version_id=new_version_id,
-            version_stages=["AWSPENDING"],
-        )
+            # We add the new secret version as "pending". The previous version remains
+            # as "current" for now. Once we've passed the new secret through the lambda
+            # rotation function (if provided) we can then update the status to "current".
+            old_secret_version_secret_string = (
+                old_secret_version["secret_string"]
+                if "secret_string" in old_secret_version
+                else None
+            )
+            self._add_secret(
+                secret_id,
+                old_secret_version_secret_string,
+                description=secret.description,
+                tags=secret.tags,
+                version_id=new_version_id,
+                version_stages=["AWSPENDING"],
+            )
+
+        secret.rotation_requested = True
         secret.rotation_lambda_arn = rotation_lambda_arn or ""
         if rotation_rules:
             secret.auto_rotate_after_days = rotation_rules.get(rotation_days, 0)
@@ -524,17 +640,15 @@ class SecretsManagerBackend(BaseBackend):
         if secret.rotation_lambda_arn:
             from moto.awslambda.models import lambda_backends
 
-            lambda_backend = lambda_backends[self.region_name]
+            lambda_backend = lambda_backends[self.account_id][self.region_name]
 
-            request_headers = {}
-            response_headers = {}
+            request_headers: Dict[str, Any] = {}
+            response_headers: Dict[str, Any] = {}
 
             try:
                 func = lambda_backend.get_function(secret.rotation_lambda_arn)
             except Exception:
-                msg = "Resource not found for ARN '{}'.".format(
-                    secret.rotation_lambda_arn
-                )
+                msg = f"Resource not found for ARN '{secret.rotation_lambda_arn}'."
                 raise ResourceNotFoundException(msg)
 
             for step in ["create", "set", "test", "finish"]:
@@ -551,33 +665,35 @@ class SecretsManagerBackend(BaseBackend):
                 )
 
             secret.set_default_version_id(new_version_id)
-        else:
+        elif secret.versions:
+            # AWS will always require a Lambda ARN
+            # without that, Moto can still apply the 'AWSCURRENT'-label
+            # This only makes sense if we have a version
             secret.reset_default_version(
                 secret.versions[new_version_id], new_version_id
             )
             secret.versions[new_version_id]["version_stages"] = ["AWSCURRENT"]
 
+        self.secrets[secret_id].last_rotation_date = int(time.time())
         return secret.to_short_dict()
 
     def get_random_password(
         self,
-        password_length,
-        exclude_characters,
-        exclude_numbers,
-        exclude_punctuation,
-        exclude_uppercase,
-        exclude_lowercase,
-        include_space,
-        require_each_included_type,
-    ):
+        password_length: int,
+        exclude_characters: str,
+        exclude_numbers: bool,
+        exclude_punctuation: bool,
+        exclude_uppercase: bool,
+        exclude_lowercase: bool,
+        include_space: bool,
+        require_each_included_type: bool,
+    ) -> str:
         # password size must have value less than or equal to 4096
         if password_length > 4096:
             raise ClientError(
-                "ClientError: An error occurred (ValidationException) \
-                when calling the GetRandomPassword operation: 1 validation error detected: Value '{}' at 'passwordLength' \
-                failed to satisfy constraint: Member must have value less than or equal to 4096".format(
-                    password_length
-                )
+                f"ClientError: An error occurred (ValidationException) \
+                when calling the GetRandomPassword operation: 1 validation error detected: Value '{password_length}' at 'passwordLength' \
+                failed to satisfy constraint: Member must have value less than or equal to 4096"
             )
         if password_length < 4:
             raise InvalidParameterException(
@@ -585,7 +701,7 @@ class SecretsManagerBackend(BaseBackend):
                 when calling the GetRandomPassword operation: Password length is too short based on the required types."
             )
 
-        response = json.dumps(
+        return json.dumps(
             {
                 "RandomPassword": random_password(
                     password_length,
@@ -600,9 +716,7 @@ class SecretsManagerBackend(BaseBackend):
             }
         )
 
-        return response
-
-    def list_secret_version_ids(self, secret_id):
+    def list_secret_version_ids(self, secret_id: str) -> str:
         secret = self.secrets[secret_id]
 
         version_list = []
@@ -616,7 +730,7 @@ class SecretsManagerBackend(BaseBackend):
                 }
             )
 
-        response = json.dumps(
+        return json.dumps(
             {
                 "ARN": secret.secret_id,
                 "Name": secret.name,
@@ -625,11 +739,12 @@ class SecretsManagerBackend(BaseBackend):
             }
         )
 
-        return response
-
     def list_secrets(
-        self, filters: List, max_results: int = 100, next_token: str = None
-    ) -> Tuple[List, str]:
+        self,
+        filters: List[Dict[str, Any]],
+        max_results: int = 100,
+        next_token: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         secret_list = []
         for secret in self.secrets.values():
             if _matches(secret, filters):
@@ -643,10 +758,13 @@ class SecretsManagerBackend(BaseBackend):
         return secret_page, new_next_token
 
     def delete_secret(
-        self, secret_id, recovery_window_in_days, force_delete_without_recovery
-    ):
+        self,
+        secret_id: str,
+        recovery_window_in_days: int,
+        force_delete_without_recovery: bool,
+    ) -> Tuple[str, str, float]:
 
-        if recovery_window_in_days and (
+        if recovery_window_in_days is not None and (
             recovery_window_in_days < 7 or recovery_window_in_days > 30
         ):
             raise InvalidParameterException(
@@ -664,10 +782,9 @@ class SecretsManagerBackend(BaseBackend):
             if not force_delete_without_recovery:
                 raise SecretNotFoundException()
             else:
-                secret = FakeSecret(self.region_name, secret_id)
-                arn = secret.arn
-                name = secret.name
-                deletion_date = datetime.datetime.utcnow()
+                arn = secret_arn(self.account_id, self.region_name, secret_id=secret_id)
+                name = secret_id
+                deletion_date = utcnow()
                 return arn, name, self._unix_time_secs(deletion_date)
         else:
             if self.secrets[secret_id].is_deleted():
@@ -676,14 +793,14 @@ class SecretsManagerBackend(BaseBackend):
                     perform the operation on a secret that's currently marked deleted."
                 )
 
-            deletion_date = datetime.datetime.utcnow()
+            deletion_date = utcnow()
 
             if force_delete_without_recovery:
-                secret = self.secrets.pop(secret_id, None)
+                secret = self.secrets.pop(secret_id)
             else:
                 deletion_date += datetime.timedelta(days=recovery_window_in_days or 30)
                 self.secrets[secret_id].delete(self._unix_time_secs(deletion_date))
-                secret = self.secrets.get(secret_id, None)
+                secret = self.secrets.get(secret_id)
 
             if not secret:
                 raise SecretNotFoundException()
@@ -693,7 +810,7 @@ class SecretsManagerBackend(BaseBackend):
 
             return arn, name, self._unix_time_secs(deletion_date)
 
-    def restore_secret(self, secret_id):
+    def restore_secret(self, secret_id: str) -> Tuple[str, str]:
 
         if not self._is_valid_identifier(secret_id):
             raise SecretNotFoundException()
@@ -703,7 +820,7 @@ class SecretsManagerBackend(BaseBackend):
 
         return secret.arn, secret.name
 
-    def tag_resource(self, secret_id, tags):
+    def tag_resource(self, secret_id: str, tags: List[Dict[str, str]]) -> None:
 
         if secret_id not in self.secrets:
             raise SecretNotFoundException()
@@ -724,9 +841,7 @@ class SecretsManagerBackend(BaseBackend):
                 old_tags.remove(existing_key_name)
             old_tags.append(tag)
 
-        return secret_id
-
-    def untag_resource(self, secret_id, tag_keys):
+    def untag_resource(self, secret_id: str, tag_keys: List[str]) -> None:
 
         if secret_id not in self.secrets:
             raise SecretNotFoundException()
@@ -738,11 +853,13 @@ class SecretsManagerBackend(BaseBackend):
             if tag["Key"] in tag_keys:
                 tags.remove(tag)
 
-        return secret_id
-
     def update_secret_version_stage(
-        self, secret_id, version_stage, remove_from_version_id, move_to_version_id
-    ):
+        self,
+        secret_id: str,
+        version_stage: str,
+        remove_from_version_id: str,
+        move_to_version_id: str,
+    ) -> Tuple[str, str]:
         if secret_id not in self.secrets:
             raise SecretNotFoundException()
 
@@ -751,14 +868,13 @@ class SecretsManagerBackend(BaseBackend):
         if remove_from_version_id:
             if remove_from_version_id not in secret.versions:
                 raise InvalidParameterException(
-                    "Not a valid version: %s" % remove_from_version_id
+                    f"Not a valid version: {remove_from_version_id}"
                 )
 
             stages = secret.versions[remove_from_version_id]["version_stages"]
             if version_stage not in stages:
                 raise InvalidParameterException(
-                    "Version stage %s not found in version %s"
-                    % (version_stage, remove_from_version_id)
+                    f"Version stage {version_stage} not found in version {remove_from_version_id}"
                 )
 
             stages.remove(version_stage)
@@ -766,7 +882,7 @@ class SecretsManagerBackend(BaseBackend):
         if move_to_version_id:
             if move_to_version_id not in secret.versions:
                 raise InvalidParameterException(
-                    "Not a valid version: %s" % move_to_version_id
+                    f"Not a valid version: {move_to_version_id}"
                 )
 
             stages = secret.versions[move_to_version_id]["version_stages"]
@@ -786,31 +902,39 @@ class SecretsManagerBackend(BaseBackend):
                 if "AWSPREVIOUS" in stages:
                     stages.remove("AWSPREVIOUS")
 
-        return secret_id
+        return secret.arn, secret.name
 
-    @staticmethod
-    def get_resource_policy(secret_id):
-        resource_policy = {
-            "Version": "2012-10-17",
-            "Statement": {
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": [
-                        "arn:aws:iam::111122223333:root",
-                        "arn:aws:iam::444455556666:root",
-                    ]
-                },
-                "Action": ["secretsmanager:GetSecretValue"],
-                "Resource": "*",
-            },
+    def put_resource_policy(self, secret_id: str, policy: str) -> Tuple[str, str]:
+        """
+        The BlockPublicPolicy-parameter is not yet implemented
+        """
+        if not self._is_valid_identifier(secret_id):
+            raise SecretNotFoundException()
+
+        secret = self.secrets[secret_id]
+        secret.policy = policy
+        return secret.arn, secret.name
+
+    def get_resource_policy(self, secret_id: str) -> str:
+        if not self._is_valid_identifier(secret_id):
+            raise SecretNotFoundException()
+
+        secret = self.secrets[secret_id]
+        resp = {
+            "ARN": secret.arn,
+            "Name": secret.name,
         }
-        return json.dumps(
-            {
-                "ARN": secret_id,
-                "Name": secret_id,
-                "ResourcePolicy": json.dumps(resource_policy),
-            }
-        )
+        if secret.policy is not None:
+            resp["ResourcePolicy"] = secret.policy
+        return json.dumps(resp)
+
+    def delete_resource_policy(self, secret_id: str) -> Tuple[str, str]:
+        if not self._is_valid_identifier(secret_id):
+            raise SecretNotFoundException()
+
+        secret = self.secrets[secret_id]
+        secret.policy = None
+        return secret.arn, secret.name
 
 
 secretsmanager_backends = BackendDict(SecretsManagerBackend, "secretsmanager")

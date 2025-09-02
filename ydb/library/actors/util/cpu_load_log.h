@@ -1,7 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include <library/cpp/pop_count/popcount.h>
+
+#include <bit>
 
 static constexpr ui64 BitDurationNs = 131'072;  // A power of 2
 
@@ -173,7 +174,7 @@ public:
             }
             if (!input) {
                 if (!bucket) {
-                    Idle += 64 - PopCount(all_busy);
+                    Idle += 64 - std::popcount(all_busy);
                     continue;
                 }
             }

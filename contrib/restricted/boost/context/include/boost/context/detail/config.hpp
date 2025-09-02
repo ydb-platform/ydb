@@ -67,7 +67,7 @@
 #if defined(__cpp_lib_integer_sequence) && __cpp_lib_integer_sequence >= 201304
 # undef BOOST_CONTEXT_NO_CXX14_INTEGER_SEQUENCE
 #endif
-// workaroud: MSVC 14 does not provide macros to test for compile-time integer sequence
+// workaround: MSVC 14 does not provide macros to test for compile-time integer sequence
 #if _MSC_VER > 1800 // _MSC_VER == 1800 -> MS Visual Studio 2013
 # undef BOOST_CONTEXT_NO_INDEX_SEQUENCE
 #endif
@@ -78,7 +78,7 @@
 # endif
 #endif
 
-// workaroud: MSVC 14 does support constexpr
+// workaround: MSVC 14 does support constexpr
 #if _MSC_VER > 1800 // _MSC_VER == 1800 -> MS Visual Studio 2013
 # undef BOOST_NO_CXX11_CONSTEXPR
 #endif
@@ -96,7 +96,7 @@
     defined(BOOST_NO_CXX11_UNIFIED_INITIALISATION_SYNTAX) || \
     defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES) || \
     defined(BOOST_NO_HDR_ATOMIC) || \
-    defined(BOOST_NO_HDR_TUPLE) 
+    defined(BOOST_NO_HDR_TUPLE)
 # define BOOST_CONTEXT_NO_CXX11
 #endif
 
@@ -112,7 +112,7 @@
 // modern architectures have cachelines with 64byte length
 // ARM Cortex-A15 32/64byte, Cortex-A9 16/32/64bytes
 // MIPS 74K: 32byte, 4KEc: 16byte
-// ist should be safe to use 64byte for all
+// it should be safe to use 64byte for all
 static constexpr std::size_t cache_alignment{ 64 };
 static constexpr std::size_t cacheline_length{ 64 };
 // lookahead size for prefetching

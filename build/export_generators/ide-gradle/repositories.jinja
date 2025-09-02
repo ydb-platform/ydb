@@ -1,0 +1,14 @@
+{#- empty string #}
+val bucketUsername: String by project
+val bucketPassword: String by project
+repositories {
+    repositories {
+        maven {
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = "$bucketUsername"
+                password = "$bucketPassword"
+            }
+        }
+    }
+}

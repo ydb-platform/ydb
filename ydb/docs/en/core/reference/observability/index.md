@@ -4,3 +4,5 @@ This section of {{ ydb-short-name }} documentation covers various observability-
 
 * [{#T}](metrics/index.md)
 * [{#T}](metrics/grafana-dashboards.md)
+* [{#T}](tracing/setup.md)
+* [{#T}](tracing/external-traces.md)

@@ -10,7 +10,6 @@ private:
     using TBase = TOlapIndexUpsert;
     YDB_READONLY(ui32, Id, Max<ui32>());
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(TString, StorageId);
     YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>, IndexMeta);
 public:
     TOlapIndexSchema() = default;
@@ -78,6 +77,6 @@ public:
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
-    bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
+    bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
 }

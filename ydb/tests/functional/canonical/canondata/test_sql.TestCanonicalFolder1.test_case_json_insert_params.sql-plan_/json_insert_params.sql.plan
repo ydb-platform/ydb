@@ -6,18 +6,13 @@
     "tables": [
         {
             "name": "/local/base_json_insert_params_sql_plan/ResultParamsJD",
-            "reads": [
-                {
-                    "type": "Lookup"
-                }
-            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         }

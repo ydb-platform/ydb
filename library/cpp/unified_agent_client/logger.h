@@ -35,6 +35,17 @@
     YLOG(TLOG_CRIT, msg, Logger);  \
     _Exit(1);
 
+#define YLOG_EMERG_F(fmt, ...) YLOG_EMERG(std::format(fmt, __VA_ARGS__))
+#define YLOG_ALERT_F(fmt, ...) YLOG_ALERT(std::format(fmt, __VA_ARGS__))
+#define YLOG_CRIT_F(fmt, ...) YLOG_CRIT(std::format(fmt, __VA_ARGS__))
+#define YLOG_ERR_F(fmt, ...) YLOG_ERR(std::format(fmt, __VA_ARGS__))
+#define YLOG_WARNING_F(fmt, ...) YLOG_WARNING(std::format(fmt, __VA_ARGS__))
+#define YLOG_NOTICE_F(fmt, ...) YLOG_NOTICE(std::format(fmt, __VA_ARGS__))
+#define YLOG_INFO_F(fmt, ...) YLOG_INFO(std::format(fmt, __VA_ARGS__))
+#define YLOG_DEBUG_F(fmt, ...) YLOG_DEBUG(std::format(fmt, __VA_ARGS__))
+#define YLOG_RESOURCES_F(fmt, ...) YLOG_RESOURCES(std::format(fmt, __VA_ARGS__))
+#define YLOG_FATAL_F(fmt, ...) YLOG_FATAL(std::format(fmt, __VA_ARGS__))
+
 namespace NUnifiedAgent {
     class TScopeLogger;
 
@@ -131,6 +142,13 @@ namespace NUnifiedAgent {
 
         inline TLogger* Unwrap() noexcept {
             return Logger;
+        }
+
+        ELogPriority FiltrationLevel() const {
+            if (Logger) {
+                return Logger->CurrentLogContext_.load()->Priority;
+            }
+            return LOG_DEF_PRIORITY;
         }
 
         friend class TLogger;

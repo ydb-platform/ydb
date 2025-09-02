@@ -70,9 +70,9 @@ void TCube<T>::Add(TTagIdList tagIds)
 }
 
 template <class T>
-void TCube<T>::AddAll(const TTagIdList& tagIds, const TProjectionSet& projections)
+void TCube<T>::AddAll(const TTagIdSet& tagSet)
 {
-    projections.Range(tagIds, [this] (auto tagIds) mutable {
+    tagSet.Range([this] (auto tagIds) mutable {
         Add(std::move(tagIds));
     });
 }
@@ -94,9 +94,9 @@ void TCube<T>::Remove(TTagIdList tagIds)
 }
 
 template <class T>
-void TCube<T>::RemoveAll(const TTagIdList& tagIds, const TProjectionSet& projections)
+void TCube<T>::RemoveAll(const TTagIdSet& tagSet)
 {
-    projections.Range(tagIds, [this] (auto tagIds) mutable {
+    tagSet.Range([this] (auto tagIds) mutable {
         Remove(std::move(tagIds));
     });
 }
@@ -174,7 +174,7 @@ T TCube<T>::Rollup(const TProjection& window, int index) const
 
 template <class T>
 int TCube<T>::ReadSensors(
-    const TString& name,
+    const std::string& name,
     const TReadOptions& options,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
@@ -184,13 +184,13 @@ int TCube<T>::ReadSensors(
     int sensorsEmitted = 0;
 
     auto prepareNameLabel = [&] (std::optional<TStringBuf> suffix) {
-        TString sensorName;
+        std::string sensorName;
         sensorName.reserve(name.size() + (suffix ? suffix->size() : 0));
         if (options.DisableSensorsRename) {
             sensorName += name;
         } else if (options.StripSensorsNamePrefix) {
             auto delimiterPos = name.find_last_of('/');
-            if (TString::npos == delimiterPos) {
+            if (std::string::npos == delimiterPos) {
                 sensorName.assign(name);
             } else {
                 sensorName.assign(name, delimiterPos + 1);
@@ -435,7 +435,7 @@ int TCube<T>::ReadSensors(
         };
 
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
-            if (options.ConvertCountersToRateGauge) {
+            if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
             } else {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::RATE);
@@ -455,7 +455,17 @@ int TCube<T>::ReadSensors(
                     } else {
                         consumer->OnDouble(time, value.SecondsFloat() / options.RateDenominator);
                     }
+                } else if (options.ConvertCountersToDeltaGauge) {
+                    if constexpr (std::is_same_v<T, i64>) {
+                        consumer->OnDouble(time, value);
+                    } else {
+                        consumer->OnDouble(time, value.SecondsFloat());
+                    }
                 } else {
+                    if (!options.ReportTimestampsForRateMetrics) {
+                        time = TInstant::Zero();
+                    }
+
                     // TODO(prime@): RATE is incompatible with windowed read.
                     if constexpr (std::is_same_v<T, i64>) {
                         consumer->OnInt64(time, Rollup(*window, indices.back()));
@@ -514,7 +524,7 @@ int TCube<T>::ReadSensors(
                     }
 
                     for (size_t i = 0; i < n; ++i) {
-                        int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                        auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
 
                         (*hist)[i] = {value.Bounds[i], bucketValue / options.RateDenominator};
                     }
@@ -525,7 +535,7 @@ int TCube<T>::ReadSensors(
                     auto rollup = Rollup(*window, indices.back());
 
                     for (size_t i = 0; i < n; ++i) {
-                        int bucketValue = i < rollup.Values.size() ? rollup.Values[i] : 0u;
+                        auto bucketValue = i < rollup.Values.size() ? rollup.Values[i] : 0u;
                         (*hist)[i] = {rollup.Bounds[i], bucketValue};
                     }
 
@@ -549,7 +559,7 @@ int TCube<T>::ReadSensors(
                 auto hist = NMonitoring::TExplicitHistogramSnapshot::New(n + 1);
 
                 for (size_t i = 0; i < n; ++i) {
-                    int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                    auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
                     (*hist)[i] = {value.Bounds[i], bucketValue};
                 }
 
@@ -576,7 +586,7 @@ int TCube<T>::ReadSensors(
                 }
 
                 for (size_t i = 0; i < n; ++i) {
-                    int bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
+                    auto bucketValue = i < value.Values.size() ? value.Values[i] : 0u;
                     (*hist)[i] = {value.Bounds[i], bucketValue / options.RateDenominator};
                 }
 
@@ -669,11 +679,11 @@ int TCube<T>::ReadSensorValues(
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TGaugeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
-            std::vector<std::pair<double, int>> hist;
+            std::vector<std::pair<double, i64>> hist;
             size_t n = value.Bounds.size();
             hist.reserve(n + 1);
             for (size_t i = 0; i != n; ++i) {
-                int bucketValue = i < value.Values.size() ? value.Values[i] : 0;
+                auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
                 hist.emplace_back(value.Bounds[i], bucketValue);
             }
             hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
@@ -731,36 +741,38 @@ int TCube<T>::ReadSensorValues(
 }
 
 template <class T>
-void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraTags) const
+void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extraProjections) const
 {
-    for (const auto& [tagIds, window] : Projections_) {
-        auto projection = cube->add_projections();
-        for (auto tagId : tagIds) {
-            projection->add_tag_ids(tagId);
-        }
-        for (auto tagId : extraTags) {
-            projection->add_tag_ids(tagId);
-        }
+    for (const auto& extraTags : extraProjections) {
+        for (const auto& [tagIds, window] : Projections_) {
+            auto projection = cube->add_projections();
+            for (auto tagId : tagIds) {
+                projection->add_tag_ids(tagId);
+            }
+            for (auto tagId : extraTags) {
+                projection->add_tag_ids(tagId);
+            }
 
-        projection->set_has_value(window.HasValue[Index_]);
-        if constexpr (std::is_same_v<T, i64>) {
-            projection->set_counter(window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TDuration>) {
-            projection->set_duration(window.Values[Index_].GetValue());
-        } else if constexpr (std::is_same_v<T, double>) {
-            projection->set_gauge(window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
-            ToProto(projection->mutable_summary(), window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
-            ToProto(projection->mutable_timer(), window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
-            ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
-            ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
-        } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
-            ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
-        } else {
-            THROW_ERROR_EXCEPTION("Unexpected cube type");
+            projection->set_has_value(window.HasValue[Index_]);
+            if constexpr (std::is_same_v<T, i64>) {
+                projection->set_counter(window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TDuration>) {
+                projection->set_duration(window.Values[Index_].GetValue());
+            } else if constexpr (std::is_same_v<T, double>) {
+                projection->set_gauge(window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
+                ToProto(projection->mutable_summary(), window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
+                ToProto(projection->mutable_timer(), window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
+                ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+                ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
+            } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
+                ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
+            } else {
+                THROW_ERROR_EXCEPTION("Unexpected cube type");
+            }
         }
     }
 }

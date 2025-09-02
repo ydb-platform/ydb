@@ -1,10 +1,8 @@
 #include "arrow_writer.h"
 
-#include <yt/yt/client/arrow/fbs/Message.fbs.h>
-#include <yt/yt/client/arrow/fbs/Schema.fbs.h>
+#include "schemaless_writer_adapter.h"
 
 #include <yt/yt/client/formats/public.h>
-#include <yt/yt/library/formats/schemaless_writer_adapter.h>
 
 #include <yt/yt/client/table_client/columnar.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -15,21 +13,31 @@
 
 #include <yt/yt/library/column_converters/column_converter.h>
 
+#include <yt/yt/library/tz_types/tz_types.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/range.h>
+
+#include <library/cpp/yt/memory/range.h>
+
+#include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/generated/Schema.fbs.h>
 
 #include <vector>
 
 namespace NYT::NFormats {
 
-using namespace NTableClient;
+using namespace NColumnConverters;
 using namespace NComplexTypes;
+using namespace NTableClient;
+using namespace NTzTypes;
 
-static constexpr auto& Logger = FormatsLogger;
+using namespace org::apache::arrow20;
+
+constinit const auto Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;
@@ -49,23 +57,83 @@ const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
 
-std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> SerializeColumnType(
+std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Offset<flatbuf::Field>>> SerializeTzType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    TColumnSchema schema)
+    ESimpleLogicalValueType type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    std::vector<flatbuffers::Offset<flatbuf::Field>> childrenOffset;
+
+    // Make timestamp field.
+
+    auto timestampOffset = flatbuf::CreateInt(
+        *flatbufBuilder,
+        GetTzTypeBitWidth(type),
+        IsTzTypeSigned(type)).Union();
+
+    auto timestampField = flatbuf::CreateField(
+        *flatbufBuilder,
+        SerializeString(flatbufBuilder, "Timestamp"),
+        /*nullable*/ false,
+        flatbuf::Type_Int,
+        timestampOffset);
+
+    childrenOffset.push_back(timestampField);
+
+    if (arrowConfig->EnableTzIndex) {
+        // Make tz index field.
+        auto tzIndexOffset = flatbuf::CreateInt(
+            *flatbufBuilder,
+            /*bitWidth*/ 16,
+            /*is_signed*/ false).Union();
+
+        auto tzIndexField = flatbuf::CreateField(
+            *flatbufBuilder,
+            SerializeString(flatbufBuilder, "TzIndex"),
+            /*nullable*/ false,
+            flatbuf::Type_Int,
+            tzIndexOffset);
+
+        childrenOffset.push_back(std::move(tzIndexField));
+    } else {
+        // Make tz name field.
+        auto tzNameOffset = flatbuf::CreateBinary(*flatbufBuilder).Union();
+
+        auto tzNameField = flatbuf::CreateField(
+            *flatbufBuilder,
+            SerializeString(flatbufBuilder, "TzName"),
+            /*nullable*/ false,
+            flatbuf::Type_Binary,
+            tzNameOffset);
+
+        childrenOffset.push_back(std::move(tzNameField));
+    }
+
+    return std::tuple(
+        flatbuf::Type_Struct_,
+        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        std::move(childrenOffset));
+}
+
+std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Offset<flatbuf::Field>>> SerializeColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TColumnSchema& schema,
+    const TArrowFormatConfigPtr& arrowConfig)
 {
     auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Null,
-                org::apache::arrow::flatbuf::CreateNull(*flatbufBuilder)
-                    .Union());
+                flatbuf::Type_Null,
+                flatbuf::CreateNull(*flatbufBuilder)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Int64:
         case ESimpleLogicalValueType::Uint64:
@@ -76,80 +144,99 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Int,
-                org::apache::arrow::flatbuf::CreateInt(
+                flatbuf::Type_Int,
+                flatbuf::CreateInt(
                     *flatbufBuilder,
                     GetIntegralTypeBitWidth(simpleType),
                     IsIntegralTypeSigned(simpleType))
-                    .Union());
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Interval:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Int,
-                org::apache::arrow::flatbuf::CreateInt(
+                flatbuf::Type_Int,
+                flatbuf::CreateInt(
                     *flatbufBuilder,
-                    64,
-                    true)
-                    .Union());
+                    /*bitWidth*/ 64,
+                    /*is_signed*/ true)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Date:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Date,
-                org::apache::arrow::flatbuf::CreateDate(
+                flatbuf::Type_Date,
+                flatbuf::CreateDate(
                     *flatbufBuilder,
-                    org::apache::arrow::flatbuf::DateUnit_DAY)
-                    .Union());
+                    flatbuf::DateUnit_DAY)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Datetime:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Date,
-                org::apache::arrow::flatbuf::CreateDate(
+                flatbuf::Type_Timestamp,
+                flatbuf::CreateTimestamp(
                     *flatbufBuilder,
-                    org::apache::arrow::flatbuf::DateUnit_MILLISECOND)
-                    .Union());
+                    flatbuf::TimeUnit_SECOND)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Timestamp:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Timestamp,
-                org::apache::arrow::flatbuf::CreateTimestamp(
+                flatbuf::Type_Timestamp,
+                flatbuf::CreateTimestamp(
                     *flatbufBuilder,
-                    org::apache::arrow::flatbuf::TimeUnit_MICROSECOND)
-                    .Union());
+                    flatbuf::TimeUnit_MICROSECOND)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Double:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_FloatingPoint,
-                org::apache::arrow::flatbuf::CreateFloatingPoint(
+                flatbuf::Type_FloatingPoint,
+                flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
-                    org::apache::arrow::flatbuf::Precision_DOUBLE)
-                    .Union());
+                    flatbuf::Precision_DOUBLE)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Float:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_FloatingPoint,
-                org::apache::arrow::flatbuf::CreateFloatingPoint(
+                flatbuf::Type_FloatingPoint,
+                flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
-                    org::apache::arrow::flatbuf::Precision_SINGLE)
-                    .Union());
+                    flatbuf::Precision_SINGLE)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Boolean:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Bool,
-                org::apache::arrow::flatbuf::CreateBool(*flatbufBuilder)
-                    .Union());
+                flatbuf::Type_Bool,
+                flatbuf::CreateBool(*flatbufBuilder)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Binary,
-                org::apache::arrow::flatbuf::CreateBinary(*flatbufBuilder)
-                    .Union());
+                flatbuf::Type_Binary,
+                flatbuf::CreateBinary(*flatbufBuilder)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return SerializeTzType(flatbufBuilder, simpleType, arrowConfig);
 
         case ESimpleLogicalValueType::Utf8:
+        case ESimpleLogicalValueType::Json:
             return std::tuple(
-                org::apache::arrow::flatbuf::Type_Utf8,
-                org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)
-                    .Union());
+                flatbuf::Type_Utf8,
+                flatbuf::CreateUtf8(*flatbufBuilder)
+                    .Union(),
+                std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         default:
             THROW_ERROR_EXCEPTION("Column %v has type %Qlv that is not currently supported by Arrow encoder",
@@ -168,6 +255,10 @@ int ExtractTableIndexFromColumn(const TBatchColumn* column)
 
     const auto* valueColumn = column->Rle->ValueColumn;
     auto values = valueColumn->GetTypedValues<ui64>();
+    TRef nullBitmap;
+    if (valueColumn->NullBitmap) {
+        nullBitmap = valueColumn->NullBitmap->Data;
+    }
 
     // Expecting only one element.
     YT_VERIFY(values.size() == 1);
@@ -184,12 +275,14 @@ int ExtractTableIndexFromColumn(const TBatchColumn* column)
         valueColumn->Values->ZigZagEncoded,
         TRange<ui32>(),
         rleIndexes,
+        nullBitmap,
         [&] (auto index) {
             return values[index];
         },
         [&] (auto value) {
             tableIndex = value;
         });
+
     return tableIndex;
 }
 
@@ -222,6 +315,13 @@ bool IsRleButNotDictionaryEncodedStringLikeColumn(const TBatchColumn& column)
         !column.Rle->ValueColumn->Dictionary;
 }
 
+bool IsRleButNotDictionaryEncodedTzColumn(const TBatchColumn& column)
+{
+    return IsTzType(column.Type) &&
+        column.Rle &&
+        !column.Rle->ValueColumn->Dictionary;
+}
+
 bool IsRleAndDictionaryEncodedColumn(const TBatchColumn& column)
 {
     return column.Rle &&
@@ -232,7 +332,8 @@ bool IsDictionaryEncodedColumn(const TBatchColumn& column)
 {
     return column.Dictionary ||
         IsRleAndDictionaryEncodedColumn(column) ||
-        IsRleButNotDictionaryEncodedStringLikeColumn(column);
+        IsRleButNotDictionaryEncodedStringLikeColumn(column) ||
+        IsRleButNotDictionaryEncodedTzColumn(column);
 }
 
 
@@ -267,15 +368,15 @@ struct TRecordBatchSerializationContext final
     flatbuffers::FlatBufferBuilder* const FlatbufBuilder;
 
     i64 CurrentBodyOffset = 0;
-    std::vector<org::apache::arrow::flatbuf::FieldNode> FieldNodes;
-    std::vector<org::apache::arrow::flatbuf::Buffer> Buffers;
+    std::vector<flatbuf::FieldNode> FieldNodes;
+    std::vector<flatbuf::Buffer> Buffers;
     std::vector<TRecordBatchBodyPart> Parts;
 };
 
 template <class T>
 TMutableRange<T> GetTypedValues(TMutableRef ref)
 {
-    return MakeMutableRange(
+    return TMutableRange(
         reinterpret_cast<T*>(ref.Begin()),
         reinterpret_cast<T*>(ref.End()));
 }
@@ -494,6 +595,11 @@ void SerializeIntegerColumn(
 
             auto startIndex = column->StartIndex;
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             switch (simpleType) {
 #define XX(cppType, ytType)                                 \
     case ESimpleLogicalValueType::ytType: {                 \
@@ -506,6 +612,7 @@ void SerializeIntegerColumn(
             valueColumn->Values->ZigZagEncoded,             \
             TRange<ui32>(),                                 \
             rleIndexes,                                     \
+            nullBitmap,                                     \
             [&] (auto index) {                              \
                 return values[index];                       \
             },                                              \
@@ -562,6 +669,11 @@ void SerializeDateColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i32>(dstRef);
@@ -573,6 +685,7 @@ void SerializeDateColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
@@ -590,7 +703,6 @@ void SerializeDatetimeColumn(
     TRecordBatchSerializationContext* context)
 {
     const auto* column = typedColumn.Column;
-    const auto maxAllowedValue = std::numeric_limits<i64>::max() / 1000;
     YT_VERIFY(column->Values);
 
     YT_LOG_DEBUG("Adding datetime column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
@@ -613,6 +725,11 @@ void SerializeDatetimeColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i64>(dstRef);
@@ -624,14 +741,12 @@ void SerializeDatetimeColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
                 [&] (auto value) {
-                    if (value > maxAllowedValue) {
-                        THROW_ERROR_EXCEPTION("Datetime value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, maxAllowedValue);
-                    }
-                    *currentOutput++ = value * 1000;
+                    *currentOutput++ = value;
                 });
         });
 }
@@ -663,6 +778,11 @@ void SerializeTimestampColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            TRef nullBitmap;
+            if (valueColumn->NullBitmap) {
+                nullBitmap = valueColumn->NullBitmap->Data;
+            }
+
             auto startIndex = column->StartIndex;
 
             auto dstValues = GetTypedValues<i64>(dstRef);
@@ -674,6 +794,7 @@ void SerializeTimestampColumn(
                 valueColumn->Values->ZigZagEncoded,
                 TRange<ui32>(),
                 rleIndexes,
+                nullBitmap,
                 [&] (auto index) {
                     return values[index];
                 },
@@ -800,6 +921,169 @@ void SerializeStringLikeColumn(
         });
 }
 
+template<ESimpleLogicalValueType type>
+void SerializeTzColumnImpl(
+    const TTypedBatchColumn& typedColumn,
+    TRecordBatchSerializationContext* context,
+    const TArrowFormatConfigPtr& config)
+{
+    const auto* column = typedColumn.Column;
+    YT_VERIFY(column->Values);
+    YT_VERIFY(column->Values->BaseValue == 0);
+    YT_VERIFY(column->Values->BitWidth == 32);
+    YT_VERIFY(column->Values->ZigZagEncoded);
+    YT_VERIFY(column->Strings);
+    YT_VERIFY(column->Strings->AvgLength);
+    YT_VERIFY(!column->Rle);
+
+    auto startIndex = column->StartIndex;
+    auto endIndex = startIndex + column->ValueCount;
+    auto stringData = column->Strings->Data;
+    auto avgLength = *column->Strings->AvgLength;
+
+    auto offsets = column->GetTypedValues<ui32>();
+    auto startOffset = DecodeStringOffset(offsets, avgLength, startIndex);
+    auto endOffset = DecodeStringOffset(offsets, avgLength, endIndex);
+    auto stringsSize = endOffset - startOffset;
+    std::vector<ui32> tzOffsets(column->ValueCount + 1);
+
+    YT_LOG_DEBUG("Adding tz-type column (ColumnId: %v, StartIndex: %v, ValueCount: %v, StartOffset: %v, EndOffset: %v, StringsSize: %v)",
+        column->Id,
+        column->StartIndex,
+        column->ValueCount,
+        startOffset,
+        endOffset,
+        stringsSize);
+
+    SerializeColumnPrologue(typedColumn, context);
+
+    DecodeStringOffsets(
+        offsets,
+        avgLength,
+        startIndex,
+        endIndex,
+        TMutableRange(tzOffsets));
+
+    auto addEmptyBitmap = [=] () {
+        context->AddFieldNode(
+            column->ValueCount,
+            0);
+
+        context->AddBuffer(
+            0,
+            [=] (TMutableRef /*dstRef*/) {
+            });
+    };
+
+    addEmptyBitmap();
+
+    constexpr ESimpleLogicalValueType UnderlyingDateType = GetUnderlyingDateType<type>();
+    using TInt = TUnderlyingTimestampIntegerType<UnderlyingDateType>;
+
+    // Writing timestamp values.
+    context->AddBuffer(
+        sizeof(TInt) * column->ValueCount,
+        [=] (TMutableRef dstRef) {
+            auto currentStringData = stringData.Data();
+            auto dstValues = GetTypedValues<TInt>(dstRef);
+
+            auto* currentOutput = dstValues.Begin();
+            for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+                if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
+                    auto tzItem = ParseTzValue<TInt>(std::string_view(
+                        currentStringData + tzOffsets[rowOffset],
+                        currentStringData + tzOffsets[rowOffset + 1]));
+                    *currentOutput = tzItem.first;
+                }
+                ++currentOutput;
+            }
+        });
+
+    addEmptyBitmap();
+
+    if (config->EnableTzIndex) {
+        // Writing timezone indexes
+        context->AddBuffer(
+            sizeof(ui16) * column->ValueCount,
+            [=] (TMutableRef dstRef) {
+                auto currentStringData = stringData.Data();
+                auto dstValues = GetTypedValues<ui16>(dstRef);
+
+                auto* currentOutput = dstValues.Begin();
+                for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+                    if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
+                        auto tzItem = ParseTzValue<TInt>(std::string_view(
+                            currentStringData + tzOffsets[rowOffset],
+                            currentStringData + tzOffsets[rowOffset + 1]));
+                        *currentOutput = GetTzIndex(tzItem.second);
+                    }
+                    ++currentOutput;
+                }
+            });
+    } else {
+        // Writing timezone names.
+        TStringBuilder builder;
+        std::vector<i32> nameOffsets;
+        nameOffsets.reserve(column->ValueCount);
+        i32 tzStringsSize = 0;
+        auto currentStringData = stringData.Data();
+        for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+            nameOffsets.push_back(tzStringsSize);
+            if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
+                auto tzItem = ParseTzValue<TInt>(std::string_view(
+                    currentStringData + tzOffsets[rowOffset],
+                    currentStringData + tzOffsets[rowOffset + 1]));
+                tzStringsSize += tzItem.second.size();
+                builder.AppendString(tzItem.second);
+            }
+        }
+        nameOffsets.push_back(tzStringsSize);
+        auto tzStringsBuffer = builder.Flush();
+
+        context->AddBuffer(
+            sizeof(i32) * (column->ValueCount + 1),
+            [=] (TMutableRef dstRef) {
+                ::memcpy(
+                    dstRef.Begin(),
+                    nameOffsets.data(),
+                    nameOffsets.size() * sizeof(i32));
+            });
+
+        context->AddBuffer(
+            tzStringsSize,
+            [=] (TMutableRef dstRef) {
+                ::memcpy(
+                    dstRef.Begin(),
+                    tzStringsBuffer.data(),
+                    tzStringsSize);
+            });
+    }
+}
+
+void SerializeTzColumn(
+    const TTypedBatchColumn& typedColumn,
+    ESimpleLogicalValueType simpleType,
+    TRecordBatchSerializationContext* context,
+    const TArrowFormatConfigPtr& config)
+{
+    switch (simpleType) {
+#define XX(ytType)                                                                                      \
+    case ESimpleLogicalValueType::ytType: {                                                             \
+        return SerializeTzColumnImpl<ESimpleLogicalValueType::ytType>(typedColumn, context, config);    \
+    }
+    XX(TzDate)
+    XX(TzDatetime)
+    XX(TzTimestamp)
+    XX(TzDate32)
+    XX(TzDatetime64)
+    XX(TzTimestamp64)
+#undef XX
+
+    default:
+        YT_ABORT();
+    }
+}
+
 void SerializeBooleanColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context)
@@ -837,11 +1121,14 @@ void SerializeNullColumn(
 
 void SerializeColumn(
     const TTypedBatchColumn& typedColumn,
-    TRecordBatchSerializationContext* context)
+    TRecordBatchSerializationContext* context,
+    const TArrowFormatConfigPtr& config)
 {
     const auto* column = typedColumn.Column;
 
-    if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column)) {
+    if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column) ||
+        IsRleButNotDictionaryEncodedTzColumn(*typedColumn.Column))
+    {
         SerializeRleButNotDictionaryEncodedStringLikeColumn(typedColumn, context);
         return;
     }
@@ -859,6 +1146,8 @@ void SerializeColumn(
     auto simpleType = CastToV1Type(typedColumn.Type).first;
     if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
+    } else if (IsTzType(typedColumn.Type)) {
+        SerializeTzColumn(typedColumn, simpleType, context, config);
     } else if (simpleType == ESimpleLogicalValueType::Interval) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     }  else if (simpleType == ESimpleLogicalValueType::Date) {
@@ -889,19 +1178,20 @@ void SerializeColumn(
 auto SerializeRecordBatch(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
     int length,
-    TRange<TTypedBatchColumn> typedColumns)
+    TRange<TTypedBatchColumn> typedColumns,
+    const TArrowFormatConfigPtr& config)
 {
     auto context = New<TRecordBatchSerializationContext>(flatbufBuilder);
 
     for (const auto& typedColumn : typedColumns) {
-        SerializeColumn(typedColumn, context.Get());
+        SerializeColumn(typedColumn, context.Get(), config);
     }
 
     auto fieldNodesOffset = flatbufBuilder->CreateVectorOfStructs(context->FieldNodes);
 
     auto buffersOffset = flatbufBuilder->CreateVectorOfStructs(context->Buffers);
 
-    auto recordBatchOffset = org::apache::arrow::flatbuf::CreateRecordBatch(
+    auto recordBatchOffset = flatbuf::CreateRecordBatch(
         *flatbufBuilder,
         length,
         fieldNodesOffset,
@@ -921,15 +1211,17 @@ auto SerializeRecordBatch(
             YT_VERIFY(current == dstRef.End());
         });
 }
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TArrowWriter
     : public TSchemalessFormatWriterBase
 {
 public:
     TArrowWriter(
+        TArrowFormatConfigPtr config,
         TNameTablePtr nameTable,
-        const std::vector<NTableClient::TTableSchemaPtr>& tableSchemas,
+        const std::vector<TTableSchemaPtr>& tableSchemas,
+        const std::vector<std::optional<std::vector<std::string>>>& columns,
         NConcurrency::IAsyncOutputStreamPtr output,
         bool enableContextSaving,
         TControlAttributesConfigPtr controlAttributesConfig,
@@ -940,8 +1232,10 @@ public:
             enableContextSaving,
             std::move(controlAttributesConfig),
             keyColumnCount)
+        , ArrowConfig_(std::move(config))
     {
         YT_VERIFY(tableSchemas.size() > 0);
+        YT_VERIFY(columns.size() == tableSchemas.size() || columns.size() == 0);
 
         ColumnConverters_.resize(tableSchemas.size());
         TableCount_ = tableSchemas.size();
@@ -950,9 +1244,19 @@ public:
         IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
+            THashSet<std::string> columnNames;
+            bool hasColumnFilter = false;
+            if (tableIndex < std::ssize(columns) && columns[tableIndex]) {
+                hasColumnFilter = true;
+                for (const auto& columnName : *(columns[tableIndex])) {
+                    columnNames.insert(columnName);
+                }
+            }
             for (const auto& columnSchema : tableSchemas[tableIndex]->Columns()) {
-                auto columnId = NameTable_->GetIdOrRegisterName(columnSchema.Name());
-                ColumnSchemas_[tableIndex][columnId] = columnSchema;
+                if (!hasColumnFilter || columnNames.contains(columnSchema.Name())) {
+                    auto columnId = NameTable_->GetIdOrRegisterName(columnSchema.Name());
+                    ColumnSchemas_[tableIndex][columnId] = columnSchema;
+                }
             }
             if (CheckColumnInNameTable(GetRangeIndexColumnId())) {
                 ColumnSchemas_[tableIndex][GetRangeIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetRangeIndexColumnId()), GetRangeIndexColumnId());
@@ -1037,7 +1341,7 @@ private:
         ++EncodedRowBatchCount_;
     }
 
-    void DoWriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) override
+    void DoWriteBatch(IUnversionedRowBatchPtr rowBatch) override
     {
         auto columnarBatch = rowBatch->TryAsColumnar();
         if (!columnarBatch) {
@@ -1095,6 +1399,8 @@ private:
     }
 
 private:
+    const TArrowFormatConfigPtr ArrowConfig_;
+
     int TableCount_ = 0;
     bool IsFirstBatch_ = true;
     i64 PrevTableIndex_ = 0;
@@ -1102,9 +1408,10 @@ private:
     std::vector<TTypedBatchColumn> TypedColumns_;
     std::vector<THashMap<int, TColumnSchema>> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
-    std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
+    std::vector<TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
     std::vector<bool> IsFirstBatchForSpecificTable_;
+    TConvertedColumnRange MissingColumns_;
 
     i64 EncodedRowBatchCount_ = 0;
     i64 EncodedColumnarBatchCount_ = 0;
@@ -1126,7 +1433,7 @@ private:
             ControlAttributesConfig_->EnableTabletIndex && IsTabletIndexColumnId(columnIndex);
     }
 
-    bool IsColumnNeedsToAdd(int columnIndex) const
+    bool ShouldColumnBeAdded(int columnIndex) const
     {
         return !IsSystemColumnId(columnIndex)
             || (CheckIfSystemColumnEnable(columnIndex) && !IsTableIndexColumnId(columnIndex));
@@ -1143,24 +1450,23 @@ private:
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
         if (!IsFirstBatchForSpecificTable_[tableIndex]) {
-            std::vector<bool> idExists(NameTable_->GetSize(), false);
-            for (const auto* column : batchColumns) {
-                if (IsColumnNeedsToAdd(column->Id)) {
-                    idExists[column->Id] = true;
-                }
-            }
             int currentIndex = 0;
-            for (int columnId = 0; columnId < NameTable_->GetSize(); columnId++) {
-                if (idExists[columnId]) {
+            for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
+                auto columnId = columnSchema.first;
+                if (ShouldColumnBeAdded(columnId)) {
                     TableIdToIndex_[tableIndex][columnId] = currentIndex;
                     currentIndex++;
                 }
             }
+
             IsFirstBatchForSpecificTable_[tableIndex] = true;
         }
+
         TypedColumns_.resize(TableIdToIndex_[tableIndex].size());
+        std::vector<bool> columnExists(TableIdToIndex_[tableIndex].size());
+
         for (const auto* column : batchColumns) {
-            if (IsColumnNeedsToAdd(column->Id)) {
+            if (ShouldColumnBeAdded(column->Id)) {
                 auto iterIndex = TableIdToIndex_[tableIndex].find(column->Id);
                 YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
 
@@ -1168,6 +1474,36 @@ private:
                 YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
                 TypedColumns_[iterIndex->second] = TTypedBatchColumn{
                     column,
+                    iterSchema->second.LogicalType()
+                };
+                columnExists[iterIndex->second] = true;
+            }
+        }
+
+        THashMap<int, TColumnSchema> missingColumnSchemas;
+        for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
+            auto columnId = columnSchema.first;
+            if (ShouldColumnBeAdded(columnId)) {
+                auto iterIndex = TableIdToIndex_[tableIndex].find(columnId);
+                YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
+                if (!columnExists[iterIndex->second]) {
+                    missingColumnSchemas[columnId] = columnSchema.second;
+                }
+            }
+        }
+        if (missingColumnSchemas.size() > 0 && RowCount_ > 0) {
+            std::vector<TUnversionedRow> rows(RowCount_);
+            TColumnConverters columnConverter;
+            MissingColumns_ = columnConverter.ConvertRowsToColumns(rows, missingColumnSchemas);
+            for (ssize_t columnIndex = 0; columnIndex < std::ssize(MissingColumns_); columnIndex++) {
+                auto iterIndex = TableIdToIndex_[tableIndex].find(MissingColumns_[columnIndex].RootColumn->Id);
+                YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
+
+                auto iterSchema = ColumnSchemas_[tableIndex].find(MissingColumns_[columnIndex].RootColumn->Id);
+                YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
+
+                TypedColumns_[iterIndex->second] = TTypedBatchColumn{
+                    MissingColumns_[columnIndex].RootColumn,
                     iterSchema->second.LogicalType()
                 };
             }
@@ -1207,13 +1543,13 @@ private:
     }
 
     void RegisterMessage(
-        [[maybe_unused]] org::apache::arrow::flatbuf::MessageHeader type,
+        [[maybe_unused]] flatbuf::MessageHeader type,
         flatbuffers::FlatBufferBuilder&& flatbufBuilder,
         i64 bodySize = 0,
         std::function<void(TMutableRef)> bodyWriter = nullptr)
     {
         YT_LOG_DEBUG("Message registered (Type: %v, MessageSize: %v, BodySize: %v)",
-            org::apache::arrow::flatbuf::EnumNamesMessageHeader()[type],
+            flatbuf::EnumNameMessageHeader(type),
             flatbufBuilder.GetSize(),
             bodySize);
 
@@ -1229,7 +1565,7 @@ private:
         flatbuffers::FlatBufferBuilder flatbufBuilder;
 
         int arrowDictionaryIdCounter = 0;
-        std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> fieldOffsets;
+        std::vector<flatbuffers::Offset<flatbuf::Field>> fieldOffsets;
         for (int columnIndex = 0; columnIndex < std::ssize(TypedColumns_); columnIndex++) {
             const auto& typedColumn = TypedColumns_[columnIndex];
             auto iterSchema = ColumnSchemas_[tableIndex].find(typedColumn.Column->Id);
@@ -1237,58 +1573,59 @@ private:
             auto columnSchema = iterSchema->second;
             auto nameOffset = SerializeString(&flatbufBuilder, columnSchema.Name());
 
-            auto [typeType, typeOffset] = SerializeColumnType(&flatbufBuilder, columnSchema);
+            auto [typeType, typeOffset, childrenFields] = SerializeColumnType(&flatbufBuilder, columnSchema, ArrowConfig_);
 
-            flatbuffers::Offset<org::apache::arrow::flatbuf::DictionaryEncoding> dictionaryEncodingOffset;
-            auto index_type_offset = org::apache::arrow::flatbuf::CreateInt(flatbufBuilder, 32, false);
+            flatbuffers::Offset<flatbuf::DictionaryEncoding> dictionaryEncodingOffset;
+            auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32,  /*is_signed*/ false);
 
             if (IsDictionaryEncodedColumn(*typedColumn.Column)) {
-                dictionaryEncodingOffset = org::apache::arrow::flatbuf::CreateDictionaryEncoding(
+                dictionaryEncodingOffset = flatbuf::CreateDictionaryEncoding(
                     flatbufBuilder,
                     arrowDictionaryIdCounter++,
-                    index_type_offset);
+                    indexTypeOffset);
             }
 
-            auto fieldOffset = org::apache::arrow::flatbuf::CreateField(
+            auto fieldOffset = flatbuf::CreateField(
                 flatbufBuilder,
                 nameOffset,
                 columnSchema.LogicalType()->IsNullable(),
                 typeType,
                 typeOffset,
-                dictionaryEncodingOffset);
+                dictionaryEncodingOffset,
+                flatbufBuilder.CreateVector(childrenFields.data(), childrenFields.size()));
 
             fieldOffsets.push_back(fieldOffset);
         }
 
         auto fieldsOffset = flatbufBuilder.CreateVector(fieldOffsets);
 
-        std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>> customMetadata;
+        std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customMetadata;
 
         if (TableCount_ > 1) {
-            auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
+            auto keyValueOffsett = flatbuf::CreateKeyValue(
                 flatbufBuilder,
                 flatbufBuilder.CreateString("TableId"),
                 flatbufBuilder.CreateString(std::to_string(tableIndex)));
             customMetadata.push_back(keyValueOffsett);
         }
 
-        auto schemaOffset = org::apache::arrow::flatbuf::CreateSchema(
+        auto schemaOffset = flatbuf::CreateSchema(
             flatbufBuilder,
-            org::apache::arrow::flatbuf::Endianness_Little,
+            flatbuf::Endianness_Little,
             fieldsOffset,
             flatbufBuilder.CreateVector(customMetadata));
 
-        auto messageOffset = org::apache::arrow::flatbuf::CreateMessage(
+        auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            org::apache::arrow::flatbuf::MetadataVersion_V4,
-            org::apache::arrow::flatbuf::MessageHeader_Schema,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_Schema,
             schemaOffset.Union(),
             0);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            org::apache::arrow::flatbuf::MessageHeader_Schema,
+            flatbuf::MessageHeader_Schema,
             std::move(flatbufBuilder));
     }
 
@@ -1328,7 +1665,9 @@ private:
                     columnIndex,
                     typedColumn.Column->Dictionary->DictionaryId,
                     typedColumn.Column->Dictionary->ValueColumn);
-            } else if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column)) {
+            } else if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column) ||
+                IsRleButNotDictionaryEncodedTzColumn(*typedColumn.Column))
+            {
                 YT_LOG_DEBUG("Adding dictionary batch for RLE but not dictionary-encoded string-like column (ColumnId: %v)",
                     typedColumn.Column->Id);
                 prepareDictionaryBatch(
@@ -1355,24 +1694,25 @@ private:
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
             typedColumn.Column->ValueCount,
-            MakeRange({typedColumn}));
+            TRange({typedColumn}),
+            ArrowConfig_);
 
-        auto dictionaryBatchOffset = org::apache::arrow::flatbuf::CreateDictionaryBatch(
+        auto dictionaryBatchOffset = flatbuf::CreateDictionaryBatch(
             flatbufBuilder,
             arrowDictionaryId,
             recordBatchOffset);
 
-        auto messageOffset = org::apache::arrow::flatbuf::CreateMessage(
+        auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            org::apache::arrow::flatbuf::MetadataVersion_V4,
-            org::apache::arrow::flatbuf::MessageHeader_DictionaryBatch,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_DictionaryBatch,
             dictionaryBatchOffset.Union(),
             bodySize);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            org::apache::arrow::flatbuf::MessageHeader_DictionaryBatch,
+            flatbuf::MessageHeader_DictionaryBatch,
             std::move(flatbufBuilder),
             bodySize,
             std::move(bodyWriter));
@@ -1385,19 +1725,20 @@ private:
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
             RowCount_,
-            TypedColumns_);
+            TypedColumns_,
+            ArrowConfig_);
 
-        auto messageOffset = org::apache::arrow::flatbuf::CreateMessage(
+        auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            org::apache::arrow::flatbuf::MetadataVersion_V4,
-            org::apache::arrow::flatbuf::MessageHeader_RecordBatch,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_RecordBatch,
             recordBatchOffset.Union(),
             bodySize);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            org::apache::arrow::flatbuf::MessageHeader_RecordBatch,
+            flatbuf::MessageHeader_RecordBatch,
             std::move(flatbufBuilder),
             bodySize,
             std::move(bodyWriter));
@@ -1435,7 +1776,7 @@ private:
                 output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
 
-                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
+                output->Write(AlignmentString.data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {
@@ -1459,22 +1800,51 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 ISchemalessFormatWriterPtr CreateWriterForArrow(
-    NTableClient::TNameTablePtr nameTable,
+    TArrowFormatConfigPtr config,
+    TNameTablePtr nameTable,
     const std::vector<NTableClient::TTableSchemaPtr>& schemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
     int keyColumnCount)
 {
-    auto result = New<TArrowWriter>(
+    return New<TArrowWriter>(
+        std::move(config),
         std::move(nameTable),
         schemas,
+        columns,
         std::move(output),
         enableContextSaving,
         std::move(controlAttributesConfig),
         keyColumnCount);
+}
 
-    return result;
+ISchemalessFormatWriterPtr CreateWriterForArrow(
+    const NYTree::IAttributeDictionary& attributes,
+    TNameTablePtr nameTable,
+    const std::vector<TTableSchemaPtr>& schemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
+    NConcurrency::IAsyncOutputStreamPtr output,
+    bool enableContextSaving,
+    TControlAttributesConfigPtr controlAttributesConfig,
+    int keyColumnCount)
+{
+    TArrowFormatConfigPtr arrowConfig;
+    try {
+        arrowConfig = ConvertTo<TArrowFormatConfigPtr>(attributes);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format") << ex;
+    }
+    return CreateWriterForArrow(
+        std::move(arrowConfig),
+        std::move(nameTable),
+        schemas,
+        columns,
+        std::move(output),
+        enableContextSaving,
+        std::move(controlAttributesConfig),
+        keyColumnCount);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

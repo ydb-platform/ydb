@@ -39,6 +39,8 @@ enum class EExecutionUnitKind: ui32 {
     PrepareWriteTxInRS,
     PrepareDistributedEraseTxInRS,
     LoadAndWaitInRS,
+    LoadInRS,
+    BlockFailPoint,
     ExecuteDataTx,
     ExecuteKqpDataTx,
     ExecuteDistributedEraseTx,
@@ -74,7 +76,9 @@ enum class EExecutionUnitKind: ui32 {
     CreateCdcStream,
     AlterCdcStream,
     DropCdcStream,
+    RotateCdcStream,
     MoveIndex,
+    CreateIncrementalRestoreSrc,
     Count,
     Unspecified
 };

@@ -19,6 +19,11 @@ std::vector<typename T::key_type> GetKeys(
     size_t sizeLimit = std::numeric_limits<size_t>::max());
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(
+    const T& collection,
+    size_t sizeLimit = std::numeric_limits<size_t>::max());
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(
     const T& collection,
     size_t sizeLimit = std::numeric_limits<size_t>::max());
@@ -40,7 +45,10 @@ template <class TSource, class TTarget>
 void MergeFrom(TTarget* target, const TSource& source);
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set);
+[[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set);
 
 /*!
  * This function is supposed to replace a frequent pattern
@@ -95,6 +103,12 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
 
 /*!
+ * This function emplaces default value at the given key.
+ */
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key);
+
+/*!
  * This function is supposed to replace std::get<T>(variant)
  * for those cases when exception should not be thrown.
  */
@@ -110,6 +124,15 @@ const T& GetOrCrash(const std::variant<TVariantArgs...>& variant);
  */
 template <class TMap, class TKey>
 typename TMap::mapped_type GetOrDefault(
+    const TMap& map,
+    const TKey& key,
+    const typename TMap::mapped_type& defaultValue = {})
+    requires (!TIsDefaultMap<TMap>::Value);
+
+//! Same as #GetOrDefault, but returns a const reference instead of a copied value.
+// TODO(eshcherbin): Should we remove #GetOrDefault in favour of #GetOrDefaultReference?
+template <class TMap, class TKey>
+const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue = {})
@@ -140,19 +163,22 @@ void EnsureVectorSize(std::vector<T>& vector, ssize_t size, const T& defaultValu
 template <class T>
 void EnsureVectorIndex(std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
 
-//! If vector size is not enough for vector[size] to exist, resize vector to size + 1.
-//! After that perform assignment vector[size] = value. Const reference version.
+//! If vector size is not enough for vector[index] to exist, resize vector to index + 1.
+//! After that perform assignment vector[index] = value. Const reference version.
 template <class T>
 void AssignVectorAt(std::vector<T>& vector, ssize_t index, const T& value, const T& defaultValue = T());
 
-//! If vector size is not enough for vector[size] to exist, resize vector to size + 1.
-//! After that perform assignment vector[size] = std::move(value). Rvalue reference version.
+//! If vector size is not enough for vector[index] to exist, resize vector to index + 1.
+//! After that perform assignment vector[index] = std::move(value). Rvalue reference version.
 template <class T>
 void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& defaultValue = T());
 
-//! If vector size is not enough for vector[size] to exist, return defaultValue, otherwise return vector[size].
+//! If vector size is not enough for vector[index] to exist, return defaultValue, otherwise return vector[index].
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector);
 
 ////////////////////////////////////////////////////////////////////////////////
 

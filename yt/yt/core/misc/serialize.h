@@ -1,13 +1,8 @@
 #pragma once
 
 #include "public.h"
-#include "error.h"
-#include "mpl.h"
 #include "property.h"
 #include "serialize_dump.h"
-#include "maybe_inf.h"
-
-#include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/memory/ref.h>
 
@@ -18,6 +13,8 @@
 #include <util/stream/zerocopy_output.h>
 
 #include <util/system/align.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NYT {
 
@@ -148,20 +145,47 @@ protected:
 class TLoadContextStream
 {
 public:
-    explicit TLoadContextStream(IInputStream* input);
-    explicit TLoadContextStream(IZeroCopyInput* input);
+    TLoadContextStream(
+        TStreamLoadContext* context,
+        IInputStream* input);
+    TLoadContextStream(
+        TStreamLoadContext* context,
+        IZeroCopyInput* input);
 
     size_t Load(void* buf, size_t len);
-    void ClearBuffer();
+    void SkipToCheckpoint();
 
 private:
+    friend class TStreamLoadContext;
+
+    TStreamLoadContext* const Context_;
     IInputStream* const Input_ = nullptr;
     IZeroCopyInput* const ZeroCopyInput_ = nullptr;
 
     char* BufferPtr_ = nullptr;
     size_t BufferRemaining_ = 0;
 
+    struct TScope
+    {
+        size_t NameLength;
+        bool FilterMatch;
+        char* CurrentChecksumPtr;
+        TChecksum CurrentChecksum = {};
+    };
+
+    TSerializationDumpScopeFilter ScopeFilter_;
+    std::vector<TScope> ScopeStack_;
+    std::string CurrentScopePath_;
+
     size_t LoadSlow(void* buf, size_t len);
+
+    void UpdateTopmostScopeChecksum(void* buf, size_t len);
+    void UpdateScopesChecksum();
+    void UpdateScopesCurrentChecksumPtr();
+
+    void ConfigureScopeFilter(TSerializationDumpScopeFilter scopeFilter);
+    void BeginScope(TStringBuf name);
+    void EndScope();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -180,8 +204,32 @@ public:
 
     TLoadContextStream* GetInput();
 
+    void ConfigureDump(
+        ESerializationDumpMode mode,
+        TSerializationDumpScopeFilter scopeFilter = {});
+    void BeginScope(TStringBuf name);
+    void EndScope();
+
 protected:
+    bool DumpConfigured_ = false;
     TLoadContextStream Input_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStreamLoadContextScopeGuard
+{
+public:
+    TStreamLoadContextScopeGuard(
+        TStreamLoadContext& context,
+        TStringBuf name);
+    TStreamLoadContextScopeGuard(const TStreamLoadContextScopeGuard&) = delete;
+    ~TStreamLoadContextScopeGuard();
+
+    TStreamLoadContextScopeGuard& operator=(const TStreamLoadContextScopeGuard&) = delete;
+
+private:
+    TStreamLoadContext& Context_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,6 +331,15 @@ void Load(C& context, T& value, TArgs&&... args);
 
 template <class T, class C, class... TArgs>
 T Load(C& context, TArgs&&... args);
+
+template <class TSerializer, class T, class C, class... TArgs>
+void LoadWith(C& context, T& value, TArgs&&... args);
+
+template <class TSerializer, class T, class C, class... TArgs>
+void SaveWith(C& context, const T& value, TArgs&&... args);
+
+template <class TSerializer, class T, class C, class... TArgs>
+T LoadWith(C& context, TArgs&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 

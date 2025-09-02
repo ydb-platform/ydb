@@ -38,7 +38,7 @@ public:
         auto& record = ev->Get()->Record;
         if (const auto& vdisk = VDisk.lock()) {
             auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::ERROR, vdisk->GetVDiskId(),
-                false, false, 0);
+                false, false, false, 0);
             auto& r = response->Record;
             if (VDiskIDFromVDiskID(record.GetVDiskID()) != vdisk->GetVDiskId()) { // RACE
                 r.SetStatus(NKikimrProto::RACE);
@@ -62,7 +62,7 @@ public:
             }
             Send(ev->Sender, response.release(), 0, ev->Cookie);
         } else {
-            Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::ERROR, record.GetVDiskID()), 0, ev->Cookie);
+            Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::ERROR, VDiskIDFromVDiskID(record.GetVDiskID())), 0, ev->Cookie);
         }
     }
 

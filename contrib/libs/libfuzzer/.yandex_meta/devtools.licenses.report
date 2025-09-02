@@ -1,0 +1,421 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     NCSA                 281d1ec07e86b61c925d7c514deecb25
+BELONGS ya.make
+    License text:
+        Compiler-RT is open source software. You may freely distribute it under the
+        terms of the license agreement found in LICENSE.txt.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        README.txt [7:8]
+
+KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2
+BELONGS ya.make
+    License text:
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [237:237]
+
+KEEP     Public-Domain        5ab2e1de3ac199ad15211e88647b49aa
+BELONGS ya.make
+    License text:
+        // This code is taken from public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/fuzzer/FuzzerSHA1.cpp [8:8]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.TXT [295:311]
+
+KEEP     Apache-2.0 WITH LLVM-exception 755ab7da3ff8c5d6ae90bdbebd177e49
+BELONGS lib/fuzzer/afl/ya.make ya.make
+    License text:
+        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+        // See https://llvm.org/LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/fuzzer/FuzzedDataProvider.h [3:4]
+        lib/fuzzer/FuzzerBuiltins.h [3:4]
+        lib/fuzzer/FuzzerBuiltinsMsvc.h [3:4]
+        lib/fuzzer/FuzzerCommand.h [3:4]
+        lib/fuzzer/FuzzerCorpus.h [3:4]
+        lib/fuzzer/FuzzerCrossOver.cpp [3:4]
+        lib/fuzzer/FuzzerDataFlowTrace.cpp [3:4]
+        lib/fuzzer/FuzzerDataFlowTrace.h [3:4]
+        lib/fuzzer/FuzzerDefs.h [3:4]
+        lib/fuzzer/FuzzerDictionary.h [3:4]
+        lib/fuzzer/FuzzerDriver.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctions.def [3:4]
+        lib/fuzzer/FuzzerExtFunctions.h [3:4]
+        lib/fuzzer/FuzzerExtFunctionsDlsym.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctionsWeak.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctionsWindows.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCounters.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCountersDarwin.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCountersWindows.cpp [3:4]
+        lib/fuzzer/FuzzerFlags.def [3:4]
+        lib/fuzzer/FuzzerFork.cpp [3:4]
+        lib/fuzzer/FuzzerFork.h [3:4]
+        lib/fuzzer/FuzzerIO.cpp [3:4]
+        lib/fuzzer/FuzzerIO.h [3:4]
+        lib/fuzzer/FuzzerIOPosix.cpp [3:4]
+        lib/fuzzer/FuzzerIOWindows.cpp [3:4]
+        lib/fuzzer/FuzzerInterface.h [3:4]
+        lib/fuzzer/FuzzerInternal.h [3:4]
+        lib/fuzzer/FuzzerLoop.cpp [3:4]
+        lib/fuzzer/FuzzerMain.cpp [3:4]
+        lib/fuzzer/FuzzerMerge.cpp [3:4]
+        lib/fuzzer/FuzzerMerge.h [3:4]
+        lib/fuzzer/FuzzerMutate.cpp [3:4]
+        lib/fuzzer/FuzzerMutate.h [3:4]
+        lib/fuzzer/FuzzerOptions.h [2:3]
+        lib/fuzzer/FuzzerPlatform.h [3:4]
+        lib/fuzzer/FuzzerRandom.h [3:4]
+        lib/fuzzer/FuzzerSHA1.cpp [3:4]
+        lib/fuzzer/FuzzerSHA1.h [3:4]
+        lib/fuzzer/FuzzerTracePC.cpp [3:4]
+        lib/fuzzer/FuzzerTracePC.h [3:4]
+        lib/fuzzer/FuzzerUtil.cpp [3:4]
+        lib/fuzzer/FuzzerUtil.h [3:4]
+        lib/fuzzer/FuzzerUtilDarwin.cpp [3:4]
+        lib/fuzzer/FuzzerUtilLinux.cpp [3:4]
+        lib/fuzzer/FuzzerUtilPosix.cpp [3:4]
+        lib/fuzzer/FuzzerUtilWindows.cpp [3:4]
+        lib/fuzzer/FuzzerValueBitMap.h [3:4]
+        lib/fuzzer/afl/afl_driver.cpp [3:4]
+        lib/fuzzer/standalone/StandaloneFuzzTargetMain.c [3:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        include/fuzzer/FuzzedDataProvider.h [3:4]
+        lib/fuzzer/FuzzerBuiltins.h [3:4]
+        lib/fuzzer/FuzzerBuiltinsMsvc.h [3:4]
+        lib/fuzzer/FuzzerCommand.h [3:4]
+        lib/fuzzer/FuzzerCorpus.h [3:4]
+        lib/fuzzer/FuzzerCrossOver.cpp [3:4]
+        lib/fuzzer/FuzzerDataFlowTrace.cpp [3:4]
+        lib/fuzzer/FuzzerDataFlowTrace.h [3:4]
+        lib/fuzzer/FuzzerDefs.h [3:4]
+        lib/fuzzer/FuzzerDictionary.h [3:4]
+        lib/fuzzer/FuzzerDriver.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctions.def [3:4]
+        lib/fuzzer/FuzzerExtFunctions.h [3:4]
+        lib/fuzzer/FuzzerExtFunctionsDlsym.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctionsWeak.cpp [3:4]
+        lib/fuzzer/FuzzerExtFunctionsWindows.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCounters.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCountersDarwin.cpp [3:4]
+        lib/fuzzer/FuzzerExtraCountersWindows.cpp [3:4]
+        lib/fuzzer/FuzzerFlags.def [3:4]
+        lib/fuzzer/FuzzerFork.cpp [3:4]
+        lib/fuzzer/FuzzerFork.h [3:4]
+        lib/fuzzer/FuzzerIO.cpp [3:4]
+        lib/fuzzer/FuzzerIO.h [3:4]
+        lib/fuzzer/FuzzerIOPosix.cpp [3:4]
+        lib/fuzzer/FuzzerIOWindows.cpp [3:4]
+        lib/fuzzer/FuzzerInterface.h [3:4]
+        lib/fuzzer/FuzzerInternal.h [3:4]
+        lib/fuzzer/FuzzerLoop.cpp [3:4]
+        lib/fuzzer/FuzzerMain.cpp [3:4]
+        lib/fuzzer/FuzzerMerge.cpp [3:4]
+        lib/fuzzer/FuzzerMerge.h [3:4]
+        lib/fuzzer/FuzzerMutate.cpp [3:4]
+        lib/fuzzer/FuzzerMutate.h [3:4]
+        lib/fuzzer/FuzzerOptions.h [2:3]
+        lib/fuzzer/FuzzerPlatform.h [3:4]
+        lib/fuzzer/FuzzerRandom.h [3:4]
+        lib/fuzzer/FuzzerSHA1.cpp [3:4]
+        lib/fuzzer/FuzzerSHA1.h [3:4]
+        lib/fuzzer/FuzzerTracePC.cpp [3:4]
+        lib/fuzzer/FuzzerTracePC.h [3:4]
+        lib/fuzzer/FuzzerUtil.cpp [3:4]
+        lib/fuzzer/FuzzerUtil.h [3:4]
+        lib/fuzzer/FuzzerUtilDarwin.cpp [3:4]
+        lib/fuzzer/FuzzerUtilLinux.cpp [3:4]
+        lib/fuzzer/FuzzerUtilPosix.cpp [3:4]
+        lib/fuzzer/FuzzerUtilWindows.cpp [3:4]
+        lib/fuzzer/FuzzerValueBitMap.h [3:4]
+        lib/fuzzer/afl/afl_driver.cpp [3:4]
+        lib/fuzzer/standalone/StandaloneFuzzTargetMain.c [3:4]
+
+KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
+BELONGS ya.make
+    # starts with --- LLVM Exceptions to the Apache 2.0 License ----
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.TXT [208:222]
+
+KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [5:205]
+
+KEEP     Public-Domain        9af2e28b3ed3ba201bece4b3024268de
+BELONGS ya.make
+    License text:
+        /* This code is public-domain - it is based on libcrypt
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/fuzzer/FuzzerSHA1.cpp [22:22]
+
+KEEP     NCSA AND MIT         acaf5a1ddffd6829f7ebecb9e50c6c5f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [240:245]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.TXT [240:245]
+
+KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [264:289]
+
+KEEP     Apache-2.0 WITH LLVM-exception b7566a1930e050e1090162bf1d543650
+BELONGS lib/fuzzer/afl/ya.make ya.make
+    License text:
+        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/fuzzer/FuzzedDataProvider.h [5:5]
+        lib/fuzzer/FuzzerBuiltins.h [5:5]
+        lib/fuzzer/FuzzerBuiltinsMsvc.h [5:5]
+        lib/fuzzer/FuzzerCommand.h [5:5]
+        lib/fuzzer/FuzzerCorpus.h [5:5]
+        lib/fuzzer/FuzzerCrossOver.cpp [5:5]
+        lib/fuzzer/FuzzerDataFlowTrace.cpp [5:5]
+        lib/fuzzer/FuzzerDataFlowTrace.h [5:5]
+        lib/fuzzer/FuzzerDefs.h [5:5]
+        lib/fuzzer/FuzzerDictionary.h [5:5]
+        lib/fuzzer/FuzzerDriver.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctions.def [5:5]
+        lib/fuzzer/FuzzerExtFunctions.h [5:5]
+        lib/fuzzer/FuzzerExtFunctionsDlsym.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctionsWeak.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctionsWindows.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCounters.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCountersDarwin.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCountersWindows.cpp [5:5]
+        lib/fuzzer/FuzzerFlags.def [5:5]
+        lib/fuzzer/FuzzerFork.cpp [5:5]
+        lib/fuzzer/FuzzerFork.h [5:5]
+        lib/fuzzer/FuzzerIO.cpp [5:5]
+        lib/fuzzer/FuzzerIO.h [5:5]
+        lib/fuzzer/FuzzerIOPosix.cpp [5:5]
+        lib/fuzzer/FuzzerIOWindows.cpp [5:5]
+        lib/fuzzer/FuzzerInterface.h [5:5]
+        lib/fuzzer/FuzzerInternal.h [5:5]
+        lib/fuzzer/FuzzerLoop.cpp [5:5]
+        lib/fuzzer/FuzzerMain.cpp [5:5]
+        lib/fuzzer/FuzzerMerge.cpp [5:5]
+        lib/fuzzer/FuzzerMerge.h [5:5]
+        lib/fuzzer/FuzzerMutate.cpp [5:5]
+        lib/fuzzer/FuzzerMutate.h [5:5]
+        lib/fuzzer/FuzzerOptions.h [4:4]
+        lib/fuzzer/FuzzerPlatform.h [5:5]
+        lib/fuzzer/FuzzerRandom.h [5:5]
+        lib/fuzzer/FuzzerSHA1.cpp [5:5]
+        lib/fuzzer/FuzzerSHA1.h [5:5]
+        lib/fuzzer/FuzzerTracePC.cpp [5:5]
+        lib/fuzzer/FuzzerTracePC.h [5:5]
+        lib/fuzzer/FuzzerUtil.cpp [5:5]
+        lib/fuzzer/FuzzerUtil.h [5:5]
+        lib/fuzzer/FuzzerUtilDarwin.cpp [5:5]
+        lib/fuzzer/FuzzerUtilLinux.cpp [5:5]
+        lib/fuzzer/FuzzerUtilPosix.cpp [5:5]
+        lib/fuzzer/FuzzerUtilWindows.cpp [5:5]
+        lib/fuzzer/FuzzerValueBitMap.h [5:5]
+        lib/fuzzer/afl/afl_driver.cpp [5:5]
+        lib/fuzzer/standalone/StandaloneFuzzTargetMain.c [5:5]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        include/fuzzer/FuzzedDataProvider.h [5:5]
+        lib/fuzzer/FuzzerBuiltins.h [5:5]
+        lib/fuzzer/FuzzerBuiltinsMsvc.h [5:5]
+        lib/fuzzer/FuzzerCommand.h [5:5]
+        lib/fuzzer/FuzzerCorpus.h [5:5]
+        lib/fuzzer/FuzzerCrossOver.cpp [5:5]
+        lib/fuzzer/FuzzerDataFlowTrace.cpp [5:5]
+        lib/fuzzer/FuzzerDataFlowTrace.h [5:5]
+        lib/fuzzer/FuzzerDefs.h [5:5]
+        lib/fuzzer/FuzzerDictionary.h [5:5]
+        lib/fuzzer/FuzzerDriver.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctions.def [5:5]
+        lib/fuzzer/FuzzerExtFunctions.h [5:5]
+        lib/fuzzer/FuzzerExtFunctionsDlsym.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctionsWeak.cpp [5:5]
+        lib/fuzzer/FuzzerExtFunctionsWindows.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCounters.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCountersDarwin.cpp [5:5]
+        lib/fuzzer/FuzzerExtraCountersWindows.cpp [5:5]
+        lib/fuzzer/FuzzerFlags.def [5:5]
+        lib/fuzzer/FuzzerFork.cpp [5:5]
+        lib/fuzzer/FuzzerFork.h [5:5]
+        lib/fuzzer/FuzzerIO.cpp [5:5]
+        lib/fuzzer/FuzzerIO.h [5:5]
+        lib/fuzzer/FuzzerIOPosix.cpp [5:5]
+        lib/fuzzer/FuzzerIOWindows.cpp [5:5]
+        lib/fuzzer/FuzzerInterface.h [5:5]
+        lib/fuzzer/FuzzerInternal.h [5:5]
+        lib/fuzzer/FuzzerLoop.cpp [5:5]
+        lib/fuzzer/FuzzerMain.cpp [5:5]
+        lib/fuzzer/FuzzerMerge.cpp [5:5]
+        lib/fuzzer/FuzzerMerge.h [5:5]
+        lib/fuzzer/FuzzerMutate.cpp [5:5]
+        lib/fuzzer/FuzzerMutate.h [5:5]
+        lib/fuzzer/FuzzerOptions.h [4:4]
+        lib/fuzzer/FuzzerPlatform.h [5:5]
+        lib/fuzzer/FuzzerRandom.h [5:5]
+        lib/fuzzer/FuzzerSHA1.cpp [5:5]
+        lib/fuzzer/FuzzerSHA1.h [5:5]
+        lib/fuzzer/FuzzerTracePC.cpp [5:5]
+        lib/fuzzer/FuzzerTracePC.h [5:5]
+        lib/fuzzer/FuzzerUtil.cpp [5:5]
+        lib/fuzzer/FuzzerUtil.h [5:5]
+        lib/fuzzer/FuzzerUtilDarwin.cpp [5:5]
+        lib/fuzzer/FuzzerUtilLinux.cpp [5:5]
+        lib/fuzzer/FuzzerUtilPosix.cpp [5:5]
+        lib/fuzzer/FuzzerUtilWindows.cpp [5:5]
+        lib/fuzzer/FuzzerValueBitMap.h [5:5]
+        lib/fuzzer/afl/afl_driver.cpp [5:5]
+        lib/fuzzer/standalone/StandaloneFuzzTargetMain.c [5:5]
+
+KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943
+BELONGS ya.make
+    License text:
+        University of Illinois/NCSA
+        Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [249:250]
+
+KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
+BELONGS ya.make
+    License text:
+        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [2:2]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.TXT [2:2]
+
+KEEP     Public-Domain        f452f4d0b721fed73ab5c8bb024a0478
+BELONGS ya.make
+    License text:
+         * placed in the public domain by Wei Dai and other contributors.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        lib/fuzzer/FuzzerSHA1.cpp [23:23]

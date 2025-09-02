@@ -38,9 +38,9 @@ namespace orc {
   RleEncoderV1::RleEncoderV1(std::unique_ptr<BufferedOutputStream> outStream, bool hasSigned)
       : RleEncoder(std::move(outStream), hasSigned) {
     literals = new int64_t[MAX_LITERAL_SIZE];
-    delta = 0;
-    repeat = false;
-    tailRunLength = 0;
+    delta_ = 0;
+    repeat_ = false;
+    tailRunLength_ = 0;
   }
 
   RleEncoderV1::~RleEncoderV1() {
@@ -49,9 +49,9 @@ namespace orc {
 
   void RleEncoderV1::writeValues() {
     if (numLiterals != 0) {
-      if (repeat) {
+      if (repeat_) {
         writeByte(static_cast<char>(static_cast<uint64_t>(numLiterals) - MINIMUM_REPEAT));
-        writeByte(static_cast<char>(delta));
+        writeByte(static_cast<char>(delta_));
         if (isSigned) {
           writeVslong(literals[0]);
         } else {
@@ -67,26 +67,24 @@ namespace orc {
           }
         }
       }
-      repeat = false;
+      repeat_ = false;
       numLiterals = 0;
-      tailRunLength = 0;
+      tailRunLength_ = 0;
     }
   }
 
   uint64_t RleEncoderV1::flush() {
-    writeValues();
-    outputStream->BackUp(static_cast<int>(bufferLength - bufferPosition));
+    finishEncode();
     uint64_t dataSize = outputStream->flush();
-    bufferLength = bufferPosition = 0;
     return dataSize;
   }
 
   void RleEncoderV1::write(int64_t value) {
     if (numLiterals == 0) {
       literals[numLiterals++] = value;
-      tailRunLength = 1;
-    } else if (repeat) {
-      if (value == literals[0] + delta * static_cast<int64_t>(numLiterals)) {
+      tailRunLength_ = 1;
+    } else if (repeat_) {
+      if (value == literals[0] + delta_ * static_cast<int64_t>(numLiterals)) {
         numLiterals += 1;
         if (numLiterals == MAXIMUM_REPEAT) {
           writeValues();
@@ -94,36 +92,36 @@ namespace orc {
       } else {
         writeValues();
         literals[numLiterals++] = value;
-        tailRunLength = 1;
+        tailRunLength_ = 1;
       }
     } else {
-      if (tailRunLength == 1) {
-        delta = value - literals[numLiterals - 1];
-        if (delta < MIN_DELTA || delta > MAX_DELTA) {
-          tailRunLength = 1;
+      if (tailRunLength_ == 1) {
+        delta_ = value - literals[numLiterals - 1];
+        if (delta_ < MIN_DELTA || delta_ > MAX_DELTA) {
+          tailRunLength_ = 1;
         } else {
-          tailRunLength = 2;
+          tailRunLength_ = 2;
         }
-      } else if (value == literals[numLiterals - 1] + delta) {
-        tailRunLength += 1;
+      } else if (value == literals[numLiterals - 1] + delta_) {
+        tailRunLength_ += 1;
       } else {
-        delta = value - literals[numLiterals - 1];
-        if (delta < MIN_DELTA || delta > MAX_DELTA) {
-          tailRunLength = 1;
+        delta_ = value - literals[numLiterals - 1];
+        if (delta_ < MIN_DELTA || delta_ > MAX_DELTA) {
+          tailRunLength_ = 1;
         } else {
-          tailRunLength = 2;
+          tailRunLength_ = 2;
         }
       }
-      if (tailRunLength == MINIMUM_REPEAT) {
+      if (tailRunLength_ == MINIMUM_REPEAT) {
         if (numLiterals + 1 == MINIMUM_REPEAT) {
-          repeat = true;
+          repeat_ = true;
           numLiterals += 1;
         } else {
           numLiterals -= static_cast<int>(MINIMUM_REPEAT - 1);
           int64_t base = literals[numLiterals];
           writeValues();
           literals[0] = base;
-          repeat = true;
+          repeat_ = true;
           numLiterals = MINIMUM_REPEAT;
         }
       } else {
@@ -135,18 +133,23 @@ namespace orc {
     }
   }
 
+  void RleEncoderV1::finishEncode() {
+    writeValues();
+    RleEncoder::finishEncode();
+  }
+
   signed char RleDecoderV1::readByte() {
     SCOPED_MINUS_STOPWATCH(metrics, DecodingLatencyUs);
-    if (bufferStart == bufferEnd) {
+    if (bufferStart_ == bufferEnd_) {
       int bufferLength;
       const void* bufferPointer;
-      if (!inputStream->Next(&bufferPointer, &bufferLength)) {
+      if (!inputStream_->Next(&bufferPointer, &bufferLength)) {
         throw ParseError("bad read in readByte");
       }
-      bufferStart = static_cast<const char*>(bufferPointer);
-      bufferEnd = bufferStart + bufferLength;
+      bufferStart_ = static_cast<const char*>(bufferPointer);
+      bufferEnd_ = bufferStart_ + bufferLength;
     }
-    return static_cast<signed char>(*(bufferStart++));
+    return static_cast<signed char>(*(bufferStart_++));
   }
 
   uint64_t RleDecoderV1::readLong() {
@@ -177,34 +180,34 @@ namespace orc {
   void RleDecoderV1::readHeader() {
     signed char ch = readByte();
     if (ch < 0) {
-      remainingValues = static_cast<uint64_t>(-ch);
-      repeating = false;
+      remainingValues_ = static_cast<uint64_t>(-ch);
+      repeating_ = false;
     } else {
-      remainingValues = static_cast<uint64_t>(ch) + MINIMUM_REPEAT;
-      repeating = true;
-      delta = readByte();
-      value = isSigned ? unZigZag(readLong()) : static_cast<int64_t>(readLong());
+      remainingValues_ = static_cast<uint64_t>(ch) + MINIMUM_REPEAT;
+      repeating_ = true;
+      delta_ = readByte();
+      value_ = isSigned_ ? unZigZag(readLong()) : static_cast<int64_t>(readLong());
     }
   }
 
   void RleDecoderV1::reset() {
-    remainingValues = 0;
-    value = 0;
-    bufferStart = nullptr;
-    bufferEnd = nullptr;
-    delta = 0;
-    repeating = false;
+    remainingValues_ = 0;
+    value_ = 0;
+    bufferStart_ = nullptr;
+    bufferEnd_ = nullptr;
+    delta_ = 0;
+    repeating_ = false;
   }
 
   RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input, bool hasSigned,
-                             ReaderMetrics* _metrics)
-      : RleDecoder(_metrics), inputStream(std::move(input)), isSigned(hasSigned) {
+                             ReaderMetrics* metrics)
+      : RleDecoder(metrics), inputStream_(std::move(input)), isSigned_(hasSigned) {
     reset();
   }
 
   void RleDecoderV1::seek(PositionProvider& location) {
     // move the input stream
-    inputStream->seek(location);
+    inputStream_->seek(location);
     // reset the decoder status and lazily call readHeader()
     reset();
     // skip ahead the given number of records
@@ -213,14 +216,14 @@ namespace orc {
 
   void RleDecoderV1::skip(uint64_t numValues) {
     while (numValues > 0) {
-      if (remainingValues == 0) {
+      if (remainingValues_ == 0) {
         readHeader();
       }
-      uint64_t count = std::min(numValues, remainingValues);
-      remainingValues -= count;
+      uint64_t count = std::min(numValues, remainingValues_);
+      remainingValues_ -= count;
       numValues -= count;
-      if (repeating) {
-        value += delta * static_cast<int64_t>(count);
+      if (repeating_) {
+        value_ += delta_ * static_cast<int64_t>(count);
       } else {
         skipLongs(count);
       }
@@ -240,38 +243,38 @@ namespace orc {
     }
     while (position < numValues) {
       // If we are out of values, read more.
-      if (remainingValues == 0) {
+      if (remainingValues_ == 0) {
         readHeader();
       }
       // How many do we read out of this block?
-      uint64_t count = std::min(numValues - position, remainingValues);
+      uint64_t count = std::min(numValues - position, remainingValues_);
       uint64_t consumed = 0;
-      if (repeating) {
+      if (repeating_) {
         if (notNull) {
           for (uint64_t i = 0; i < count; ++i) {
             if (notNull[position + i]) {
-              data[position + i] = static_cast<T>(value + static_cast<int64_t>(consumed) * delta);
+              data[position + i] = static_cast<T>(value_ + static_cast<int64_t>(consumed) * delta_);
               consumed += 1;
             }
           }
         } else {
           for (uint64_t i = 0; i < count; ++i) {
-            data[position + i] = static_cast<T>(value + static_cast<int64_t>(i) * delta);
+            data[position + i] = static_cast<T>(value_ + static_cast<int64_t>(i) * delta_);
           }
           consumed = count;
         }
-        value += static_cast<int64_t>(consumed) * delta;
+        value_ += static_cast<int64_t>(consumed) * delta_;
       } else {
         if (notNull) {
           for (uint64_t i = 0; i < count; ++i) {
             if (notNull[position + i]) {
               data[position + i] =
-                  isSigned ? static_cast<T>(unZigZag(readLong())) : static_cast<T>(readLong());
+                  isSigned_ ? static_cast<T>(unZigZag(readLong())) : static_cast<T>(readLong());
               ++consumed;
             }
           }
         } else {
-          if (isSigned) {
+          if (isSigned_) {
             for (uint64_t i = 0; i < count; ++i) {
               data[position + i] = static_cast<T>(unZigZag(readLong()));
             }
@@ -283,7 +286,7 @@ namespace orc {
           consumed = count;
         }
       }
-      remainingValues -= consumed;
+      remainingValues_ -= consumed;
       position += count;
 
       // skipNulls()

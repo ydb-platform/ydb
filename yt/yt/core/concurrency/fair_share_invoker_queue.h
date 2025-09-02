@@ -32,7 +32,7 @@ public:
     TFairShareInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const std::vector<TBucketDescription>& bucketDescriptions,
-        NProfiling::IRegistryImplPtr registry = {});
+        NProfiling::IRegistryPtr registry = {});
 
     ~TFairShareInvokerQueue();
 
@@ -52,7 +52,7 @@ public:
     void Reconfigure(std::vector<double> weights);
 
 private:
-    constexpr static i64 UnitWeight = 1'000;
+    static constexpr i64 UnitWeight = 1'000;
 
     struct TBucket
     {

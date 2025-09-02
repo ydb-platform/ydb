@@ -11,11 +11,7 @@ namespace NKikimr {
         // TFreeRes
         ////////////////////////////////////////////////////////////////////////////
         void TFreeRes::Output(IOutputStream &str) const {
-            str << "{ChunkIdx: " << ChunkId << " Mask# ";
-            for (size_t i = 0; i < MaskSize; ++i) {
-                str << (Mask[i] ? "1" : "0");
-            }
-            str << "}";
+            str << "{ChunkIdx: " << ChunkId << " InLockedChunks# " << InLockedChunks << '}';
         }
 
         ////////////////////////////////////////////////////////////////////////////

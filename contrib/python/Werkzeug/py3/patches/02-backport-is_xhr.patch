@@ -1,0 +1,31 @@
+--- contrib/python/Werkzeug/py3/werkzeug/sansio/request.py	(index)
++++ contrib/python/Werkzeug/py3/werkzeug/sansio/request.py	(working tree)
+@@ -204,6 +204,28 @@ class Request:
+         return f"{self.path}?{_to_str(self.query_string, self.url_charset)}"
+ 
+     @property
++    def is_xhr(self):
++        """True if the request was triggered via a JavaScript XMLHttpRequest.
++        This only works with libraries that support the ``X-Requested-With``
++        header and set it to "XMLHttpRequest".  Libraries that do that are
++        prototype, jQuery and Mochikit and probably some more.
++        .. deprecated:: 0.13
++            ``X-Requested-With`` is not standard and is unreliable. You
++            may be able to use :attr:`AcceptMixin.accept_mimetypes`
++            instead.
++        """
++        import warnings
++        warnings.warn(
++            "'Request.is_xhr' is deprecated as of version 0.13 and will"
++            " be removed in version 1.0. The 'X-Requested-With' header"
++            " is not standard and is unreliable. You may be able to use"
++            " 'accept_mimetypes' instead.",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        return self.environ.get("HTTP_X_REQUESTED_WITH", "").lower() == "xmlhttprequest"
++
++    @property
+     def is_secure(self) -> bool:
+         """``True`` if the request was made with a secure protocol
+         (HTTPS or WSS).

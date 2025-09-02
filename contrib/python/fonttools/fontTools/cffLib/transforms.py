@@ -94,17 +94,22 @@ class _DesubroutinizingT2Decompiler(SimpleT2Decompiler):
             cs._patches.append((index, subr._desubroutinized))
 
 
+def desubroutinizeCharString(cs):
+    """Desubroutinize a charstring in-place."""
+    cs.decompile()
+    subrs = getattr(cs.private, "Subrs", [])
+    decompiler = _DesubroutinizingT2Decompiler(subrs, cs.globalSubrs, cs.private)
+    decompiler.execute(cs)
+    cs.program = cs._desubroutinized
+    del cs._desubroutinized
+
+
 def desubroutinize(cff):
     for fontName in cff.fontNames:
         font = cff[fontName]
         cs = font.CharStrings
         for c in cs.values():
-            c.decompile()
-            subrs = getattr(c.private, "Subrs", [])
-            decompiler = _DesubroutinizingT2Decompiler(subrs, c.globalSubrs, c.private)
-            decompiler.execute(c)
-            c.program = c._desubroutinized
-            del c._desubroutinized
+            desubroutinizeCharString(c)
         # Delete all the local subrs
         if hasattr(font, "FDArray"):
             for fd in font.FDArray:
@@ -457,6 +462,13 @@ def remove_unused_subroutines(cff):
             if subrs == font.GlobalSubrs:
                 if not hasattr(font, "FDArray") and hasattr(font.Private, "Subrs"):
                     local_subrs = font.Private.Subrs
+                elif (
+                    hasattr(font, "FDArray")
+                    and len(font.FDArray) == 1
+                    and hasattr(font.FDArray[0].Private, "Subrs")
+                ):
+                    # Technically we shouldn't do this. But I've run into fonts that do it.
+                    local_subrs = font.FDArray[0].Private.Subrs
                 else:
                     local_subrs = None
             else:

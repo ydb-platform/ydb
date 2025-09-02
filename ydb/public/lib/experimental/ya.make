@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     ydb_clickhouse_internal.cpp
     ydb_logstore.cpp
@@ -9,8 +13,8 @@ SRCS(
 PEERDIR(
     ydb/core/scheme
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/table
 )
 
 END()

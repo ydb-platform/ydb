@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/tx/columnshard/data_sharing/destination/events
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/transactions/transactions
+    ydb/core/tx/columnshard/transactions/locks
 )
 
 YQL_LAST_ABI_VERSION()

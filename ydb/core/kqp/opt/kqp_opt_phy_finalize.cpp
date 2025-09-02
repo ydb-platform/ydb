@@ -1,6 +1,6 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h>
 
@@ -69,8 +69,32 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
             break;
         }
     }
+
+    std::function<bool(TExprBase)> hasReturning = [&] (TExprBase node) {
+        if (auto effect = node.Maybe<TKqlUpsertRows>()) {
+            return !effect.ReturningColumns().Cast().Empty();
+        }
+        if (auto effect = node.Maybe<TKqlDeleteRows>()) {
+            return !effect.ReturningColumns().Cast().Empty();
+        }
+        if (auto effect = node.Maybe<TExprList>()) {
+            for (auto item : effect.Cast()) {
+                if (hasReturning(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
     for (const auto& effect : query.Effects()) {
         if (!hasPrecomputes(effect)) {
+            omitResultPrecomputes = false;
+            break;
+        }
+        // returning works by forcing materialization of modified rows via precompute
+        // so omitting precomputes here breaks returning logic
+        if (hasReturning(effect)) {
             omitResultPrecomputes = false;
             break;
         }
@@ -222,6 +246,115 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     return TStatus::Ok;
 }
 
+template <typename TExpr>
+TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) {
+    TVector<TExpr> result;
+
+    VisitExpr(input, [&result](const TExprNode::TPtr& node) {
+        if (TExpr::Match(node.Get())) {
+            result.emplace_back(TExpr(node));
+        }
+        return true;
+    });
+
+    return result;
+}
+
+bool FindPrecomputedOutputs(TDqStageBase stage, const TParentsMap& parentsMap) {
+    auto outIt = parentsMap.find(stage.Raw());
+    if (outIt == parentsMap.end()) {
+        return false;
+    }
+
+    for (auto& output : outIt->second) {
+        if (TDqOutput::Match(output)) {
+            auto connIt = parentsMap.find(output);
+            if (connIt != parentsMap.end()) {
+                for (auto maybeConn : connIt->second) {
+                    auto parentIt = parentsMap.find(maybeConn);
+                    if (parentIt != parentsMap.end()) {
+                        for (auto& parent : parentIt->second) {
+                            if (TDqPrecompute::Match(parent) || TDqPhyPrecompute::Match(parent)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+
+TExprBase ReplicatePrecompute(TDqStageBase stage, TExprContext& ctx, const TParentsMap& parentsMap) {
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        auto input = stage.Inputs().Item(i);
+        if (auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>()) {
+            auto conn = maybeConn.Cast();
+            if (conn.Maybe<TDqCnValue>() || conn.Maybe<TDqCnUnionAll>()) {
+                {
+                    auto sourceStage = conn.Output().Stage();
+                    if (!sourceStage.Program().Body().Maybe<TDqReplicate>()) {
+                        continue;
+                    }
+
+                    if (!FindPrecomputedOutputs(sourceStage, parentsMap)) {
+                        continue;
+                    }
+                }
+
+                auto arg = stage.Program().Args().Arg(i);
+                auto newArg = Build<TCoArgument>(ctx, stage.Program().Args().Arg(i).Pos())
+                    .Name("_replaced_arg")
+                    .Done();
+
+                TVector<TCoArgument> newArgs;
+                TNodeOnNodeOwnedMap programReplaces;
+                for (size_t j = 0; j < stage.Program().Args().Size(); ++j) {
+                    auto oldArg = stage.Program().Args().Arg(j);
+                    newArgs.push_back(Build<TCoArgument>(ctx, stage.Program().Args().Arg(i).Pos())
+                        .Name("_replaced_arg_" + ToString(j))
+                        .Done());
+                    if (i == j) {
+                        programReplaces[oldArg.Raw()] = Build<TCoToFlow>(ctx, oldArg.Pos()).Input(newArgs.back()).Done().Ptr();
+                    } else {
+                        programReplaces[oldArg.Raw()] = newArgs.back().Ptr();
+                    }
+                }
+
+                return
+                    Build<TDqStage>(ctx, stage.Pos())
+                        .Inputs(ctx.ReplaceNode(stage.Inputs().Ptr(), input.Ref(), Build<TDqPhyPrecompute>(ctx, input.Pos()).Connection(conn).Done().Ptr()))
+                        .Outputs(stage.Outputs())
+                        .Settings(stage.Settings())
+                        .Program()
+                            .Args(newArgs)
+                            .Body(TExprBase(ctx.ReplaceNodes(stage.Program().Body().Ptr(), programReplaces)))
+                            .Build()
+                    .Done();
+            }
+        }
+    }
+    return stage;
+}
+
+NYql::IGraphTransformer::TStatus ReplicatePrecomputeRule(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TParentsMap parents;
+    GatherParents(*input, parents);
+    auto stages = CollectNodes<TDqStageBase>(input);
+    for (auto& stage : stages) {
+        auto applied = ReplicatePrecompute(stage, ctx, parents);
+        if (applied.Raw() != stage.Raw()) {
+            output = ctx.ReplaceNode(input.Get(), stage.Ref(), applied.Ptr());
+            return TStatus::Repeat;
+        }
+    }
+    output = input;
+    return TStatus::Ok;
+}
+
 template <typename TFunctor>
 NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, const NYql::TExprNode::TPtr& input,
     NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx, TFunctor func)
@@ -250,6 +383,8 @@ TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePt
     return CreateFunctorTransformer(
         [kqpCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             output = input;
+
+            PERFORM_GLOBAL_RULE("ReplicatePrecompute", input, output, ctx, ReplicatePrecomputeRule);
 
             PERFORM_GLOBAL_RULE("ReplicateMultiUsedConnection", input, output, ctx,
                 [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

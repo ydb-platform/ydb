@@ -1,0 +1,16 @@
+--- contrib/python/matplotlib/py3/ya.make	(index)
++++ contrib/python/matplotlib/py3/ya.make	(working tree)
+@@ -49,6 +49,13 @@ CFLAGS(
+     -DMPL_DEVNULL=/dev/null
+ )
+ 
++IF (OS_WINDOWS)
++    LDFLAGS(
++        Comctl32.lib
++        Psapi.lib
++    )
++ENDIF()
++
+ SRCS(
+     src/_backend_agg.cpp
+     src/_backend_agg_wrapper.cpp

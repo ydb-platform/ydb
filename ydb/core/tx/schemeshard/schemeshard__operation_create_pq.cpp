@@ -1,16 +1,19 @@
-#include "schemeshard__operation_part.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
-#include <library/cpp/int128/int128.h>
+#include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/core/mind/hive/hive.h>
+
 #include <ydb/services/lib/sharding/sharding.h>
+
+#include <library/cpp/int128/int128.h>
 
 namespace {
 
@@ -155,6 +158,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
+    pqGroupInfo->ActivePartitionCount = partitionCount;
 
     ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
     if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
@@ -353,7 +357,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -541,8 +545,8 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
@@ -554,7 +558,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(StreamShardsCountChange);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -583,6 +587,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreatePersQueueGroup().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreatePersQueueGroup()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreatePQ>(id, tx);

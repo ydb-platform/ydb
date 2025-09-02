@@ -1,0 +1,14 @@
+PRAGMA FeatureR010="prototype";
+
+$input = SELECT * FROM AS_TABLE([
+    <|time: 0, value: 1u, name: "A"|>,
+]);
+
+SELECT * FROM $input MATCH_RECOGNIZE (
+    ORDER BY CAST(time AS Timestamp)
+    MEASURES
+        AGGREGATE_BY(A.value, AggregationFactory("sum")) AS aggr_factory_expr
+    PATTERN (A)
+    DEFINE
+        A AS A.name = "A"
+);

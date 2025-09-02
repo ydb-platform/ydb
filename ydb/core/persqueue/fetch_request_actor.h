@@ -31,7 +31,7 @@ struct TPartitionFetchRequest {
 struct TFetchRequestSettings {
     TString Database;
     TVector<TPartitionFetchRequest> Partitions;
-    TMaybe<NACLib::TUserToken> User;
+    TIntrusiveConstPtr<NACLib::TUserToken> User;
     ui64 MaxWaitTimeMs;
     ui64 TotalMaxBytes;
     TRlContext RlCtx;
@@ -40,7 +40,7 @@ struct TFetchRequestSettings {
     ui64 RequestId = 0;
     TFetchRequestSettings(
             const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
-            const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0, bool ruPerRequest = false
+            TIntrusiveConstPtr<NACLib::TUserToken> user = {}, ui64 requestId = 0, bool ruPerRequest = false
     )
         : Database(database)
         , Partitions(partitions)

@@ -7,6 +7,8 @@
 
 #include <aws/common/byte_buf.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /**
  * Data representing a URI. uri_str is always allocated and filled in.
  * The other portions are merely storing offsets into uri_str.
@@ -21,7 +23,7 @@ struct aws_uri {
     struct aws_byte_cursor user;
     struct aws_byte_cursor password;
     struct aws_byte_cursor host_name;
-    uint16_t port;
+    uint32_t port;
     struct aws_byte_cursor path;
     struct aws_byte_cursor query_string;
     struct aws_byte_cursor path_and_query;
@@ -47,7 +49,7 @@ struct aws_uri_builder_options {
     struct aws_byte_cursor scheme;
     struct aws_byte_cursor path;
     struct aws_byte_cursor host_name;
-    uint16_t port;
+    uint32_t port;
     struct aws_array_list *query_params;
     struct aws_byte_cursor query_string;
 };
@@ -105,12 +107,34 @@ AWS_COMMON_API const struct aws_byte_cursor *aws_uri_host_name(const struct aws_
  * Returns the port portion of the authority if it was present, otherwise, returns 0.
  * If this is 0, it is the users job to determine the correct port based on scheme and protocol.
  */
-AWS_COMMON_API uint16_t aws_uri_port(const struct aws_uri *uri);
+AWS_COMMON_API uint32_t aws_uri_port(const struct aws_uri *uri);
 
 /**
  * Returns the path and query portion of the uri (i.e., the thing you send across the wire).
  */
 AWS_COMMON_API const struct aws_byte_cursor *aws_uri_path_and_query(const struct aws_uri *uri);
+
+/**
+ * For iterating over the params in the query string.
+ * `param` is an in/out argument used to track progress, it MUST be zeroed out to start.
+ * If true is returned, `param` contains the value of the next param.
+ * If false is returned, there are no further params.
+ *
+ * Edge cases:
+ * 1) Entries without '=' sign are treated as having a key and no value.
+ *    Example: First param in query string "a&b=c" has key="a" value=""
+ *
+ * 2) Blank entries are skipped.
+ *    Example: The only param in query string "&&a=b" is key="a" value="b"
+ */
+AWS_COMMON_API bool aws_query_string_next_param(struct aws_byte_cursor query_string, struct aws_uri_param *param);
+
+/**
+ * Parses query string and stores the parameters in 'out_params'. Returns AWS_OP_SUCCESS on success and
+ * AWS_OP_ERR on failure. The user is responsible for initializing out_params with item size of struct aws_query_param.
+ * The user is also responsible for cleaning up out_params when finished.
+ */
+AWS_COMMON_API int aws_query_string_params(struct aws_byte_cursor query_string, struct aws_array_list *out_params);
 
 /**
  * For iterating over the params in the uri query string.
@@ -158,5 +182,6 @@ AWS_COMMON_API int aws_byte_buf_append_encoding_uri_param(
 AWS_COMMON_API int aws_byte_buf_append_decoding_uri(struct aws_byte_buf *buffer, const struct aws_byte_cursor *cursor);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_URI_H */

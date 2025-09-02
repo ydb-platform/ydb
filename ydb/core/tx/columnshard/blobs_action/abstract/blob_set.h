@@ -573,11 +573,11 @@ public:
     void AddSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
         AFL_VERIFY(Sharing.Add(tabletId, id));
     }
-    void RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        Y_UNUSED(Sharing.Remove(tabletId, id));
+    [[nodiscard]] bool RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        return Sharing.Remove(tabletId, id);
     }
-    void RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        Y_UNUSED(Borrowed.Remove(tabletId, id));
+    [[nodiscard]] bool RemoveBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
+        return Borrowed.Remove(tabletId, id);
     }
     TBlobsCategories(const TTabletId selfTabletId)
         : SelfTabletId(selfTabletId)

@@ -63,13 +63,13 @@ inline TRetentionsConversionResult ConvertRetentions(std::optional<TString> rete
             RETENTION_MS_CONFIG_NAME,
             [&result](std::optional<ui64> retention) -> void { result.Ms = retention; }
     );
-    
+
     convertRetention(
             retentionBytes,
             RETENTION_BYTES_CONFIG_NAME,
             [&result](std::optional<ui64> retention) -> void { result.Bytes = retention; }
     );
-    
+
     return result;
 }
 
@@ -107,7 +107,8 @@ inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTo
     } else {
         return std::optional<THolder<TEvKafka::TEvTopicModificationResponse>>();
     }
-} 
+}
+
 
 template<class T>
 inline std::unordered_set<TString> ExtractDuplicates(
@@ -134,7 +135,7 @@ class TAlterTopicActor : public NKikimr::NGRpcProxy::V1::TUpdateSchemeActor<T, U
 public:
 
     TAlterTopicActor(
-            TActorId requester, 
+            TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName)
@@ -142,8 +143,8 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](const EKafkaErrors status, const TString& message) {
-                this->SendResult(status, message);
+            [this](const EKafkaErrors status, const std::string& message, const ::google::protobuf::Message&) {
+                this->SendResult(status,TString{message});
             })
         )
         , TopicPath(topicPath)
@@ -176,15 +177,15 @@ private:
     const std::shared_ptr<TString> SerializedToken;
 };
 
-class TKafkaTopicModificationRequest : public NKikimr::NGRpcService::IRequestOpCtx {
+class TKafkaTopicRequestCtx : public NKikimr::NGRpcService::IRequestOpCtx {
 public:
-    using TRequest = TKafkaTopicModificationRequest;
+    using TRequest = TKafkaTopicRequestCtx;
 
-    TKafkaTopicModificationRequest(
+    TKafkaTopicRequestCtx(
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const TString&)> sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&, const google::protobuf::Message& result)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -204,12 +205,21 @@ public:
         return DatabaseName;
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
+    }
+
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
         return UserToken;
     }
 
     const TString& GetSerializedToken() const override {
-        return UserToken->GetSerializedToken();
+        static TString emptyString;
+        return UserToken == nullptr ? emptyString : UserToken->GetSerializedToken();
     }
 
     bool IsClientLost() const override {
@@ -238,7 +248,7 @@ public:
     };
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        ProcessYdbStatusCode(status);
+        ProcessYdbStatusCode(status, google::protobuf::Empty{});
     };
 
     void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
@@ -292,10 +302,6 @@ public:
         return DummyAuditLogParts;
     };
 
-    google::protobuf::Message* GetRequestMut() override {
-        return nullptr;
-    };
-
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
     };
@@ -337,8 +343,7 @@ public:
     }
 
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
-        Y_UNUSED(result);
-        ProcessYdbStatusCode(status);
+        ProcessYdbStatusCode(status, result);
     };
 
     void SendResult(
@@ -346,17 +351,16 @@ public:
             Ydb::StatusIds::StatusCode status,
             const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
 
-        Y_UNUSED(result);
         Y_UNUSED(message);
-        ProcessYdbStatusCode(status);
+        ProcessYdbStatusCode(status, result);
     };
 
     const Ydb::Operations::OperationParams& operation_params() const {
         return DummyParams;
     }
 
-    static TKafkaTopicModificationRequest* GetProtoRequest(std::shared_ptr<IRequestOpCtx> request) {
-        return static_cast<TKafkaTopicModificationRequest*>(&(*request));
+    static TKafkaTopicRequestCtx* GetProtoRequest(std::shared_ptr<IRequestOpCtx> request) {
+        return static_cast<TKafkaTopicRequestCtx*>(&(*request));
     }
 
 protected:
@@ -374,11 +378,21 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
+    const std::function<void(const EKafkaErrors status, const std::string& message, const google::protobuf::Message& result)> SendResultCallback;
     NYql::TIssue Issue;
 
-    void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
-        SendResultCallback(Convert(status), Issue.GetMessage());
+    void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status, const google::protobuf::Message& result) {
+        SendResultCallback(Convert(status), Issue.GetMessage(), result);
     }
 };
-}
+
+enum class ECleanupPolicy {
+    REMOVE,
+    COMPACT,
+    UNKNOWN
+};
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
+                                                                                    std::optional<ECleanupPolicy>& cleanupPolicy);
+
+} //namespace NKafka

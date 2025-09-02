@@ -1,8 +1,9 @@
 """ttLib/sfnt.py -- low-level module to deal with the sfnt file format.
 
 Defines two public classes:
-	SFNTReader
-	SFNTWriter
+
+- SFNTReader
+- SFNTWriter
 
 (Normally you don't have to use these classes explicitly; they are
 used automatically by ttLib.TTFont.)
@@ -374,10 +375,9 @@ class SFNTWriter(object):
 
     def _calcMasterChecksum(self, directory):
         # calculate checkSumAdjustment
-        tags = list(self.tables.keys())
         checksums = []
-        for i in range(len(tags)):
-            checksums.append(self.tables[tags[i]].checkSum)
+        for tag in self.tables.keys():
+            checksums.append(self.tables[tag].checkSum)
 
         if self.DirectoryEntry != SFNTDirectoryEntry:
             # Create a SFNT directory for checksum calculation purposes

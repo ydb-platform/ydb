@@ -1,5 +1,5 @@
 /* Creation of autonomous subprocesses.
-   Copyright (C) 2001-2004, 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 2001-2004, 2006-2016 Free Software Foundation, Inc.
    Written by Bruno Haible <haible@clisp.cons.org>, 2001.
 
    This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "penviron.h"
 #include "error.h"
 #include "fatal-signal.h"
 #include "wait-process.h"
@@ -49,11 +48,9 @@
 
 #endif
 
-/* The results of open() in this file are not used with fchdir,
-   therefore save some unnecessary work in fchdir.c.  */
-#undef open
-#undef close
-
+#if defined(__FreeBSD__) || defined(__MACH__)
+    extern char** environ;
+#endif
 
 #if defined EINTR && ((defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__)
 

@@ -11,7 +11,7 @@ struct TTableIterOps {
     static inline int CompareKeys(
             TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
-            TArrayRef<const TCell> b) noexcept
+            TArrayRef<const TCell> b)
     {
         if (int cmp = CompareTypedCellVectors(a.data(), b.data(), types.data(), Min(a.size(), b.size()))) {
             return cmp;
@@ -160,7 +160,7 @@ struct TTableItReverseOps {
     static int CompareKeys(
             TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
-            TArrayRef<const TCell> b) noexcept
+            TArrayRef<const TCell> b)
     {
         return -TTableIterOps::CompareKeys(types, a, b);
     }

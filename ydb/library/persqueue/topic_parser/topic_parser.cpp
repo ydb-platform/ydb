@@ -46,7 +46,7 @@ namespace {
 }
 
 void NormalizeAsFullPath(TString& path) {
-    if (!path.Empty() && !path.StartsWith("/")) {
+    if (!path.empty() && !path.StartsWith("/")) {
         path = TString("/") + path;
     }
 }
@@ -60,36 +60,41 @@ TString StripLeadSlash(const TString& path) {
 }
 
 TString NormalizeFullPath(const TString& fullPath) {
-    if (!fullPath.Empty() && !fullPath.StartsWith("/")) {
+    if (!fullPath.empty() && !fullPath.StartsWith("/")) {
         return TString("/") + fullPath;
     } else {
         return fullPath;
     }
 }
 
-TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString>& database, const TString& topicPath) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        return FullPath(database, topicPath);
-    } else {
-        return topicPath;
-    }
+TString GetFullTopicPath(const TMaybe<TString>& database, const TString& topicPath) {
+    return FullPath(database, topicPath);
 }
 
-TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+TString ConvertNewConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig) {
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         return consumer;
     } else {
         return ConvertNewConsumerName(consumer);
     }
 }
 
-TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    return ConvertNewConsumerName(consumer, NKikimr::AppData(ctx)->PQConfig);
+}
+
+TString ConvertOldConsumerName(const TString& consumer, const NKikimrPQ::TPQConfig& pqConfig) {
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         return consumer;
     } else {
         return ConvertOldConsumerName(consumer);
     }
 }
+
+TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    return ConvertOldConsumerName(consumer, NKikimr::AppData(ctx)->PQConfig);
+}
+
 
 TString MakeConsumerPath(const TString& consumer) {
     TStringBuilder res;

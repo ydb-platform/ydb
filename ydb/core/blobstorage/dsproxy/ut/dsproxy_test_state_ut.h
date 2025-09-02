@@ -11,28 +11,20 @@ namespace NKikimr {
 struct TTestState {
     TTestActorRuntime &Runtime;
     TActorId EdgeActor;
-    TBlobStorageGroupType Type;
-    TGroupMock GroupMock;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    TGroupMock GroupMock;
 
+    const ui32 BlobSize;
+    TString BlobData;
 
-    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type,
-            TIntrusivePtr<TBlobStorageGroupInfo> &info, ui64 nodeIndex = 0)
+    TTestState(TTestActorRuntime &runtime, TIntrusivePtr<TBlobStorageGroupInfo> &info, ui64 nodeIndex = 0, ui32 blobSize = 1024)
         : Runtime(runtime)
         , EdgeActor(runtime.AllocateEdgeActor(nodeIndex))
-        , Type(type)
-        , GroupMock(0, Type.GetErasure(), Type.BlobSubgroupSize(), 1, info)
         , Info(info)
+        , GroupMock(0, info)
+        , BlobSize(blobSize)
     {
-    }
-
-    TTestState(TTestActorRuntime &runtime, const TBlobStorageGroupType &type, ui64 nodeIndex = 0)
-        : Runtime(runtime)
-        , EdgeActor(runtime.AllocateEdgeActor(nodeIndex))
-        , Type(type)
-        , GroupMock(0, Type.GetErasure(), Type.BlobSubgroupSize(), 1)
-        , Info(GroupMock.GetInfo())
-    {
+        FillBlobData();
     }
 
     TGroupMock& GetGroupMock() {
@@ -51,9 +43,9 @@ struct TTestState {
 
     TPartLocation HandoffVDiskForBlobPart(TLogoBlobID blobId, ui64 handoffIdx) {
         Y_ABORT_UNLESS(blobId.PartId());
-        Y_ABORT_UNLESS(handoffIdx < Type.Handoff());
+        Y_ABORT_UNLESS(handoffIdx < Info->Type.Handoff());
         TLogoBlobID origBlobId(blobId, 0);
-        TVDiskID vDiskId = Info->GetVDiskInSubgroup(Type.TotalPartCount() + handoffIdx, origBlobId.Hash());
+        TVDiskID vDiskId = Info->GetVDiskInSubgroup(Info->Type.TotalPartCount() + handoffIdx, origBlobId.Hash());
         return {blobId, vDiskId};
     }
 
@@ -66,6 +58,13 @@ struct TTestState {
             result.emplace(vDiskIds[idx], 0);
         }
         return result;
+    }
+
+    void FillBlobData() {
+        BlobData.resize(BlobSize);
+        for (ui32 i = 0; i < BlobSize; ++i) {
+            BlobData[i] = RandomNumber<ui8>();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////

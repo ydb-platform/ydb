@@ -1,8 +1,11 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/events/global.h>
 
 namespace {
 
@@ -16,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropPQ TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -183,10 +186,10 @@ public:
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
         Y_ABORT_UNLESS(parseOk);
 
-        const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
+        const PQGroupReserve reserve(config, pqGroup->ActivePartitionCount);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
@@ -202,7 +205,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
 
-        parentDir->DecAliveChildren();
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemovePersQueueGroup(db, pathId);
@@ -466,6 +469,14 @@ ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
 ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropPQ>(id, state);
+}
+
+bool CreateDropPQ(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    Y_UNUSED(context);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+
+    result.push_back(CreateDropPQ(NextPartId(id, result), tx));
+    return true;
 }
 
 }

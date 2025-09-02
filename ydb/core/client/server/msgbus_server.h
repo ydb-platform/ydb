@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
@@ -46,6 +46,7 @@ class TMessageBusSessionIdentHolder {
 
     class TImplMessageBus;
     class TImplGRpc;
+    class TImplNoOpGrpc;
 
     // to create session
     friend class TBusMessageContext;
@@ -64,6 +65,9 @@ public:
 
     template <typename U /* <: TBusMessage */>
     void SendReplyAutoPtr(TAutoPtr<U>& resp) { SendReplyMove(resp); }
+
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const;
 };
 
 class TBusMessageContext {
@@ -72,12 +76,14 @@ class TBusMessageContext {
 
     class TImplMessageBus;
     class TImplGRpc;
+    class TImplNoOpGrpc;
 
 public:
     TBusMessageContext();
     TBusMessageContext(const TBusMessageContext& other);
     TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher = nullptr);
     TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type);
+    TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type);
     ~TBusMessageContext();
 
     TBusMessageContext& operator =(TBusMessageContext other);
@@ -87,6 +93,10 @@ public:
     void SendReplyMove(NBus::TBusMessageAutoPtr response);
     void Swap(TBusMessageContext& msg);
     TVector<TStringBuf> FindClientCert() const;
+    TString GetPeerName() const;
+
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;
@@ -272,17 +282,12 @@ IActor* CreateMessageBusServerProxy(TMessageBusServer *server);
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);
-IActor* CreateMessageBusKeyValue(TBusMessageContext &msg);
 IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
 IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
@@ -293,11 +298,9 @@ IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
 IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
-IActor* CreateMessageBusLoginRequest(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
 

@@ -1,8 +1,7 @@
 import abc
 import operator
 import re
-import warnings
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from itertools import repeat
 from typing import Any, Dict, List, Optional, Union
 
@@ -16,14 +15,23 @@ from pyparsing import (
     Suppress,
     Word,
     alphanums,
-    delimited_list,
     exceptions,
     infix_notation,
     one_of,
     pyparsing_common,
 )
 
-from .exceptions import InvalidInputException, InvalidStateException
+try:
+    # TODO import directly when depending on pyparsing>=3.1.0
+    from pyparsing import DelimitedList
+except ImportError:
+    # delimited_list is deprecated in favor of DelimitedList in pyparsing 3.1.0
+    from pyparsing import delimited_list as DelimitedList  # type: ignore[assignment]
+
+from .exceptions import (
+    InvalidInputException,
+    InvalidStateException,
+)
 
 
 def _cast(type_: str, value: Any) -> Union[date, datetime, float, int, str]:
@@ -71,15 +79,17 @@ def _cast(type_: str, value: Any) -> Union[date, datetime, float, int, str]:
                 f" {value} is not a timestamp."
             )
 
+        # use nanosecond representation for timestamps
+        posix_nanoseconds = int(timestamp.timestamp() * 1_000_000_000)
+
         nanos = match.group("nanos")
         if nanos is not None:
             # strip leading dot, reverse and left pad with zeros to nanoseconds
             nanos = "".join(reversed(nanos[1:])).zfill(9)
             for i, nanoseconds in enumerate(nanos):
-                microseconds = (int(nanoseconds) * 10**i) / 1000
-                timestamp += timedelta(microseconds=round(microseconds))
+                posix_nanoseconds += int(nanoseconds) * 10**i
 
-        return timestamp
+        return posix_nanoseconds
 
     raise InvalidInputException("GetPartitions", f"Unknown type : '{type_}'")
 
@@ -92,7 +102,7 @@ def _escape_regex(pattern: str) -> str:
 
 class _Expr(abc.ABC):
     @abc.abstractmethod
-    def eval(self, part_keys: List[Dict[str, str]], part_input: Dict[str, Any]) -> Any:
+    def eval(self, part_keys: List[Dict[str, str]], part_input: Dict[str, Any]) -> Any:  # type: ignore[misc]
         raise NotImplementedError()
 
 
@@ -191,7 +201,7 @@ class _Like(_Expr):
         pattern = _cast("string", self.literal)
 
         # prepare SQL pattern for conversion to regex pattern
-        pattern = _escape_regex(pattern)
+        pattern = _escape_regex(pattern)  # type: ignore
 
         # NOTE convert SQL wildcards to regex, no literal matches possible
         pattern = pattern.replace("_", ".").replace("%", ".*")
@@ -260,22 +270,22 @@ class _BoolOr(_Expr):
 
 
 class _PartitionFilterExpressionCache:
-    def __init__(self):
+    def __init__(self) -> None:
         # build grammar according to Glue.Client.get_partitions(Expression)
         lpar, rpar = map(Suppress, "()")
 
         # NOTE these are AWS Athena column name best practices
         ident = Forward().set_name("ident")
-        ident <<= Word(alphanums + "._").set_parse_action(_Ident) | lpar + ident + rpar
+        ident <<= Word(alphanums + "._").set_parse_action(_Ident) | lpar + ident + rpar  # type: ignore
 
         number = Forward().set_name("number")
-        number <<= pyparsing_common.number | lpar + number + rpar
+        number <<= pyparsing_common.number | lpar + number + rpar  # type: ignore
 
         string = Forward().set_name("string")
-        string <<= QuotedString(quote_char="'", esc_quote="''") | lpar + string + rpar
+        string <<= QuotedString(quote_char="'", esc_quote="''") | lpar + string + rpar  # type: ignore
 
         literal = (number | string).set_name("literal")
-        literal_list = delimited_list(literal, min=1).set_name("list")
+        literal_list = DelimitedList(literal, min=1).set_name("list")
 
         bin_op = one_of("<> >= <= > < =").set_name("binary op")
 
@@ -288,7 +298,7 @@ class _PartitionFilterExpressionCache:
         in_, between, like, not_, is_, null = map(
             CaselessKeyword, "in between like not is null".split()
         )
-        not_ = Suppress(not_)  # only needed for matching
+        not_ = Suppress(not_)  # type: ignore  # only needed for matching
 
         cond = (
             (ident + is_ + null).set_parse_action(_IsNull)
@@ -338,17 +348,17 @@ _PARTITION_FILTER_EXPRESSION_CACHE = _PartitionFilterExpressionCache()
 
 
 class PartitionFilter:
-    def __init__(self, expression: Optional[str], fake_table):
+    def __init__(self, expression: Optional[str], fake_table: Any):
         self.expression = expression
         self.fake_table = fake_table
 
-    def __call__(self, fake_partition) -> bool:
+    def __call__(self, fake_partition: Any) -> bool:
         expression = _PARTITION_FILTER_EXPRESSION_CACHE.get(self.expression)
         if expression is None:
             return True
 
-        warnings.warn("Expression filtering is experimental")
+        versions = list(self.fake_table.versions.values())
         return expression.eval(
-            part_keys=self.fake_table.versions[-1].get("PartitionKeys", []),
+            part_keys=versions[-1].get("PartitionKeys", []),
             part_input=fake_partition.partition_input,
         )

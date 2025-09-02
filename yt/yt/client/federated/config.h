@@ -12,15 +12,17 @@ namespace NYT::NClient::NFederated {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFederationConfig
+struct TFederationConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Bundle name which liveness should be checked on the background.
-    std::optional<TString> BundleName;
+    std::optional<std::string> BundleName;
 
     //! How often cluster liveness should be checked on the background.
     TDuration ClusterHealthCheckPeriod;
+
+    //! Checks Cypress root availability in liveness check.
+    bool CheckCypressRoot;
 
     //! Maximum number of retry attempts to make.
     int ClusterRetryAttempts;
@@ -35,10 +37,9 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TFederationConfig)
 
-class TConnectionConfig
+struct TConnectionConfig
     : public TFederationConfig
 {
-public:
     //! The RPC connection config for participants clusters.
     std::vector<NApi::NRpcProxy::TConnectionConfigPtr> RpcProxyConnections;
 

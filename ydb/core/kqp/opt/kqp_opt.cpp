@@ -83,12 +83,46 @@ bool IsKqpEffectsStage(const TDqStageBase& stage) {
 }
 
 bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
-    return kqpCtx.IsGenericQuery()
+    return (kqpCtx.IsGenericQuery()
+            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->AllowOlapDataQuery)))
         && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
         && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
 }
 
+bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
+    return table.Metadata->Kind == EKikimrTableKind::Olap
+            || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->EnableStreamWrite);
+}
+
+bool HasReadTable(const TStringBuf table, const TExprNode::TPtr& root) {
+    bool result = false;
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (NYql::NNodes::TKqpCnStreamLookup::Match(node.Get())) {
+            const auto& streamLookup = TExprBase(node).Cast<NYql::NNodes::TKqpCnStreamLookup>();
+            const TStringBuf tablePathId = streamLookup.Table().PathId().Value();
+            if (table == tablePathId) {
+                result = true;
+            }
+        } else if (NYql::NNodes::TDqSource::Match(node.Get())) {
+            const auto& source = TExprBase(node).Cast<NYql::NNodes::TDqSource>();
+            const auto sourceSettings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
+            if (sourceSettings) {
+                const TStringBuf tablePathId = sourceSettings.Cast().Table().PathId().Value();
+                if (table == tablePathId) {
+                    result = true;
+                }
+            }
+        }
+        return !result;
+    });
+    return result;
+}
+
 TExprBase ProjectColumns(const TExprBase& input, const TVector<TString>& columnNames, TExprContext& ctx) {
+    return ProjectColumnsInternal(input, columnNames, ctx);
+}
+
+TExprBase ProjectColumns(const TExprBase& input, const TVector<TStringBuf>& columnNames, TExprContext& ctx) {
     return ProjectColumnsInternal(input, columnNames, ctx);
 }
 
@@ -110,6 +144,103 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
+bool IsSortKeyPrimary(
+    const NYql::NNodes::TCoLambda& keySelector,
+    const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields,
+    const ui64 skipPointKeys
+) {
+    YQL_ENSURE(skipPointKeys <= tableDesc.Metadata->KeyColumnNames.size());
+    std::deque<TString> unsortedKeyColumns(tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys, tableDesc.Metadata->KeyColumnNames.end());
+    if (unsortedKeyColumns.empty()) {
+        return true;
+    }
+
+    THashSet<TString> sortedPointKeysSet(tableDesc.Metadata->KeyColumnNames.begin(), tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys);
+
+    auto checkKey = [keySelector, &sortedPointKeysSet, &passthroughFields] (NYql::NNodes::TExprBase key, TString unsorted) -> std::optional<bool> {
+        if (!key.Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = key.Cast<TCoMember>();
+        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto column = TString(member.Name().Value());
+        if (!sortedPointKeysSet.contains(column)) {
+            if (column != unsorted) {
+                return false;
+            }
+        }
+
+        if (passthroughFields && !passthroughFields->contains(column)) {
+            return false;
+        }
+
+        if (sortedPointKeysSet.contains(column)) {
+            return std::nullopt;
+        }
+
+        return true;
+    };
+
+    auto lambdaBody = keySelector.Body();
+    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        for (size_t i = 0; i < tuple.Size(); ++i) {
+            if (unsortedKeyColumns.empty()) {
+                return true;
+            }
+
+            auto result = checkKey(tuple.Item(i), unsortedKeyColumns.front());
+            if (!result.has_value()) {
+                continue;
+            } else if (!result.value()) {
+                return false;
+            } else {
+                unsortedKeyColumns.pop_front();
+            }
+        }
+    } else {
+        if (unsortedKeyColumns.empty()) {
+            return true;
+        }
+
+        auto result = checkKey(lambdaBody, unsortedKeyColumns.front());
+        if (result.has_value() && !result.value()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
+    auto getDirection = [] (TExprBase expr) -> ESortDirection {
+        if (!expr.Maybe<TCoBool>()) {
+            return ESortDirection::Unknown;
+        }
+
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return ESortDirection::Reverse;
+        }
+
+        return ESortDirection::Forward;
+    };
+
+    auto direction = ESortDirection::None;
+    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            direction |= getDirection(expr);
+        }
+    } else {
+        direction |= getDirection(sortDirections);
+    }
+    return direction;
+};
+
 bool IsBuiltEffect(const TExprBase& effect) {
     // Stage with effect output
     if (effect.Maybe<TDqOutput>()) {
@@ -122,6 +253,27 @@ bool IsBuiltEffect(const TExprBase& effect) {
     }
 
     return false;
+}
+
+void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
+    const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx)
+{
+// #define KQP_ENABLE_DUMP_APPLIED_RULE
+#ifdef KQP_ENABLE_DUMP_APPLIED_RULE
+    if (input != output) {
+        auto builder = TStringBuilder() << "Rule applied: " << name << Endl;
+        builder << "Expression before rule application: " << Endl;
+        builder << KqpExprToPrettyString(*input, ctx) << Endl;
+        builder << "Expression after rule application: " << Endl;
+        builder << KqpExprToPrettyString(*output, ctx);
+        YQL_CLOG(TRACE, ProviderKqp) << builder;
+    }
+#else
+    Y_UNUSED(ctx);
+    if (input != output) {
+        YQL_CLOG(TRACE, ProviderKqp) << name;
+    }
+#endif
 }
 
 } // namespace NKikimr::NKqp::NOpt

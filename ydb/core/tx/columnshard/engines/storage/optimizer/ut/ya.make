@@ -6,7 +6,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines
     ydb/core/tx/columnshard
-    ydb/library/yql/public/udf
+    yql/essentials/public/udf
     ydb/core/formats/arrow/compression
     ydb/core/grpc_services
     ydb/core/scheme
@@ -15,10 +15,10 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/library/mkql_proto
     ydb/core/tx/schemeshard
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper
     ydb/core/persqueue
     ydb/core/tx/time_cast
-    ydb/library/yql/sql/pg
+    yql/essentials/sql/pg
 )
 
 SRCS(

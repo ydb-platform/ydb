@@ -1,18 +1,36 @@
 #include "ttl.h"
 #include "util.h"
 
-#include <util/folder/pathsplit.h>
-#include <util/string/printf.h>
+#include <format>
 
 using namespace NExample;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
-constexpr ui32 DOC_TABLE_PARTITION_COUNT = 4;
-constexpr ui32 EXPIRATION_QUEUE_COUNT = 4;
+constexpr uint32_t DOC_TABLE_PARTITION_COUNT = 4;
+constexpr uint32_t EXPIRATION_QUEUE_COUNT = 4;
+
+namespace {
+
+template <class T>
+std::string OptionalToString(const std::optional<T>& opt) {
+    if (opt.has_value()) {
+        return std::to_string(opt.value());
+    }
+    return "(NULL)";
+}
+
+template <>
+std::string OptionalToString<std::string>(const std::optional<std::string>& opt) {
+    if (opt.has_value()) {
+        return opt.value();
+    }
+    return "(NULL)";
+}
 
 //! Creates Documents table and multiple ExpirationQueue tables
-static void CreateTables(TTableClient client, const TString& path) {
+void CreateTables(TTableClient client, const std::string& path) {
     // Documents table stores the contents of web pages.
     // The table is partitioned by hash(Url) in order to evenly distribute the load.
     ThrowOnError(client.RetryOperationSync([path](TSession session) {
@@ -34,7 +52,7 @@ static void CreateTables(TTableClient client, const TString& path) {
 
     // Multiple ExpirationQueue tables allow to scale the load.
     // Each ExpirationQueue table can be handled by a dedicated worker.
-    for (ui32 i = 0; i < EXPIRATION_QUEUE_COUNT; ++i) {
+    for (uint32_t i = 0; i < EXPIRATION_QUEUE_COUNT; ++i) {
         ThrowOnError(client.RetryOperationSync([path, i](TSession session) {
             auto expirationDesc = TTableBuilder()
                 .AddNullableColumn("timestamp", EPrimitiveType::Uint64)
@@ -42,7 +60,7 @@ static void CreateTables(TTableClient client, const TString& path) {
                 .SetPrimaryKeyColumns({"timestamp", "doc_id"})
                 .Build();
 
-            return session.CreateTable(JoinPath(path, Sprintf("expiration_queue_%" PRIu32, i)),
+            return session.CreateTable(JoinPath(path, std::format("expiration_queue_{}", i)),
                 std::move(expirationDesc)).GetValueSync();
         }));
     }
@@ -51,15 +69,15 @@ static void CreateTables(TTableClient client, const TString& path) {
 ///////////////////////////////////////////////////////////////////////////////
 
 //! Insert or replaces a document.
-static TStatus AddDocumentTransaction(TSession session, const TString& path,
-    const TString& url, const TString& html, ui64 timestamp)
+TStatus AddDocumentTransaction(TSession session, const std::string& path,
+    const std::string& url, const std::string& html, uint64_t timestamp)
 {
     // Add an entry to a random expiration queue in order to evenly distribute the load
-    ui32 queue = rand() % EXPIRATION_QUEUE_COUNT;
+    uint32_t queue = rand() % EXPIRATION_QUEUE_COUNT;
 
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $url AS Utf8;
         DECLARE $html AS Utf8;
@@ -72,11 +90,11 @@ static TStatus AddDocumentTransaction(TSession session, const TString& path,
         VALUES
             ($doc_id, $url, $html, $timestamp);
 
-        REPLACE INTO expiration_queue_%u
+        REPLACE INTO expiration_queue_{}
             (`timestamp`, doc_id)
         VALUES
             ($timestamp, $doc_id);
-    )", path.c_str(), queue);
+    )", path, queue);
 
     auto params = session.GetParamsBuilder()
         .AddParam("$url").Utf8(url).Build()
@@ -91,12 +109,12 @@ static TStatus AddDocumentTransaction(TSession session, const TString& path,
 }
 
 //! Reads document contents.
-static TStatus ReadDocumentTransaction(TSession session, const TString& path,
-    const TString& url, TMaybe<TResultSet>& resultSet)
+TStatus ReadDocumentTransaction(TSession session, const std::string& path,
+    const std::string& url, std::optional<TResultSet>& resultSet)
 {
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $url AS Utf8;
 
@@ -105,7 +123,7 @@ static TStatus ReadDocumentTransaction(TSession session, const TString& path,
         SELECT doc_id, url, html, `timestamp`
         FROM documents
         WHERE doc_id = $doc_id;
-    )", path.c_str());
+    )", path);
 
     auto params = session.GetParamsBuilder()
         .AddParam("$url").Utf8(url).Build()
@@ -124,42 +142,42 @@ static TStatus ReadDocumentTransaction(TSession session, const TString& path,
 }
 
 //! Reads a batch of entries from expiration queue
-static TStatus ReadExpiredBatchTransaction(TSession session, const TString& path, const ui32 queue,
-    const ui64 timestamp, const ui64 prevTimestamp, const ui64 prevDocId, TMaybe<TResultSet>& resultSet)
+TStatus ReadExpiredBatchTransaction(TSession session, const std::string& path, const uint32_t queue,
+    const uint64_t timestamp, const uint64_t prevTimestamp, const uint64_t prevDocId, std::optional<TResultSet>& resultSet)
 {
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{0}");
 
         DECLARE $timestamp AS Uint64;
         DECLARE $prev_timestamp AS Uint64;
         DECLARE $prev_doc_id AS Uint64;
 
         $data = (
-            SELECT *
-            FROM expiration_queue_%u
+            (SELECT *
+            FROM expiration_queue_{1}
             WHERE
                 `timestamp` <= $timestamp
                 AND
                 `timestamp` > $prev_timestamp
             ORDER BY `timestamp`, doc_id
-            LIMIT 100
+            LIMIT 100)
 
             UNION ALL
 
-            SELECT *
-            FROM expiration_queue_%u
+            (SELECT *
+            FROM expiration_queue_{1}
             WHERE
                 `timestamp` = $prev_timestamp AND doc_id > $prev_doc_id
             ORDER BY `timestamp`, doc_id
-            LIMIT 100
+            LIMIT 100)
         );
 
         SELECT `timestamp`, doc_id
         FROM $data
         ORDER BY `timestamp`, doc_id
         LIMIT 100;
-    )", path.c_str(), queue, queue);
+    )", path, queue);
 
     auto params = session.GetParamsBuilder()
         .AddParam("$timestamp").Uint64(timestamp).Build()
@@ -180,12 +198,12 @@ static TStatus ReadExpiredBatchTransaction(TSession session, const TString& path
 }
 
 //! Deletes an expired document
-static TStatus DeleteDocumentWithTimestamp(TSession session, const TString& path, const ui32 queue,
-    const ui64 docId, const ui64 timestamp)
+TStatus DeleteDocumentWithTimestamp(TSession session, const std::string& path, const uint32_t queue,
+    const uint64_t docId, const uint64_t timestamp)
 {
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $doc_id AS Uint64;
         DECLARE $timestamp AS Uint64;
@@ -193,9 +211,9 @@ static TStatus DeleteDocumentWithTimestamp(TSession session, const TString& path
         DELETE FROM documents
         WHERE doc_id = $doc_id AND `timestamp` = $timestamp;
 
-        DELETE FROM expiration_queue_%u
+        DELETE FROM expiration_queue_{}
         WHERE `timestamp` = $timestamp AND doc_id = $doc_id;
-    )", path.c_str(), queue);
+    )", path, queue);
 
     auto params = session.GetParamsBuilder()
         .AddParam("$doc_id").Uint64(docId).Build()
@@ -209,47 +227,50 @@ static TStatus DeleteDocumentWithTimestamp(TSession session, const TString& path
 
     return result;
 }
+
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
-void AddDocument(TTableClient client, const TString& path, const TString& url,
-    const TString& html, const ui64 timestamp)
+void AddDocument(TTableClient client, const std::string& path, const std::string& url,
+    const std::string& html, const uint64_t timestamp)
 {
-    Cout << "> AddDocument:" << Endl
-         << " Url: " << url << Endl
-         << " Timestamp: " << timestamp << Endl;
+    std::cout << "> AddDocument:" << std::endl
+         << " Url: " << url << std::endl
+         << " Timestamp: " << timestamp << std::endl;
 
     ThrowOnError(client.RetryOperationSync([path, url, html, timestamp](TSession session) {
         return AddDocumentTransaction(session, path, url, html, timestamp);
     }));
-    Cout << Endl;
+    std::cout << std::endl;
 }
 
-void ReadDocument(TTableClient client, const TString& path, const TString& url) {
-    Cout << "> ReadDocument \"" << url << "\":" << Endl;
-    TMaybe<TResultSet> resultSet;
+void ReadDocument(TTableClient client, const std::string& path, const std::string& url) {
+    std::cout << "> ReadDocument \"" << url << "\":" << std::endl;
+    std::optional<TResultSet> resultSet;
     ThrowOnError(client.RetryOperationSync([path, url, &resultSet] (TSession session) {
         return ReadDocumentTransaction(session, path, url, resultSet);
     }));
 
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
-        Cout << " DocId: " << parser.ColumnParser("doc_id").GetOptionalUint64() << Endl
-            << " Url: " << parser.ColumnParser("url").GetOptionalUtf8() << Endl
-            << " Timestamp: " << parser.ColumnParser("timestamp").GetOptionalUint64() << Endl
-            << " Html: " << parser.ColumnParser("html").GetOptionalUtf8() << Endl;
+        std::cout << " DocId: " << OptionalToString(parser.ColumnParser("doc_id").GetOptionalUint64()) << std::endl
+            << " Url: " << OptionalToString(parser.ColumnParser("url").GetOptionalUtf8()) << std::endl
+            << " Timestamp: " << OptionalToString(parser.ColumnParser("timestamp").GetOptionalUint64()) << std::endl
+            << " Html: " << OptionalToString(parser.ColumnParser("html").GetOptionalUtf8()) << std::endl;
     } else {
-        Cout << " Not found" << Endl;
+        std::cout << " Not found" << std::endl;
     }
-    Cout << Endl;
+    std::cout << std::endl;
 }
 
-void DeleteExpired(TTableClient client, const TString& path, const ui32 queue, const ui64 timestamp) {
-    Cout << "> DeleteExpired from queue #" << queue << ":" << Endl;
+void DeleteExpired(TTableClient client, const std::string& path, const uint32_t queue, const uint64_t timestamp) {
+    std::cout << "> DeleteExpired from queue #" << queue << ":" << std::endl;
     bool empty = false;
-    ui64 lastTimestamp = 0;
-    ui64 lastDocId = 0;
+    uint64_t lastTimestamp = 0;
+    uint64_t lastDocId = 0;
     while (!empty) {
-        TMaybe<TResultSet> resultSet;
+        std::optional<TResultSet> resultSet;
         ThrowOnError(client.RetryOperationSync([path, queue, timestamp, lastDocId, lastTimestamp, &resultSet] (TSession session) {
             return ReadExpiredBatchTransaction(session, path, queue, timestamp, lastTimestamp, lastDocId, resultSet);
         }));
@@ -260,18 +281,18 @@ void DeleteExpired(TTableClient client, const TString& path, const ui32 queue, c
             empty = false;
             lastDocId  = *parser.ColumnParser("doc_id").GetOptionalUint64();
             lastTimestamp = *parser.ColumnParser("timestamp").GetOptionalUint64();
-            Cout << " DocId: " << lastDocId << " Timestamp: " << lastTimestamp << Endl;
+            std::cout << " DocId: " << lastDocId << " Timestamp: " << lastTimestamp << std::endl;
 
             ThrowOnError(client.RetryOperationSync([path, queue, lastDocId, lastTimestamp] (TSession session) {
                 return DeleteDocumentWithTimestamp(session, path, queue, lastDocId, lastTimestamp);
             }));
         }
     }
-    Cout << Endl;
+    std::cout << std::endl;
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-bool Run(const TDriver& driver, const TString& path) {
+bool Run(const TDriver& driver, const std::string& path) {
     TTableClient client(driver);
 
     try {
@@ -290,7 +311,7 @@ bool Run(const TDriver& driver, const TString& path) {
         ReadDocument(client, path, "https://yandex.ru/");
         ReadDocument(client, path, "https://ya.ru/");
 
-        for (ui32 q = 0; q < EXPIRATION_QUEUE_COUNT; ++q) {
+        for (uint32_t q = 0; q < EXPIRATION_QUEUE_COUNT; ++q) {
             DeleteExpired(client, path, q, 1);
         }
 
@@ -306,7 +327,7 @@ bool Run(const TDriver& driver, const TString& path) {
                     "<html><body><h1>Yandex</h1></body></html>",
                     3);
 
-        for (ui32 q = 0; q < EXPIRATION_QUEUE_COUNT; ++q) {
+        for (uint32_t q = 0; q < EXPIRATION_QUEUE_COUNT; ++q) {
             DeleteExpired(client, path, q, 2);
         }
 
@@ -314,8 +335,7 @@ bool Run(const TDriver& driver, const TString& path) {
         ReadDocument(client, path, "https://ya.ru/");
     }
     catch (const TYdbErrorException& e) {
-        Cerr << "Execution failed due to fatal error:" << Endl;
-        PrintStatus(e.Status);
+        std::cerr << "Execution failed due to fatal error: " << e.what() << std::endl;
         return false;
     }
 

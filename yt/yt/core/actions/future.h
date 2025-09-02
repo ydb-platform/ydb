@@ -71,6 +71,9 @@ constexpr bool IsFuture = false;
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
 
+template <class U, class F>
+void InterceptExceptions(const TPromise<U>& promise, const F& func);
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,6 +172,9 @@ struct TFutureTimeoutOptions
     //! If set to a non-trivial error, timeout or cancelation errors
     //! are enveloped into this error.
     TError Error;
+
+    //! An invoker the timeout event is handled in (DelayedExecutor is null).
+    IInvokerPtr Invoker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,23 +289,18 @@ public:
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithDeadline(
         TInstant deadline,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case of timeout).
-    //! The timeout event is handled in #invoker (DelayedExecutor is null).
     TFuture<T> WithTimeout(
         TDuration timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
     TFuture<T> WithTimeout(
         std::optional<TDuration> timeout,
-        TFutureTimeoutOptions options = {},
-        IInvokerPtr invoker = nullptr) const;
+        TFutureTimeoutOptions options = {}) const;
 
     //! Chains the asynchronous computation with another one.
     template <class R>
@@ -455,7 +456,7 @@ public:
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
     template <class U>
-    void TrySetFrom(TFuture<U> another) const;
+    void TrySetFrom(const TFuture<U>& another) const;
 
     //! Gets the value.
     /*!
@@ -471,6 +472,9 @@ public:
 
     //! Checks if the promise is canceled.
     bool IsCanceled() const;
+
+    //! Returns cancelation error if one is present.
+    TError GetCancelationError() const;
 
     //! Attaches a cancellation handler.
     /*!
@@ -500,6 +504,10 @@ protected:
     friend void swap(TPromise<U>& lhs, TPromise<U>& rhs);
     template <class U>
     friend struct ::hash;
+    template <class U, class F>
+    friend void ::NYT::NDetail::InterceptExceptions(const TPromise<U>& promise, const F& func);
+
+    void TrySetCanceled(const TError& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -733,6 +741,14 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Enables runtime checks ensuring that no fiber context switch can happen
+//! during excution of a future handler.
+//! See YT-25879 for more details.
+void ForbidContextSwitchInFutureHandler();
+bool IsContextSwitchInFutureHandlerForbidden();
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 concept CFuture = NDetail::IsFuture<T>;
 
@@ -744,8 +760,6 @@ concept CFuture = NDetail::IsFuture<T>;
 
 //! Used for marking unused futures for easier search.
 #define YT_UNUSED_FUTURE(var) Y_UNUSED(var)
-
-////////////////////////////////////////////////////////////////////////////////
 
 #define FUTURE_INL_H_
 #include "future-inl.h"

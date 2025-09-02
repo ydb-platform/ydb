@@ -71,10 +71,6 @@ public:
         return TReq::GetProtoRequest(Request_);
     }
 
-    TRequest* GetProtoRequestMut() noexcept {
-        return TReq::GetProtoRequestMut(Request_);
-    }
-
     IRequestNoOpCtx& Request() noexcept { return *Request_; }
 
 private:

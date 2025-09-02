@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -169,6 +169,7 @@ struct TSqsEvents {
         enum EFlags {
             NeedQueueLeader = 1,
             NeedQueueAttributes = NeedQueueLeader | 2, // attributes are stored in leader actor, so, when you need attributes, you need leader
+            NeedQueueTags = NeedQueueLeader | 4,       // same for tags
         };
 
         TEvGetConfiguration() = default;
@@ -225,6 +226,7 @@ struct TSqsEvents {
         ui64 Shards = 1;
         bool Fifo = false;
         TMaybe<TQueueAttributes> QueueAttributes;
+        TMaybe<NJson::TJsonMap> QueueTags;
         TIntrusivePtr<TQuoterResourcesForActions> QuoterResources;
 
         // Counters
@@ -277,6 +279,7 @@ struct TSqsEvents {
     };
 
     struct TEvExecuted : public NActors::TEventPB<TEvExecuted, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvExecuted> {
+        using TEventBase = NActors::TEventPB<TEvExecuted, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvExecuted>;
         using TRecord = ProtoRecordType;
 
         TExecutedCallback Cb;
@@ -292,7 +295,7 @@ struct TSqsEvents {
         { }
 
         TEvExecuted(const TRecord& rec, TExecutedCallback cb, ui64 shard)
-            : TEventPB(rec)
+            : TEventBase(rec)
             , Cb(cb)
             , Shard(shard)
         { }
@@ -419,7 +422,8 @@ struct TSqsEvents {
     };
 
     struct TEvActionCounterChanged: public NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged> {
-        using TEventPB::TEventPB;
+        using TEventBase = NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged>;
+        using TEventBase::TEventBase;
     };
 
     struct TEvLocalCounterChanged: public NActors::TEventLocal<TEvLocalCounterChanged, EvLocalCounterChanged> {
@@ -441,12 +445,14 @@ struct TSqsEvents {
 
     // Request that is sent from proxy to sqs service actor on other (leader) node
     struct TEvSqsRequest : public NActors::TEventPB<TEvSqsRequest, NKikimrClient::TSqsRequest, EvSqsRequest> {
-        using TEventPB::TEventPB;
+        using TEventBase = NActors::TEventPB<TEvSqsRequest, NKikimrClient::TSqsRequest, EvSqsRequest>;
+        using TEventBase::TEventBase;
     };
 
     // Response to TEvSqsRequest
     struct TEvSqsResponse : public NActors::TEventPB<TEvSqsResponse, NKikimrClient::TSqsResponse, EvSqsResponse> {
-        using TEventPB::TEventPB;
+        using TEventBase = NActors::TEventPB<TEvSqsResponse, NKikimrClient::TSqsResponse, EvSqsResponse>;
+        using TEventBase::TEventBase;
     };
 
     // Request for proxying request to sqs service actor on other (leader) node
@@ -957,7 +963,7 @@ struct TSqsEvents {
         ui64 Type;
     };
 
-    struct TEvNodeTrackerSubscribeRequest 
+    struct TEvNodeTrackerSubscribeRequest
         : public NActors::TEventLocal<TEvNodeTrackerSubscribeRequest, EvNodeTrackerSubscribeRequest>
     {
         explicit TEvNodeTrackerSubscribeRequest(
@@ -976,8 +982,8 @@ struct TSqsEvents {
         bool IsFifo;
         std::optional<ui64> TabletId;
     };
-    
-    struct TEvNodeTrackerUnsubscribeRequest 
+
+    struct TEvNodeTrackerUnsubscribeRequest
         : public NActors::TEventLocal<TEvNodeTrackerUnsubscribeRequest, EvNodeTrackerUnsubscribeRequest>
     {
         TEvNodeTrackerUnsubscribeRequest(ui64 subscriptionId)
@@ -996,17 +1002,17 @@ struct TSqsEvents {
         ui32 NodeId;
         bool Disconnected;
     };
-    
+
     struct TEvForceReloadState : public NActors::TEventLocal<TEvForceReloadState, EvForceReloadState> {
         explicit TEvForceReloadState(TDuration nextTryAfter = TDuration::Zero())
             : NextTryAfter(nextTryAfter)
         {}
         TDuration NextTryAfter;
     };
-    
+
     struct TEvReloadStateRequest : public NActors::TEventPB<TEvReloadStateRequest, TReloadStateRequest, EvReloadStateRequest> {
         TEvReloadStateRequest() = default;
-        
+
         TEvReloadStateRequest(const TString& user, const TString& queue) {
             Record.MutableTarget()->SetUserName(user);
             Record.MutableTarget()->SetQueueName(queue);

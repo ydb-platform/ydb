@@ -14,12 +14,12 @@ namespace NMonitoring {
         /**
          * Store {@code count} times given {@code value} in this collector.
          */
-        virtual void Collect(double value, ui64 count) = 0;
+        virtual void Collect(double value, ui64 count) noexcept = 0;
 
         /**
          * Store given {@code value} in this collector.
          */
-        void Collect(double value) {
+        void Collect(double value) noexcept {
             Collect(value, 1);
         }
 
@@ -35,12 +35,17 @@ namespace NMonitoring {
         /**
          * Reset collector values
          */
-        virtual void Reset() = 0;
+        virtual void Reset() noexcept = 0;
 
         /**
          * @return snapshot of the state of this collector.
          */
         virtual IHistogramSnapshotPtr Snapshot() const = 0;
+
+        /**
+        * @return copy of collector implementation
+        */
+        virtual THolder<IHistogramCollector> Clone() = 0;
     };
 
     using IHistogramCollectorPtr = THolder<IHistogramCollector>;

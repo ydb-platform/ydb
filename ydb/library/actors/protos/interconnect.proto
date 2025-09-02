@@ -27,6 +27,7 @@ message TNodeLocation {
     optional uint32 BodyNum = 4 [deprecated=true];
     optional uint32 Body = 100500 [deprecated=true]; // for compatibility with WalleLocation
 
+    optional string BridgePileName = 5 [(PrintName) = "P"];
     optional string DataCenter = 10 [(PrintName) = "DC"];
     optional string Module = 20 [(PrintName) = "M"];
     optional string Rack = 30 [(PrintName) = "R"];
@@ -79,6 +80,12 @@ message THandshakeRequest {
     optional bytes CompatibilityInfo = 22;
 
     optional bytes HandshakeId = 23;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 26; // extra params for connection validation
 }
 
 message THandshakeSuccess {
@@ -106,12 +113,24 @@ message THandshakeSuccess {
     optional bool UseXdcShuffle = 17;
 
     optional bytes CompatibilityInfo = 15;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 18; // extra params for connection validation
 }
 
 message THandshakeReply {
     optional THandshakeSuccess Success = 1;
     optional string ErrorExplaination = 2;
     optional bool CookieCheckResult = 3;
+
+    message TKeyValuePair {
+        optional string Key = 1;
+        optional bytes Value = 2;
+    }
+    repeated TKeyValuePair Params = 4;
 }
 
 message TEvLoadMessage {

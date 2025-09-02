@@ -1,69 +1,181 @@
 import xmltodict
+from typing import Any, Dict
+from urllib.parse import unquote
 
-from moto.core.responses import BaseResponse
-from .models import cloudfront_backend
+from moto.core.responses import BaseResponse, TYPE_RESPONSE
+from .models import cloudfront_backends, CloudFrontBackend
 
 
 XMLNS = "http://cloudfront.amazonaws.com/doc/2020-05-31/"
 
 
 class CloudFrontResponse(BaseResponse):
-    def _get_xml_body(self):
-        return xmltodict.parse(self.body, dict_constructor=dict)
+    def __init__(self) -> None:
+        super().__init__(service_name="cloudfront")
 
-    def distributions(self, request, full_url, headers):
+    def _get_xml_body(self) -> Dict[str, Any]:
+        return xmltodict.parse(self.body, dict_constructor=dict, force_list="Path")
+
+    @property
+    def backend(self) -> CloudFrontBackend:
+        return cloudfront_backends[self.current_account]["global"]
+
+    def distributions(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         if request.method == "POST":
             return self.create_distribution()
         if request.method == "GET":
             return self.list_distributions()
 
-    def create_distribution(self):
+    def invalidation(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "POST":
+            return self.create_invalidation()
+        if request.method == "GET":
+            return self.list_invalidations()
+
+    def tags(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "GET":
+            return self.list_tags_for_resource()
+
+    def origin_access_controls(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "POST":
+            return self.create_origin_access_control()
+        if request.method == "GET":
+            return self.list_origin_access_controls()
+
+    def origin_access_control(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
+        self.setup_class(request, full_url, headers)
+        if request.method == "GET":
+            return self.get_origin_access_control()
+        if request.method == "PUT":
+            return self.update_origin_access_control()
+        if request.method == "DELETE":
+            return self.delete_origin_access_control()
+
+    def create_distribution(self) -> TYPE_RESPONSE:
         params = self._get_xml_body()
-        distribution_config = params.get("DistributionConfig")
-        distribution, location, e_tag = cloudfront_backend.create_distribution(
-            distribution_config=distribution_config
+        if "DistributionConfigWithTags" in params:
+            config = params.get("DistributionConfigWithTags")
+            tags = (config.get("Tags", {}).get("Items") or {}).get("Tag", [])  # type: ignore[union-attr]
+            if not isinstance(tags, list):
+                tags = [tags]
+        else:
+            config = params
+            tags = []
+        distribution_config = config.get("DistributionConfig")  # type: ignore[union-attr]
+        distribution, location, e_tag = self.backend.create_distribution(
+            distribution_config=distribution_config,
+            tags=tags,
         )
         template = self.response_template(CREATE_DISTRIBUTION_TEMPLATE)
         response = template.render(distribution=distribution, xmlns=XMLNS)
         headers = {"ETag": e_tag, "Location": location}
         return 200, headers, response
 
-    def list_distributions(self):
-        distributions = cloudfront_backend.list_distributions()
+    def list_distributions(self) -> TYPE_RESPONSE:
+        distributions = self.backend.list_distributions()
         template = self.response_template(LIST_TEMPLATE)
         response = template.render(distributions=distributions)
         return 200, {}, response
 
-    def individual_distribution(self, request, full_url, headers):
+    def individual_distribution(self, request: Any, full_url: str, headers: Any) -> TYPE_RESPONSE:  # type: ignore[return]
         self.setup_class(request, full_url, headers)
         distribution_id = full_url.split("/")[-1]
         if request.method == "DELETE":
             if_match = self._get_param("If-Match")
-            cloudfront_backend.delete_distribution(distribution_id, if_match)
+            self.backend.delete_distribution(distribution_id, if_match)
             return 204, {}, ""
         if request.method == "GET":
-            dist, etag = cloudfront_backend.get_distribution(distribution_id)
+            dist, etag = self.backend.get_distribution(distribution_id)
             template = self.response_template(GET_DISTRIBUTION_TEMPLATE)
             response = template.render(distribution=dist, xmlns=XMLNS)
             return 200, {"ETag": etag}, response
 
-    def update_distribution(self, request, full_url, headers):
+    def update_distribution(  # type: ignore[return]
+        self, request: Any, full_url: str, headers: Any
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers)
-        params = self._get_xml_body()
-        distribution_config = params.get("DistributionConfig")
         dist_id = full_url.split("/")[-2]
-        if_match = headers["If-Match"]
+        if request.method == "GET":
+            distribution_config, etag = self.backend.get_distribution_config(dist_id)
+            template = self.response_template(GET_DISTRIBUTION_CONFIG_TEMPLATE)
+            response = template.render(distribution=distribution_config, xmlns=XMLNS)
+            return 200, {"ETag": etag}, response
+        if request.method == "PUT":
+            params = self._get_xml_body()
+            dist_config = params.get("DistributionConfig")
+            if_match = headers["If-Match"]
 
-        dist, location, e_tag = cloudfront_backend.update_distribution(
-            DistributionConfig=distribution_config,
-            Id=dist_id,
-            IfMatch=if_match,
-        )
-        template = self.response_template(UPDATE_DISTRIBUTION_TEMPLATE)
-        response = template.render(distribution=dist, xmlns=XMLNS)
-        headers = {"ETag": e_tag, "Location": location}
-        return 200, headers, response
+            dist, location, e_tag = self.backend.update_distribution(
+                dist_config=dist_config,  # type: ignore[arg-type]
+                _id=dist_id,
+                if_match=if_match,
+            )
+            template = self.response_template(UPDATE_DISTRIBUTION_TEMPLATE)
+            response = template.render(distribution=dist, xmlns=XMLNS)
+            headers = {"ETag": e_tag, "Location": location}
+            return 200, headers, response
+
+    def create_invalidation(self) -> TYPE_RESPONSE:
+        dist_id = self.path.split("/")[-2]
+        params = self._get_xml_body()["InvalidationBatch"]
+        paths = ((params.get("Paths") or {}).get("Items") or {}).get("Path") or []
+        caller_ref = params.get("CallerReference")
+
+        invalidation = self.backend.create_invalidation(dist_id, paths, caller_ref)  # type: ignore[arg-type]
+        template = self.response_template(CREATE_INVALIDATION_TEMPLATE)
+        response = template.render(invalidation=invalidation, xmlns=XMLNS)
+
+        return 200, {"Location": invalidation.location}, response
+
+    def list_invalidations(self) -> TYPE_RESPONSE:
+        dist_id = self.path.split("/")[-2]
+        invalidations = self.backend.list_invalidations(dist_id)
+        template = self.response_template(INVALIDATIONS_TEMPLATE)
+        response = template.render(invalidations=invalidations, xmlns=XMLNS)
+
+        return 200, {}, response
+
+    def list_tags_for_resource(self) -> TYPE_RESPONSE:
+        resource = unquote(self._get_param("Resource"))
+        tags = self.backend.list_tags_for_resource(resource=resource)["Tags"]
+        template = self.response_template(TAGS_TEMPLATE)
+        response = template.render(tags=tags, xmlns=XMLNS)
+        return 200, {}, response
+
+    def create_origin_access_control(self) -> TYPE_RESPONSE:
+        config = self._get_xml_body().get("OriginAccessControlConfig", {})
+        config.pop("@xmlns", None)
+        control = self.backend.create_origin_access_control(config)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {}, template.render(control=control)
+
+    def get_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-1]
+        control = self.backend.get_origin_access_control(control_id)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {"ETag": control.etag}, template.render(control=control)
+
+    def list_origin_access_controls(self) -> TYPE_RESPONSE:
+        controls = self.backend.list_origin_access_controls()
+        template = self.response_template(LIST_ORIGIN_ACCESS_CONTROl)
+        return 200, {}, template.render(controls=controls)
+
+    def update_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-2]
+        config = self._get_xml_body().get("OriginAccessControlConfig", {})
+        config.pop("@xmlns", None)
+        control = self.backend.update_origin_access_control(control_id, config)
+        template = self.response_template(ORIGIN_ACCESS_CONTROl)
+        return 200, {"ETag": control.etag}, template.render(control=control)
+
+    def delete_origin_access_control(self) -> TYPE_RESPONSE:
+        control_id = self.path.split("/")[-1]
+        self.backend.delete_origin_access_control(control_id)
+        return 200, {}, "{}"
 
 
 DIST_META_TEMPLATE = """
@@ -86,7 +198,7 @@ DIST_CONFIG_TEMPLATE = """
           {% endfor %}
         </Items>
       </Aliases>
-      <DefaultRootObject>{{ distribution.distribution_config.default_distribution_object }}</DefaultRootObject>
+      <DefaultRootObject>{{ distribution.distribution_config.default_root_object }}</DefaultRootObject>
       <Origins>
         <Quantity>{{ distribution.distribution_config.origins|length }}</Quantity>
         <Items>
@@ -104,32 +216,34 @@ DIST_CONFIG_TEMPLATE = """
                 {% endfor %}
               </Items>
             </CustomHeaders>
+            {% if origin.s3_access_identity %}
             <S3OriginConfig>
               <OriginAccessIdentity>{{ origin.s3_access_identity }}</OriginAccessIdentity>
             </S3OriginConfig>
+            {% endif %}
             {% if origin.custom_origin %}
             <CustomOriginConfig>
               <HTTPPort>{{ origin.custom_origin.http_port }}</HTTPPort>
               <HTTPSPort>{{ origin.custom_origin.https_port }}</HTTPSPort>
-              <OriginProtocolPolicy>{{ OriginProtocolPolicy }}</OriginProtocolPolicy>
+              <OriginProtocolPolicy>{{ origin.custom_origin.protocol_policy }}</OriginProtocolPolicy>
               <OriginSslProtocols>
-                <Quantity>{{ origin.custom_origin.origin_ssl_protocols.quantity }}</Quantity>
+                <Quantity>{{ origin.custom_origin.ssl_protocols|length }}</Quantity>
                 <Items>
-                  {% for protocol  in origin.custom_origin.origin_ssl_protocols %}
-                  {{ protocol }}
+                  {% for protocol  in origin.custom_origin.ssl_protocols %}
+                  <SslProtocol>{{ protocol }}</SslProtocol>
                   {% endfor %}
                 </Items>
               </OriginSslProtocols>
-              <OriginReadTimeout>{{ origin.custom_origin.origin_read_timeout }}</OriginReadTimeout>
-              <OriginKeepaliveTimeout>{{ origin.custom_origin.origin_keepalive_timeout }}</OriginKeepaliveTimeout>
+              <OriginReadTimeout>{{ origin.custom_origin.read_timeout }}</OriginReadTimeout>
+              <OriginKeepaliveTimeout>{{ origin.custom_origin.keep_alive }}</OriginKeepaliveTimeout>
             </CustomOriginConfig>
             {% endif %}
             <ConnectionAttempts>{{ origin.connection_attempts }}</ConnectionAttempts>
             <ConnectionTimeout>{{ origin.connection_timeout }}</ConnectionTimeout>
             {% if origin.origin_shield %}
             <OriginShield>
-              <Enabled>{{ origin.origin_shield.enabled }}</Enabled>
-              <OriginShieldRegion>{{ OriginShieldRegion }}</OriginShieldRegion>
+              <Enabled>{{ origin.origin_shield.get("Enabled") }}</Enabled>
+              <OriginShieldRegion>{{ origin.origin_shield.get("OriginShieldRegion") }}</OriginShieldRegion>
             </OriginShield>
             {% else %}
             <OriginShield>
@@ -171,7 +285,7 @@ DIST_CONFIG_TEMPLATE = """
       <DefaultCacheBehavior>
         <TargetOriginId>{{ distribution.distribution_config.default_cache_behavior.target_origin_id }}</TargetOriginId>
         <TrustedSigners>
-          <Enabled>{{ distribution.distribution_config.default_cache_behavior.trusted_signers.enabled }}</Enabled>
+          <Enabled>{{ distribution.distribution_config.default_cache_behavior.trusted_signers_enabled }}</Enabled>
           <Quantity>{{ distribution.distribution_config.default_cache_behavior.trusted_signers|length }}</Quantity>
           <Items>
             {% for aws_account_number  in distribution.distribution_config.default_cache_behavior.trusted_signers %}
@@ -193,14 +307,14 @@ DIST_CONFIG_TEMPLATE = """
           <Quantity>{{ distribution.distribution_config.default_cache_behavior.allowed_methods|length }}</Quantity>
           <Items>
             {% for method in distribution.distribution_config.default_cache_behavior.allowed_methods %}
-            <member>{{ method }}</member>
+            <Method>{{ method }}</Method>
             {% endfor %}
           </Items>
           <CachedMethods>
             <Quantity>{{ distribution.distribution_config.default_cache_behavior.cached_methods|length }}</Quantity>
             <Items>
               {% for method in distribution.distribution_config.default_cache_behavior.cached_methods %}
-              <member>{{ method }}</member>
+              <Method>{{ method }}</Method>
               {% endfor %}
             </Items>
           </CachedMethods>
@@ -238,7 +352,7 @@ DIST_CONFIG_TEMPLATE = """
         <ForwardedValues>
           <QueryString>{{ distribution.distribution_config.default_cache_behavior.forwarded_values.query_string }}</QueryString>
           <Cookies>
-            <Forward>{{ ItemSelection }}</Forward>
+            <Forward>{{ distribution.distribution_config.default_cache_behavior.forwarded_values.cookie_forward }}</Forward>
             <WhitelistedNames>
               <Quantity>{{ distribution.distribution_config.default_cache_behavior.forwarded_values.whitelisted_names|length }}</Quantity>
               <Items>
@@ -273,7 +387,7 @@ DIST_CONFIG_TEMPLATE = """
         <Quantity>{{ distribution.distribution_config.cache_behaviors|length }}</Quantity>
         {% if distribution.distribution_config.cache_behaviors %}
         <Items>
-          {% for behaviour  in distribution.distribution_config.cache_behaviors %}
+          {% for behaviour in distribution.distribution_config.cache_behaviors %}
             <PathPattern>{{ behaviour.path_pattern }}</PathPattern>
             <TargetOriginId>{{ behaviour.target_origin_id }}</TargetOriginId>
             <TrustedSigners>
@@ -286,33 +400,33 @@ DIST_CONFIG_TEMPLATE = """
               </Items>
             </TrustedSigners>
             <TrustedKeyGroups>
-              <Enabled>{{ cache_behavior_list.trusted_key_groups.enabled }}</Enabled>
-              <Quantity>{{ cache_behavior_list.trusted_key_groups.quantity }}</Quantity>
+              <Enabled>{{ behaviour.trusted_key_groups.enabled }}</Enabled>
+              <Quantity>{{ behaviour.trusted_key_groups.quantity }}</Quantity>
               <Items>
-                {% for trusted_key_group_id_list  in cache_behavior_list.trusted_key_groups.TrustedKeyGroupIdList %}
+                {% for trusted_key_group_id_list  in behaviour.trusted_key_groups.TrustedKeyGroupIdList %}
                   <KeyGroup>{{ trusted_key_group_id_list.key_group }}</KeyGroup>
                 {% endfor %}
               </Items>
             </TrustedKeyGroups>
             <ViewerProtocolPolicy>{{ ViewerProtocolPolicy }}</ViewerProtocolPolicy>
             <AllowedMethods>
-              <Quantity>{{ cache_behavior_list.allowed_methods.quantity }}</Quantity>
+              <Quantity>{{ behaviour.allowed_methods.quantity }}</Quantity>
               <Items>
-                {% for methods_list  in cache_behavior_list.allowed_methods.MethodsList %}{{ Method }}{% endfor %}
+                {% for methods_list in behaviour.allowed_methods.MethodsList %}{{ Method }}{% endfor %}
               </Items>
               <CachedMethods>
-                <Quantity>{{ cache_behavior_list.allowed_methods.cached_methods.quantity }}</Quantity>
+                <Quantity>{{ behaviour.allowed_methods.cached_methods.quantity }}</Quantity>
                 <Items>
-                  {% for methods_list  in cache_behavior_list.allowed_methods.cached_methods.MethodsList %}{{ Method }}{% endfor %}
+                  {% for methods_list in behaviour.allowed_methods.cached_methods.MethodsList %}{{ Method }}{% endfor %}
                 </Items>
               </CachedMethods>
             </AllowedMethods>
-            <SmoothStreaming>{{ cache_behavior_list.smooth_streaming }}</SmoothStreaming>
-            <Compress>{{ cache_behavior_list.compress }}</Compress>
+            <SmoothStreaming>{{ behaviour.smooth_streaming }}</SmoothStreaming>
+            <Compress>{{ behaviour.compress }}</Compress>
             <LambdaFunctionAssociations>
-              <Quantity>{{ cache_behavior_list.lambda_function_associations.quantity }}</Quantity>
+              <Quantity>{{ behaviour.lambda_function_associations.quantity }}</Quantity>
               <Items>
-                {% for lambda_function_association_list  in cache_behavior_list.lambda_function_associations.LambdaFunctionAssociationList %}
+                {% for lambda_function_association_list in behaviour.lambda_function_associations.LambdaFunctionAssociationList %}
                   <LambdaFunctionARN>{{ LambdaFunctionARN }}</LambdaFunctionARN>
                   <EventType>{{ EventType }}</EventType>
                   <IncludeBody>{{ lambda_function_association_list.include_body }}</IncludeBody>
@@ -320,52 +434,52 @@ DIST_CONFIG_TEMPLATE = """
               </Items>
             </LambdaFunctionAssociations>
             <FunctionAssociations>
-              <Quantity>{{ cache_behavior_list.function_associations.quantity }}</Quantity>
+              <Quantity>{{ behaviour.function_associations.quantity }}</Quantity>
               <Items>
-                {% for function_association_list  in cache_behavior_list.function_associations.FunctionAssociationList %}
+                {% for function_association_list  in behaviour.function_associations.FunctionAssociationList %}
                   <FunctionARN>{{ FunctionARN }}</FunctionARN>
                   <EventType>{{ EventType }}</EventType>
                 {% endfor %}
               </Items>
             </FunctionAssociations>
-            <FieldLevelEncryptionId>{{ cache_behavior_list.field_level_encryption_id }}</FieldLevelEncryptionId>
-            <RealtimeLogConfigArn>{{ cache_behavior_list.realtime_log_config_arn }}</RealtimeLogConfigArn>
-            <CachePolicyId>{{ cache_behavior_list.cache_policy_id }}</CachePolicyId>
-            <OriginRequestPolicyId>{{ cache_behavior_list.origin_request_policy_id }}</OriginRequestPolicyId>
-            <ResponseHeadersPolicyId>{{ cache_behavior_list.response_headers_policy_id }}</ResponseHeadersPolicyId>
+            <FieldLevelEncryptionId>{{ behaviour.field_level_encryption_id }}</FieldLevelEncryptionId>
+            <RealtimeLogConfigArn>{{ behaviour.realtime_log_config_arn }}</RealtimeLogConfigArn>
+            <CachePolicyId>{{ behaviour.cache_policy_id }}</CachePolicyId>
+            <OriginRequestPolicyId>{{ behaviour.origin_request_policy_id }}</OriginRequestPolicyId>
+            <ResponseHeadersPolicyId>{{ behaviour.response_headers_policy_id }}</ResponseHeadersPolicyId>
             <ForwardedValues>
-              <QueryString>{{ cache_behavior_list.forwarded_values.query_string }}</QueryString>
+              <QueryString>{{ behaviour.forwarded_values.query_string }}</QueryString>
               <Cookies>
                 <Forward>{{ ItemSelection }}</Forward>
                 <WhitelistedNames>
-                  <Quantity>{{ cache_behavior_list.forwarded_values.cookies.whitelisted_names.quantity }}</Quantity>
+                  <Quantity>{{ behaviour.forwarded_values.cookies.whitelisted_names.quantity }}</Quantity>
                   <Items>
-                    {% for cookie_name_list  in cache_behavior_list.forwarded_values.cookies.whitelisted_names.CookieNameList %}
+                    {% for cookie_name_list  in behaviour.forwarded_values.cookies.whitelisted_names.CookieNameList %}
                       <Name>{{ cookie_name_list.name }}</Name>
                     {% endfor %}
                   </Items>
                 </WhitelistedNames>
               </Cookies>
               <Headers>
-                <Quantity>{{ cache_behavior_list.forwarded_values.headers.quantity }}</Quantity>
+                <Quantity>{{ behaviour.forwarded_values.headers.quantity }}</Quantity>
                 <Items>
-                  {% for header_list  in cache_behavior_list.forwarded_values.headers.HeaderList %}
+                  {% for header_list in behaviour.forwarded_values.headers.HeaderList %}
                     <Name>{{ header_list.name }}</Name>
                   {% endfor %}
                 </Items>
               </Headers>
               <QueryStringCacheKeys>
-                <Quantity>{{ cache_behavior_list.forwarded_values.query_string_cache_keys.quantity }}</Quantity>
+                <Quantity>{{ behaviour.forwarded_values.query_string_cache_keys.quantity }}</Quantity>
                 <Items>
-                  {% for query_string_cache_keys_list  in cache_behavior_list.forwarded_values.query_string_cache_keys.QueryStringCacheKeysList %}
+                  {% for query_string_cache_keys_list in behaviour.forwarded_values.query_string_cache_keys.QueryStringCacheKeysList %}
                     <Name>{{ query_string_cache_keys_list.name }}</Name>
                   {% endfor %}
                 </Items>
               </QueryStringCacheKeys>
             </ForwardedValues>
-            <MinTTL>{{ cache_behavior_list.min_ttl }}</MinTTL>
-            <DefaultTTL>{{ cache_behavior_list.default_ttl }}</DefaultTTL>
-            <MaxTTL>{{ cache_behavior_list.max_ttl }}</MaxTTL>
+            <MinTTL>{{ behaviour.min_ttl }}</MinTTL>
+            <DefaultTTL>{{ behaviour.default_ttl }}</DefaultTTL>
+            <MaxTTL>{{ behaviour.max_ttl }}</MaxTTL>
           {% endfor %}
         </Items>
         {% endif %}
@@ -403,11 +517,11 @@ DIST_CONFIG_TEMPLATE = """
       </ViewerCertificate>
       <Restrictions>
         <GeoRestriction>
-          <RestrictionType>{{ distribution.distribution_config.geo_restriction_type }}</RestrictionType>
-          <Quantity>{{ distribution.distribution_config.geo_restrictions|length }}</Quantity>
-          {% if distribution.distribution_config.geo_restrictions %}
+          <RestrictionType>{{ distribution.distribution_config.geo_restriction._type }}</RestrictionType>
+          <Quantity>{{ distribution.distribution_config.geo_restriction.restrictions|length }}</Quantity>
+          {% if distribution.distribution_config.geo_restriction.restrictions %}
           <Items>
-            {% for location  in distribution.distribution_config.geo_restrictions %}
+            {% for location  in distribution.distribution_config.geo_restriction.restrictions %}
               <Location>{{ location }}</Location>
             {% endfor %}
           </Items>
@@ -490,6 +604,16 @@ GET_DISTRIBUTION_TEMPLATE = (
 """
 )
 
+GET_DISTRIBUTION_CONFIG_TEMPLATE = (
+    """<?xml version="1.0"?>
+  <DistributionConfig>
+"""
+    + DIST_CONFIG_TEMPLATE
+    + """
+  </DistributionConfig>
+"""
+)
+
 
 LIST_TEMPLATE = (
     """<?xml version="1.0"?>
@@ -524,3 +648,89 @@ UPDATE_DISTRIBUTION_TEMPLATE = (
   </Distribution>
 """
 )
+
+CREATE_INVALIDATION_TEMPLATE = """<?xml version="1.0"?>
+<Invalidation>
+  <Id>{{ invalidation.invalidation_id }}</Id>
+  <Status>{{ invalidation.status }}</Status>
+  <CreateTime>{{ invalidation.create_time }}</CreateTime>
+  <InvalidationBatch>
+    <CallerReference>{{ invalidation.caller_ref }}</CallerReference>
+    <Paths>
+      <Quantity>{{ invalidation.paths|length }}</Quantity>
+      <Items>
+        {% for path in invalidation.paths %}<Path>{{ path }}</Path>{% endfor %}
+      </Items>
+    </Paths>
+  </InvalidationBatch>
+</Invalidation>
+"""
+
+INVALIDATIONS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<InvalidationList>
+   <IsTruncated>false</IsTruncated>
+   {% if invalidations %}
+   <Items>
+      {% for invalidation in invalidations %}
+      <InvalidationSummary>
+         <CreateTime>{{ invalidation.create_time }}</CreateTime>
+         <Id>{{ invalidation.invalidation_id }}</Id>
+         <Status>{{ invalidation.status }}</Status>
+      </InvalidationSummary>
+      {% endfor %}
+   </Items>
+   {% endif %}
+   <Marker></Marker>
+   <MaxItems>100</MaxItems>
+   <Quantity>{{ invalidations|length }}</Quantity>
+</InvalidationList>
+"""
+
+TAGS_TEMPLATE = """<?xml version="1.0"?>
+<Tags>
+  <Items>
+    {% for tag in tags %}
+      <Tag>
+      <Key>{{ tag["Key"] }}</Key>
+      <Value>{{ tag["Value"] }}</Value>
+      </Tag>
+    {% endfor %}
+  </Items>
+</Tags>
+"""
+
+
+ORIGIN_ACCESS_CONTROl = """<?xml version="1.0"?>
+<OriginAccessControl>
+  <Id>{{ control.id }}</Id>
+  <OriginAccessControlConfig>
+    <Name>{{ control.name }}</Name>
+    {% if control.description %}
+    <Description>{{ control.description }}</Description>
+    {% endif %}
+    <SigningProtocol>{{ control.signing_protocol }}</SigningProtocol>
+    <SigningBehavior>{{ control.signing_behaviour }}</SigningBehavior>
+    <OriginAccessControlOriginType>{{ control.origin_type }}</OriginAccessControlOriginType>
+  </OriginAccessControlConfig>
+</OriginAccessControl>
+"""
+
+
+LIST_ORIGIN_ACCESS_CONTROl = """<?xml version="1.0"?>
+<OriginAccessControlList>
+  <Items>
+  {% for control in controls %}
+    <OriginAccessControlSummary>
+      <Id>{{ control.id }}</Id>
+      <Name>{{ control.name }}</Name>
+      {% if control.description %}
+      <Description>{{ control.description }}</Description>
+      {% endif %}
+      <SigningProtocol>{{ control.signing_protocol }}</SigningProtocol>
+      <SigningBehavior>{{ control.signing_behaviour }}</SigningBehavior>
+      <OriginAccessControlOriginType>{{ control.origin_type }}</OriginAccessControlOriginType>
+    </OriginAccessControlSummary>
+  {% endfor %}
+  </Items>
+</OriginAccessControlList>
+"""

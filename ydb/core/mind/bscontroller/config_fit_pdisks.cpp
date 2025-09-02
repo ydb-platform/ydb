@@ -10,9 +10,7 @@ namespace NKikimr {
             ui32 NodeId = 0;
             TString Path;
 
-            bool operator==(const TDiskId& other) const {
-                return NodeId == other.NodeId && Path == other.Path;
-            }
+            friend std::strong_ordering operator<=>(const TDiskId&, const TDiskId&) = default;
         };
 
         struct TDiskInfo {
@@ -27,26 +25,12 @@ namespace NKikimr {
             bool ReadCentric = false;
             TPDiskCategory PDiskCategory = {};
             TString PDiskConfig;
+            ui64 InferPDiskSlotCountFromUnitSize = 0;
 
             TDiskId GetId() const {
                 return {NodeId, Path};
             }
         };
-
-    } // NBsController
-} // NKikimr
-
-namespace std {
-    template <>
-    struct hash<NKikimr::NBsController::TDiskId> {
-        size_t operator()(const NKikimr::NBsController::TDiskId& diskId) const {
-            return hash<ui32>()(diskId.NodeId) ^ hash<TString>()(diskId.Path);
-        }
-    };
-}
-
-namespace NKikimr {
-    namespace NBsController {
 
         static TPDiskId FindFirstEmptyPDiskId(const TOverlayMap<TPDiskId, TBlobStorageController::TPDiskInfo>& pdisks,
                 TNodeId nodeId) {
@@ -89,7 +73,8 @@ namespace NKikimr {
                 pdiskInfo->SharedWithOs != disk.SharedWithOs ||
                 pdiskInfo->ReadCentric != disk.ReadCentric ||
                 pdiskInfo->BoxId != disk.BoxId ||
-                pdiskInfo->PDiskConfig != disk.PDiskConfig)
+                pdiskInfo->PDiskConfig != disk.PDiskConfig ||
+                pdiskInfo->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize)
             {
                 // update PDisk configuration
                 auto pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
@@ -98,11 +83,16 @@ namespace NKikimr {
                 pdiskInfo->SharedWithOs = disk.SharedWithOs;
                 pdiskInfo->ReadCentric = disk.ReadCentric;
                 pdiskInfo->BoxId = disk.BoxId;
-                if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
-                    if (const auto id = FindStaticPDisk(disk, state); id && state.StaticPDisks.at(*id).PDiskConfig != disk.PDiskConfig) {
+                if (pdiskInfo->PDiskConfig != disk.PDiskConfig
+                        || pdiskInfo->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize) {
+                    const std::optional<TBlobStorageController::TStaticPDiskInfo> staticPDisk = FindStaticPDisk(disk, state).transform(
+                        [&](TPDiskId id) {return state.StaticPDisks.at(id);});
+                    if (staticPDisk && (staticPDisk->PDiskConfig != disk.PDiskConfig
+                            || staticPDisk->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize)) {
                         throw TExError() << "PDiskConfig mismatch for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
                     } else {
                         pdiskInfo->PDiskConfig = disk.PDiskConfig;
+                        pdiskInfo->InferPDiskSlotCountFromUnitSize = disk.InferPDiskSlotCountFromUnitSize;
                     }
                 }
                 // run ExtractConfig as the very last step
@@ -150,8 +140,8 @@ namespace NKikimr {
             return TString();
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromHostConfig(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
-            std::unordered_map<TDiskId, TDiskInfo> disks;
+        static std::map<TDiskId, TDiskInfo> GetDisksFromHostConfig(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
+            std::map<TDiskId, TDiskInfo> disks;
 
             const auto& hostConfigs = state.HostConfigs.Get();
             const auto& boxes = state.Boxes.Get();
@@ -172,7 +162,7 @@ namespace NKikimr {
                     const auto& hostConfig = it->second;
 
                     const TBlobStorageController::THostId hostId(hostKey.Fqdn, hostKey.IcPort);
-                    const auto& nodeId = state.HostRecords->ResolveNodeId(hostKey, hostValue);
+                    const auto& nodeId = hostValue.EnforcedNodeId ? hostValue.EnforcedNodeId : state.HostRecords->ResolveNodeId(hostKey);
                     if (!nodeId) {
                         throw TExHostNotFound(hostKey) << TErrorParams::BoxId(boxId) << TErrorParams::NodeId(*nodeId);
                     } else if (!usedNodes.insert(*nodeId).second) {
@@ -195,6 +185,7 @@ namespace NKikimr {
                         disk.ReadCentric = driveInfo.ReadCentric;
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
+                        disk.InferPDiskSlotCountFromUnitSize = driveInfo.InferPDiskSlotCountFromUnitSize;
 
                         auto diskId = disk.GetId();
                         auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));
@@ -208,8 +199,8 @@ namespace NKikimr {
             return disks;
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromDrivesSerials(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
-            std::unordered_map<TDiskId, TDiskInfo> disks;
+        static std::map<TDiskId, TDiskInfo> GetDisksFromDrivesSerials(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
+            std::map<TDiskId, TDiskInfo> disks;
 
             state.DrivesSerials.ForEachInRange({}, {}, [&](const auto& serial, const auto& driveInfo) {
                 if (!relevantBoxes.contains(driveInfo.BoxId)) {
@@ -262,7 +253,7 @@ namespace NKikimr {
             return disks;
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromDrivesSerialsAndHostConfig(
+        static std::map<TDiskId, TDiskInfo> GetDisksFromDrivesSerialsAndHostConfig(
             const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes)
         {
             auto disksFromDrivesSerials = GetDisksFromDrivesSerials(state, relevantBoxes);
@@ -344,7 +335,10 @@ namespace NKikimr {
                             /* nextVslotId */ 1000, disk.PDiskConfig, disk.BoxId, DefaultMaxSlots,
                             NKikimrBlobStorage::EDriveStatus::ACTIVE, /* statusTimestamp */ TInstant::Zero(),
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, NBsController::TPDiskMood::Normal,
-                            disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage);
+                            disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage,
+                            true /* assume shred completed for this disk */,
+                            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST,
+                            disk.InferPDiskSlotCountFromUnitSize);
 
                     // Set PDiskId and Guid in DrivesSerials
                     if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {

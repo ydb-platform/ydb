@@ -17,7 +17,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
     auto mon = appData->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);
@@ -34,6 +34,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
     RemoveBlobs(ctx, tabletId, request->RemovedBlobs);
     RegretBlobs(ctx, tabletId, request->MissedBlobs);
+    RenameBlobs(ctx, tabletId, request->RenamedBlobs);
 
     THashMap<TKey, TCacheValue::TPtr> evicted;
     AddBlobs(ctx, tabletId, request->StoredBlobs, evicted);
@@ -46,7 +47,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     TInstant now = TAppData::TimeProvider->Now();
     THashMap<TActorId, THolder<TCacheL2Response>> responses;
 
-    for (auto rm : evictedBlobs) {
+    for (const auto& rm : evictedBlobs) {
         const TKey& key = rm.first;
         TCacheValue::TPtr evicted = rm.second;
 
@@ -57,7 +58,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         }
 
         Y_ABORT_UNLESS(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
-        resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
+        resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.Suffix, evicted);
 
         RetentionTime = now - evicted->GetAccessTime();
         if (RetentionTime < KeepTime)
@@ -72,6 +73,13 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     }
 }
 
+void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx)
+{
+    auto response = MakeHolder<TEvPqCache::TEvCacheKeysResponse>();
+    response->RenamedKeys = RenamedKeys;
+    ctx.Send(ev->Sender, response.Release());
+}
+
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
 void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                                  THashMap<TKey, TCacheValue::TPtr>& outEvicted)
@@ -83,8 +91,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. Tablet '" << tabletId
-                << "' partition " << key.Partition << " offset " << key.Offset << " size " << blob.Value->DataSize());
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. " << key.ToString() << " size " << blob.Value->DataSize());
             continue;
         }
 
@@ -100,19 +107,17 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
                 tabletId, Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size());
 
             TCacheValue::TPtr value = oldest.Value();
-            outEvicted.insert({oldest.Key(), value});
+            outEvicted.emplace(oldest.Key(), value);
             if (value->GetAccessCount() == 0)
                 ++numUnused;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. Tablet '" << tabletId
-                << "' partition " << oldest.Key().Partition << " offset " << oldest.Key().Offset << " size " << value->DataSize());
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. " << oldest.Key().ToString() << " size " << value->DataSize());
 
             CurrentSize -= value->DataSize();
             Cache.Erase(oldest);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. Tablet '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset << " size " << blob.Value->DataSize());
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. " << key.ToString() << " size " << blob.Value->DataSize());
 
         Cache.Insert(key, blob.Value);
     }
@@ -138,12 +143,10 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
             numEvicted++;
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->DataSize());
             Cache.Erase(it);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. Tablet '" << tabletId
-                << "' partition " << blob.Partition << " offset " << blob.Offset);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. Tablet '" << tabletId
-                << "' partition " << blob.Partition << " offset " << blob.Offset);
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. " << key.ToString());
         }
     }
 
@@ -156,6 +159,27 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
     }
 }
 
+void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                                    const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs)
+{
+    RenamedKeys += blobs.size();
+
+    for (const auto& [oldBlob, newBlob] : blobs) {
+        TKey oldKey(tabletId, oldBlob);
+
+        auto it = Cache.FindWithoutPromote(oldKey);
+        if (it == Cache.End()) {
+            continue;
+        }
+
+        TKey newKey(tabletId, newBlob);
+        Cache.Insert(newKey, *it);
+        Cache.Erase(it);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. old " << oldKey.ToString() << ", new " << newKey.ToString());
+    }
+}
+
 void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit)
 {
     TInstant now = TAppData::TimeProvider->Now();
@@ -165,11 +189,9 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
         auto it = Cache.Find(key);
         if (it != Cache.End()) {
             (*it)->Touch(now);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. Tablet '" << tabletId
-                << "' partition " << blob.Partition << " offset " << blob.Offset);
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. " << key.ToString());
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. Tablet '" << tabletId
-                << "' partition " << blob.Partition << " offset " << blob.Offset);
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. " << key.ToString());
         }
     }
 
@@ -188,7 +210,8 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, con
 {
     for (const TCacheBlobL2& blob : blobs) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset);
+            << "' partition " << blob.Partition << " offset " << blob.Offset <<
+            " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount);
     }
 
     { // counters

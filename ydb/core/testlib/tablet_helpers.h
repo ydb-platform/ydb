@@ -6,6 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/mind/hive/domain_info.h>
@@ -27,7 +28,8 @@ namespace NKikimr {
     void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
     void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
-                             NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
+                             NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
+                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 
     const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1";
 
@@ -124,7 +126,7 @@ namespace NKikimr {
                 : DomainKey(domainKey)
             {}
         };
-        
+
         struct TEvRequestDomainInfoReply: public TEventLocal<TEvRequestDomainInfoReply, EvRequestDomainInfoReply> {
             NHive::TDomainInfo DomainInfo;
 
@@ -135,10 +137,20 @@ namespace NKikimr {
 
     };
 
+
+    // partial mirror of NHive::ETabletState states from ydb/core/mind/hive/hive.h
+    enum class ETabletState : ui64 {
+        Unknown = 0,        // THive::ETabletState::Unknown
+        Stopped = 100,      // THive::ETabletState::Stopped
+        ReadyToWork = 200,  // THive::ETabletState::ReadyToWork
+    };
+
     struct TFakeHiveTabletInfo {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
         TActorId BootstrapperActorId;
+        ETabletState State = ETabletState::Unknown;
+        TSubDomainKey ObjectDomain;  // what subdomain tablet belongs to
 
         TChannelsBindings BoundChannels;
         ui32 ChannelsProfile;

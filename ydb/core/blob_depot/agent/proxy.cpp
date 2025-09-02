@@ -14,6 +14,10 @@ namespace NKikimr::NBlobDepot {
             case TEvBlobStorage::EvGet:
                 static_cast<TEvBlobStorage::TEvGet&>(*event).ExecutionRelay = executionRelay;
                 break;
+
+            case TEvBlobStorage::EvCheckIntegrity:
+                static_cast<TEvBlobStorage::TEvCheckIntegrity&>(*event).ExecutionRelay = executionRelay;
+                break;
         }
 
         const ui64 id = NextOtherRequestId++;

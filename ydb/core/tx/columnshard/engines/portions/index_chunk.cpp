@@ -1,4 +1,5 @@
 #include "index_chunk.h"
+
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 
 namespace NKikimr::NOlap {
@@ -13,15 +14,38 @@ NKikimr::TConclusionStatus TIndexChunk::DeserializeFromProto(const NKikimrColumn
         RecordsCount = proto.GetMeta().GetRecordsCount();
         RawBytes = proto.GetMeta().GetRawBytes();
     }
-    {
+    if (proto.HasBlobRange()) {
         auto parsed = TBlobRangeLink16::BuildFromProto(proto.GetBlobRange());
         if (!parsed) {
             return parsed;
         }
-        BlobRange = parsed.DetachResult();
+        Data = parsed.DetachResult();
+    } else if (proto.HasBlobData()) {
+        Data = proto.GetBlobData();
+    } else {
+        return TConclusionStatus::Fail("incorrect blob info - neither BlobData nor BlobRange");
     }
     return TConclusionStatus::Success();
 }
+
+namespace {
+class TBlobInfoSerializer {
+private:
+    NKikimrColumnShardDataSharingProto::TIndexChunk& Proto;
+
+public:
+    TBlobInfoSerializer(NKikimrColumnShardDataSharingProto::TIndexChunk& proto)
+        : Proto(proto) {
+    }
+
+    void operator()(const TBlobRangeLink16& link) {
+        *Proto.MutableBlobRange() = link.SerializeToProto();
+    }
+    void operator()(const TString& data) {
+        *Proto.MutableBlobData() = data;
+    }
+};
+}   // namespace
 
 NKikimrColumnShardDataSharingProto::TIndexChunk TIndexChunk::SerializeToProto() const {
     NKikimrColumnShardDataSharingProto::TIndexChunk result;
@@ -32,8 +56,26 @@ NKikimrColumnShardDataSharingProto::TIndexChunk TIndexChunk::SerializeToProto() 
         meta->SetRecordsCount(RecordsCount);
         meta->SetRawBytes(RawBytes);
     }
-    *result.MutableBlobRange() = BlobRange.SerializeToProto();
+    std::visit(TBlobInfoSerializer(result), Data);
     return result;
 }
 
+namespace {
+class TDataSizeExtractor {
+public:
+    TDataSizeExtractor() = default;
+
+    ui64 operator()(const TBlobRangeLink16& link) {
+        return link.GetSize();
+    }
+    ui64 operator()(const TString& data) {
+        return data.size();
+    }
+};
+}   // namespace
+
+ui64 TIndexChunk::GetDataSize() const {
+    return std::visit(TDataSizeExtractor(), Data);
 }
+
+}   // namespace NKikimr::NOlap

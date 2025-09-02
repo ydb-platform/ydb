@@ -9,6 +9,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from typing import Callable
     from typing import Dict
     from typing import List
+    from typing import Optional
     from typing import Type
     from typing import Union
     from responses import FirstMatchRegistry
@@ -22,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 import yaml
 
+from responses import _UNSET
 from responses import RequestsMock
 from responses import Response
 from responses import _real_send
@@ -122,10 +124,13 @@ class Recorder(RequestsMock):
 
     def dump_to_file(
         self,
-        *,
         file_path: "Union[str, bytes, os.PathLike[Any]]",
-        registered: "List[BaseResponse]",
+        *,
+        registered: "Optional[List[BaseResponse]]" = None,
     ) -> None:
+        """Dump the recorded responses to a file."""
+        if registered is None:
+            registered = self.get_registry().registered
         with open(file_path, "w") as file:
             _dump(registered, file, yaml.dump)
 
@@ -149,6 +154,7 @@ class Recorder(RequestsMock):
             status=requests_response.status_code,
             body=requests_response.text,
             headers=headers_values,
+            content_type=requests_response.headers.get("Content-Type", _UNSET),
         )
         self._registry.add(responses_response)
         return requests_response

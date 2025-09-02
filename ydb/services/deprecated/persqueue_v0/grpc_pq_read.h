@@ -8,7 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
@@ -28,10 +28,12 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
         void OnWriteDone(ui64 size) override;
         void DestroyStream(const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode) override;
         bool IsShuttingDown() const override;
+
         TSession(std::shared_ptr<TPQReadService> proxy,
              grpc::ServerCompletionQueue* cq, ui64 cookie, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool needDiscoverClusters,
              const NPersQueue::TConverterFactoryPtr& converterFactory);
+
         void Start() override;
         void SendEvent(NActors::IEventBase* ev);
 
@@ -60,7 +62,7 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
 public:
 
     TPQReadService(NGRpcService::TGRpcPersQueueService* service,
-                     grpc::ServerCompletionQueue* cq,
+                     const std::vector<grpc::ServerCompletionQueue*>& cqs,
                      NActors::TActorSystem* as, const NActors::TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                      const ui32 maxSessions);
 
@@ -77,6 +79,14 @@ public:
 
     void StopService() {
         AtomicSet(ShuttingDown_, 1);
+        if (ClustersUpdaterStatus) {
+            ClustersUpdaterStatus->Stop();
+        }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
+        }
     }
 
     bool IsShuttingDown() const {
@@ -116,7 +126,7 @@ private:
     NKikimr::NGRpcService::TGRpcPersQueueService* Service;
 
     grpc::ServerContext Context;
-    grpc::ServerCompletionQueue* CQ;
+    std::vector<grpc::ServerCompletionQueue*> CQS;
     NActors::TActorSystem* ActorSystem;
     NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;
@@ -137,6 +147,8 @@ private:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
 
     bool NeedDiscoverClusters;
+    TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
+
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };

@@ -18,6 +18,9 @@ namespace NKikimr {
         TIngress Ingress;
         bool HasIngress = true;
 
+        bool Keep = false;
+        bool DoNotKeep = false;
+
     public:
         TBlobStatusTracker(const TLogoBlobID& fullId, const TBlobStorageGroupInfo *info)
             : FullId(fullId)
@@ -86,6 +89,13 @@ namespace NKikimr {
                 default:
                     Y_ABORT("unexpected blob status# %s", NKikimrProto::EReplyStatus_Name(status).data());
             }
+
+            if (result.HasKeep()) {
+                Keep |= result.GetKeep();
+            }
+            if (result.HasDoNotKeep()) {
+                DoNotKeep |= result.GetDoNotKeep();
+            }
         }
 
         TBlobStorageGroupInfo::EBlobState GetBlobState(const TBlobStorageGroupInfo *info, bool *lostByIngress) const {
@@ -116,6 +126,10 @@ namespace NKikimr {
             }
 
             return state;
+        }
+
+        std::tuple<bool, bool> GetKeepFlags() const {
+            return {Keep, DoNotKeep};
         }
     };
 

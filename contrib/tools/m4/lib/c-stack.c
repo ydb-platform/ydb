@@ -1,6 +1,6 @@
 /* Stack overflow handling.
 
-   Copyright (C) 2002, 2004, 2006, 2008-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2006, 2008-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -52,10 +52,6 @@ typedef struct sigaltstack stack_t;
 #endif
 #ifndef SIGSTKSZ
 # define SIGSTKSZ 16384
-#elif defined __USE_DYNAMIC_STACK_SIZE
-/* Redefining SIGSTKSZ here as dynamic stack size is not supported in this version of bison */
-# undef SIGSTKSZ
-# define SIGSTKSZ 16384
 #elif HAVE_LIBSIGSEGV && SIGSTKSZ < 16384
 /* libsigsegv 2.6 through 2.8 have a bug where some architectures use
    more than the Linux default of an 8k alternate stack when deciding
@@ -76,12 +72,13 @@ typedef struct sigaltstack stack_t;
 #include <unistd.h>
 
 #if HAVE_LIBSIGSEGV
-# include <sigsegv.h>
+# error #include <sigsegv.h>
 #endif
 
 #include "c-stack.h"
 #include "exitfail.h"
 #include "ignore-value.h"
+#include "getprogname.h"
 
 #if defined SA_ONSTACK && defined SA_SIGINFO
 # define SIGINFO_WORKS 1
@@ -91,8 +88,6 @@ typedef struct sigaltstack stack_t;
 #  define SA_ONSTACK 0
 # endif
 #endif
-
-extern char *program_name;
 
 /* The user-specified action to take when a SEGV-related program error
    or stack overflow occurs.  */
@@ -120,7 +115,7 @@ die (int signo)
 #endif /* !SIGINFO_WORKS && !HAVE_LIBSIGSEGV */
   segv_action (signo);
   message = signo ? program_error_message : stack_overflow_message;
-  ignore_value (write (STDERR_FILENO, program_name, strlen (program_name)));
+  ignore_value (write (STDERR_FILENO, getprogname (), strlen (getprogname ())));
   ignore_value (write (STDERR_FILENO, ": ", 2));
   ignore_value (write (STDERR_FILENO, message, strlen (message)));
   ignore_value (write (STDERR_FILENO, "\n", 1));
@@ -327,10 +322,7 @@ c_stack_action (void (*action) (int))
 int
 c_stack_action (void (*action) (int)  __attribute__ ((unused)))
 {
-#if (defined _MSC_VER) && (_MSC_VER < 1800)
-#else
   errno = ENOTSUP;
-#endif
   return -1;
 }
 

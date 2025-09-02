@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -67,7 +67,7 @@ private:
 };
 
 THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents);
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database = {});
 
 } // namespace NTableCreator
 
@@ -76,6 +76,9 @@ NActors::IActor* CreateTableCreator(
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing());
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+    const TString& database = {},
+    bool isSystemUser = false,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
 
 } // namespace NKikimr

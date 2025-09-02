@@ -37,22 +37,22 @@ The use of the `topic read` and `topic write` commands with standard I/O devices
    {{ ydb-cli }} -p quickstart topic write topic1 --format newline-delimited
    ```
 
-### Running of an SQL query with the transmission of messages from the topic as parameters {#example-read-to-yql-param}
+## Running an SQL query with the transmission of messages from the topic as parameters {#example-read-to-yql-param}
 
 * Running a YQL, passing each message read from `topic1` as a parameter
 
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-   {{ ydb-cli }} -p quickstart table query execute -q 'declare $s as String;select Len($s) as Bytes' \
-   --stdin-format newline-delimited --stdin-par s --stdin-format raw
+   {{ ydb-cli }} -p quickstart sql -s 'declare $s as String;select Len($s) as Bytes' \
+   --input-framing newline-delimited --input-param-name s --input-format raw
    ```
 
 * Running a YQL query involving adaptive batching of parameters from messages read from `topic1`
 
    ```bash
    {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-   {{ ydb-cli }} -p quickstart table query execute \
-   -q 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
-   --stdin-format newline-delimited --stdin-par s --stdin-format raw \
-   --batch adaptive
+   {{ ydb-cli }} -p quickstart sql \
+   -s 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
+   --input-framing newline-delimited --input-param-name s --input-format raw \
+   --input-batch adaptive
    ```

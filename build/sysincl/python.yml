@@ -1,4 +1,4 @@
-- source_filter: "^(?!(contrib/tools/python|library/python/runtime|library/python/symbols))"
+- source_filter: "^(?!((contrib/tools/python3(_prev)?|library/python/runtime(_py3)?/main|library/python/symbols)/))"
   includes:
   - Python-ast.h
   - Python.h
@@ -102,3 +102,7 @@
   - unicodeobject.h
   - warnings.h
   - weakrefobject.h
+
+- source_filter: "^contrib/tools/python3(_prev)?/Include/internal"
+  includes:
+  - internal/pycore_runtime.h: pycore_runtime.h

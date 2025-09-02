@@ -7,12 +7,6 @@ Style guide for the util folder is a stricter version of
  * all {} must be in K&R style
  * &, * tied closer to a type, not to variable
  * always use `using` not `typedef`
- * even a single line block must be in braces {}:
-   ```
-   if (A) {
-       B();
-   }
-   ```
  * _ at the end of private data member of a class - `First_`, `Second_`
  * every .h file must be accompanied with corresponding .cpp to avoid a leakage and check that it is self contained
  * prohibited to use `printf`-like functions
@@ -51,7 +45,7 @@ to send a graceful ping into [Igni et ferro](https://wiki.yandex-team.ru/ignietf
 
 Certain exceptions apply. The following trivial changes do not need to be reviewed:
 
-* docs, comments, typo fixes,
+* grammar and misspelling fixes,
 * renaming of an internal variable to match the styleguide.
 
 Whenever a breaking change happens to accidentally land into trunk, reverting it does not need to be reviewed.
@@ -66,5 +60,5 @@ To limit the incoming review request queue size, util reviewers follow these rul
 
 Review requests discarded as stale may be reopened or resubmitted by any committer willing to push them to completion.
 
-**Note:** It's an author's duty to push the review request to completion. 
+**Note:** It's an author's duty to push the review request to completion.
 If util reviewers stop responding to updates, they should be politely pinged via appropriate means of communication.

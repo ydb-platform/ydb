@@ -8,7 +8,6 @@
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "cpu_manager.h"
-#include "executor_thread.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -163,9 +162,9 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
 
-        bool StartExecuted;
-        bool StopExecuted;
-        bool CleanupExecuted;
+        bool StartExecuted = false;
+        bool StopExecuted = false;
+        bool CleanupExecuted = false;
 
         std::deque<std::function<void()>> DeferredPreStop;
     public:
@@ -176,6 +175,8 @@ namespace NActors {
         void Start();
         void Stop();
         void Cleanup();
+
+        static bool IsStopped();
 
         template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,

@@ -4,9 +4,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
 
@@ -114,10 +115,14 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }
@@ -137,10 +142,12 @@ public:
 
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         if (enableYq) {
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG);
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -150,7 +157,7 @@ public:
 
         NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
+            grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
@@ -172,7 +179,7 @@ public:
         GRpcPort_ = grpc;
     }
 
-    ui16 GetPort() {
+    ui16 GetPort() const {
         return GRpcPort_;
     }
 
@@ -222,7 +229,9 @@ struct TTestOlap {
                 arrow::field("json_payload", arrow::binary()),
                 arrow::field("ingested_at", tsType),
                 arrow::field("saved_at", tsType),
-                arrow::field("request_id", arrow::utf8())
+                arrow::field("request_id", arrow::utf8()),
+                arrow::field("flt", arrow::float32()),
+                arrow::field("dbl", arrow::float64())
             });
     }
 
@@ -237,7 +246,9 @@ struct TTestOlap {
             { "json_payload", NYdb::EPrimitiveType::JsonDocument },
             { "ingested_at", NYdb::EPrimitiveType::Timestamp },
             { "saved_at", NYdb::EPrimitiveType::Timestamp },
-            { "request_id", NYdb::EPrimitiveType::Utf8 }
+            { "request_id", NYdb::EPrimitiveType::Utf8 },
+            { "flt", NYdb::EPrimitiveType::Float },
+            { "dbl", NYdb::EPrimitiveType::Double }
         };
 
         if (sort) {
@@ -268,9 +279,10 @@ struct TTestOlap {
                     Columns { Name: "ingested_at" Type: "Timestamp" }
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
+                    Columns { Name: "flt" Type: "Float" }
+                    Columns { Name: "dbl" Type: "Double" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", storeName.c_str());
@@ -326,6 +338,8 @@ struct TTestOlap {
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::FloatType>(*builders[10], i * 1.5f));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::DoubleType>(*builders[11], i * 2.5));
         }
 
         return arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));

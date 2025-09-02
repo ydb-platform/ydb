@@ -1,26 +1,52 @@
 #include "brotli.h"
 #include "output_queue_impl.h"
 
+#include <contrib/libs/brotli/c/include/brotli/decode.h>
+#include <contrib/libs/brotli/c/include/brotli/encode.h>
+
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <contrib/libs/brotli/include/brotli/encode.h>
 
-namespace NYql {
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
-namespace NBrotli {
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NBrotli {
 
 namespace {
-    struct TAllocator {
-        static void* Allocate(void* /* opaque */, size_t size) {
-            return ::operator new(size);
-        }
 
-        static void Deallocate(void* /* opaque */, void* ptr) noexcept {
-            ::operator delete(ptr);
-        }
-    };
+struct TAllocator {
+    static void* Allocate(void* /* opaque */, size_t size) {
+        return ::operator new(size);
+    }
 
-}
+    static void Deallocate(void* /* opaque */, void* ptr) noexcept {
+        ::operator delete(ptr);
+    }
+};
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+
+    BrotliDecoderState* DecoderState_;
+
+    bool SubstreamFinished_ = false;
+    bool InputExhausted_ = false;
+    size_t InputAvailable_ = 0;
+    size_t InputSize_ = 0;
+
+    void InitDecoder();
+    void FreeDecoder();
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source)
@@ -71,10 +97,10 @@ bool TReadBuffer::nextImpl() {
                 SubstreamFinished_ = true;
                 break;
             case BROTLI_DECODER_RESULT_ERROR:
-                ythrow yexception() << "Brotli decoder failed to decompress buffer: "
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Brotli decoder failed to decompress buffer: "
                                     << BrotliDecoderErrorString(BrotliDecoderGetErrorCode(DecoderState_));
             case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:
-                YQL_ENSURE(availableOut != OutBuffer.size(), "Buffer passed to read in Brotli decoder is too small");
+                YQL_ENSURE_CODELINE(availableOut != OutBuffer.size(), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
                 break;
             default:
                 break;
@@ -83,7 +109,7 @@ bool TReadBuffer::nextImpl() {
     } while (!decompressedSize && result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT && !InputExhausted_);
 
     if (!SubstreamFinished_ && !decompressedSize) {
-        ythrow yexception() << "Input stream is incomplete";
+        ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Input stream is incomplete";
     }
 
     if (decompressedSize > 0)
@@ -97,15 +123,13 @@ bool TReadBuffer::nextImpl() {
 void TReadBuffer::InitDecoder() {
     DecoderState_ = BrotliDecoderCreateInstance(&TAllocator::Allocate, &TAllocator::Deallocate, nullptr);
     if (!DecoderState_) {
-        ythrow yexception() << "Brotli decoder initialization failed";
+        ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Brotli decoder initialization failed";
     }
 }
 
 void TReadBuffer::FreeDecoder() {
     BrotliDecoderDestroyInstance(DecoderState_);
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -186,11 +210,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
+
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(BROTLI_DEFAULT_QUALITY));
 }
 
-}
-
-}
+} // namespace NYql::NBrotli

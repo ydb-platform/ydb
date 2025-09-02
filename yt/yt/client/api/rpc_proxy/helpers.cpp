@@ -1,9 +1,12 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
 #include <yt/yt/client/sequoia_client/public.h>
+
+#include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -18,6 +21,8 @@
 #include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/ypath/rich.h>
+
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -58,6 +63,17 @@ void ToProto(
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
 }
 
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto)
+{
+    FromProto(&options->TransactionId, proto.transaction_id());
+    options->Ping = proto.ping();
+    options->PingAncestors = proto.ping_ancestors();
+    options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
+    options->SuppressUpstreamSync = proto.suppress_upstream_sync();
+}
+
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
     const NApi::TPrerequisiteOptions& options)
@@ -69,7 +85,7 @@ void ToProto(
     for (const auto& item : options.PrerequisiteRevisions) {
         auto* protoItem = proto->add_revisions();
         protoItem->set_path(item->Path);
-        protoItem->set_revision(item->Revision);
+        protoItem->set_revision(ToProto(item->Revision));
     }
 }
 
@@ -79,12 +95,10 @@ void ToProto(
 {
     proto->set_read_from(static_cast<NProto::EMasterReadKind>(options.ReadFrom));
     proto->set_disable_per_user_cache(options.DisablePerUserCache);
-    proto->set_expire_after_successful_update_time(ToProto<i64>(options.ExpireAfterSuccessfulUpdateTime));
-    proto->set_expire_after_failed_update_time(ToProto<i64>(options.ExpireAfterFailedUpdateTime));
-    proto->set_success_staleness_bound(ToProto<i64>(options.SuccessStalenessBound));
-    if (options.CacheStickyGroupSize) {
-        proto->set_cache_sticky_group_size(*options.CacheStickyGroupSize);
-    }
+    proto->set_expire_after_successful_update_time(ToProto(options.ExpireAfterSuccessfulUpdateTime));
+    proto->set_expire_after_failed_update_time(ToProto(options.ExpireAfterFailedUpdateTime));
+    proto->set_success_staleness_bound(ToProto(options.SuccessStalenessBound));
+    YT_OPTIONAL_SET_PROTO(proto, cache_sticky_group_size, options.CacheStickyGroupSize);
 }
 
 void ToProto(
@@ -108,12 +122,8 @@ void ToProto(
     NProto::TTabletRangeOptions* proto,
     const NApi::TTabletRangeOptions& options)
 {
-    if (options.FirstTabletIndex) {
-        proto->set_first_tablet_index(*options.FirstTabletIndex);
-    }
-    if (options.LastTabletIndex) {
-        proto->set_last_tablet_index(*options.LastTabletIndex);
-    }
+    YT_OPTIONAL_SET_PROTO(proto, first_tablet_index, options.FirstTabletIndex);
+    YT_OPTIONAL_SET_PROTO(proto, last_tablet_index, options.LastTabletIndex);
 }
 
 void ToProto(
@@ -121,9 +131,7 @@ void ToProto(
     const NApi::TTabletReadOptionsBase& options)
 {
     protoOptions->set_read_from(static_cast<NProto::ETabletReadKind>(options.ReadFrom));
-    if (options.CachedSyncReplicasTimeout) {
-        protoOptions->set_cached_sync_replicas_timeout(ToProto<i64>(*options.CachedSyncReplicasTimeout));
-    }
+    YT_OPTIONAL_SET_PROTO(protoOptions, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -193,14 +201,10 @@ void ToProto(
     proto->set_action(static_cast<NProto::ESecurityAction>(result.Action));
 
     ToProto(proto->mutable_object_id(), result.ObjectId);
-    if (result.ObjectName) {
-        proto->set_object_name(*result.ObjectName);
-    }
+    YT_OPTIONAL_TO_PROTO(proto, object_name, result.ObjectName);
 
     ToProto(proto->mutable_subject_id(), result.SubjectId);
-    if (result.SubjectName) {
-        proto->set_subject_name(*result.SubjectName);
-    }
+    YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 }
 
 void FromProto(
@@ -210,18 +214,10 @@ void FromProto(
     result->Action = static_cast<NSecurityClient::ESecurityAction>(proto.action());
 
     FromProto(&result->ObjectId, proto.object_id());
-    if (proto.has_object_name()) {
-        result->ObjectName = proto.object_name();
-    } else {
-        result->ObjectName.reset();
-    }
+    result->ObjectName = YT_OPTIONAL_FROM_PROTO(proto, object_name);
 
     FromProto(&result->SubjectId, proto.subject_id());
-    if (proto.has_subject_name()) {
-        result->SubjectName = proto.subject_name();
-    } else {
-        result->SubjectName.reset();
-    }
+    result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 }
 
 void ToProto(
@@ -233,9 +229,7 @@ void ToProto(
     proto->set_action(static_cast<NProto::ESecurityAction>(result.Action));
 
     ToProto(proto->mutable_subject_id(), result.SubjectId);
-    if (result.SubjectName) {
-        proto->set_subject_name(*result.SubjectName);
-    }
+    YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 
     ToProto(proto->mutable_missing_subjects(), result.MissingSubjects);
 }
@@ -247,11 +241,7 @@ void FromProto(
     result->Action = static_cast<NSecurityClient::ESecurityAction>(proto.action());
 
     FromProto(&result->SubjectId, proto.subject_id());
-    if (proto.has_subject_name()) {
-        result->SubjectName = proto.subject_name();
-    } else {
-        result->SubjectName.reset();
-    }
+    result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 
     FromProto(&result->MissingSubjects, proto.missing_subjects());
 }
@@ -265,19 +255,19 @@ void ToProto(
 
     if (result.PoolTreeCounts) {
         auto* poolTreeCounts = proto->mutable_pool_tree_counts()->mutable_entries();
-        for (const auto& entry: *result.PoolTreeCounts) {
+        for (const auto& entry : *result.PoolTreeCounts) {
             (*poolTreeCounts)[entry.first] = entry.second;
         }
     }
     if (result.PoolCounts) {
-        for (const auto& entry: *result.PoolCounts) {
+        for (const auto& entry : *result.PoolCounts) {
             auto* newPoolCount = proto->mutable_pool_counts()->add_entries();
             newPoolCount->set_pool(entry.first);
             newPoolCount->set_count(entry.second);
         }
     }
     if (result.UserCounts) {
-        for (const auto& entry: *result.UserCounts) {
+        for (const auto& entry : *result.UserCounts) {
             auto* newUserCount = proto->mutable_user_counts()->add_entries();
             newUserCount->set_user(entry.first);
             newUserCount->set_count(entry.second);
@@ -285,7 +275,7 @@ void ToProto(
     }
 
     if (result.StateCounts) {
-        for (const auto& state: TEnumTraits<NScheduler::EOperationState>::GetDomainValues()) {
+        for (const auto& state : TEnumTraits<NScheduler::EOperationState>::GetDomainValues()) {
             if ((*result.StateCounts)[state] != 0) {
                 auto* newStateCount = proto->mutable_state_counts()->add_entries();
                 newStateCount->set_state(ConvertOperationStateToProto(state));
@@ -294,7 +284,7 @@ void ToProto(
         }
     }
     if (result.TypeCounts) {
-        for (const auto& type: TEnumTraits<NScheduler::EOperationType>::GetDomainValues()) {
+        for (const auto& type : TEnumTraits<NScheduler::EOperationType>::GetDomainValues()) {
             if ((*result.TypeCounts)[type] != 0) {
                 auto* newTypeCount = proto->mutable_type_counts()->add_entries();
                 newTypeCount->set_type(ConvertOperationTypeToProto(type));
@@ -303,9 +293,7 @@ void ToProto(
         }
     }
 
-    if (result.FailedJobsCount) {
-        proto->set_failed_jobs_count(*result.FailedJobsCount);
-    }
+    YT_OPTIONAL_SET_PROTO(proto, failed_jobs_count, result.FailedJobsCount);
     proto->set_incomplete(result.Incomplete);
 }
 
@@ -327,7 +315,7 @@ void FromProto(
 
     if (proto.has_pool_counts()) {
         result->PoolCounts.emplace();
-        for (const auto& poolCount: proto.pool_counts().entries()) {
+        for (const auto& poolCount : proto.pool_counts().entries()) {
             auto pool = poolCount.pool();
             YT_VERIFY((*result->PoolCounts)[pool] == 0);
             (*result->PoolCounts)[pool] = poolCount.count();
@@ -337,7 +325,7 @@ void FromProto(
     }
     if (proto.has_user_counts()) {
         result->UserCounts.emplace();
-        for (const auto& userCount: proto.user_counts().entries()) {
+        for (const auto& userCount : proto.user_counts().entries()) {
             auto user = userCount.user();
             YT_VERIFY((*result->UserCounts)[user] == 0);
             (*result->UserCounts)[user] = userCount.count();
@@ -349,7 +337,7 @@ void FromProto(
     if (proto.has_state_counts()) {
         result->StateCounts.emplace();
         std::fill(result->StateCounts->begin(), result->StateCounts->end(), 0);
-        for (const auto& stateCount: proto.state_counts().entries()) {
+        for (const auto& stateCount : proto.state_counts().entries()) {
             auto state = ConvertOperationStateFromProto(stateCount.state());
             YT_VERIFY(result->StateCounts->IsValidIndex(state));
             YT_VERIFY((*result->StateCounts)[state] == 0);
@@ -361,7 +349,7 @@ void FromProto(
     if (proto.has_type_counts()) {
         result->TypeCounts.emplace();
         std::fill(result->TypeCounts->begin(), result->TypeCounts->end(), 0);
-        for (const auto& typeCount: proto.type_counts().entries()) {
+        for (const auto& typeCount : proto.type_counts().entries()) {
             auto type = ConvertOperationTypeFromProto(typeCount.type());
             YT_VERIFY(result->TypeCounts->IsValidIndex(type));
             YT_VERIFY((*result->TypeCounts)[type] == 0);
@@ -386,14 +374,11 @@ void ToProto(
     proto->Clear();
     ToProto(proto->mutable_jobs(), result.Jobs);
 
-    if (result.CypressJobCount) {
-        proto->set_cypress_job_count(*result.CypressJobCount);
-    }
-    if (result.ControllerAgentJobCount) {
-        proto->set_controller_agent_job_count(*result.ControllerAgentJobCount);
-    }
-    if (result.ArchiveJobCount) {
-        proto->set_archive_job_count(*result.ArchiveJobCount);
+    YT_OPTIONAL_SET_PROTO(proto, cypress_job_count, result.CypressJobCount);
+    YT_OPTIONAL_SET_PROTO(proto, controller_agent_job_count, result.ControllerAgentJobCount);
+    YT_OPTIONAL_SET_PROTO(proto, archive_job_count, result.ArchiveJobCount);
+    if (result.ContinuationToken) {
+        proto->set_continuation_token(*result.ContinuationToken);
     }
 
     ToProto(proto->mutable_statistics(), result.Statistics);
@@ -406,24 +391,70 @@ void FromProto(
 {
     FromProto(&result->Jobs, proto.jobs());
 
-    if (proto.has_cypress_job_count()) {
-        result->CypressJobCount = proto.cypress_job_count();
-    } else {
-        result->CypressJobCount.reset();
-    }
-    if (proto.has_controller_agent_job_count()) {
-        result->ControllerAgentJobCount = proto.controller_agent_job_count();
-    } else {
-        result->ControllerAgentJobCount.reset();
-    }
-    if (proto.has_archive_job_count()) {
-        result->ArchiveJobCount = proto.archive_job_count();
-    } else {
-        result->ArchiveJobCount.reset();
-    }
+    result->CypressJobCount = YT_OPTIONAL_FROM_PROTO(proto, cypress_job_count);
+    result->ControllerAgentJobCount = YT_OPTIONAL_FROM_PROTO(proto, controller_agent_job_count);
+    result->ArchiveJobCount = YT_OPTIONAL_FROM_PROTO(proto, archive_job_count);
+    result->ContinuationToken = YT_OPTIONAL_FROM_PROTO(proto, continuation_token);
 
     FromProto(&result->Statistics, proto.statistics());
     FromProto(&result->Errors, proto.errors());
+}
+
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
+}
+
+void ToProto(
+    NProto::TOperationEvent* proto,
+    const NApi::TOperationEvent& result)
+{
+    proto->set_timestamp(ToProto(result.Timestamp));
+    proto->set_event_type(ConvertOperationEventTypeToProto(result.EventType));
+
+    YT_OPTIONAL_TO_PROTO(proto, incarnation, result.Incarnation);
+
+    if (result.IncarnationSwitchReason) {
+        proto->set_incarnation_switch_reason(ConvertIncarnationSwitchReasonToProto(*result.IncarnationSwitchReason));
+    }
+
+    if (result.IncarnationSwitchInfo) {
+        proto->set_incarnation_switch_info(result.IncarnationSwitchInfo->ToString());
+    }
+}
+
+void FromProto(
+    NApi::TOperationEvent* result,
+    const NProto::TOperationEvent& proto)
+{
+    FromProto(&result->Timestamp, proto.timestamp());
+    result->EventType = ConvertOperationEventTypeFromProto(proto.event_type());
+    result->Incarnation = YT_OPTIONAL_FROM_PROTO(proto, incarnation);
+    if (proto.has_incarnation_switch_reason()) {
+        result->IncarnationSwitchReason = ConvertIncarnationSwitchReasonFromProto(proto.incarnation_switch_reason());
+    }
+    if (proto.has_incarnation_switch_info()) {
+        result->IncarnationSwitchInfo = TYsonString(proto.incarnation_switch_info());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -432,46 +463,23 @@ void FromProto(
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema)
 {
-    protoSchema->set_stable_name(schema.StableName().Underlying());
-    protoSchema->set_name(schema.Name());
-    protoSchema->set_type(ToProto<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_stable_name(ToProto(schema.StableName()));
+    protoSchema->set_name(ToProto(schema.Name()));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
     auto typeV3Yson = ConvertToYsonString(TTypeV3LogicalTypeWrapper{schema.LogicalType()});
     protoSchema->set_type_v3(typeV3Yson.ToString());
-    if (schema.Lock()) {
-        protoSchema->set_lock(*schema.Lock());
-    } else {
-        protoSchema->clear_lock();
-    }
-    if (schema.Expression()) {
-        protoSchema->set_expression(*schema.Expression());
-    } else {
-        protoSchema->clear_expression();
-    }
-    if (schema.Aggregate()) {
-        protoSchema->set_aggregate(*schema.Aggregate());
-    } else {
-        protoSchema->clear_aggregate();
-    }
-    if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto<int>(*schema.SortOrder()));
-    } else {
-        protoSchema->clear_sort_order();
-    }
-    if (schema.Group()) {
-        protoSchema->set_group(*schema.Group());
-    } else {
-        protoSchema->clear_group();
-    }
+    YT_OPTIONAL_TO_PROTO(protoSchema, lock, schema.Lock());
+    YT_OPTIONAL_TO_PROTO(protoSchema, expression, schema.Expression());
+    YT_OPTIONAL_SET_PROTO(protoSchema, materialized, schema.Materialized());
+    YT_OPTIONAL_TO_PROTO(protoSchema, aggregate, schema.Aggregate());
+    YT_OPTIONAL_SET_PROTO(protoSchema, sort_order, schema.SortOrder());
+    YT_OPTIONAL_TO_PROTO(protoSchema, group, schema.Group());
     if (schema.Required()) {
         protoSchema->set_required(schema.Required());
     } else {
         protoSchema->clear_required();
     }
-    if (schema.MaxInlineHunkSize()) {
-        protoSchema->set_max_inline_hunk_size(*schema.MaxInlineHunkSize());
-    } else {
-        protoSchema->clear_max_inline_hunk_size();
-    }
+    YT_OPTIONAL_SET_PROTO(protoSchema, max_inline_hunk_size, schema.MaxInlineHunkSize());
 }
 
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
@@ -482,7 +490,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         ? TColumnStableName(protoSchema.stable_name())
         : TColumnStableName(protoSchema.name()));
 
-    auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+    auto physicalType = FromProto<EValueType>(protoSchema.type());
 
     TLogicalTypePtr columnType;
     if (protoSchema.has_type_v3()) {
@@ -504,7 +512,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
-        auto logicalType = CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.logical_type());
+        auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
@@ -520,19 +528,20 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     }
 
     schema->SetLogicalType(std::move(columnType));
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(ESortOrder(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_OPTIONAL_FROM_PROTO(protoSchema, lock));
+    schema->SetExpression(YT_OPTIONAL_FROM_PROTO(protoSchema, expression));
+    schema->SetMaterialized(YT_OPTIONAL_FROM_PROTO(protoSchema, materialized));
+    schema->SetAggregate(YT_OPTIONAL_FROM_PROTO(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
+    schema->SetGroup(YT_OPTIONAL_FROM_PROTO(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_OPTIONAL_FROM_PROTO(protoSchema, max_inline_hunk_size));
 }
 
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)
 {
     ToProto(protoSchema->mutable_columns(), schema.Columns());
-    protoSchema->set_strict(schema.GetStrict());
-    protoSchema->set_unique_keys(schema.GetUniqueKeys());
+    protoSchema->set_strict(schema.IsStrict());
+    protoSchema->set_unique_keys(schema.IsUniqueKeys());
 }
 
 void FromProto(NTableClient::TTableSchema* schema, const NProto::TTableSchema& protoSchema)
@@ -557,8 +566,8 @@ void FromProto(NTableClient::TTableSchemaPtr* schema, const NProto::TTableSchema
 void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletInfo& tabletInfo)
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
-    protoTabletInfo->set_mount_revision(tabletInfo.MountRevision);
-    protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
+    protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
+    protoTabletInfo->set_state(ToProto(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
         ToProto(protoTabletInfo->mutable_cell_id(), tabletInfo.CellId);
@@ -567,13 +576,49 @@ void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletI
 
 void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo& protoTabletInfo)
 {
-    tabletInfo->TabletId =
-        FromProto<TTabletId>(protoTabletInfo.tablet_id());
-    tabletInfo->MountRevision = protoTabletInfo.mount_revision();
-    tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
+    tabletInfo->TabletId = FromProto<TTabletId>(protoTabletInfo.tablet_id());
+    tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
+    tabletInfo->State = FromProto<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
-    if (protoTabletInfo.has_cell_id()) {
-        tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
+    tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
+}
+
+template <class T>
+void ToProto(
+    NProto::TQueryStatistics::TAggregate* protoCounter,
+    const NQueryClient::TAggregate<T>& counter)
+{
+    protoCounter->set_argmax_node(counter.ArgmaxNode());
+    if constexpr (std::is_same_v<T, TDuration>) {
+        protoCounter->set_total(counter.GetTotal().GetValue());
+        protoCounter->set_max(counter.GetMax().GetValue());
+    } else {
+        protoCounter->set_total(counter.GetTotal());
+        protoCounter->set_max(counter.GetMax());
+    }
+}
+
+template <class T>
+void FromProto(
+    NQueryClient::TAggregate<T>* counter,
+    const NProto::TQueryStatistics::TAggregate& protoCounter)
+{
+    if (protoCounter.has_argmax_node()) {
+        FromProto(&counter->ArgmaxNode(), protoCounter.argmax_node());
+    }
+    if (protoCounter.has_total()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetTotal(TDuration::FromValue(protoCounter.total()));
+        } else {
+            counter->SetTotal(protoCounter.total());
+        }
+    }
+    if (protoCounter.has_max()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetMax(TDuration::FromValue(protoCounter.max()));
+        } else {
+            counter->SetMax(protoCounter.max());
+        }
     }
 }
 
@@ -581,58 +626,77 @@ void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics)
 {
-    protoStatistics->set_rows_read(statistics.RowsRead);
-    protoStatistics->set_data_weight_read(statistics.DataWeightRead);
-    protoStatistics->set_rows_written(statistics.RowsWritten);
-    protoStatistics->set_sync_time(statistics.SyncTime.GetValue());
-    protoStatistics->set_async_time(statistics.AsyncTime.GetValue());
-    protoStatistics->set_execute_time(statistics.ExecuteTime.GetValue());
-    protoStatistics->set_read_time(statistics.ReadTime.GetValue());
-    protoStatistics->set_write_time(statistics.WriteTime.GetValue());
-    protoStatistics->set_codegen_time(statistics.CodegenTime.GetValue());
-    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetValue());
+    // COMPAT(sabdenovch)
+    protoStatistics->set_rows_read(statistics.RowsRead.GetTotal());
+    protoStatistics->set_data_weight_read(statistics.DataWeightRead.GetTotal());
+    protoStatistics->set_rows_written(statistics.RowsWritten.GetTotal());
+    protoStatistics->set_sync_time(statistics.SyncTime.GetTotal().GetValue());
+    protoStatistics->set_async_time(statistics.AsyncTime.GetTotal().GetValue());
+    protoStatistics->set_execute_time(statistics.ExecuteTime.GetTotal().GetValue());
+    protoStatistics->set_read_time(statistics.ReadTime.GetTotal().GetValue());
+    protoStatistics->set_write_time(statistics.WriteTime.GetTotal().GetValue());
+    protoStatistics->set_codegen_time(statistics.CodegenTime.GetTotal().GetValue());
+    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetTotal().GetValue());
+    protoStatistics->set_memory_usage(statistics.MemoryUsage.GetTotal());
+    protoStatistics->set_grouped_row_count(statistics.GroupedRowCount.GetTotal());
+
+    ToProto(protoStatistics->mutable_rows_read_aggr(), statistics.RowsRead);
+    ToProto(protoStatistics->mutable_data_weight_read_aggr(), statistics.DataWeightRead);
+    ToProto(protoStatistics->mutable_rows_written_aggr(), statistics.RowsWritten);
+    ToProto(protoStatistics->mutable_sync_time_aggr(), statistics.SyncTime);
+    ToProto(protoStatistics->mutable_async_time_aggr(), statistics.AsyncTime);
+    ToProto(protoStatistics->mutable_execute_time_aggr(), statistics.ExecuteTime);
+    ToProto(protoStatistics->mutable_read_time_aggr(), statistics.ReadTime);
+    ToProto(protoStatistics->mutable_write_time_aggr(), statistics.WriteTime);
+    ToProto(protoStatistics->mutable_codegen_time_aggr(), statistics.CodegenTime);
+    ToProto(protoStatistics->mutable_wait_on_ready_event_time_aggr(), statistics.WaitOnReadyEventTime);
+    ToProto(protoStatistics->mutable_memory_usage_aggr(), statistics.MemoryUsage);
+    ToProto(protoStatistics->mutable_grouped_row_count_aggr(), statistics.GroupedRowCount);
+
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
-    protoStatistics->set_memory_usage(statistics.MemoryUsage);
+    protoStatistics->set_query_count(statistics.QueryCount);
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
+
+#define DESERIALIZE_I64_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(protoStatistics.snakeCaseName()); \
+    }
+
+#define DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(TDuration::FromValue(protoStatistics.snakeCaseName())); \
+    }
 
 void FromProto(
     NQueryClient::TQueryStatistics* statistics,
     const NProto::TQueryStatistics& protoStatistics)
 {
-    statistics->RowsRead = protoStatistics.rows_read();
-    statistics->DataWeightRead = protoStatistics.data_weight_read();
-    statistics->RowsWritten = protoStatistics.rows_written();
-    statistics->SyncTime = TDuration::FromValue(protoStatistics.sync_time());
-    statistics->AsyncTime = TDuration::FromValue(protoStatistics.async_time());
-    statistics->ExecuteTime = TDuration::FromValue(protoStatistics.execute_time());
-    statistics->ReadTime = TDuration::FromValue(protoStatistics.read_time());
-    statistics->WriteTime = TDuration::FromValue(protoStatistics.write_time());
-    statistics->CodegenTime = TDuration::FromValue(protoStatistics.codegen_time());
-    statistics->WaitOnReadyEventTime = TDuration::FromValue(protoStatistics.wait_on_ready_event_time());
+    // COMPAT(sabdenovch)
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_read, RowsRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(data_weight_read, DataWeightRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_written, RowsWritten);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(sync_time, SyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(async_time, AsyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(execute_time, ExecuteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(read_time, ReadTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(write_time, WriteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(codegen_time, CodegenTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(wait_on_ready_event_time, WaitOnReadyEventTime);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(memory_usage, MemoryUsage);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(grouped_row_count, GroupedRowCount);
+
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
-    statistics->MemoryUsage = protoStatistics.memory_usage();
+    statistics->QueryCount = protoStatistics.query_count();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
-}
-
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options)
-{
-    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
-}
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions)
-{
-    if (protoOptions.has_read_mode()) {
-        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
-    }
 }
 
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
@@ -650,10 +714,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.StartTime) {
-        protoOperation->set_start_time(ToProto<i64>(*operation.StartTime));
+        protoOperation->set_start_time(ToProto(*operation.StartTime));
     }
     if (operation.FinishTime) {
-        protoOperation->set_finish_time(ToProto<i64>(*operation.FinishTime));
+        protoOperation->set_finish_time(ToProto(*operation.FinishTime));
     }
 
     if (operation.AuthenticatedUser) {
@@ -661,107 +725,90 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.BriefSpec) {
-        protoOperation->set_brief_spec(operation.BriefSpec.ToString());
+        protoOperation->set_brief_spec(ToProto(operation.BriefSpec));
     }
     if (operation.Spec) {
-        protoOperation->set_spec(operation.Spec.ToString());
+        protoOperation->set_spec(ToProto(operation.Spec));
     }
     if (operation.ProvidedSpec) {
-        protoOperation->set_provided_spec(operation.ProvidedSpec.ToString());
+        protoOperation->set_provided_spec(ToProto(operation.ProvidedSpec));
     }
     if (operation.ExperimentAssignments) {
-        protoOperation->set_experiment_assignments(operation.ExperimentAssignments.ToString());
+        protoOperation->set_experiment_assignments(ToProto(operation.ExperimentAssignments));
     }
     if (operation.ExperimentAssignmentNames) {
-        protoOperation->set_experiment_assignment_names(operation.ExperimentAssignmentNames.ToString());
+        protoOperation->set_experiment_assignment_names(ToProto(operation.ExperimentAssignmentNames));
     }
     if (operation.FullSpec) {
-        protoOperation->set_full_spec(operation.FullSpec.ToString());
+        protoOperation->set_full_spec(ToProto(operation.FullSpec));
     }
     if (operation.UnrecognizedSpec) {
-        protoOperation->set_unrecognized_spec(operation.UnrecognizedSpec.ToString());
+        protoOperation->set_unrecognized_spec(ToProto(operation.UnrecognizedSpec));
     }
 
     if (operation.BriefProgress) {
-        protoOperation->set_brief_progress(operation.BriefProgress.ToString());
+        protoOperation->set_brief_progress(ToProto(operation.BriefProgress));
     }
     if (operation.Progress) {
-        protoOperation->set_progress(operation.Progress.ToString());
+        protoOperation->set_progress(ToProto(operation.Progress));
     }
 
     if (operation.RuntimeParameters) {
-        protoOperation->set_runtime_parameters(operation.RuntimeParameters.ToString());
+        protoOperation->set_runtime_parameters(ToProto(operation.RuntimeParameters));
     }
 
     if (operation.Suspended) {
         protoOperation->set_suspended(*operation.Suspended);
     }
 
+    if (operation.SuspendReason) {
+        protoOperation->set_suspend_reason(*operation.SuspendReason);
+    }
+
     if (operation.Events) {
-        protoOperation->set_events(operation.Events.ToString());
+        protoOperation->set_events(ToProto(operation.Events));
     }
     if (operation.Result) {
-        protoOperation->set_result(operation.Result.ToString());
+        protoOperation->set_result(ToProto(operation.Result));
     }
 
     if (operation.SlotIndexPerPoolTree) {
-        protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+        protoOperation->set_slot_index_per_pool_tree(ToProto(operation.SlotIndexPerPoolTree));
+    }
+
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(ToProto(operation.SchedulingAttributesPerPoolTree));
     }
 
     if (operation.TaskNames) {
-        protoOperation->set_task_names(operation.TaskNames.ToString());
+        protoOperation->set_task_names(ToProto(operation.TaskNames));
     }
 
     if (operation.Alerts) {
-        protoOperation->set_alerts(operation.Alerts.ToString());
+        protoOperation->set_alerts(ToProto(operation.Alerts));
     }
     if (operation.AlertEvents) {
-        protoOperation->set_alert_events(operation.AlertEvents.ToString());
+        protoOperation->set_alert_events(ToProto(operation.AlertEvents));
     }
 
     if (operation.ControllerFeatures) {
-        protoOperation->set_controller_features(operation.ControllerFeatures.ToString());
+        protoOperation->set_controller_features(ToProto(operation.ControllerFeatures));
     }
 
     if (operation.OtherAttributes) {
-        protoOperation->set_other_attributes(ConvertToYsonString(operation.OtherAttributes).ToString());
+        protoOperation->set_other_attributes(ToProto(ConvertToYsonString(operation.OtherAttributes)));
     }
 }
 
 void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOperation)
 {
-    if (protoOperation.has_id()) {
-        operation->Id = FromProto<NScheduler::TOperationId>(protoOperation.id());
-    } else {
-        operation->Id.reset();
-    }
-    if (protoOperation.has_type()) {
-        operation->Type = ConvertOperationTypeFromProto(protoOperation.type());
-    } else {
-        operation->Type.reset();
-    }
-    if (protoOperation.has_state()) {
-        operation->State = ConvertOperationStateFromProto(protoOperation.state());
-    } else {
-        operation->State.reset();
-    }
+    operation->Id = YT_APPLY_PROTO_OPTIONAL(protoOperation, id, FromProto<NScheduler::TOperationId>);
+    operation->Type = YT_APPLY_PROTO_OPTIONAL(protoOperation, type, ConvertOperationTypeFromProto);
+    operation->State = YT_APPLY_PROTO_OPTIONAL(protoOperation, state, ConvertOperationStateFromProto);
 
-    if (protoOperation.has_start_time()) {
-        operation->StartTime = TInstant::FromValue(protoOperation.start_time());
-    } else {
-        operation->StartTime.reset();
-    }
-    if (protoOperation.has_finish_time()) {
-        operation->FinishTime = TInstant::FromValue(protoOperation.finish_time());
-    } else {
-        operation->FinishTime.reset();
-    }
-
-    if (protoOperation.has_authenticated_user()) {
-        operation->AuthenticatedUser = protoOperation.authenticated_user();
-    } else {
-        operation->AuthenticatedUser.reset();
-    }
+    operation->StartTime = YT_OPTIONAL_FROM_PROTO(protoOperation, start_time, TInstant);
+    operation->FinishTime = YT_OPTIONAL_FROM_PROTO(protoOperation, finish_time, TInstant);
+    operation->AuthenticatedUser = YT_OPTIONAL_FROM_PROTO(protoOperation, authenticated_user);
 
     if (protoOperation.has_brief_spec()) {
         operation->BriefSpec = TYsonString(protoOperation.brief_spec());
@@ -817,11 +864,7 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->RuntimeParameters = TYsonString();
     }
 
-    if (protoOperation.has_suspended()) {
-        operation->Suspended = protoOperation.suspended();
-    } else {
-        operation->Suspended.reset();
-    }
+    operation->Suspended = YT_OPTIONAL_FROM_PROTO(protoOperation, suspended);
 
     if (protoOperation.has_events()) {
         operation->Events = TYsonString(protoOperation.events());
@@ -838,6 +881,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString(protoOperation.slot_index_per_pool_tree());
     } else {
         operation->SlotIndexPerPoolTree = TYsonString();
+    }
+
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
     }
 
     if (protoOperation.has_task_names()) {
@@ -894,44 +943,33 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
         protoJob->set_archive_state(ConvertJobStateToProto(*job.ArchiveState));
     }
 
-    if (job.StartTime) {
-        protoJob->set_start_time(ToProto<i64>(*job.StartTime));
-    }
-    if (job.FinishTime) {
-        protoJob->set_finish_time(ToProto<i64>(*job.FinishTime));
-    }
+    YT_OPTIONAL_SET_PROTO(protoJob, start_time, job.StartTime);
+    YT_OPTIONAL_SET_PROTO(protoJob, finish_time, job.FinishTime);
 
-    if (job.Address) {
-        protoJob->set_address(*job.Address);
-    }
+    YT_OPTIONAL_TO_PROTO(protoJob, address, job.Address);
+    YT_OPTIONAL_TO_PROTO(protoJob, addresses, job.Addresses);
     if (job.Progress) {
         protoJob->set_progress(*job.Progress);
     }
-    if (job.StderrSize) {
-        protoJob->set_stderr_size(*job.StderrSize);
-    }
-    if (job.FailContextSize) {
-        protoJob->set_fail_context_size(*job.FailContextSize);
-    }
-    if (job.HasSpec) {
-        protoJob->set_has_spec(*job.HasSpec);
-    }
+    YT_OPTIONAL_SET_PROTO(protoJob, stderr_size, job.StderrSize);
+    YT_OPTIONAL_SET_PROTO(protoJob, fail_context_size, job.FailContextSize);
+    YT_OPTIONAL_SET_PROTO(protoJob, has_spec, job.HasSpec);
 
     if (job.Error) {
-        protoJob->set_error(job.Error.ToString());
+        protoJob->set_error(ToProto(job.Error));
     }
     if (job.InterruptionInfo) {
-        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+        protoJob->set_interruption_info(ToProto(job.InterruptionInfo));
     }
 
     if (job.BriefStatistics) {
-        protoJob->set_brief_statistics(job.BriefStatistics.ToString());
+        protoJob->set_brief_statistics(ToProto(job.BriefStatistics));
     }
     if (job.InputPaths) {
-        protoJob->set_input_paths(job.InputPaths.ToString());
+        protoJob->set_input_paths(ToProto(job.InputPaths));
     }
     if (job.CoreInfos) {
-        protoJob->set_core_infos(job.CoreInfos.ToString());
+        protoJob->set_core_infos(ToProto(job.CoreInfos));
     }
     if (job.JobCompetitionId) {
         ToProto(protoJob->mutable_job_competition_id(), job.JobCompetitionId);
@@ -939,33 +977,29 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.ProbingJobCompetitionId) {
         ToProto(protoJob->mutable_probing_job_competition_id(), job.ProbingJobCompetitionId);
     }
-    if (job.HasCompetitors) {
-        protoJob->set_has_competitors(*job.HasCompetitors);
-    }
-    if (job.HasProbingCompetitors) {
-        protoJob->set_has_probing_competitors(*job.HasProbingCompetitors);
-    }
-    if (job.IsStale) {
-        protoJob->set_is_stale(*job.IsStale);
-    }
+    YT_OPTIONAL_SET_PROTO(protoJob, has_competitors, job.HasCompetitors);
+    YT_OPTIONAL_SET_PROTO(protoJob, has_probing_competitors, job.HasProbingCompetitors);
+    YT_OPTIONAL_SET_PROTO(protoJob, is_stale, job.IsStale);
     if (job.ExecAttributes) {
-        protoJob->set_exec_attributes(job.ExecAttributes.ToString());
+        protoJob->set_exec_attributes(ToProto(job.ExecAttributes));
     }
-    if (job.TaskName) {
-        protoJob->set_task_name(*job.TaskName);
-    }
-    if (job.PoolTree) {
-        protoJob->set_pool_tree(*job.PoolTree);
-    }
-    if (job.Pool) {
-        protoJob->set_pool(*job.Pool);
-    }
-    if (job.JobCookie) {
-        protoJob->set_job_cookie(*job.JobCookie);
-    }
+    YT_OPTIONAL_TO_PROTO(protoJob, task_name, job.TaskName);
+    YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
+    YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
+    YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
     if (job.ArchiveFeatures) {
-        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+        protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
     }
+    YT_OPTIONAL_TO_PROTO(protoJob, monitoring_descriptor, job.MonitoringDescriptor);
+    YT_OPTIONAL_SET_PROTO(protoJob, operation_incarnation, job.OperationIncarnation);
+    YT_OPTIONAL_TO_PROTO(protoJob, allocation_id, job.AllocationId);
+    if (job.Events) {
+        protoJob->set_events(ToProto(job.Events));
+    }
+    if (job.Statistics) {
+        protoJob->set_statistics(ToProto(job.Statistics));
+    }
+    YT_OPTIONAL_SET_PROTO(protoJob, gang_rank, job.GangRank);
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -980,55 +1014,22 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->OperationId = {};
     }
-    if (protoJob.has_type()) {
-        job->Type = ConvertJobTypeFromProto(protoJob.type());
+    job->Type = YT_APPLY_PROTO_OPTIONAL(protoJob, type, ConvertJobTypeFromProto);
+    job->ControllerState = YT_APPLY_PROTO_OPTIONAL(protoJob, controller_state, ConvertJobStateFromProto);
+    job->ArchiveState = YT_APPLY_PROTO_OPTIONAL(protoJob, archive_state, ConvertJobStateFromProto);
+    job->StartTime = YT_OPTIONAL_FROM_PROTO(protoJob, start_time, TInstant);
+    job->FinishTime = YT_OPTIONAL_FROM_PROTO(protoJob, finish_time, TInstant);
+    job->Address = YT_OPTIONAL_FROM_PROTO(protoJob, address);
+    if (protoJob.has_addresses()) {
+        job->Addresses = FromProto<NNodeTrackerClient::TAddressMap>(protoJob.addresses());
     } else {
-        job->Type.reset();
+        job->Addresses = {};
     }
-    if (protoJob.has_controller_state()) {
-        job->ControllerState = ConvertJobStateFromProto(protoJob.controller_state());
-    } else {
-        job->ControllerState.reset();
-    }
-    if (protoJob.has_archive_state()) {
-        job->ArchiveState = ConvertJobStateFromProto(protoJob.archive_state());
-    } else {
-        job->ArchiveState.reset();
-    }
-    if (protoJob.has_start_time()) {
-        job->StartTime = TInstant::FromValue(protoJob.start_time());
-    } else {
-        job->StartTime.reset();
-    }
-    if (protoJob.has_finish_time()) {
-        job->FinishTime = TInstant::FromValue(protoJob.finish_time());
-    } else {
-        job->FinishTime.reset();
-    }
-    if (protoJob.has_address()) {
-        job->Address = protoJob.address();
-    } else {
-        job->Address.reset();
-    }
-    if (protoJob.has_progress()) {
-        job->Progress = protoJob.progress();
-    } else {
-        job->Progress.reset();
-    }
-    if (protoJob.has_stderr_size()) {
-        job->StderrSize = protoJob.stderr_size();
-    } else {
-        job->StderrSize.reset();
-    }
-    if (protoJob.has_fail_context_size()) {
-        job->FailContextSize = protoJob.fail_context_size();
-    } else {
-        job->FailContextSize.reset();
-    }
+    job->Progress = YT_OPTIONAL_FROM_PROTO(protoJob, progress);
+    job->StderrSize = YT_OPTIONAL_FROM_PROTO(protoJob, stderr_size);
+    job->FailContextSize = YT_OPTIONAL_FROM_PROTO(protoJob, fail_context_size);
     if (protoJob.has_has_spec()) {
         job->HasSpec = protoJob.has_spec();
-    } else {
-        job->HasSpec = false;
     }
     if (protoJob.has_error()) {
         job->Error = TYsonString(protoJob.error());
@@ -1067,49 +1068,41 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     }
     if (protoJob.has_has_competitors()) {
         job->HasCompetitors = protoJob.has_competitors();
-    } else {
-        job->HasCompetitors = false;
     }
-    if (protoJob.has_has_probing_competitors()) {
-        job->HasProbingCompetitors = protoJob.has_probing_competitors();
-    } else {
-        job->HasProbingCompetitors = false;
-    }
-    if (protoJob.has_is_stale()) {
-        job->IsStale = protoJob.is_stale();
-    } else {
-        job->IsStale.reset();
-    }
+    job->HasProbingCompetitors = YT_OPTIONAL_FROM_PROTO(protoJob, has_probing_competitors);
+    job->IsStale = YT_OPTIONAL_FROM_PROTO(protoJob, is_stale);
     if (protoJob.has_exec_attributes()) {
         job->ExecAttributes = TYsonString(protoJob.exec_attributes());
     } else {
         job->ExecAttributes = TYsonString();
     }
-    if (protoJob.has_task_name()) {
-        job->TaskName = protoJob.task_name();
+    if (protoJob.has_events()) {
+        job->Events = TYsonString(protoJob.events());
     } else {
-        job->TaskName.reset();
+        job->Events = TYsonString();
     }
-    if (protoJob.has_pool_tree()) {
-        job->PoolTree = protoJob.pool_tree();
-    } else {
-        job->PoolTree.reset();
-    }
-    if (protoJob.has_pool()) {
-        job->Pool = protoJob.pool();
-    } else {
-        job->Pool.reset();
-    }
-    if (protoJob.has_job_cookie()) {
-        job->JobCookie = protoJob.job_cookie();
-    } else {
-        job->JobCookie.reset();
-    }
+    job->TaskName = YT_OPTIONAL_FROM_PROTO(protoJob, task_name);
+    job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
+    job->Pool = YT_OPTIONAL_FROM_PROTO(protoJob, pool);
+    job->JobCookie = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie);
     if (protoJob.has_archive_features()) {
         job->ArchiveFeatures = TYsonString(protoJob.archive_features());
     } else {
         job->ArchiveFeatures = TYsonString();
     }
+    job->MonitoringDescriptor = YT_OPTIONAL_FROM_PROTO(protoJob, monitoring_descriptor);
+    job->OperationIncarnation = YT_OPTIONAL_FROM_PROTO(protoJob, operation_incarnation);
+    if (protoJob.has_allocation_id()) {
+        job->AllocationId = NScheduler::TAllocationId(FromProto<TGuid>(protoJob.allocation_id()));
+    } else {
+        job->AllocationId = {};
+    }
+    if (protoJob.has_statistics()) {
+        job->Statistics = TYsonString(protoJob.statistics());
+    } else {
+        job->Statistics = TYsonString();
+    }
+    job->GangRank = YT_OPTIONAL_FROM_PROTO(protoJob, gang_rank);
 }
 
 void ToProto(
@@ -1117,7 +1110,7 @@ void ToProto(
     const NApi::TListJobsStatistics& statistics)
 {
     protoStatistics->mutable_state_counts()->clear_entries();
-    for (const auto& state: TEnumTraits<NJobTrackerClient::EJobState>::GetDomainValues()) {
+    for (const auto& state : TEnumTraits<NJobTrackerClient::EJobState>::GetDomainValues()) {
         if (statistics.StateCounts[state] != 0) {
             auto* newStateCount = protoStatistics->mutable_state_counts()->add_entries();
             newStateCount->set_state(ConvertJobStateToProto(state));
@@ -1126,7 +1119,7 @@ void ToProto(
     }
 
     protoStatistics->mutable_type_counts()->clear_entries();
-    for (const auto& type: TEnumTraits<NJobTrackerClient::EJobType>::GetDomainValues()) {
+    for (const auto& type : TEnumTraits<NJobTrackerClient::EJobType>::GetDomainValues()) {
         if (statistics.TypeCounts[type] != 0) {
             auto* newTypeCount = protoStatistics->mutable_type_counts()->add_entries();
             newTypeCount->set_type(ConvertJobTypeToProto(type));
@@ -1140,7 +1133,7 @@ void FromProto(
     const NProto::TListJobsStatistics& protoStatistics)
 {
     std::fill(statistics->StateCounts.begin(), statistics->StateCounts.end(), 0);
-    for (const auto& stateCount: protoStatistics.state_counts().entries()) {
+    for (const auto& stateCount : protoStatistics.state_counts().entries()) {
         auto state = ConvertJobStateFromProto(stateCount.state());
         YT_VERIFY(statistics->StateCounts.IsValidIndex(state));
         YT_VERIFY(statistics->StateCounts[state] == 0);
@@ -1148,7 +1141,7 @@ void FromProto(
     }
 
     std::fill(statistics->TypeCounts.begin(), statistics->TypeCounts.end(), 0);
-    for (const auto& typeCount: protoStatistics.type_counts().entries()) {
+    for (const auto& typeCount : protoStatistics.type_counts().entries()) {
         auto type = ConvertJobTypeFromProto(typeCount.type());
         YT_VERIFY(statistics->TypeCounts.IsValidIndex(type));
         YT_VERIFY(statistics->TypeCounts[type] == 0);
@@ -1183,7 +1176,7 @@ void ToProto(
     const NChunkClient::TFetcherConfigPtr& fetcherConfig)
 {
     protoFetcherConfig->set_node_rpc_timeout(
-        ToProto<i64>(fetcherConfig->NodeRpcTimeout));
+        ToProto(fetcherConfig->NodeRpcTimeout));
 }
 
 void FromProto(
@@ -1200,21 +1193,17 @@ void ToProto(
     protoStatistics->Clear();
 
     ToProto(protoStatistics->mutable_column_data_weights(), statistics.ColumnDataWeights);
-    if (statistics.TimestampTotalWeight) {
-        protoStatistics->set_timestamp_total_weight(*statistics.TimestampTotalWeight);
-    }
+    YT_OPTIONAL_SET_PROTO(protoStatistics, timestamp_total_weight, statistics.TimestampTotalWeight);
     protoStatistics->set_legacy_chunk_data_weight(statistics.LegacyChunkDataWeight);
 
     NYT::NTableClient::ToProto(protoStatistics->mutable_column_min_values(), statistics.ColumnMinValues);
     NYT::NTableClient::ToProto(protoStatistics->mutable_column_max_values(), statistics.ColumnMaxValues);
     ToProto(protoStatistics->mutable_column_non_null_value_counts(), statistics.ColumnNonNullValueCounts);
 
-    if (statistics.ChunkRowCount) {
-        protoStatistics->set_chunk_row_count(*statistics.ChunkRowCount);
-    }
-    if (statistics.LegacyChunkRowCount) {
-        protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
-    }
+    YT_OPTIONAL_SET_PROTO(protoStatistics, chunk_row_count, statistics.ChunkRowCount);
+    YT_OPTIONAL_SET_PROTO(protoStatistics, legacy_chunk_row_count, statistics.LegacyChunkRowCount);
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1222,27 +1211,17 @@ void FromProto(
     const NProto::TColumnarStatistics& protoStatistics)
 {
     FromProto(&statistics->ColumnDataWeights, protoStatistics.column_data_weights());
-    if (protoStatistics.has_timestamp_total_weight()) {
-        statistics->TimestampTotalWeight = protoStatistics.timestamp_total_weight();
-    } else {
-        statistics->TimestampTotalWeight.reset();
-    }
+    statistics->TimestampTotalWeight = YT_OPTIONAL_FROM_PROTO(protoStatistics, timestamp_total_weight);
     statistics->LegacyChunkDataWeight = protoStatistics.legacy_chunk_data_weight();
 
     NYT::NTableClient::FromProto(&statistics->ColumnMinValues, protoStatistics.column_min_values());
     NYT::NTableClient::FromProto(&statistics->ColumnMaxValues, protoStatistics.column_max_values());
     FromProto(&statistics->ColumnNonNullValueCounts, protoStatistics.column_non_null_value_counts());
 
-    if (protoStatistics.has_chunk_row_count()) {
-        statistics->ChunkRowCount = protoStatistics.chunk_row_count();
-    } else {
-        statistics->ChunkRowCount.reset();
-    }
-    if (protoStatistics.has_legacy_chunk_row_count()) {
-        statistics->LegacyChunkRowCount = protoStatistics.legacy_chunk_row_count();
-    } else {
-        statistics->LegacyChunkRowCount.reset();
-    }
+    statistics->ChunkRowCount = YT_OPTIONAL_FROM_PROTO(protoStatistics, chunk_row_count);
+    statistics->LegacyChunkRowCount = YT_OPTIONAL_FROM_PROTO(protoStatistics, legacy_chunk_row_count);
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(
@@ -1259,6 +1238,18 @@ void ToProto(
     aggregateStatistics->set_chunk_count(multiTablePartition.AggregateStatistics.ChunkCount);
     aggregateStatistics->set_data_weight(multiTablePartition.AggregateStatistics.DataWeight);
     aggregateStatistics->set_row_count(multiTablePartition.AggregateStatistics.RowCount);
+
+    if (multiTablePartition.Cookie) {
+        ToProto(protoMultiTablePartition->mutable_cookie(), multiTablePartition.Cookie);
+    }
+}
+
+void ToProto(
+    TProtobufString* protoCookie,
+    const TTablePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
 }
 
 void FromProto(
@@ -1266,7 +1257,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(range));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -1274,6 +1265,10 @@ void FromProto(
         multiTablePartition->AggregateStatistics.ChunkCount = aggregateStatistics.chunk_count();
         multiTablePartition->AggregateStatistics.DataWeight = aggregateStatistics.data_weight();
         multiTablePartition->AggregateStatistics.RowCount = aggregateStatistics.row_count();
+    }
+
+    if (protoMultiTablePartition.has_cookie()) {
+        FromProto(&multiTablePartition->Cookie, protoMultiTablePartition.cookie());
     }
 }
 
@@ -1286,15 +1281,20 @@ void FromProto(
         protoRspPartitionTables.partitions());
 }
 
+void FromProto(
+    TTablePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
 void ToProto(
     NProto::TRowBatchReadOptions* proto,
     const NQueueClient::TQueueRowBatchReadOptions& result)
 {
     proto->set_max_row_count(result.MaxRowCount);
     proto->set_max_data_weight(result.MaxDataWeight);
-    if (result.DataWeightPerRowHint) {
-        proto->set_data_weight_per_row_hint(*result.DataWeightPerRowHint);
-    }
+    YT_OPTIONAL_SET_PROTO(proto, data_weight_per_row_hint, result.DataWeightPerRowHint);
 }
 
 void FromProto(
@@ -1303,9 +1303,7 @@ void FromProto(
 {
     result->MaxRowCount = proto.max_row_count();
     result->MaxDataWeight = proto.max_data_weight();
-    if (proto.has_data_weight_per_row_hint()) {
-        result->DataWeightPerRowHint = proto.data_weight_per_row_hint();
-    }
+    result->DataWeightPerRowHint = YT_OPTIONAL_FROM_PROTO(proto, data_weight_per_row_hint);
 }
 
 void ToProto(
@@ -1314,7 +1312,7 @@ void ToProto(
 {
     protoManifest->set_source_path(manifest->SourcePath);
     protoManifest->set_destination_path(manifest->DestinationPath);
-    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+    protoManifest->set_ordered_mode(ToProto(manifest->OrderedMode));
 }
 
 void FromProto(
@@ -1325,19 +1323,19 @@ void FromProto(
 
     (*manifest)->SourcePath = protoManifest.source_path();
     (*manifest)->DestinationPath = protoManifest.destination_path();
-    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+    (*manifest)->OrderedMode = FromProto<EOrderedTableBackupMode>(protoManifest.ordered_mode());
 }
 
 void ToProto(
     NProto::TBackupManifest::TClusterManifest* protoEntry,
-    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry)
+    const std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>& entry)
 {
     protoEntry->set_cluster(entry.first);
     ToProto(protoEntry->mutable_table_manifests(), entry.second);
 }
 
 void FromProto(
-    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>* entry,
     const NProto::TBackupManifest::TClusterManifest& protoEntry)
 {
     entry->first = protoEntry.cluster();
@@ -1369,43 +1367,31 @@ void ToProto(
     if (query.Engine) {
         protoQuery->set_engine(ConvertQueryEngineToProto(*query.Engine));
     }
-    if (query.Query) {
-        protoQuery->set_query(*query.Query);
-    }
+    YT_OPTIONAL_TO_PROTO(protoQuery, query, query.Query);
     if (query.Files) {
-        protoQuery->set_files(query.Files->ToString());
+        protoQuery->set_files(ToProto(*query.Files));
     }
-    if (query.StartTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
-    }
-    if (query.FinishTime) {
-        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
-    }
+    YT_OPTIONAL_SET_PROTO(protoQuery, start_time, query.StartTime);
+    YT_OPTIONAL_SET_PROTO(protoQuery, finish_time, query.FinishTime);
     if (query.Settings) {
-        protoQuery->set_settings(query.Settings.ToString());
+        protoQuery->set_settings(ToProto(query.Settings));
     }
-    if (query.User) {
-        protoQuery->set_user(*query.User);
-    }
+    YT_OPTIONAL_TO_PROTO(protoQuery, user, query.User);
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
-    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+    protoQuery->set_access_control_objects(ToProto(*query.AccessControlObjects));
 
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
-    if (query.ResultCount) {
-        protoQuery->set_result_count(*query.ResultCount);
-    }
+    YT_OPTIONAL_SET_PROTO(protoQuery, result_count, query.ResultCount);
     if (query.Progress) {
-        protoQuery->set_progress(query.Progress.ToString());
+        protoQuery->set_progress(ToProto(query.Progress));
     }
-    if (query.Error) {
-        ToProto(protoQuery->mutable_error(), *query.Error);
-    }
+    YT_OPTIONAL_TO_PROTO(protoQuery, error, query.Error);
     if (query.Annotations) {
-        protoQuery->set_annotations(query.Annotations.ToString());
+        protoQuery->set_annotations(ToProto(query.Annotations));
     }
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
@@ -1418,71 +1404,27 @@ void FromProto(
 {
     FromProto(&query->Id, protoQuery.id());
 
-    if (protoQuery.has_engine()) {
-        query->Engine = ConvertQueryEngineFromProto(protoQuery.engine());
-    } else {
-        query->Engine.reset();
-    }
-    if (protoQuery.has_query()) {
-        query->Query = protoQuery.query();
-    } else {
-        query->Query.reset();
-    }
-    if (protoQuery.has_files()) {
-        query->Files = TYsonString(protoQuery.files());
-    } else {
-        query->Files.reset();
-    }
-    if (protoQuery.has_start_time()) {
-        query->StartTime = TInstant::FromValue(protoQuery.start_time());
-    } else {
-        query->StartTime.reset();
-    }
-    if (protoQuery.has_finish_time()) {
-        query->FinishTime = TInstant::FromValue(protoQuery.finish_time());
-    } else {
-        query->FinishTime.reset();
-    }
+    query->Engine = YT_APPLY_PROTO_OPTIONAL(protoQuery, engine, ConvertQueryEngineFromProto);
+    query->Query = YT_OPTIONAL_FROM_PROTO(protoQuery, query);
+    query->Files = YT_APPLY_PROTO_OPTIONAL(protoQuery, files, TYsonString);
+    query->StartTime = YT_OPTIONAL_FROM_PROTO(protoQuery, start_time, TInstant);
+    query->FinishTime = YT_OPTIONAL_FROM_PROTO(protoQuery, finish_time, TInstant);
     if (protoQuery.has_settings()) {
         query->Settings = TYsonString(protoQuery.settings());
     } else {
         query->Settings = TYsonString{};
     }
-    if (protoQuery.has_user()) {
-        query->User = protoQuery.user();
-    } else {
-        query->User.reset();
-    }
-    if (protoQuery.has_access_control_object()) {
-        query->AccessControlObject = protoQuery.access_control_object();
-    } else {
-        query->AccessControlObject.reset();
-    }
-    if (protoQuery.has_access_control_objects()) {
-        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
-    } else {
-        query->AccessControlObjects.reset();
-    }
-    if (protoQuery.has_state()) {
-        query->State = ConvertQueryStateFromProto(protoQuery.state());
-    } else {
-        query->State.reset();
-    }
-    if (protoQuery.has_result_count()) {
-        query->ResultCount = protoQuery.result_count();
-    } else {
-        query->ResultCount.reset();
-    }
+    query->User = YT_OPTIONAL_FROM_PROTO(protoQuery, user);
+    query->AccessControlObject = YT_OPTIONAL_FROM_PROTO(protoQuery, access_control_object);
+    query->AccessControlObjects = YT_APPLY_PROTO_OPTIONAL(protoQuery, access_control_objects, TYsonString);
+    query->State = YT_APPLY_PROTO_OPTIONAL(protoQuery, state, ConvertQueryStateFromProto);
+    query->ResultCount = YT_OPTIONAL_FROM_PROTO(protoQuery, result_count);
     if (protoQuery.has_progress()) {
         query->Progress = TYsonString(protoQuery.progress());
     } else {
         query->Progress = TYsonString{};
     }
-    if (protoQuery.has_error()) {
-        query->Error = FromProto<TError>(protoQuery.error());
-    } else {
-        query->Error.reset();
-    }
+    query->Error = YT_APPLY_PROTO_OPTIONAL(protoQuery, error, FromProto<TError>);
     if (protoQuery.has_annotations()) {
         query->Annotations = TYsonString(protoQuery.annotations());
     } else {
@@ -1641,6 +1583,54 @@ NScheduler::EOperationState ConvertOperationStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for operation state");
     }
     YT_ABORT();
+}
+
+NProto::EOperationEventType ConvertOperationEventTypeToProto(
+    NApi::EOperationEventType operationEventType)
+{
+    switch (operationEventType) {
+        case NApi::EOperationEventType::IncarnationStarted:
+            return NProto::EOperationEventType::OET_INCARNATION_STARTED;
+    }
+}
+
+NApi::EOperationEventType ConvertOperationEventTypeFromProto(
+    NProto::EOperationEventType proto)
+{
+    switch (proto) {
+        case NProto::EOperationEventType::OET_INCARNATION_STARTED:
+            return NApi::EOperationEventType::IncarnationStarted;
+    }
+}
+
+NProto::EIncarnationSwitchReason ConvertIncarnationSwitchReasonToProto(
+    NControllerAgent::EOperationIncarnationSwitchReason operationEventType)
+{
+    switch (operationEventType) {
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_FAILED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL;
+    }
+}
+
+NControllerAgent::EOperationIncarnationSwitchReason ConvertIncarnationSwitchReasonFromProto(
+    NProto::EIncarnationSwitchReason proto)
+{
+    switch (proto) {
+        case NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_FAILED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival;
+    }
 }
 
 NProto::EJobType ConvertJobTypeToProto(
@@ -1903,11 +1893,160 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     YT_ABORT();
 }
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto)
+{
+    switch (proto) {
+        case NProto::EJobStderrType::JST_USER_JOB_STDERR:
+            return NApi::EJobStderrType::UserJobStderr;
+        case NProto::EJobStderrType::JST_GPU_CHECK_STDERR:
+            return NApi::EJobStderrType::GpuCheckStderr;
+    }
+}
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType)
+{
+    switch (jobStderrType) {
+        case NApi::EJobStderrType::UserJobStderr:
+            return NProto::EJobStderrType::JST_USER_JOB_STDERR;
+        case NApi::EJobStderrType::GpuCheckStderr:
+            return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+    req->set_cookie_count(options.CookieCount);
+    if (options.Timeout) {
+        req->set_timeout(options.Timeout->GetValue());
+    }
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    mutableOptions->CookieCount = req.cookie_count();
+    if (req.has_timeout()) {
+        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    }
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    Y_UNUSED(options);
+    req->set_signed_session(ToProto(ConvertToYsonString(session)));
+}
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableOptions);
+    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    YT_VERIFY(sessionWithResults.Session);
+
+    req->set_signed_session(ToProto(ConvertToYsonString(sessionWithResults.Session)));
+    for (const auto& writeResult : sessionWithResults.Results) {
+        YT_VERIFY(writeResult);
+        req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
+    }
+    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+}
+
+void ParseRequest(
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
+    for (const auto& writeResult : req.signed_write_results()) {
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(writeResult)));
+    }
+
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+
+    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteTableFragment* req,
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    req->set_signed_cookie(ToProto(ConvertToYsonString(cookie)));
+
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+}
+
+void ParseRequest(
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req)
+{
+    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(req.signed_cookie()));
+    if (req.has_config()) {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+    } else {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////
+
+bool IsChaosRetriableError(const TError& error)
+{
+    return static_cast<bool>(error.FindMatching([] (const TError& error) {
+        auto code = error.GetCode();
+        return
+            code == NTransactionClient::EErrorCode::ChaosCoordinatorsAreNotAvailable ||
+            code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
+            code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NChaosClient::EErrorCode::ShortcutNotFound ||
+            code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
+            code == NChaosClient::EErrorCode::ShortcutRevoked;
+    }));
+}
 
 bool IsDynamicTableRetriableError(const TError& error)
 {
@@ -1918,23 +2057,12 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded) ||
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
-        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
+        IsChaosRetriableError(error);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
+bool IsRetriableError(const TError& error, bool retryProxyBanned)
 {
-    // For now transient Sequoia failures are always retriable even if client's
-    // retries are disabled.
-    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
-    // for this.
-    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
-        return true;
-    }
-
-    if (retrySequoiaErrorsOnly) {
-        return false;
-    }
-
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {
@@ -1951,14 +2079,6 @@ bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequ
         IsDynamicTableRetriableError(error);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void SetTimeoutOptions(
-    NRpc::TClientRequest& request,
-    const TTimeoutOptions& options)
-{
-    request.SetTimeout(options.Timeout);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ROWSETS
@@ -2038,12 +2158,12 @@ std::vector<TSharedRef> SerializeRowset(
     // COMPAT(babenko)
     for (const auto& column : schema.Columns()) {
         auto* entry = descriptor->add_name_table_entries();
-        entry->set_name(column.Name());
+        entry->set_name(ToProto(column.Name()));
         // we save physical type for backward compatibility
         // COMPAT(babenko)
-        entry->set_type(ToProto<int>(column.GetWireType()));
+        entry->set_type(ToProto(column.GetWireType()));
         // COMPAT(babenko)
-        entry->set_logical_type(ToProto<int>(column.CastToV1Type()));
+        entry->set_logical_type(ToProto(column.CastToV1Type()));
     }
 
     auto writer = CreateWireProtocolWriter();
@@ -2078,10 +2198,10 @@ TTableSchemaPtr DeserializeRowsetSchema(
             columns[i].SetStableName(TColumnStableName(entry.name()));
         }
         if (entry.has_logical_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         } else if (entry.has_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         }
     }

@@ -7,9 +7,9 @@
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -117,6 +117,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_bytes_value(cell.Data(), cell.Size());
         break;
     }
+    case NUdf::TDataType<NUdf::TUuid>::Id:
     case NUdf::TDataType<NUdf::TDecimal>::Id: {
         struct TCellData {
             ui64 Low;
@@ -187,7 +188,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     }
     case NScheme::NTypeIds::Pg: {
-        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
+        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
         if (result.Error) {
             err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
             return false;
@@ -355,7 +356,7 @@ private:
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
                 auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto* typeDesc = typeInfoMod.TypeInfo.GetTypeDesc();
+                auto typeDesc = typeInfoMod.TypeInfo.GetPgTypeDesc();
                 pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                 pg->set_type_modifier(typeInfoMod.TypeMod);
                 pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
@@ -366,10 +367,7 @@ private:
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
                 auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                 if (id == NYql::NProto::Decimal) {
-                    auto decimalType = xType->mutable_decimal_type();
-                    //TODO: Pass decimal params here
-                    decimalType->set_precision(22);
-                    decimalType->set_scale(9);
+                    NScheme::ProtoFromDecimalType(typeInfoMod.TypeInfo.GetDecimalType(), *xType->mutable_decimal_type());
                 } else {
                     xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                 }
@@ -383,7 +381,7 @@ private:
     const bool AllowNotNull;
 };
 
-class TReadTableScan : public TActor<TReadTableScan>, public NTable::IScan {
+class TReadTableScan : public TActor<TReadTableScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_READ_TABLE_SCAN;
@@ -426,7 +424,7 @@ public:
 
     ~TReadTableScan() {}
 
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const override
     {
         out << "TReadTableScan";
     }
@@ -476,7 +474,7 @@ private:
 
     void Handle(TEvTxProcessing::TEvStreamDataAck::TPtr &, const TActorContext &ctx)
     {
-        Y_ABORT_UNLESS(PendingAcks);
+        Y_ENSURE(PendingAcks);
         --PendingAcks;
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -555,7 +553,7 @@ private:
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
-    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) override
     {
         Driver = driver;
 
@@ -579,7 +577,7 @@ private:
         return { EScan::Sleep, { } };
     }
 
-    EScan Seek(TLead &lead, ui64 seq) noexcept override
+    EScan Seek(TLead &lead, ui64 seq) override
     {
         if (seq) {
             MaybeSendResponseMessage(true);
@@ -675,7 +673,7 @@ private:
         return MessageQuota ? EScan::Feed : EScan::Sleep;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &row) noexcept override
+    EScan Feed(TArrayRef<const TCell> key, const TRow &row) override
     {
         Y_DEBUG_ABORT_UNLESS(DebugCheckKeyInRange(key));
 
@@ -697,13 +695,14 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+    TAutoPtr<IDestructable> Finish(EStatus status) override
     {
         auto ctx = ActorContext();
 
         if (!SchemaChanged) {
-            if (abort != EAbort::None)
-                Error = "Aborted by scan host env";
+            if (status != EStatus::Done) {
+                Error = TStringBuilder() << "Scan finished unsuccessfully with status " << status;
+            }
 
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request
                 = new TEvTxProcessing::TEvStreamQuotaRelease;
@@ -722,6 +721,14 @@ private:
 
         Die(ctx);
         return new TReadTableProd(Error, IsFatalError, SchemaChanged);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
 private:

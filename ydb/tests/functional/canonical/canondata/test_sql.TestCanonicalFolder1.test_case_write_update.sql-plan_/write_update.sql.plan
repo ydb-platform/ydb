@@ -26,8 +26,8 @@
                 {
                     "columns": [
                         "Amount",
-                        "Name",
-                        "Group"
+                        "Group",
+                        "Name"
                     ],
                     "type": "MultiUpsert"
                 }

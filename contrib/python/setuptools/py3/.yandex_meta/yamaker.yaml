@@ -1,0 +1,16 @@
+requirements:
+  - jaraco.collections
+  - jaraco.context
+  - jaraco.functools
+  - jaraco.text
+  - more-itertools
+  - packaging
+  - platformdirs
+  - typing-extensions
+  - typeguard
+  - wheel
+  - library/python/resource
+mark_as_sources:
+  - setuptools/command/test.py
+exclude:
+  - setuptools/_vendor/*

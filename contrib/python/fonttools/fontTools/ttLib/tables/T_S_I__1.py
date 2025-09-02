@@ -3,6 +3,8 @@ tool to store its hinting source data.
 
 TSI1 contains the text of the glyph programs in the form of low-level assembly
 code, as well as the 'extra' programs 'fpgm', 'ppgm' (i.e. 'prep'), and 'cvt'.
+
+See also https://learn.microsoft.com/en-us/typography/tools/vtt/tsi-tables
 """
 
 from . import DefaultTable
@@ -89,12 +91,11 @@ class table_T_S_I__1(LogMixin, DefaultTable.DefaultTable):
         glyphNames = ttFont.getGlyphOrder()
 
         indices = []
-        for i in range(len(glyphNames)):
+        for i, name in enumerate(glyphNames):
             if len(data) % 2:
                 data = (
                     data + b"\015"
                 )  # align on 2-byte boundaries, fill with return chars. Yum.
-            name = glyphNames[i]
             if name in self.glyphPrograms:
                 text = tobytes(self.glyphPrograms[name], encoding="utf-8")
             else:
@@ -106,13 +107,11 @@ class table_T_S_I__1(LogMixin, DefaultTable.DefaultTable):
             data = data + text
 
         extra_indices = []
-        codes = sorted(self.extras.items())
-        for i in range(len(codes)):
+        for code, name in sorted(self.extras.items()):
             if len(data) % 2:
                 data = (
                     data + b"\015"
                 )  # align on 2-byte boundaries, fill with return chars.
-            code, name = codes[i]
             if name in self.extraPrograms:
                 text = tobytes(self.extraPrograms[name], encoding="utf-8")
             else:

@@ -161,7 +161,7 @@ bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
             return false;
         }
 
-        Y_ABORT_UNLESS(x->Shift == 0, "Got blob read result with non-zero offset");
+        Y_ENSURE(x->Shift == 0, "Got blob read result with non-zero offset");
 
         const auto p = Active.equal_range(x->Id);
         if (p.first == p.second) {
@@ -185,7 +185,7 @@ bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
                 items.push_back(it->second);
             }
             Active.erase(p.first, p.second);
-            Y_ABORT_UNLESS(items.size() > 1);
+            Y_ENSURE(items.size() > 1);
 
             size_t last = items.size() - 1;
             for (size_t i = 0; i < last; ++i) {

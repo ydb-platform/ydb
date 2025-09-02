@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -67,6 +67,9 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NKikimr::NMiniKQL::T
 std::shared_ptr<arrow::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values,
     const NKikimr::NMiniKQL::TType* itemType);
 
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array,
+    ui64 row, const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+
 NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
     const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
@@ -84,6 +87,16 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
  */
 void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type);
 
+class IBlockSplitter : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IBlockSplitter>;
+
+    virtual bool ShouldSplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
+
+    virtual std::vector<std::vector<arrow::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
+};
+
+IBlockSplitter::TPtr CreateBlockSplitter(const NKikimr::NMiniKQL::TType* type, ui64 chunkSizeLimit);
 
 } // NArrow
 } // NYql

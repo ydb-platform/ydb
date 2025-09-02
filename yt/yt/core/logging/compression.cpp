@@ -27,7 +27,7 @@ TAppendableCompressedFile::TAppendableCompressedFile(
         message.AppendFormat("Truncated %v bytes due to zstd repair.\n", fileSize - OutputPosition_);
         TString messageStr = message.Flush();
 
-        Input_.Append(messageStr.Data(), messageStr.Size());
+        Input_.Append(messageStr.data(), messageStr.size());
         Flush();
     }
 }

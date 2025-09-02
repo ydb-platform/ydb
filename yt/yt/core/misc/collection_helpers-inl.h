@@ -87,6 +87,13 @@ std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 }
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
+{
+    auto vec = GetKeys(collection, sizeLimit);
+    return THashSet<typename T::key_type>(vec.begin(), vec.end());
+}
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
     return GetIthsImpl<typename T::mapped_type>(
@@ -103,9 +110,7 @@ std::vector<typename T::value_type> GetItems(const T& collection, size_t sizeLim
     return GetIthsImpl<typename T::value_type>(
         collection,
         sizeLimit,
-        [] (const auto& item) {
-            return item;
-        });
+        /*getter*/ std::identity{});
 }
 
 template <size_t I, class T>
@@ -140,7 +145,7 @@ void MergeFrom(TTarget* target, const TSource& source)
 }
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
+TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 {
     TKeySet dropped;
     for (auto it = map.begin(); it != map.end(); ) {
@@ -152,6 +157,18 @@ TKeySet DropMissingKeys(TMap&& map, const TKeySet& set)
         }
     }
     return dropped;
+}
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set)
+{
+    for (auto it = map.begin(); it != map.end(); ) {
+        if (!set.contains(it->first)) {
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 template <class TMap, class TKey>
@@ -196,6 +213,15 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     return it;
 }
 
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key)
+{
+    return map.emplace(
+        std::piecewise_construct_t{},
+        std::tuple<TKey&&>{std::forward<TKey>(key)},
+        std::tuple{});
+}
+
 template <class T, class... TVariantArgs>
 T& GetOrCrash(std::variant<TVariantArgs...>& variant)
 {
@@ -214,6 +240,17 @@ const T& GetOrCrash(const std::variant<TVariantArgs...>& variant)
 
 template <class TMap, class TKey>
 typename TMap::mapped_type GetOrDefault(
+    const TMap& map,
+    const TKey& key,
+    const typename TMap::mapped_type& defaultValue)
+    requires (!TIsDefaultMap<TMap>::Value)
+{
+    auto it = map.find(key);
+    return it == map.end() ? defaultValue : it->second;
+}
+
+template <class TMap, class TKey>
+const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue)
@@ -319,7 +356,7 @@ std::vector<std::pair<typename T::key_type, typename T::mapped_type>> SortHashMa
 template <class T>
 void EnsureVectorSize(std::vector<T>& vector, ssize_t size, const T& defaultValue)
 {
-    if (static_cast<ssize_t>(vector.size()) < size) {
+    if (std::ssize(vector) < size) {
         vector.resize(size, defaultValue);
     }
 }
@@ -347,7 +384,13 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue)
 {
-    return index < static_cast<ssize_t>(vector.size()) ? vector[index] : defaultValue;
+    return index < std::ssize(vector) ? vector[index] : defaultValue;
+}
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector)
+{
+    return vector.capacity() * sizeof(T);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

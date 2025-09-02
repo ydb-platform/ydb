@@ -20,7 +20,7 @@ class ClumsyOpenMPDependencyHandler(ast.NodeVisitor):
         return node
 
 
-class DeadCodeElimination(Transformation):
+class DeadCodeElimination(Transformation[PureExpressions, DefUseChains, Ancestors]):
     """
     Remove useless statement like:
         - assignment to unused variables
@@ -57,9 +57,7 @@ class DeadCodeElimination(Transformation):
         return 1
     """
     def __init__(self):
-        super(DeadCodeElimination, self).__init__(PureExpressions,
-                                                  DefUseChains,
-                                                  Ancestors)
+        super().__init__()
         self.blacklist = set()
 
     def used_target(self, node):
@@ -91,10 +89,21 @@ class DeadCodeElimination(Transformation):
                    if self.used_target(target)]
         if len(targets) == len(node.targets):
             return node
-        node.targets = targets
         self.update = True
         if targets:
+            node.targets = targets
             return node
+        if node.value in self.pure_expressions:
+            return ast.Pass()
+        else:
+            return ast.Expr(value=node.value)
+
+    def visit_AnnAssign(self, node):
+        if not node.value:
+            return node
+        if self.used_target(node.target):
+            return node
+        self.update = True
         if node.value in self.pure_expressions:
             return ast.Pass()
         else:

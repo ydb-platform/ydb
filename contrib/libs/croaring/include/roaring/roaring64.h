@@ -7,6 +7,7 @@
 
 #include <roaring/memory.h>
 #include <roaring/portability.h>
+#include <roaring/roaring.h>
 #include <roaring/roaring_types.h>
 
 #ifdef __cplusplus
@@ -16,7 +17,7 @@ namespace api {
 #endif
 
 typedef struct roaring64_bitmap_s roaring64_bitmap_t;
-typedef struct roaring64_leaf_s roaring64_leaf_t;
+typedef uint64_t roaring64_leaf_t;
 typedef struct roaring64_iterator_s roaring64_iterator_t;
 
 /**
@@ -38,12 +39,14 @@ typedef struct roaring64_bulk_context_s {
 /**
  * Dynamically allocates a new bitmap (initially empty).
  * Client is responsible for calling `roaring64_bitmap_free()`.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_create(void);
 void roaring64_bitmap_free(roaring64_bitmap_t *r);
 
 /**
  * Returns a copy of a bitmap.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_copy(const roaring64_bitmap_t *r);
 
@@ -93,8 +96,17 @@ roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
 #endif
 
 /**
+ * Create a new bitmap by moving containers from a 32 bit roaring bitmap.
+ *
+ * After calling this function, the original bitmap will be empty, and the
+ * returned bitmap will contain all the values from the original bitmap.
+ */
+roaring64_bitmap_t *roaring64_bitmap_move_from_roaring32(roaring_bitmap_t *r);
+
+/**
  * Create a new bitmap containing all the values in [min, max) that are at a
  * distance k*step from min.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_from_range(uint64_t min, uint64_t max,
                                                 uint64_t step);
@@ -203,6 +215,11 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
                                           uint64_t max);
 
 /**
+ * Empties the bitmap.
+ */
+void roaring64_bitmap_clear(roaring64_bitmap_t *r);
+
+/**
  * Returns true if the provided value is present.
  */
 bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t val);
@@ -273,6 +290,12 @@ uint64_t roaring64_bitmap_range_cardinality(const roaring64_bitmap_t *r,
                                             uint64_t min, uint64_t max);
 
 /**
+ * Returns the number of elements in the range [min, max]
+ */
+uint64_t roaring64_bitmap_range_closed_cardinality(const roaring64_bitmap_t *r,
+                                                   uint64_t min, uint64_t max);
+
+/**
  * Returns true if the bitmap is empty (cardinality is zero).
  */
 bool roaring64_bitmap_is_empty(const roaring64_bitmap_t *r);
@@ -291,6 +314,12 @@ uint64_t roaring64_bitmap_maximum(const roaring64_bitmap_t *r);
  * Returns true if the result has at least one run container.
  */
 bool roaring64_bitmap_run_optimize(roaring64_bitmap_t *r);
+
+/**
+ * Shrinks internal arrays to eliminate any unused capacity. Returns the number
+ * of bytes freed.
+ */
+size_t roaring64_bitmap_shrink_to_fit(roaring64_bitmap_t *r);
 
 /**
  *  (For advanced users.)
@@ -340,6 +369,8 @@ bool roaring64_bitmap_is_strict_subset(const roaring64_bitmap_t *r1,
  * bitmaps, two-by-two, it is best to start with the smallest bitmaps. You may
  * also rely on roaring64_bitmap_and_inplace to avoid creating many temporary
  * bitmaps.
+ *
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_and(const roaring64_bitmap_t *r1,
                                          const roaring64_bitmap_t *r2);
@@ -384,6 +415,7 @@ double roaring64_bitmap_jaccard_index(const roaring64_bitmap_t *r1,
 /**
  * Computes the union between two bitmaps and returns new bitmap. The caller is
  * responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_or(const roaring64_bitmap_t *r1,
                                         const roaring64_bitmap_t *r2);
@@ -403,6 +435,7 @@ void roaring64_bitmap_or_inplace(roaring64_bitmap_t *r1,
 /**
  * Computes the symmetric difference (xor) between two bitmaps and returns a new
  * bitmap. The caller is responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_xor(const roaring64_bitmap_t *r1,
                                          const roaring64_bitmap_t *r2);
@@ -423,6 +456,7 @@ void roaring64_bitmap_xor_inplace(roaring64_bitmap_t *r1,
 /**
  * Computes the difference (andnot) between two bitmaps and returns a new
  * bitmap. The caller is responsible for free-ing the result.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_andnot(const roaring64_bitmap_t *r1,
                                             const roaring64_bitmap_t *r2);
@@ -444,6 +478,7 @@ void roaring64_bitmap_andnot_inplace(roaring64_bitmap_t *r1,
  * Compute the negation of the bitmap in the interval [min, max).
  * The number of negated values is `max - min`. Areas outside the range are
  * passed through unchanged.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_flip(const roaring64_bitmap_t *r,
                                           uint64_t min, uint64_t max);
@@ -452,6 +487,7 @@ roaring64_bitmap_t *roaring64_bitmap_flip(const roaring64_bitmap_t *r,
  * Compute the negation of the bitmap in the interval [min, max].
  * The number of negated values is `max - min + 1`. Areas outside the range are
  * passed through unchanged.
+ * The returned pointer may be NULL in case of errors.
  */
 roaring64_bitmap_t *roaring64_bitmap_flip_closed(const roaring64_bitmap_t *r,
                                                  uint64_t min, uint64_t max);
@@ -491,6 +527,10 @@ size_t roaring64_bitmap_portable_size_in_bytes(const roaring64_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring64_bitmap_portable_serialize(const roaring64_bitmap_t *r,
                                            char *buf);
@@ -505,14 +545,17 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
                                                   size_t maxbytes);
 
 /**
- * Read a bitmap from a serialized buffer safely (reading up to maxbytes).
+ * Read a bitmap from a serialized buffer (reading up to maxbytes).
  * In case of failure, NULL is returned.
  *
  * This is meant to be compatible with other languages
  * https://github.com/RoaringBitmap/RoaringFormatSpec#extension-for-64-bit-implementations
  *
  * The function itself is safe in the sense that it will not cause buffer
- * overflows. However, for correct operations, it is assumed that the bitmap
+ * overflows: it will not read beyond the scope of the provided buffer
+ * (buf,maxbytes).
+ *
+ * However, for correct operations, it is assumed that the bitmap
  * read was once serialized from a valid bitmap (i.e., it follows the format
  * specification). If you provided an incorrect input (garbage), then the bitmap
  * read may not be in a valid state and following operations may not lead to
@@ -521,12 +564,68 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
  * order. This is is guaranteed to happen when serializing an existing bitmap,
  * but not for random inputs.
  *
+ * If the source is untrusted, you should call
+ * roaring64_bitmap_internal_validate to check the validity of the
+ * bitmap prior to using it. Only after calling
+ * roaring64_bitmap_internal_validate is the bitmap considered safe for use.
+ *
+ * We also recommend that you use checksums to check that serialized data
+ * corresponds to the serialized bitmap. The CRoaring library does not provide
+ * checksumming.
+ *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
  */
 roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(const char *buf,
                                                                size_t maxbytes);
+
+/**
+ * Returns the number of bytes required to serialize this bitmap in a "frozen"
+ * format. This is not compatible with any other serialization formats.
+ *
+ * `roaring64_bitmap_shrink_to_fit()` must be called before this method.
+ */
+size_t roaring64_bitmap_frozen_size_in_bytes(const roaring64_bitmap_t *r);
+
+/**
+ * Serializes the bitmap in a "frozen" format. The given buffer must be at least
+ * `roaring64_bitmap_frozen_size_in_bytes()` in size. Returns the number of
+ * bytes used for serialization.
+ *
+ * `roaring64_bitmap_shrink_to_fit()` must be called before this method.
+ *
+ * The frozen format is optimized for speed of (de)serialization, as well as
+ * allowing the user to create a bitmap based on a memory mapped file, which is
+ * possible because the format mimics the memory layout of the bitmap.
+ *
+ * Because the format mimics the memory layout of the bitmap, the format is not
+ * fixed across releases of Roaring Bitmaps, and may change in future releases.
+ *
+ * This function is endian-sensitive. If you have a big-endian system (e.g., a
+ * mainframe IBM s390x), the data format is going to be big-endian and not
+ * compatible with little-endian systems.
+ */
+size_t roaring64_bitmap_frozen_serialize(const roaring64_bitmap_t *r,
+                                         char *buf);
+
+/**
+ * Creates a readonly bitmap that is a view of the given buffer. The buffer
+ * must be created with `roaring64_bitmap_frozen_serialize()`, and must be
+ * aligned by 64 bytes.
+ *
+ * Returns NULL if deserialization fails.
+ *
+ * The returned bitmap must only be used in a readonly manner. The bitmap must
+ * be freed using `roaring64_bitmap_free()` as normal. The backing buffer must
+ * only be freed after the bitmap.
+ *
+ * This function is endian-sensitive. If you have a big-endian system (e.g., a
+ * mainframe IBM s390x), the data format is going to be big-endian and not
+ * compatible with little-endian systems.
+ */
+roaring64_bitmap_t *roaring64_bitmap_frozen_view(const char *buf,
+                                                 size_t maxbytes);
 
 /**
  * Iterate over the bitmap elements. The function `iterator` is called once for

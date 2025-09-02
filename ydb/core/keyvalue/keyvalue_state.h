@@ -217,6 +217,21 @@ public:
         return StoredState.UserGeneration;
     }
 
+    TSet<TLogoBlobID>& GetCurrentTrashBin() {
+        return Trash;
+    }
+
+    TSet<TLogoBlobID>& GetCollectingTrashBin() {
+        if (TrashForVacuum.empty()) {
+            return Trash;
+        }
+        return TrashForVacuum.begin()->second;
+    }
+
+    ui64 GetVacuumResetGeneration() const {
+        return VacuumResetGeneration;
+    }
+
 protected:
     TKeyValueStoredStateData StoredState;
     ui32 NextLogoBlobStep;
@@ -226,7 +241,14 @@ protected:
 
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
+
+    TMap<ui64, TSet<TLogoBlobID>> TrashForVacuum; // vacuum generation -> set of blobs
     TSet<TLogoBlobID> Trash;
+    ui64 CompletedVacuumGeneration = 0;
+    ui64 CompletedVacuumTrashGeneration = 0;
+    TMap<ui64, THashSet<TActorId>> VacuumGenerationToSender;
+    ui64 VacuumResetGeneration = 0; // needs to distinguish between vacuum clanups of different resets
+
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
@@ -253,7 +275,6 @@ protected:
 
     TDeque<TAutoPtr<TIntermediate>> Queue;
     ui64 IntermediatesInFlight;
-    ui64 IntermediatesInFlightLimit;
     ui64 RoInlineIntermediatesInFlight;
     ui64 DeletesPerRequestLimit;
 
@@ -271,6 +292,9 @@ protected:
     bool RepeatGCTX = false;
 
     ui64 TotalTrashSize = 0;
+
+    TControlWrapper ReadRequestsInFlightLimit_Base;
+    TMemorizableControlWrapper ReadRequestsInFlightLimit;
 
 public:
     TKeyValueState();
@@ -310,29 +334,34 @@ public:
     void RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx);
     void RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
     void SendCutHistory(const TActorContext &ctx, const TTabletStorageInfo *info);
-    void OnInitQueueEmpty(const TActorContext &ctx);
-    void OnStateWork(const TActorContext &ctx);
+    void OnInitQueueEmpty();
+    void OnStateWork();
     void RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
     void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
-    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx);
+    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db);
     void DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr /*in-out*/, bool writesMade,
         const TActorContext& ctx);
     void ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info);
 
     // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
-    bool RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ctx);
-    void UpdateStoredState(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
+    bool RemoveCollectedTrash(ISimpleDb &db);
+    bool StartVacuum(ui64 generation, TActorId sender);
+    void VacuumEmptyTrashBins(const TActorContext &ctx);
+    void ResetVacuumGeneration(const TActorContext &ctx, ui64 generation);
+    void UpdateVacuumGeneration(ISimpleDb &db, ui64 generation);
+    void UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers::TGenerationStep &genStep);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
+    void CompleteVacuumExecute(ISimpleDb &db, const TActorContext &ctx, ui64 vacuumGeneration);
+    void CompleteVacuumComplete(const TActorContext &ctx, const TTabletStorageInfo *info, ui64 vacuumGeneration);
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);
     bool OnEvCollect(const TActorContext &ctx);
     void OnEvCollectDone(const TActorContext &ctx);
     void OnEvCompleteGC(bool repeat);
-
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
@@ -375,12 +404,12 @@ public:
     void CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
     void CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
-    void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
+    void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db);
     void CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
-    bool IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    bool IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db);
 
     struct TCheckResult {
         NKikimrKeyValue::Statuses::ReplyStatus Status = NKikimrKeyValue::Statuses::RSTATUS_OK;
@@ -408,9 +437,9 @@ public:
         return CollectOperation;
     }
 
-    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
+    void Dereference(const TIndexRecord& record, ISimpleDb& db);
     void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
-    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial);
+    void Dereference(const TLogoBlobID& id, ISimpleDb& db, bool initial);
 
     ui32 GetPerGenerationCounter() {
         return PerGenerationCounter;
@@ -429,14 +458,14 @@ public:
     void OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
 
-    void OnPeriodicRefresh(const TActorContext &ctx);
+    void OnPeriodicRefresh();
     void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
 
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
         const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
     void CancelInFlight(ui64 requestUid);
 
-    void OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx);
+    void OnEvIntermediate(TIntermediate &intermediate);
     void OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, const TTabletStorageInfo *info);
     bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
         TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info);
@@ -515,7 +544,7 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
-    bool PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
         THolder<TIntermediate>& intermediate);
@@ -553,7 +582,7 @@ public:
         NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr)
     {
-        LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
+        ALOG_INFO(NKikimrServices::KEYVALUE, errorDescription);
         Y_ABORT_UNLESS(!intermediate->IsReplied);
         std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
         response->Record.set_status(status);
@@ -712,7 +741,9 @@ public:
     }
 
     ui32 GetTrashCount() const {
-        return Trash.size();
+        return std::accumulate(TrashForVacuum.begin(), TrashForVacuum.end(), Trash.size(), [](ui64 acc, const auto& pair) {
+            return acc + pair.second.size();
+        });
     }
 
 public: // For testing

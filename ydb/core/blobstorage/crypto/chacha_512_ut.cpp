@@ -1,15 +1,14 @@
 #include <util/random/fast.h>
 
-#include "chacha_512.h"
 #include "chacha_vec.h"
 #include "secured_block.h"
+
+#include <ydb/core/blobstorage/crypto/chacha_512/chacha_512.h>
 #include <ydb/core/blobstorage/crypto/ut/ut_helpers.h>
 #include <ydb/core/blobstorage/crypto/ut/chacha_test_vectors.h>
 
 
-Y_UNIT_TEST_SUITE(TChaCha512)
-{
-#ifdef __AVX512F__
+Y_UNIT_TEST_SUITE(TChaCha512) {
     void RunTest(int rounds, const ui8 key[KEY_SIZE], const ui8 iv[IV_SIZE],
             const ui8 expected[][DATA_SIZE])
     {
@@ -178,5 +177,4 @@ Y_UNIT_TEST_SUITE(TChaCha512)
             UNIT_ASSERT_ARRAYS_EQUAL(bufOrig.Data(), bufOutNew.Data(), size);
         }
     }
-#endif
 }

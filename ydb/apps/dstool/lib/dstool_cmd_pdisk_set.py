@@ -88,7 +88,7 @@ def do(args):
         }
         for pdisk_id, pdisk in sorted(pdisks.items()):
             try:
-                for row in common.fetch('viewer/json/pdiskinfo', params, node_id_to_host[pdisk.NodeId][0]).get('PDiskStateInfo', []):
+                for row in common.fetch(f'node/{pdisk.NodeId}/viewer/json/pdiskinfo', params).get('PDiskStateInfo', []):
                     if 'State' in row and row['NodeId'] == pdisk.NodeId and row['PDiskId'] == pdisk.PDiskId:
                         pdisk_status[pdisk_id] = not row['State'].endswith('Error')
             except Exception as e:

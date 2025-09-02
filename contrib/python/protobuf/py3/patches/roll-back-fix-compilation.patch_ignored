@@ -1,0 +1,13 @@
+diff --git a/google/protobuf/pyext/message.cc b/google/protobuf/pyext/message.cc
+index c55f5687..19470c76 100644
+--- src/python/google/protobuf/pyext/message.cc
++++ src/python/google/protobuf/pyext/message.cc
+@@ -1065,7 +1065,7 @@ int DeleteRepeatedField(
+     }
+   }
+ 
+-  Arena* arena = Arena::InternalHelper<Message>::GetArenaForAllocation(message);
++  Arena* arena = Arena::InternalGetArenaForAllocation(message);
+   GOOGLE_DCHECK_EQ(arena, nullptr)
+       << "python protobuf is expected to be allocated from heap";
+   // Remove items, starting from the end.

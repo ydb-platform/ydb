@@ -58,6 +58,7 @@ static int test_mixed_reg2(int bgid)
 
 	io_uring_free_buf_ring(&ring, br, 32, bgid);
 	io_uring_queue_exit(&ring);
+	free(bufs);
 	return 0;
 }
 
@@ -100,6 +101,7 @@ static int test_mixed_reg(int bgid)
 	}
 
 	io_uring_queue_exit(&ring);
+	free(bufs);
 	return 0;
 }
 
@@ -304,16 +306,16 @@ static int test_running(int bgid, int entries, int loops, int use_mmap)
 
 	ret = t_create_ring(1, &ring, 0);
 	if (ret == T_SETUP_SKIP)
-		return 0;
+		return T_EXIT_SKIP;
 	else if (ret != T_SETUP_OK)
-		return 1;
+		return T_EXIT_FAIL;
 
 	if (!use_mmap) {
 		br = io_uring_setup_buf_ring(&ring, entries, bgid, 0, &ret);
 		if (!br) {
 			/* by now should have checked if this is supported or not */
 			fprintf(stderr, "Buffer ring register failed %d\n", ret);
-			return 1;
+			return T_EXIT_FAIL;
 		}
 	} else {
 		struct io_uring_buf_reg reg = {
@@ -326,8 +328,10 @@ static int test_running(int bgid, int entries, int loops, int use_mmap)
 
 		ret = io_uring_register_buf_ring(&ring, &reg, 0);
 		if (ret) {
+			if (ret == -EINVAL)
+				return T_EXIT_SKIP;
 			fprintf(stderr, "mmap ring register failed %d\n", ret);
-			return 1;
+			return T_EXIT_FAIL;
 		}
 
 		off = IORING_OFF_PBUF_RING |
@@ -337,17 +341,17 @@ static int test_running(int bgid, int entries, int loops, int use_mmap)
 				MAP_SHARED | MAP_POPULATE, ring.ring_fd, off);
 		if (br == MAP_FAILED) {
 			perror("mmap");
-			return 1;
+			return T_EXIT_FAIL;
 		}
 	}
 
 	buffers = malloc(sizeof(bool) * entries);
 	if (!buffers)
-		return 1;
+		return T_EXIT_SKIP;
 
 	read_fd = open("/dev/zero", O_RDONLY);
 	if (read_fd < 0)
-		return 1;
+		return T_EXIT_SKIP;
 
 	for (loop = 0; loop < loops; loop++) {
 		memset(buffers, 0, sizeof(bool) * entries);
@@ -360,28 +364,28 @@ static int test_running(int bgid, int entries, int loops, int use_mmap)
 			ret = test_one_read(read_fd, bgid, &ring);
 			if (ret < 0) {
 				fprintf(stderr, "bad run %d/%d = %d\n", loop, idx, ret);
-				return ret;
+				return T_EXIT_FAIL;
 			}
 			if (buffers[ret]) {
 				fprintf(stderr, "reused buffer %d/%d = %d!\n", loop, idx, ret);
-				return 1;
+				return T_EXIT_FAIL;
 			}
 			if (buffer[0] != 0) {
 				fprintf(stderr, "unexpected read %d %d/%d = %d!\n",
 						(int)buffer[0], loop, idx, ret);
-				return 1;
+				return T_EXIT_FAIL;
 			}
 			if (buffer[1] != 1) {
 				fprintf(stderr, "unexpected spilled read %d %d/%d = %d!\n",
 						(int)buffer[1], loop, idx, ret);
-				return 1;
+				return T_EXIT_FAIL;
 			}
 			buffers[ret] = true;
 		}
 		ret = test_one_read(read_fd, bgid, &ring);
 		if (ret != -ENOBUFS) {
 			fprintf(stderr, "expected enobufs run %d = %d\n", loop, ret);
-			return 1;
+			return T_EXIT_FAIL;
 		}
 
 	}
@@ -389,13 +393,13 @@ static int test_running(int bgid, int entries, int loops, int use_mmap)
 	ret = io_uring_unregister_buf_ring(&ring, bgid);
 	if (ret) {
 		fprintf(stderr, "Buffer ring register failed %d\n", ret);
-		return 1;
+		return T_EXIT_FAIL;
 	}
 
 	close(read_fd);
 	io_uring_queue_exit(&ring);
 	free(buffers);
-	return 0;
+	return T_EXIT_PASS;
 }
 
 int main(int argc, char *argv[])
@@ -459,7 +463,9 @@ int main(int argc, char *argv[])
 
 	for (i = 0; !no_buf_ring && entries[i] != -1; i++) {
 		ret = test_running(2, entries[i], 3, 1);
-		if (ret) {
+		if (ret == T_EXIT_SKIP) {
+			break;
+		} else if (ret != T_EXIT_PASS) {
 			fprintf(stderr, "test_running(%d) mmap failed\n", entries[i]);
 			return T_EXIT_FAIL;
 		}

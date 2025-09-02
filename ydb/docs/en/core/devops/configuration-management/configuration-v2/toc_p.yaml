@@ -1,0 +1,19 @@
+items:
+- name: Configuration overview
+  href: config-overview.md
+- name: Configuration update
+  href: update-config.md
+- name: Cluster configuration DSL
+  href: dynamic-config-selectors.md
+- name: Configuration parameters
+  href: config-settings.md
+- name: Cluster expansion
+  href: cluster-expansion.md
+- name: State Storage move
+  href: state-storage-move.md
+- name: Static group move
+  href: static-group-move.md
+- name: Replacing node FQDN
+  href: replacing-nodes.md
+- name: Database node authentication and authorization
+  href: node-authorization.md

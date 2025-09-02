@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 from moto.core.responses import BaseResponse
 from moto.secretsmanager.exceptions import (
     InvalidRequestException,
@@ -5,12 +6,12 @@ from moto.secretsmanager.exceptions import (
     ValidationException,
 )
 
-from .models import secretsmanager_backends, filter_keys
+from .models import secretsmanager_backends, filter_keys, SecretsManagerBackend
 
 import json
 
 
-def _validate_filters(filters):
+def _validate_filters(filters: List[Dict[str, Any]]) -> None:
     for idx, f in enumerate(filters):
         filter_key = f.get("Key", None)
         filter_values = f.get("Values", None)
@@ -18,23 +19,28 @@ def _validate_filters(filters):
             raise InvalidParameterException("Invalid filter key")
         if filter_key not in filter_keys():
             raise ValidationException(
-                "1 validation error detected: Value '{}' at 'filters.{}.member.key' failed to satisfy constraint: "
-                "Member must satisfy enum value set: [all, name, tag-key, description, tag-value]".format(
-                    filter_key, idx + 1
-                )
+                f"1 validation error detected: Value '{filter_key}' at 'filters.{(idx + 1)}.member.key' failed to satisfy constraint: "
+                "Member must satisfy enum value set: [all, name, tag-key, description, tag-value]"
             )
         if filter_values is None:
             raise InvalidParameterException(
-                "Invalid filter values for key: {}".format(filter_key)
+                f"Invalid filter values for key: {filter_key}"
             )
 
 
 class SecretsManagerResponse(BaseResponse):
-    @property
-    def backend(self):
-        return secretsmanager_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="secretsmanager")
 
-    def get_secret_value(self):
+    @property
+    def backend(self) -> SecretsManagerBackend:
+        return secretsmanager_backends[self.current_account][self.region]
+
+    def cancel_rotate_secret(self) -> str:
+        secret_id = self._get_param("SecretId")
+        return self.backend.cancel_rotate_secret(secret_id=secret_id)
+
+    def get_secret_value(self) -> str:
         secret_id = self._get_param("SecretId")
         version_id = self._get_param("VersionId")
         version_stage = self._get_param("VersionStage")
@@ -43,7 +49,7 @@ class SecretsManagerResponse(BaseResponse):
         )
         return json.dumps(value)
 
-    def create_secret(self):
+    def create_secret(self) -> str:
         name = self._get_param("Name")
         secret_string = self._get_param("SecretString")
         secret_binary = self._get_param("SecretBinary")
@@ -61,10 +67,11 @@ class SecretsManagerResponse(BaseResponse):
             client_request_token=client_request_token,
         )
 
-    def update_secret(self):
+    def update_secret(self) -> str:
         secret_id = self._get_param("SecretId")
         secret_string = self._get_param("SecretString")
         secret_binary = self._get_param("SecretBinary")
+        description = self._get_param("Description")
         client_request_token = self._get_param("ClientRequestToken")
         kms_key_id = self._get_param("KmsKeyId", if_none=None)
         return self.backend.update_secret(
@@ -73,9 +80,10 @@ class SecretsManagerResponse(BaseResponse):
             secret_binary=secret_binary,
             client_request_token=client_request_token,
             kms_key_id=kms_key_id,
+            description=description,
         )
 
-    def get_random_password(self):
+    def get_random_password(self) -> str:
         password_length = self._get_param("PasswordLength", if_none=32)
         exclude_characters = self._get_param("ExcludeCharacters", if_none="")
         exclude_numbers = self._get_param("ExcludeNumbers", if_none=False)
@@ -97,12 +105,12 @@ class SecretsManagerResponse(BaseResponse):
             require_each_included_type=require_each_included_type,
         )
 
-    def describe_secret(self):
+    def describe_secret(self) -> str:
         secret_id = self._get_param("SecretId")
         secret = self.backend.describe_secret(secret_id=secret_id)
         return json.dumps(secret)
 
-    def rotate_secret(self):
+    def rotate_secret(self) -> str:
         client_request_token = self._get_param("ClientRequestToken")
         rotation_lambda_arn = self._get_param("RotationLambdaARN")
         rotation_rules = self._get_param("RotationRules")
@@ -114,7 +122,7 @@ class SecretsManagerResponse(BaseResponse):
             rotation_rules=rotation_rules,
         )
 
-    def put_secret_value(self):
+    def put_secret_value(self) -> str:
         secret_id = self._get_param("SecretId", if_none="")
         secret_string = self._get_param("SecretString")
         secret_binary = self._get_param("SecretBinary")
@@ -135,11 +143,11 @@ class SecretsManagerResponse(BaseResponse):
             client_request_token=client_request_token,
         )
 
-    def list_secret_version_ids(self):
+    def list_secret_version_ids(self) -> str:
         secret_id = self._get_param("SecretId", if_none="")
         return self.backend.list_secret_version_ids(secret_id=secret_id)
 
-    def list_secrets(self):
+    def list_secrets(self) -> str:
         filters = self._get_param("Filters", if_none=[])
         _validate_filters(filters)
         max_results = self._get_int_param("MaxResults")
@@ -149,7 +157,7 @@ class SecretsManagerResponse(BaseResponse):
         )
         return json.dumps(dict(SecretList=secret_list, NextToken=next_token))
 
-    def delete_secret(self):
+    def delete_secret(self) -> str:
         secret_id = self._get_param("SecretId")
         recovery_window_in_days = self._get_param("RecoveryWindowInDays")
         force_delete_without_recovery = self._get_param("ForceDeleteWithoutRecovery")
@@ -160,33 +168,47 @@ class SecretsManagerResponse(BaseResponse):
         )
         return json.dumps(dict(ARN=arn, Name=name, DeletionDate=deletion_date))
 
-    def restore_secret(self):
+    def restore_secret(self) -> str:
         secret_id = self._get_param("SecretId")
         arn, name = self.backend.restore_secret(secret_id=secret_id)
         return json.dumps(dict(ARN=arn, Name=name))
 
-    def get_resource_policy(self):
+    def get_resource_policy(self) -> str:
         secret_id = self._get_param("SecretId")
         return self.backend.get_resource_policy(secret_id=secret_id)
 
-    def tag_resource(self):
+    def put_resource_policy(self) -> str:
+        secret_id = self._get_param("SecretId")
+        policy = self._get_param("ResourcePolicy")
+        arn, name = self.backend.put_resource_policy(secret_id, policy)
+        return json.dumps(dict(ARN=arn, Name=name))
+
+    def delete_resource_policy(self) -> str:
+        secret_id = self._get_param("SecretId")
+        arn, name = self.backend.delete_resource_policy(secret_id)
+        return json.dumps(dict(ARN=arn, Name=name))
+
+    def tag_resource(self) -> str:
         secret_id = self._get_param("SecretId")
         tags = self._get_param("Tags", if_none=[])
-        return self.backend.tag_resource(secret_id, tags)
+        self.backend.tag_resource(secret_id, tags)
+        return "{}"
 
-    def untag_resource(self):
+    def untag_resource(self) -> str:
         secret_id = self._get_param("SecretId")
         tag_keys = self._get_param("TagKeys", if_none=[])
-        return self.backend.untag_resource(secret_id=secret_id, tag_keys=tag_keys)
+        self.backend.untag_resource(secret_id=secret_id, tag_keys=tag_keys)
+        return "{}"
 
-    def update_secret_version_stage(self):
+    def update_secret_version_stage(self) -> str:
         secret_id = self._get_param("SecretId")
         version_stage = self._get_param("VersionStage")
         remove_from_version_id = self._get_param("RemoveFromVersionId")
         move_to_version_id = self._get_param("MoveToVersionId")
-        return self.backend.update_secret_version_stage(
+        arn, name = self.backend.update_secret_version_stage(
             secret_id=secret_id,
             version_stage=version_stage,
             remove_from_version_id=remove_from_version_id,
             move_to_version_id=move_to_version_id,
         )
+        return json.dumps({"ARN": arn, "Name": name})

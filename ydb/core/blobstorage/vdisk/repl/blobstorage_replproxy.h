@@ -183,6 +183,7 @@ namespace NKikimr {
             ui64 VDiskRespOK = 0;
             ui64 VDiskRespRACE = 0;
             ui64 VDiskRespERROR = 0;
+            ui64 VDiskRespNOTREADY = 0;
             ui64 VDiskRespDEADLINE = 0;
             ui64 VDiskRespOther = 0;
             ui64 LogoBlobGotIt = 0;
@@ -196,6 +197,7 @@ namespace NKikimr {
                 VDiskRespOK += stat.VDiskRespOK;
                 VDiskRespRACE += stat.VDiskRespRACE;
                 VDiskRespERROR += stat.VDiskRespERROR;
+                VDiskRespNOTREADY += stat.VDiskRespNOTREADY;
                 VDiskRespDEADLINE += stat.VDiskRespDEADLINE;
                 VDiskRespOther += stat.VDiskRespOther;
                 LogoBlobGotIt += stat.LogoBlobGotIt;
@@ -223,13 +225,15 @@ namespace NKikimr {
         NRepl::TNextPortion Portion;
         NRepl::TProxyStat Stat;
         bool HasTransientErrors;
+        bool BSQueueNotReady;
 
         TEvReplProxyNextResult(TVDiskID vdiskId, NRepl::TNextPortion&& portion, const NRepl::TProxyStat &stat,
-                bool hasTransientErrors)
+                bool hasTransientErrors, bool bsQueueNotReady)
             : VDiskId(vdiskId)
             , Portion(std::move(portion))
             , Stat(stat)
             , HasTransientErrors(hasTransientErrors)
+            , BSQueueNotReady(bsQueueNotReady)
         {}
     };
 
@@ -305,6 +309,10 @@ namespace NKikimr {
                 return !HasTransientErrors;
             }
 
+            bool IsBSQueueNotReady() const {
+                return BSQueueNotReady;
+            }
+
             std::shared_ptr<TReplCtx> ReplCtx;
             const TVDiskID VDiskId;
             const TActorId ServiceId;
@@ -317,6 +325,7 @@ namespace NKikimr {
             EState State = Initial;
             TDataPortion DataPortion;
             bool HasTransientErrors = false;
+            bool BSQueueNotReady = false;
 
         public:
             struct TPtrGreater {

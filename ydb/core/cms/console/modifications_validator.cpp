@@ -2,7 +2,7 @@
 
 #include <ydb/core/cms/console/validators/registry.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 

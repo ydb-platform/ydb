@@ -90,6 +90,11 @@ struct TUnfreezeTableOptions
     , public TTabletRangeOptions
 { };
 
+struct TCancelTabletTransitionOptions
+    : public TTimeoutOptions
+    , public TMutatingOptions
+{ };
+
 struct TReshardTableOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -135,6 +140,8 @@ struct TAlterTableReplicaOptions
     std::optional<bool> PreserveTimestamps;
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
+    std::optional<NYPath::TYPath> ReplicaPath;
+    bool Force = false;
 };
 
 struct TGetTablePivotKeysOptions
@@ -234,7 +241,7 @@ DEFINE_REFCOUNTED_TYPE(TTableBackupManifest)
 struct TBackupManifest
     : public NYTree::TYsonStruct
 {
-    THashMap<TString, std::vector<TTableBackupManifestPtr>> Clusters;
+    THashMap<std::string, std::vector<TTableBackupManifestPtr>> Clusters;
 
     REGISTER_YSON_STRUCT(TBackupManifest);
 
@@ -278,6 +285,7 @@ struct TAlterReplicationCardOptions
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
+    NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
 };
 
 struct TGetReplicationCardOptions
@@ -309,12 +317,30 @@ struct TPartitionTablesOptions
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;
+
+    //! Whether to return cookies that can be fed to CreateTablePartitionReader.
+    bool EnableCookies = false;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInOrderedPool = true;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInUnorderedPool = true;
 };
+
+struct TReadTablePartitionOptions
+    : public TTableReaderOptions
+{ };
+
+YT_DEFINE_STRONG_TYPEDEF(TTablePartitionCookiePtr, NSignature::TSignaturePtr);
 
 struct TMultiTablePartition
 {
     //! Table ranges are indexed by table index.
     std::vector<NYPath::TRichYPath> TableRanges;
+
+    //! Cookie that can be fed into CreateTablePartitionReader.
+    TTablePartitionCookiePtr Cookie;
 
     //! Aggregate statistics of all the table ranges in the partition.
     NTableClient::TChunkStripeStatistics AggregateStatistics;
@@ -374,6 +400,10 @@ struct ITableClient
     virtual TFuture<void> UnfreezeTable(
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options = {}) = 0;
+
+    virtual TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options = {}) = 0;
 
     virtual TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
@@ -436,7 +466,7 @@ struct ITableClient
         const TGetTabletErrorsOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options = {}) = 0;
 
@@ -462,7 +492,15 @@ struct ITableClient
 
     virtual TFuture<TMultiTablePartitions> PartitionTables(
         const std::vector<NYPath::TRichYPath>& paths,
-        const TPartitionTablesOptions& options) = 0;
+        const TPartitionTablesOptions& options = {}) = 0;
+
+    /**
+     * Read table partition that was previously received from PartitionTables method.
+     * This method is cheaper than ReadTable since such reading doesn't make request to master in typical case.
+     */
+    virtual TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const TReadTablePartitionOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

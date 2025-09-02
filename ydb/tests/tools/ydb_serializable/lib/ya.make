@@ -2,6 +2,7 @@ PY3_LIBRARY()
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/serializability
     ydb/public/sdk/python
 )
 

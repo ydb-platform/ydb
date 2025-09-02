@@ -1,0 +1,43 @@
+{%- set all_targets = [] -%}
+{%- if target is defined -%}
+{%-     set all_targets = all_targets + [target] -%}
+{%- endif -%}
+{%- if extra_targets|length -%}
+{%-     set all_targets = all_targets + extra_targets -%}
+{%- endif -%}
+
+{%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
+{%- if not output_root -%}
+{%-     set output_root = arcadia_root -%}
+{%- endif -%}
+
+{#- Kotlin -#}
+{%- set with_kotlin = all_targets|selectattr('with_kotlin', 'eq', true)|length -%}
+{%- if with_kotlin -%}
+{%-     set kotlin_version = all_targets|selectattr('kotlin_version')|map(attribute='kotlin_version')|first -%}
+{%-     set with_kotlinc_plugin_allopen = all_targets|selectattr('with_kotlinc_plugin_allopen')|map(attribute='with_kotlinc_plugin_allopen')|sum -%}
+{%-     set with_kotlinc_plugin_noarg = all_targets|selectattr('with_kotlinc_plugin_noarg')|map(attribute='with_kotlinc_plugin_noarg')|sum -%}
+{%-     set with_kotlinc_plugin_serialization = all_targets|selectattr('with_kotlinc_plugin_serialization')|map(attribute='with_kotlinc_plugin_serialization')|sum -%}
+{%-     set with_kotlinc_plugin_lombok = all_targets|selectattr('with_kotlinc_plugin_lombok')|map(attribute='with_kotlinc_plugin_lombok')|sum -%}
+{#-     KAPT -#}
+{%-     set with_kapt = target.with_kapt and target.kapt.classpaths|length -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length and extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('classpaths')|map(attribute='classpaths')|sum|length -%}
+{%- endif -%}
+
+{#- ErrorProne -#}
+{%- set with_errorprone = not(disable_errorprone) and (target.use_errorprone) and (target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- set with_test_errorprone = not(disable_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- if with_errorprone or with_test_errorprone -%}
+{%-     set errorprones = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|unique -%}
+{%- endif -%}
+
+{#- Lombok -#}
+{%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) -%}
+
+{#- JNI -#}
+{%- set jnis = all_targets|selectattr(consumer)|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
+
+{#- Flags -#}
+{%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
+
+{%- include "[generator]/jdk.jinja" -%}

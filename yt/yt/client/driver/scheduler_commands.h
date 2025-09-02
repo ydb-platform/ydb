@@ -5,6 +5,7 @@
 #include <yt/yt/client/job_tracker_client/public.h>
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
+#include <yt/yt/client/scheduler/spec_patch.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -132,6 +133,21 @@ private:
     NJobTrackerClient::TJobId JobId;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetJobTraceCommand
+    : public TSimpleOperationCommandBase<NApi::TGetJobTraceOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetJobTraceCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -147,6 +163,20 @@ public:
 private:
     NJobTrackerClient::TJobId JobId;
 
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListOperationEventsCommand
+    : public TSimpleOperationCommandBase<NApi::TListOperationEventsOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListOperationEventsCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -452,6 +482,22 @@ public:
 
 private:
     NYTree::INodePtr Parameters;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TPatchOperationSpecCommand
+    : public TSimpleOperationCommandBase<NApi::TPatchOperationSpecOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPatchOperationSpecCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NScheduler::TSpecPatchList Patches;
 
     void DoExecute(ICommandContextPtr context) override;
 };

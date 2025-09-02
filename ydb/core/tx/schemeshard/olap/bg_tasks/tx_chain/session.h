@@ -21,6 +21,9 @@ private:
     YDB_READONLY_DEF(TTxChainData, TxData);
     YDB_READONLY(ui32, StepForExecute, 0);
     std::optional<ui64> CurrentTxId;
+
+    static const inline TFactory::TRegistrator<TTxChainSession> Registrator = TFactory::TRegistrator<TTxChainSession>(GetStaticClassName());
+
 protected:
     virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NKikimr::NOlap::NBackground::TStartContext& context) const override;
     virtual TConclusionStatus DoDeserializeFromProto(const TProtoLogic& proto) override {
@@ -48,6 +51,8 @@ protected:
         return result;
     }
 public:
+    TTxChainSession() = default;
+
     TTxChainSession(const TTxChainData& data)
         : TxData(data)
     {

@@ -1,9 +1,9 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/utils
-    ydb/library/yql/public/udf
+    yql/essentials/minikql
+    yql/essentials/utils
+    yql/essentials/public/udf
     ydb/core/formats/arrow/hash
     ydb/core/tx/schemeshard/olap/schema
     ydb/core/tx/columnshard/common

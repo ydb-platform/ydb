@@ -3,7 +3,7 @@
 
 namespace NKikimr::NColumnShard {
 
-const NTiers::TManager& ITiersManager::GetManagerVerified(const TString& tierId) const {
+const NTiers::TManager& ITiersManager::GetManagerVerified(const NTiers::TExternalStorageId& tierId) const {
     auto* result = GetManagerOptional(tierId);
     AFL_VERIFY(result)("tier_id", tierId);
     return *result;

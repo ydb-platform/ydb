@@ -6,8 +6,6 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TMoveIndexUnit : public TExecutionUnit {
-    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
-
 public:
     TMoveIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::MoveIndex, false, dataShard, pipeline)
@@ -18,8 +16,8 @@ public:
     }
 
     void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveIndex& move, TVector<IDataShardChangeCollector::TChange>& changeRecords) {
-        const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
-        const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
+        const auto remapPrevId = TPathId::FromProto(move.GetReMapIndex().GetSrcPathId());
+        const auto remapNewId = TPathId::FromProto(move.GetReMapIndex().GetDstPathId());
 
         for (auto& record: changeRecords) {
             if (record.PathId == remapPrevId) {
@@ -43,10 +41,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (tx->GetSchemeTxType() != TSchemaOperation::ETypeMoveIndex) {
             return EExecutionStatus::Executed;
@@ -59,13 +57,13 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        ChangeRecords.clear();
+        op->ChangeRecords().clear();
 
         auto changesQueue = DataShard.TakeChangesQueue();
         auto lockChangeRecords = DataShard.TakeLockChangeRecords();
         auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
 
-        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecords(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
@@ -79,7 +77,7 @@ public:
             return EExecutionStatus::Restart;
         }
 
-        if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecordCommits(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
@@ -88,14 +86,14 @@ public:
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "TMoveIndexUnit Execute"
             << ": schemeTx# " << schemeTx.DebugString()
-            << ": changeRecords size# " << ChangeRecords.size()
+            << ": changeRecords size# " << op->ChangeRecords().size()
             << ", at tablet# " << DataShard.TabletID());
 
         DataShard.SuspendChangeSender(ctx);
 
         const auto& params = schemeTx.GetMoveIndex();
         DataShard.MoveUserIndex(op, params, ctx, txc);
-        MoveChangeRecords(db, params, ChangeRecords);
+        MoveChangeRecords(db, params, op->ChangeRecords());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -103,10 +101,10 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()), 0, true);
     }
 };
 

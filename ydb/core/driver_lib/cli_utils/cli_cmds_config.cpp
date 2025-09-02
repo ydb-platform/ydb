@@ -95,8 +95,7 @@ public:
 
         config.Opts->AddLongOption('n', "dry-run", "do not apply updates")
             .Optional()
-            .NoArgument()
-            .SetFlag(&DryRun);
+            .StoreTrue(&DryRun);
     }
 
     int Run(TConfig& config) override {
@@ -180,8 +179,7 @@ public:
 
         config.Opts->AddLongOption('n', "dry-run", "do not apply updates")
             .Optional()
-            .NoArgument()
-            .SetFlag(&DryRun);
+            .StoreTrue(&DryRun);
     }
 
     int Run(TConfig& config) override {

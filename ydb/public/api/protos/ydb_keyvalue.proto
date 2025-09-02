@@ -514,6 +514,9 @@ message DescribeVolumeResult {
 
     // Count of partitions.
     uint64 partition_count = 2;
+
+    // Storage config.
+    StorageConfig storage_config = 3;
 }
 
 message ListLocalPartitionsRequest {

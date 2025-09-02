@@ -5,6 +5,28 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+/* clang-format off */
+
+/* Use these macros in public header files to suppress unreasonable compiler
+ * warnings. Public header files are included by external applications,
+ * which may set their warning levels pedantically high.
+ *
+ * Developers of AWS libraries should hesitate before adding more warnings to this macro.
+ * Prefer disabling the warning within a .c file, or in the library's CFLAGS,
+ * or push/pop the warning around a single problematic declaration. */
+#if defined(_MSC_VER)
+#    define AWS_PUSH_SANE_WARNING_LEVEL                                                                                \
+        __pragma(warning(push))                                                                                        \
+        __pragma(warning(disable : 4820)) /* padding added to struct */                                                \
+        __pragma(warning(disable : 4514)) /* unreferenced inline function has been removed */                          \
+        __pragma(warning(disable : 5039)) /* reference to potentially throwing function passed to extern C function */
+#    define AWS_POP_SANE_WARNING_LEVEL __pragma(warning(pop))
+#else
+#    define AWS_PUSH_SANE_WARNING_LEVEL
+#    define AWS_POP_SANE_WARNING_LEVEL
+#endif
+/* clang-format on */
+
 #ifdef __cplusplus
 #    define AWS_EXTERN_C_BEGIN extern "C" {
 #    define AWS_EXTERN_C_END }
@@ -39,7 +61,7 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1) == 1);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2) == 2);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 
-#define AWS_CACHE_LINE 64
+enum { AWS_CACHE_LINE = 64 };
 /**
  * Format macro for strings of a specified length.
  * Allows non null-terminated strings to be used with the printf family of functions.
@@ -79,10 +101,52 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 #    if __has_feature(address_sanitizer)
 #        define AWS_SUPPRESS_ASAN __attribute__((no_sanitize("address")))
 #    endif
+#elif defined(__SANITIZE_ADDRESS__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_ASAN __attribute__((no_sanitize_address))
+#    elif defined(_MSC_VER)
+#        define AWS_SUPPRESS_ASAN __declspec(no_sanitize_address)
+#    endif
 #endif
 
 #if !defined(AWS_SUPPRESS_ASAN)
 #    define AWS_SUPPRESS_ASAN
+#endif
+
+#if defined(__has_feature)
+#    if __has_feature(thread_sanitizer)
+#        define AWS_SUPPRESS_TSAN __attribute__((no_sanitize("thread")))
+#    endif
+#elif defined(__SANITIZE_THREAD__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_TSAN __attribute__((no_sanitize_thread))
+#    else
+#        define AWS_SUPPRESS_TSAN
+#    endif
+#else
+#    define AWS_SUPPRESS_TSAN
+#endif
+
+#if !defined(AWS_SUPPRESS_TSAN)
+#    define AWS_SUPPRESS_TSAN
+#endif
+
+#if defined(__has_feature)
+#    if __has_feature(undefined_behavior_sanitizer)
+#        define AWS_SUPPRESS_UBSAN __attribute__((no_sanitize("undefined")))
+#    endif
+#elif defined(__SANITIZE_UNDEFINED__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_UBSAN __attribute__((no_sanitize_undefined))
+#    else
+#        define AWS_SUPPRESS_UBSAN
+#    endif
+#else
+#    define AWS_SUPPRESS_UBSAN
+#endif
+
+#if !defined(AWS_SUPPRESS_UBSAN)
+#    define AWS_SUPPRESS_UBSAN
 #endif
 
 /* If this is C++, restrict isn't supported. If this is not at least C99 on gcc and clang, it isn't supported.
@@ -114,6 +178,6 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
  * this will get you back to the pointer of the object. member is the name of
  * the instance of struct aws_linked_list_node in your struct.
  */
-#define AWS_CONTAINER_OF(ptr, type, member) ((type *)((uint8_t *)(ptr)-offsetof(type, member)))
+#define AWS_CONTAINER_OF(ptr, type, member) ((type *)((uint8_t *)(ptr) - offsetof(type, member)))
 
 #endif /* AWS_COMMON_MACROS_H */

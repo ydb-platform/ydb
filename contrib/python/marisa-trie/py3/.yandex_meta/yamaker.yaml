@@ -1,0 +1,5 @@
+cython_directive:
+  - language_level=3
+copy:
+  - marisa-trie/*
+  - src/*

@@ -1,0 +1,219 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     CC0-1.0              324630305b43bac5bb63af7b4c85b2eb
+BELONGS ya.make
+    License text:
+        The contents of this file are hereby released in the public domain (CC0)
+        Full text of the CC0 license:
+        https://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        PIL/DdsImagePlugin.py [8:10]
+
+KEEP     HPND                 45d87d2d576bfb7ada04935cce3d4ed6
+BELONGS ya.make
+	# "The standard PIL license" is HPND.
+	# As discussed in 
+	# https://github.com/python-pillow/Pillow/issues/7350
+	# the grant is believed to be applicable to Pillow too.
+    License text:
+        /* Originally released under LGPL.  Graciously donated to PIL
+           for distribution under the standard PIL license in 2009." */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-secret-labs-2011
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
+    Files with this license:
+        libImaging/UnsharpMask.c [6:7]
+
+KEEP     HPND                 500eb513105d8ff7ba92d5b2ee7cdb42
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: Historical Permission Notice and Disclaimer (HPND)
+    Scancode info:
+        Original SPDX id: HPND
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/historical.php, https://spdx.org/licenses/HPND
+    Files with this license:
+        .dist-info/METADATA [17:17]
+
+KEEP     CC0-1.0              57301c6342323eec931ffd393a16b82a
+BELONGS ya.make
+    License text:
+         * The contents of this file are in the public domain (CC0)
+         * Full text of the CC0 license:
+         *   https://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        libImaging/BcnDecode.c [9:11]
+
+KEEP     HPND                 6eb3f705d9fd40e1f830519165eac0ec
+BELONGS ya.make
+	# "The standard PIL license" is HPND.
+	# As discussed in 
+	# https://github.com/python-pillow/Pillow/issues/7350
+	# the grant is believed to be applicable to Pillow too.
+    License text:
+         * Originally released under LGPL.  Graciously donated to PIL in
+         * March 2009, for distribution under the standard PIL license
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-secret-labs-2011
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
+    Files with this license:
+        _imagingcms.c [16:17]
+
+KEEP     HPND                 a92e506b9e306bfbeeb92ef3cb97d12a
+BELONGS ya.make
+    License text:
+        Like PIL, Pillow is licensed under the open source HPND License:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [10:10]
+
+KEEP     Public-Domain        ad085463f8601eb4485921ff5d59e008
+BELONGS ya.make
+    License text:
+        /* Fast rank algorithm (due to Wirth), based on public domain code
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libImaging/RankFilter.c [17:17]
+
+KEEP     CC0-1.0              cf4fec969de829a42f79820e496fa9b9
+BELONGS ya.make
+    License text:
+        The contents of this file are hereby released in the public domain (CC0)
+        Full text of the CC0 license:
+          https://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        PIL/BlpImagePlugin.py [5:7]
+        PIL/FtexImagePlugin.py [5:7]
+
+KEEP     HPND                 cfa80d02ce5c3d67d9bc8e9953d49947
+BELONGS ya.make
+	# "The standard PIL license" is HPND.
+	# As discussed in 
+	# https://github.com/python-pillow/Pillow/issues/7350
+	# the grant is believed to be applicable to Pillow too.
+    License text:
+            Originally released under LGPL.  Graciously donated to PIL in
+            March 2009, for distribution under the standard PIL license
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-secret-labs-2011
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
+    Files with this license:
+        PIL/ImageCms.py [45:46]
+
+KEEP     MIT                  df72b988aaabd56ef5353d0ec9ab39dc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        libImaging/QuantOctree.c [3:19]
+
+KEEP     HPND                 e0f7ba8eeaf45ba89284b85265da087e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-secret-labs-2011
+        Score           : 99.45
+        Match type      : TEXT
+        Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
+    Files with this license:
+        LICENSE [12:30]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer eba76575f13268026b6660e3d325d8d3
+BELONGS ya.make
+	# Not a license
+    License text:
+         * use at your own risk.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        outline.c [9:9]
+
+KEEP     HPND                 f03f5653c22ab9ad7e02ad8196973900
+BELONGS ya.make
+    License text:
+        /* Released here under PIL license. */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-secret-labs-2011
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.pythonware.com/products/pil/license.htm, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/secret-labs-2011.LICENSE
+    Files with this license:
+        libImaging/GifEncode.c [28:28]
+
+KEEP     CC-BY-4.0            fee5032592739737a90250852e172a79
+BELONGS ya.make
+    License text:
+            \# cc-by-attribution -- That page references is taken from the
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        PIL/MspImagePlugin.py [78:78]

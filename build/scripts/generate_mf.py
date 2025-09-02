@@ -4,8 +4,9 @@ import os
 import sys
 import io
 
-import six
-
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 
 
@@ -98,14 +99,10 @@ def generate_mf():
                 texts = data.get('license_texts')
                 if texts:
                     candidate_text = generate_header(data) + '\n' + texts
-                    if isinstance(candidate_text, six.text_type):
-                        candidate_text = candidate_text.encode('utf-8')
                     final_credits.append(candidate_text)
 
         with io.open(options.credits_output, 'w', encoding='utf-8') as f:
             data = '\n\n'.join(final_credits)
-            if isinstance(data, str):
-                data = data.decode('utf-8')
             f.write(data)
 
     with open(file_name, 'w') as mf_file:

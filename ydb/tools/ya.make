@@ -1,9 +1,10 @@
 RECURSE(
     blobsan
     cfg
+    partcheck
     query_replay
     query_replay_yt
-    simple_queue
+    stress_tool
     tsserver
     tstool
     ydbd_slice

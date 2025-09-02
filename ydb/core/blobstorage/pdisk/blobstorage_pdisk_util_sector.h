@@ -21,11 +21,11 @@ public:
     {}
 
     ui8* Begin() {
-        return (ui8*)Buf.Data();
+        return (ui8*)Buf.data();
     }
 
     const ui8* Begin() const {
-        return (const ui8*)Buf.Data();
+        return (const ui8*)Buf.data();
     }
 
     ui8* End() {
@@ -45,21 +45,21 @@ public:
     }
 
     size_t Size() const {
-        return Buf.Size();
+        return Buf.size();
     }
 
     TDataSectorFooter *GetDataFooter() {
-        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter));
+        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter));
         return (TDataSectorFooter*) (End() - sizeof(TDataSectorFooter));
     }
 
     ui64 GetCanary() const {
-        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter) + CanarySize);
+        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter) + CanarySize);
         return ReadUnaligned<ui64>(End() - sizeof(TDataSectorFooter) - CanarySize);
     }
 
     void SetCanary(ui64 canary = NPDisk::Canary) {
-        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter) + CanarySize);
+        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter) + CanarySize);
         WriteUnaligned<ui64>(End() - sizeof(TDataSectorFooter) - CanarySize, canary);
     }
 
@@ -120,11 +120,11 @@ public:
     }
 
     TSector operator[](ui32 idx) {
-        return {Buf.Data() + idx * SectorSize, SectorSize};
+        return {Buf.data() + idx * SectorSize, SectorSize};
     }
 
     const TSector operator[](ui32 idx) const {
-        return {Buf.Data() + idx * SectorSize, SectorSize};
+        return {Buf.data() + idx * SectorSize, SectorSize};
     }
 };
 

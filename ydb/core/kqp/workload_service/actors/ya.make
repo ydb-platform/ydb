@@ -1,7 +1,8 @@
 LIBRARY()
 
 SRCS(
-    pool_handlers_acors.cpp
+    cpu_load_actors.cpp
+    pool_handlers_actors.cpp
     scheme_actors.cpp
 )
 

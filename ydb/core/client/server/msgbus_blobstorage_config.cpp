@@ -27,6 +27,7 @@ public:
     {
         SetSecurityToken(token);
         SetRequireAdminAccess(true);
+        SetPeerName(msg.GetPeerName());
     }
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr &ev, const TActorContext &ctx) {

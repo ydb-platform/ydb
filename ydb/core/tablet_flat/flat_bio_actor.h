@@ -24,21 +24,23 @@ namespace NBlockIO {
     private:
         void Registered(TActorSystem*, const TActorId&) override;
         void Inbox(TEventHandlePtr &eh);
-        void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept;
-        void Dispatch() noexcept;
-        void Handle(ui32 offset, TArrayRef<TLoaded>) noexcept;
-        void Terminate(EStatus code) noexcept;
+        void Dispatch();
+        void Handle(ui32 offset, TArrayRef<TLoaded>);
+        void Terminate(EStatus code);
 
     private:
-        const TActorId Service;
-        const ui64 Cookie = Max<ui64>();
+        const TActorId StatActorId;
+        const ui64 EventCookie;
         TAutoPtr<NUtil::ILogger> Logger;
 
         /*_ immutable request settings  */
 
-        TActorId Owner;
-        EPriority Priority = EPriority::None;
-        TAutoPtr<NPageCollection::TFetch> Origin;
+        TActorId Sender;
+        EPriority Priority;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageId> Pages;
+        NWilson::TTraceId TraceId;
+        ui64 RequestCookie;
 
         /*_ request operational state   */
 
@@ -59,13 +61,10 @@ namespace NBlockIO {
         NMetrics::TTabletIopsRawValue GroupOps;
     };
 
-    template<typename ... TArgs>
-    inline void Start(NActors::IActorOps *ops, TActorId service,
-                        ui64 cookie, TArgs&& ... args) noexcept
+    inline void Start(NActors::IActorOps *ops, TActorId statActorId, ui64 cookie, TEvFetch* fetch)
     {
-        auto self = ops->Register(new TBlockIO(service, cookie));
-
-        ops->Send(self, new TEvFetch(std::forward<TArgs>(args)...));
+        auto self = ops->Register(new TBlockIO(statActorId, cookie));
+        ops->Send(self, fetch);
     }
 
 }

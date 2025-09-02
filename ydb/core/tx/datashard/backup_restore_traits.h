@@ -30,18 +30,12 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 
-inline TString SchemeKey(const TString& objKeyPattern) {
-    return Sprintf("%s/scheme.pb", objKeyPattern.c_str());
-}
-
-inline TString MetadataKey(const TString& objKeyPattern) {
-    return Sprintf("%s/metadata.json", objKeyPattern.c_str());
-}
-
-inline TString DataKey(const TString& objKeyPattern, ui32 n, EDataFormat format, ECompressionCodec codec) {
-    const auto ext = DataFileExtension(format, codec);
-    return Sprintf("%s/data_%02d%s", objKeyPattern.c_str(), n, ext.c_str());
-}
+TString PermissionsKeySuffix(bool encryptedBackup);
+TString TopicKeySuffix(bool encryptedBackup);
+TString ChangefeedKeySuffix(bool encryptedBackup);
+TString SchemeKeySuffix(bool encryptedBackup);
+TString MetadataKeySuffix(bool encryptedBackup);
+TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec, bool encryptedBackup);
 
 } // NBackupRestoreTraits
 } // NDataShard

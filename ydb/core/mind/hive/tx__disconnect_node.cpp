@@ -20,7 +20,7 @@ public:
         BLOG_D("THive::TTxDisconnectNode()::Execute");
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
-            Self->ScheduleUnlockTabletExecution(*node);
+            Self->ScheduleUnlockTabletExecution(*node, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
             if (node->BecomeDisconnecting()) {
                 THolder<TEvPrivate::TEvProcessDisconnectNode> event = MakeHolder<TEvPrivate::TEvProcessDisconnectNode>();
                 event->NodeId = node->Id;

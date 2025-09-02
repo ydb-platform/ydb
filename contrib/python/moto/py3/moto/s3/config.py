@@ -1,4 +1,5 @@
 import json
+from typing import Any, Dict, List, Optional, Tuple
 
 from moto.core.exceptions import InvalidNextTokenException
 from moto.core.common_models import ConfigQueryModel
@@ -8,14 +9,15 @@ from moto.s3 import s3_backends
 class S3ConfigQuery(ConfigQueryModel):
     def list_config_service_resources(
         self,
-        resource_ids,
-        resource_name,
-        limit,
-        next_token,
-        backend_region=None,
-        resource_region=None,
-        aggregator=None,
-    ):
+        account_id: str,
+        resource_ids: Optional[List[str]],
+        resource_name: Optional[str],
+        limit: int,
+        next_token: Optional[str],
+        backend_region: Optional[str] = None,
+        resource_region: Optional[str] = None,
+        aggregator: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         # The resource_region only matters for aggregated queries as you can filter on bucket regions for them.
         # For other resource types, you would need to iterate appropriately for the backend_region.
 
@@ -28,15 +30,15 @@ class S3ConfigQuery(ConfigQueryModel):
 
         # If no filter was passed in for resource names/ids then return them all:
         if not resource_ids and not resource_name:
-            bucket_list = list(self.backends["global"].buckets.keys())
+            bucket_list = list(self.backends[account_id]["global"].buckets.keys())
 
         else:
             # Match the resource name / ID:
             bucket_list = []
             filter_buckets = [resource_name] if resource_name else resource_ids
 
-            for bucket in self.backends["global"].buckets.keys():
-                if bucket in filter_buckets:
+            for bucket in self.backends[account_id]["global"].buckets.keys():
+                if bucket in filter_buckets:  # type: ignore
                     bucket_list.append(bucket)
 
         # Filter on the proper region if supplied:
@@ -45,7 +47,10 @@ class S3ConfigQuery(ConfigQueryModel):
             region_buckets = []
 
             for bucket in bucket_list:
-                if self.backends["global"].buckets[bucket].region_name == region_filter:
+                if (
+                    self.backends[account_id]["global"].buckets[bucket].region_name
+                    == region_filter
+                ):
                     region_buckets.append(bucket)
 
             bucket_list = region_buckets
@@ -80,7 +85,9 @@ class S3ConfigQuery(ConfigQueryModel):
                     "type": "AWS::S3::Bucket",
                     "id": bucket,
                     "name": bucket,
-                    "region": self.backends["global"].buckets[bucket].region_name,
+                    "region": self.backends[account_id]["global"]
+                    .buckets[bucket]
+                    .region_name,
                 }
                 for bucket in bucket_list
             ],
@@ -88,22 +95,27 @@ class S3ConfigQuery(ConfigQueryModel):
         )
 
     def get_config_resource(
-        self, resource_id, resource_name=None, backend_region=None, resource_region=None
-    ):
+        self,
+        account_id: str,
+        resource_id: str,
+        resource_name: Optional[str] = None,
+        backend_region: Optional[str] = None,
+        resource_region: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         # Get the bucket:
-        bucket = self.backends["global"].buckets.get(resource_id, {})
+        bucket = self.backends[account_id]["global"].buckets.get(resource_id, {})
 
         if not bucket:
-            return
+            return None
 
         # Are we filtering based on region?
         region_filter = backend_region or resource_region
         if region_filter and bucket.region_name != region_filter:
-            return
+            return None
 
         # Are we also filtering on bucket name?
         if resource_name and bucket.name != resource_name:
-            return
+            return None
 
         # Format the bucket to the AWS Config format:
         config_data = bucket.to_config_dict()

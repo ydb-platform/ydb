@@ -11,7 +11,7 @@ DEFINE_REFCOUNTED_TYPE(TProfilerTag)
 struct TCpuProfilerTags;
 
 // This variable is referenced from signal handler.
-YT_DEFINE_THREAD_LOCAL(std::atomic<TCpuProfilerTags*>, CpuProfilerTagsPtr, nullptr);
+YT_DEFINE_THREAD_LOCAL(std::atomic<TCpuProfilerTags*>, CpuProfilerTagsPtr);
 
 struct TCpuProfilerTags
 {
@@ -36,7 +36,7 @@ std::array<TAtomicSignalPtr<TProfilerTag>, MaxActiveTags>* GetCpuProfilerTags()
 {
     auto tags = CpuProfilerTagsPtr().load();
     if (tags) {
-        return &(tags->Tags);
+        return &tags->Tags;
     }
 
     return nullptr;

@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -32,10 +32,15 @@ public:
         MKQL_ENSURE_S(KeyColumnTypes.size() == KeyColumnIndices.size());
 
         SortPartitions(Partitions, KeyColumnTypes, [](const auto& partition) { return partition.Range; });
+
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
     }
 
-    bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+    EDqFillLevel GetFillLevel() const override {
+        return Aggregator->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -67,6 +72,7 @@ private:
     TVector<TKqpRangePartition> Partitions;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIndices;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
 } // namespace

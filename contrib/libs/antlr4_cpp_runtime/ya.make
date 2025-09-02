@@ -6,11 +6,6 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-SUBSCRIBER(
-    g:cpp-contrib
-    g:ymake
-)
-
 VERSION(4.11.1)
 
 ORIGINAL_SOURCE(https://github.com/antlr/antlr4/archive/4.11.1.tar.gz)

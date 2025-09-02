@@ -5,7 +5,7 @@
 * Перекладывание одного сообщения из `topic1` в базе данных `quickstart` в `topic2` в базе данных `db2`, с ожиданием его появления в топике-источнике
 
   ```bash
-  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w | {{ ydb-cli }} -p db2 topic write topic2 
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w | {{ ydb-cli }} -p db2 topic write topic2
   ```
 
 * Фоновая передача всех появляющихся однострочных сообщений в топике `topic1` в базе данных `quickstart`, в топик `topic2` в базе данных `db2`. Данный сценарий можно использовать в случае, если гарантируется отсутствие байтов `0x0A` (перевод строки) в исходных сообщениях.
@@ -37,22 +37,22 @@
   {{ ydb-cli }} -p quickstart topic write topic1 --format newline-delimited
   ```
 
-### Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
+## Исполнение YQL-запроса с передачей сообщений из топика в качестве параметров {#example-read-to-yql-param}
 
 * Исполнение YQL-запроса с передачей параметром каждого сообщения, считанного из топика `topic1`
 
   ```bash
   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-  {{ ydb-cli }} -p quickstart table query execute -q 'declare $s as String;select Len($s) as Bytes' \
-  --stdin-format newline-delimited --stdin-par s --stdin-format raw
+  {{ ydb-cli }} -p quickstart sql -s 'declare $s as String;select Len($s) as Bytes' \
+  --input-framing newline-delimited --input-param-name s --input-format raw
   ```
 
 * Исполнение YQL-запроса с адаптивным пакетированием параметров из сообщений, считанных из топика `topic1`
 
   ```bash
   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-  {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
-  --stdin-format newline-delimited --stdin-par s --stdin-format raw \
-  --batch adaptive
+  {{ ydb-cli }} -p quickstart sql \
+  -s 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
+  --input-framing newline-delimited --input-param-name s --input-format raw \
+  --input-batch adaptive
   ```

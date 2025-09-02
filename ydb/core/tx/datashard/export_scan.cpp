@@ -17,7 +17,7 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public NTable::IScan {
+class TExportScan: private NActors::IActorCallback, public IActorExceptionHandler, public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -112,7 +112,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvReset::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvReset"
             << ": self# " << SelfId());
@@ -124,7 +124,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvFeed"
             << ": self# " << SelfId());
@@ -137,7 +137,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
             << ": self# " << SelfId()
@@ -163,7 +163,7 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "ExportScan { "
               << "Uploader: " << Uploader
               << Stats->ToString() << " "
@@ -172,7 +172,7 @@ public:
           << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -190,7 +190,7 @@ public:
         MaybeReady();
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), {}, ESeek::Lower);
         Buffer->Clear();
 
@@ -201,7 +201,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
@@ -212,21 +212,31 @@ public:
         return MaybeSendBuffer();
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         State.Set(ES_NO_MORE_DATA);
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto outcome = EExportOutcome::Success;
-        if (abort != EAbort::None) {
-            outcome = EExportOutcome::Aborted;
+        if (status != EStatus::Done) {
+            outcome = status == EStatus::Exception
+                ? EExportOutcome::Error
+                : EExportOutcome::Aborted;
         } else if (!Success) {
             outcome = EExportOutcome::Error;
         }
 
         PassAway();
         return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {

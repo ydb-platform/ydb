@@ -1,4 +1,8 @@
 #include "node_warden_impl.h"
+#include "node_warden.h"
+#include <util/system/fs.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -34,6 +38,7 @@ void TNodeWarden::EstablishPipe() {
     SendInitialGroupRequests();
     SendScrubRequests();
     SendDiskMetrics(true);
+    SendUnfinishedRequests();
 }
 
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -82,6 +87,33 @@ void TNodeWarden::SendRegisterNode() {
         WorkingLocalDrives);
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);
     ev->Record.SetDeclarativePDiskManagement(true);
+
+    for (const auto& [key, pdisk] : LocalPDisks) {
+        if (pdisk.ShredGenerationIssued) {
+            auto *item = ev->Record.AddShredStatus();
+            item->SetPDiskId(key.PDiskId);
+            if (pdisk.Record.HasPDiskGuid()) {
+                item->SetPDiskGuid(pdisk.Record.GetPDiskGuid());
+            }
+            std::visit(TOverloaded{
+                [item](const std::monostate&) { item->SetShredInProgress(true); },
+                [item](const ui64& generation) { item->SetShredGenerationFinished(generation); },
+                [item](const TString& aborted) { item->SetShredAborted(aborted); }
+            }, pdisk.ShredState);
+        }
+    }
+
+    if (!Cfg->ConfigDirPath.empty() && YamlConfig) {
+        ev->Record.SetMainConfigVersion(YamlConfig->GetMainConfigVersion());
+        ev->Record.SetMainConfigHash(NYaml::GetConfigHash(YamlConfig->GetMainConfig()));
+        if (YamlConfig->HasStorageConfigVersion()) {
+            ev->Record.SetStorageConfigVersion(YamlConfig->GetStorageConfigVersion());
+            ev->Record.SetStorageConfigHash(NYaml::GetConfigHash(YamlConfig->GetStorageConfig()));
+        }
+    }
+
+    // report working syncers to the controller
+    FillInWorkingSyncers(ev->Record.MutableSyncerState(), true);
 
     SendToController(std::move(ev));
 }

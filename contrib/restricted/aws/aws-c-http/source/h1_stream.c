@@ -329,6 +329,7 @@ static const struct aws_http_stream_vtable s_stream_vtable = {
     .destroy = s_stream_destroy,
     .update_window = s_stream_update_window,
     .activate = aws_h1_stream_activate,
+    .cancel = aws_h1_stream_cancel,
     .http1_write_chunk = s_stream_write_chunk,
     .http1_add_trailer = s_stream_add_trailer,
     .http2_reset_stream = NULL,
@@ -361,6 +362,12 @@ static struct aws_h1_stream *s_stream_new_common(
     stream->base.on_incoming_body = on_incoming_body;
     stream->base.on_complete = on_complete;
     stream->base.on_destroy = on_destroy;
+    stream->base.metrics.send_start_timestamp_ns = -1;
+    stream->base.metrics.send_end_timestamp_ns = -1;
+    stream->base.metrics.sending_duration_ns = -1;
+    stream->base.metrics.receive_start_timestamp_ns = -1;
+    stream->base.metrics.receive_end_timestamp_ns = -1;
+    stream->base.metrics.receiving_duration_ns = -1;
 
     aws_channel_task_init(
         &stream->cross_thread_work_task, s_stream_cross_thread_work_task, stream, "http1_stream_cross_thread_work");
@@ -401,6 +408,8 @@ struct aws_h1_stream *aws_h1_stream_new_request(
 
     stream->base.client_data = &stream->base.client_or_server_data.client;
     stream->base.client_data->response_status = AWS_HTTP_STATUS_CODE_UNKNOWN;
+    stream->base.client_data->response_first_byte_timeout_ms = options->response_first_byte_timeout_ms;
+    stream->base.on_metrics = options->on_metrics;
 
     /* Validate request and cache info that the encoder will eventually need */
     if (aws_h1_encoder_message_init_from_request(

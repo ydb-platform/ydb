@@ -64,6 +64,12 @@ void TAlterReplicationCardCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationCardCollocationId;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<NTabletClient::TReplicationCollocationOptionsPtr>(
+        "collocation_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.CollocationOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)
@@ -73,6 +79,28 @@ void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)
         Options);
     WaitFor(asyncResult)
         .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPingChaosLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_lease_id", &TThis::ChaosLeaseId);
+    registrar.Parameter("ping_ancestors", &TThis::PingAncestors)
+        .Default(true);
+}
+
+void TPingChaosLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto options = TChaosLeaseAttachOptions{};
+    options.Ping = true;
+    options.PingAncestors = PingAncestors;
+
+    auto future = context->GetClient()->AttachChaosLease(ChaosLeaseId, options);
+    auto chaosLease = WaitFor(future)
+        .ValueOrThrow();
 
     ProduceEmptyOutput(context);
 }

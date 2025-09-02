@@ -51,6 +51,8 @@ struct TWaitForPredicateOptions
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
+    TString Message = "<no-message>";
+    TSourceLocation SourceLocation = YT_CURRENT_SOURCE_LOCATION;
 };
 
 void WaitForPredicate(
@@ -59,8 +61,14 @@ void WaitForPredicate(
 
 void WaitForPredicate(
     std::function<bool()> predicate,
+    const TString& message,
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
+
+void WaitForPredicate(
+    std::function<bool()> predicate,
     int iterationCount = 300,
-    TDuration period = TDuration::MilliSeconds(100));
+    TDuration period = TDuration::MilliSeconds(100),
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -192,7 +200,7 @@ public:\
 private:\
   virtual void TestBody();\
   void TestInnerBody();\
-  static ::testing::TestInfo* const test_info_ GTEST_ATTRIBUTE_UNUSED_;\
+  [[maybe_unused]] static ::testing::TestInfo* const test_info_;\
 };\
 \
 ::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\

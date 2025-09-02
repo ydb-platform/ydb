@@ -11,19 +11,19 @@ namespace NRedo {
 
     struct TEntry {
         template<typename ... Args>
-        static TEntry* Create(NTable::TTxStamp stamp, TArrayRef<const ui32> affects, Args&& ... args)
+        static std::unique_ptr<TEntry> Create(NTable::TTxStamp stamp, TArrayRef<const ui32> affects, Args&& ... args)
         {
-            auto *ptr = malloc(sizeof(TEntry) + affects.size() * sizeof(ui32));
+            void* ptr = ::operator new(sizeof(TEntry) + affects.size() * sizeof(ui32));
 
-            return ::new(ptr) TEntry(stamp, affects, std::forward<Args>(args)...);
+            return std::unique_ptr<TEntry>(::new(ptr) TEntry(stamp, affects, std::forward<Args>(args)...));
         }
 
-        void operator delete (void *p)
+        void operator delete(void* p)
         {
-            free(p);
+            ::operator delete(p);
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Redo{" << NFmt::TStamp(Stamp) << " (" << Embedded.size()

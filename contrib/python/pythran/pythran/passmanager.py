@@ -14,6 +14,7 @@ There are two kinds of passes: transformations and analysis.
 import gast as ast
 import os
 import re
+from collections.abc import Iterable
 from time import time
 
 
@@ -23,7 +24,7 @@ def uncamel(name):
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-class AnalysisContext(object):
+class AnalysisContext:
 
     """
     Class that stores the hierarchy of node visited.
@@ -38,7 +39,16 @@ class AnalysisContext(object):
         self.function = None
 
 
-class ContextManager(object):
+class ContextManagerMeta(type):
+    def __getitem__(cls, Dependencies):
+        class CustomContextManager(cls):
+            if isinstance(Dependencies, Iterable):
+                deps = Dependencies
+            else:
+                deps = Dependencies,
+        return CustomContextManager
+
+class ContextManager(metaclass=ContextManagerMeta):
 
     """
     Class to be inherited from to add automatic update of context.
@@ -46,11 +56,11 @@ class ContextManager(object):
     The optional analysis dependencies are listed in `dependencies'.
     """
 
-    def __init__(self, *dependencies):
+    deps = ()
+
+    def __init__(self):
         """ Create default context and save all dependencies. """
-        self.deps = dependencies
         self.verify_dependencies()
-        super(ContextManager, self).__init__()
 
     def attach(self, pm, ctx=None):
         self.passmanager = pm
@@ -101,19 +111,14 @@ class ContextManager(object):
         a.attach(self.passmanager, self.ctx)
         return a.run(node)
 
-
 class Analysis(ContextManager, ast.NodeVisitor):
     """
     A pass that does not change its content but gathers informations about it.
     """
-    def __init__(self, *dependencies):
-        '''`dependencies' holds the type of all analysis required by this
-            analysis. `self.result' must be set prior to calling this
-            constructor.'''
-        assert hasattr(self, "result"), (
-            "An analysis must have a result attribute when initialized")
+    def __init__(self):
+        super().__init__()
+        self.result = type(self).ResultType()
         self.update = False
-        ContextManager.__init__(self, *dependencies)
 
     def run(self, node):
         key = node, type(self)
@@ -131,10 +136,9 @@ class Analysis(ContextManager, ast.NodeVisitor):
         self.display(self.run(node))
         return False, node
 
-
 class ModuleAnalysis(Analysis):
-
     """An analysis that operates on a whole module."""
+
     def run(self, node):
         if not isinstance(node, ast.Module):
             if self.ctx.module is None:
@@ -143,9 +147,7 @@ class ModuleAnalysis(Analysis):
             node = self.ctx.module
         return super(ModuleAnalysis, self).run(node)
 
-
 class FunctionAnalysis(Analysis):
-
     """An analysis that operates on a function."""
 
     def run(self, node):
@@ -164,14 +166,10 @@ class FunctionAnalysis(Analysis):
             node = self.ctx.function
         return super(FunctionAnalysis, self).run(node)
 
-
 class NodeAnalysis(Analysis):
-
     """An analysis that operates on any node."""
 
-
 class Backend(ModuleAnalysis):
-
     """A pass that produces code from an AST."""
 
 
@@ -179,9 +177,9 @@ class Transformation(ContextManager, ast.NodeTransformer):
 
     """A pass that updates its content."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         """ Initialize the update used to know if update happened. """
-        super(Transformation, self).__init__(*args, **kwargs)
+        super(Transformation, self).__init__()
         self.update = False
 
     def run(self, node):
@@ -201,7 +199,7 @@ class Transformation(ContextManager, ast.NodeTransformer):
         return self.update, new_node
 
 
-class PassManager(object):
+class PassManager:
     '''
     Front end to the pythran pass system.
     '''

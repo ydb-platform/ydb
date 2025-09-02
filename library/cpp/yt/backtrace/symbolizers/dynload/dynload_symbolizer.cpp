@@ -75,10 +75,10 @@ int GetSymbolInfo(const void* pc, char* buffer, int length)
 
 void DumpStackFrameInfo(TBaseFormatter* formatter, const void* pc)
 {
-    formatter->AppendString("@ ");
+    formatter->AppendString("@ 0x");
     const int width = (sizeof(void*) == 8 ? 12 : 8) + 2;
     // +2 for "0x"; 12 for x86_64 because higher bits are always zeroed.
-    formatter->AppendNumberAsHexWithPadding(reinterpret_cast<uintptr_t>(pc), width);
+    formatter->AppendNumber(reinterpret_cast<uintptr_t>(pc), 16, width);
     formatter->AppendString(" ");
     // Get the symbol from the previous address of PC,
     // because PC may be in the next function.

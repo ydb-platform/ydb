@@ -1,0 +1,109 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     SMLNJ                0bf5f706ffea8e89e73bb5ed2f1c104a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: SMLNJ
+        Score           : 90.13
+        Match type      : TEXT
+        Links           : http://directory.fsf.org/wiki/License:StandardMLofNJ, http://www.smlnj.org//license.html, https://spdx.org/licenses/SMLNJ
+    Files with this license:
+        src/xsum.c [4:19]
+
+KEEP     SMLNJ 649efcc0037c385d8e8b5e2e430b42c9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: SMLNJ
+        Score           : 90.13
+        Match type      : TEXT
+        Links           : http://directory.fsf.org/wiki/License:StandardMLofNJ, http://www.smlnj.org//license.html, https://spdx.org/licenses/SMLNJ
+    Files with this license:
+        src/cds.c [4:21]
+        src/defs.h [4:21]
+        src/equiv.c [4:21]
+        src/expr.c [4:21]
+        src/format.c [4:21]
+        src/formatdata.c [4:21]
+        src/init.c [4:21]
+        src/intr.c [4:21]
+        src/memset.c [4:21]
+        src/misc.c [4:21]
+        src/names.c [4:21]
+        src/p1output.c [4:21]
+        src/parse_args.c [4:21]
+        src/pread.c [4:21]
+        src/proc.c [4:21]
+        src/put.c [4:21]
+        src/sysdep.c [4:21]
+        src/sysdep.h [4:21]
+        src/vax.c [4:21]
+    Scancode info:
+        Original SPDX id: SMLNJ
+        Score           : 90.07
+        Match type      : TEXT
+        Links           : http://directory.fsf.org/wiki/License:StandardMLofNJ, http://www.smlnj.org//license.html, https://spdx.org/licenses/SMLNJ
+    Files with this license:
+        src/data.c [4:21]
+        src/error.c [4:21]
+        src/exec.c [4:21]
+        src/io.c [4:21]
+        src/lex.c [4:21]
+        src/main.c [4:21]
+        src/malloc.c [4:21]
+        src/mem.c [4:21]
+        src/niceprintf.c [4:21]
+        src/output.c [4:21]
+        src/putpcc.c [4:21]
+    Scancode info:
+        Original SPDX id: SMLNJ
+        Score           : 95.10
+        Match type      : TEXT
+        Links           : http://directory.fsf.org/wiki/License:StandardMLofNJ, http://www.smlnj.org//license.html, https://spdx.org/licenses/SMLNJ
+    Files with this license:
+        src/Notice [4:21]
+
+KEEP     SMLNJ                b6995767f79a25545cad38080b5871f0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: SMLNJ
+        Score           : 90.13
+        Match type      : TEXT
+        Links           : http://directory.fsf.org/wiki/License:StandardMLofNJ, http://www.smlnj.org//license.html, https://spdx.org/licenses/SMLNJ
+    Files with this license:
+        src/gram.head [4:21]

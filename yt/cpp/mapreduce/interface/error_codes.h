@@ -39,6 +39,8 @@ namespace NRpc {
     constexpr int InvalidCsrfToken              = 110;
     constexpr int InvalidCredentials            = 111;
     constexpr int StreamingNotSupported         = 112;
+    constexpr int TransientFailure              = 116;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -390,9 +392,10 @@ namespace NChunkPools {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-    constexpr int DataSliceLimitExceeded             = 2000;
-    constexpr int MaxDataWeightPerJobExceeded        = 2001;
-    constexpr int MaxPrimaryDataWeightPerJobExceeded = 2002;
+    constexpr int DataSliceLimitExceeded              = 2000;
+    constexpr int MaxDataWeightPerJobExceeded         = 2001;
+    constexpr int MaxPrimaryDataWeightPerJobExceeded  = 2002;
+    constexpr int MaxCompressedDataSizePerJobExceeded = 2003;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -464,19 +467,6 @@ namespace NJobProberClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NJobProberClient
-
-
-
-// from ./ytlib/sequoia_client/public.h
-namespace NSequoiaClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
-    constexpr int SequoiaRetriableError = 6002;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NSequoiaClient
 
 } // namespace NClusterErrorCodes
 } // namespace NYT

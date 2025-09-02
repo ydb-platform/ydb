@@ -366,6 +366,43 @@ static int test(int use_sqthread, int regfiles, int socket_direct, int alloc)
 	return (intptr_t)retval;
 }
 
+static int test_bad_socket(void)
+{
+	struct io_uring ring;
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	int ret;
+
+	ret = io_uring_queue_init(1, &ring, 0);
+	if (ret) {
+		fprintf(stderr, "queue init failed: %d\n", ret);
+		return 1;
+	}
+
+	sqe = io_uring_get_sqe(&ring);
+	io_uring_prep_socket(sqe, -1, SOCK_DGRAM, 0, 0);
+	ret = io_uring_submit(&ring);
+	if (ret != 1) {
+		fprintf(stderr, "socket submit: %d\n", ret);
+		goto err;
+	}
+	ret = io_uring_wait_cqe(&ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "wait_cqe: %d\n", ret);
+		goto err;
+	}
+	if (cqe->res != -EAFNOSUPPORT) {
+		fprintf(stderr, "socket res: %d\n", cqe->res);
+		goto err;
+	}
+	io_uring_cqe_seen(&ring, cqe);
+	io_uring_queue_exit(&ring);
+	return 0;
+err:
+	io_uring_queue_exit(&ring);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -403,6 +440,12 @@ int main(int argc, char *argv[])
 	if (ret) {
 		fprintf(stderr, "test sqthread=0 direct=alloc failed\n");
 		return ret;
+	}
+
+	ret = test_bad_socket();
+	if (ret) {
+		fprintf(stderr, "test bad socket failed\n");
+		return 1;
 	}
 
 	return 0;

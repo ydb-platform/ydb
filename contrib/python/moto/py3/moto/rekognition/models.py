@@ -1,22 +1,24 @@
 """RekognitionBackend class with methods for supported APIs."""
 
-import random
 import string
+from typing import Any, Dict, List, Tuple
 
-from moto.core import BaseBackend
-from moto.core.utils import BackendDict
+from moto.core import BaseBackend, BackendDict
+from moto.moto_api._internal import mock_random as random
 
 
 class RekognitionBackend(BaseBackend):
     """Implementation of Rekognition APIs."""
 
-    def start_face_search(self):
+    def start_face_search(self) -> str:
         return self._job_id()
 
-    def start_text_detection(self):
+    def start_text_detection(self) -> str:
         return self._job_id()
 
-    def get_face_search(self):
+    def get_face_search(
+        self,
+    ) -> Tuple[str, str, Dict[str, Any], List[Dict[str, Any]], str, str]:
         """
         This returns hardcoded values and none of the parameters are taken into account.
         """
@@ -29,7 +31,9 @@ class RekognitionBackend(BaseBackend):
             self._text_model_version(),
         )
 
-    def get_text_detection(self):
+    def get_text_detection(
+        self,
+    ) -> Tuple[str, str, Dict[str, Any], List[Dict[str, Any]], str, str]:
         """
         This returns hardcoded values and none of the parameters are taken into account.
         """
@@ -44,24 +48,24 @@ class RekognitionBackend(BaseBackend):
 
     # private
 
-    def _job_id(self):
+    def _job_id(self) -> str:
         return "".join(
             random.choice(string.ascii_uppercase + string.digits) for _ in range(64)
         )
 
-    def _job_status(self):
+    def _job_status(self) -> str:
         return "SUCCEEDED"
 
-    def _next_token(self):
+    def _next_token(self) -> str:
         return ""
 
-    def _status_message(self):
+    def _status_message(self) -> str:
         return ""
 
-    def _text_model_version(self):
+    def _text_model_version(self) -> str:
         return "3.1"
 
-    def _video_metadata(self):
+    def _video_metadata(self) -> Dict[str, Any]:
         return {
             "Codec": "h264",
             "DurationMillis": 15020,
@@ -72,7 +76,7 @@ class RekognitionBackend(BaseBackend):
             "ColorRange": "LIMITED",
         }
 
-    def _persons(self):
+    def _persons(self) -> List[Dict[str, Any]]:
         return [
             {
                 "Timestamp": 0,
@@ -189,7 +193,7 @@ class RekognitionBackend(BaseBackend):
             }
         ]
 
-    def _text_detections(self):
+    def _text_detections(self) -> List[Dict[str, Any]]:
         return [
             {
                 "Timestamp": 0,

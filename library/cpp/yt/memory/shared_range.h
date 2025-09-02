@@ -58,7 +58,7 @@ public:
 
     //! Constructs an empty TSharedRange from a nullptr expression.
     TSharedRange(std::nullptr_t)
-        : TRange<T>(nullptr, 0UL)
+        : TRange<T>(nullptr, static_cast<size_t>(0))
         , Holder_(nullptr)
     { }
 
@@ -191,7 +191,7 @@ TSharedRange<T> DoMakeSharedRange(TContainer&& elements, THolders&&... holders)
     holder->Holders = std::tuple<THolders...>(std::forward<THolders>(holders)...);
     holder->Elements = std::forward<TContainer>(elements);
 
-    auto range = MakeRange<T>(holder->Elements);
+    auto range = TRange<T>(holder->Elements);
 
     return TSharedRange<T>(range, std::move(holder));
 }

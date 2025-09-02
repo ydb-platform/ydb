@@ -3,7 +3,6 @@ syntax = "proto3";
 package NKikimrClient;
 
 import "ydb/core/protos/msgbus.proto";
-import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 
 service TGRpcServer {
@@ -15,18 +14,12 @@ service TGRpcServer {
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // KIKIMR CLIENT INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // MiniKQL request (DML)
-    rpc Request(TRequest) returns (TResponse);
-
     // DML transactions
     rpc SchemeOperation(TSchemeOperation) returns (TResponse);
     // status polling for scheme transactions
     rpc SchemeOperationStatus(TSchemeOperationStatus) returns (TResponse);
     // describe
     rpc SchemeDescribe(TSchemeDescribe) returns (TResponse);
-    // login
-    rpc LoginRequest(TLoginRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // CHOOSE PROXY INTERFACE
@@ -55,8 +48,8 @@ service TGRpcServer {
     // KV-TABLET INTERNAL INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
     rpc HiveCreateTablet(THiveCreateTablet) returns (TResponse);
-    rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
-    rpc KeyValue(TKeyValueRequest) returns (TResponse);
+    //rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
+    //rpc KeyValue(TKeyValueRequest) returns (TResponse);
     rpc TestShardControl(TTestShardControlRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -70,9 +63,6 @@ service TGRpcServer {
     rpc CmsRequest(TCmsRequest) returns (TCmsResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    // SQS INTERFACE
-    /////////////////////////////////////////////////////////////////////////////////////////////////
-    rpc SqsRequest(TSqsRequest) returns (TSqsResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // CONSOLE INTERFACE
@@ -82,9 +72,6 @@ service TGRpcServer {
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // INTROSPECTION
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    rpc LocalMKQL(TLocalMKQL) returns (TResponse);
-    rpc LocalSchemeTx(TLocalSchemeTx) returns (TResponse);
-    rpc TabletKillRequest(TTabletKillRequest) returns (TResponse);
     rpc InterconnectDebug(TInterconnectDebug) returns (TResponse);
 
     // [DEPRECATED]

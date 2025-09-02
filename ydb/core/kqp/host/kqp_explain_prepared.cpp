@@ -65,8 +65,8 @@ public:
         }
 
         PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), std::move(TxResults),
-            ctx, Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
-        query.SetQueryAst(KqpExprToPrettyString(*TransformCtx->ExplainTransformerInput, ctx));
+            ctx, Gateway->GetDatabase(), Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
+        query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 
         TransformCtx->ExplainTransformerInput = nullptr;
         return TStatus::Ok;

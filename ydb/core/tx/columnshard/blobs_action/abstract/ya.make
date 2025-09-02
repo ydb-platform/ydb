@@ -18,6 +18,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/tablet_flat
     ydb/core/tx/tiering/abstract
+    ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/blobs_action/common
     ydb/core/tx/columnshard/data_sharing/protos
     ydb/core/tx/columnshard/blobs_action/events

@@ -1,5 +1,5 @@
 #include "yql_ydb_settings.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 namespace NYql {
 
@@ -14,7 +14,7 @@ TYdbSettings::TConstPtr TYdbConfiguration::Snapshot() const {
 }
 
 bool TYdbConfiguration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 void TYdbConfiguration::Init(

@@ -1,0 +1,70 @@
+--- a/src/google/protobuf/map.h	(index)
++++ b/src/google/protobuf/map.h	(working tree)
+@@ -51,7 +51,8 @@
+ #endif  // defined(__cpp_lib_string_view)
+ 
+ #if !defined(GOOGLE_PROTOBUF_NO_RDTSC) && defined(__APPLE__)
+-#include <mach/mach_time.h>
++#define GOOGLE_PROTOBUF_NO_RDTSC 1
++//#include <mach/mach_time.h>
+ #endif
+ 
+ #include <google/protobuf/stubs/common.h>
+--- a/src/google/protobuf/text_format.cc   (index)
++++ b/src/google/protobuf/text_format.cc    (working tree)
+@@ -550,13 +550,19 @@
+       // start with "{" or "<" which indicates the beginning of a message body.
+       // If there is no ":" or there is a "{" or "<" after ":", this field has
+       // to be a message or the input is ill-formed.
++      bool skip;
+       if (TryConsumeBeforeWhitespace(":")) {
+         TryConsumeWhitespace();
+         if (!LookingAt("{") && !LookingAt("<")) {
+-          return SkipFieldValue();
++          skip = SkipFieldValue();
++        } else {
++          skip = SkipFieldMessage();
+         }
++      } else {
++        skip = SkipFieldMessage();
+       }
+-      return SkipFieldMessage();
++      TryConsume(";") || TryConsume(",");
++      return skip;
+     }
+ 
+     if (singular_overwrite_policy_ == FORBID_SINGULAR_OVERWRITES) {
+--- a/src/google/protobuf/compiler/cpp/helpers.cc
++++ b/src/google/protobuf/compiler/cpp/helpers.cc
+@@ -200,7 +200,7 @@ const absl::flat_hash_set<absl::string_view>& Keywords() {
+ }
+ 
+ TProtoStringType IntTypeName(const Options& options, absl::string_view type) {
+-  return absl::StrCat("::", type, "_t");
++  return absl::StrCat("::NProtoBuf::", type);
+ }
+ 
+ 
+--- a/src/google/protobuf/io/tokenizer.cc	(index)
++++ b/src/google/protobuf/io/tokenizer.cc	(working tree)
+@@ -704,13 +704,13 @@ bool Tokenizer::Next() {
+         ConsumeString('\'');
+         current_.type = TYPE_STRING;
+       } else {
+-        // Check if the high order bit is set.
+-        if (current_char_ & 0x80) {
+-          error_collector_->RecordError(
+-              line_, column_,
+-              absl::StrFormat("Interpreting non ascii codepoint %d.",
+-                              static_cast<unsigned char>(current_char_)));
+-        }
++        // The tokenizer is used to parse tomita grammars with non-ascii utf8 chars
++        // if (current_char_ & 0x80) {
++        //   error_collector_->AddError(
++        //       line_, column_,
++        //       StringPrintf("Interpreting non ascii codepoint %d.",
++        //                       static_cast<unsigned char>(current_char_)));
++        // }
+         NextChar();
+         current_.type = TYPE_SYMBOL;
+       }

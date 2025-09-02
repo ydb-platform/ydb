@@ -193,10 +193,13 @@ def make_extension(python, **extra):
         "extra_objects": []
     }
 
+    # In case the extension doesn't include any optimization level, make sure we
+    # have a decent default. Later options have prcedence so this is still
+    # customizable by users.
+    extension['extra_compile_args'].insert(0, "-O2")
+
     if python:
         extension['define_macros'].append('ENABLE_PYTHON_MODULE')
-    extension['define_macros'].append(
-        '__PYTHRAN__={}'.format(sys.version_info.major))
 
     pythonic_dir = get_include()
 
@@ -234,7 +237,7 @@ def make_extension(python, **extra):
         extension['include_dirs'].append(numpy.get_include())
 
     # blas dependency
-    reserved_blas_entries = 'pythran-openblas', 'none'
+    reserved_blas_entries = 'scipy-openblas', 'pythran-openblas', 'none'
     user_blas = cfg.get('compiler', 'blas')
     if user_blas == 'pythran-openblas':
         try:
@@ -250,24 +253,28 @@ def make_extension(python, **extra):
                            "Please install it or change the compiler.blas "
                            "setting. Defaulting to 'none'")
             user_blas = 'none'
+    elif user_blas == 'scipy-openblas':
+        try:
+            import scipy_openblas64 as openblas
+            # required to cope with atlas missing extern "C"
+            extension['define_macros'].append('PYTHRAN_BLAS_SCIPY_OPENBLAS')
+            extension['include_dirs'].append(openblas.get_include_dir())
+            extension['library_dirs'].append(openblas.get_lib_dir())
+            extension['libraries'].append(openblas.get_library())
+            extension['extra_link_args'].append("-Wl,-rpath=" + openblas.get_lib_dir())
+        except ImportError:
+            logger.warning("Failed to find 'scipy-openblas64' package. "
+                           "Please install it or change the compiler.blas "
+                           "setting. Defaulting to 'none'")
+            user_blas = 'none'
+
 
     if user_blas == 'none':
         extension['define_macros'].append('PYTHRAN_BLAS_NONE')
 
     if user_blas not in reserved_blas_entries:
-        try:
-            import numpy.distutils.system_info as numpy_sys
-             # Numpy can pollute stdout with checks
-            with silent():
-                numpy_blas = numpy_sys.get_info(user_blas)
-                extension['libraries'].extend(numpy_blas.get('libraries', []))
-                extension['library_dirs'].extend(
-                    numpy_blas.get('library_dirs', []))
-        # `numpy.distutils` not present for Python >= 3.12
-        except ImportError:
-            blas = numpy.show_config('dicts')["Build Dependencies"]["blas"]
-            libblas = {'openblas64': 'openblas'}.get(blas['name'], blas['name'])
-            extension["libraries"].append(libblas)
+        extension["libraries"].append(user_blas)
+        extension['define_macros'].append('PYTHRAN_BLAS_{}'.format(user_blas.upper()))
 
 
     # final macro normalization
@@ -304,10 +311,7 @@ def run():
     Dump on stdout the config flags required to compile pythran-generated code.
     '''
     import argparse
-    import distutils.ccompiler
-    import distutils.sysconfig
     import pythran
-    import numpy
 
     parser = argparse.ArgumentParser(
         prog='pythran-config',
@@ -318,14 +322,36 @@ def run():
     parser.add_argument('--compiler', action='store_true',
                         help='print default compiler')
 
-    parser.add_argument('--cflags', action='store_true',
-                        help='print compilation flags')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--cflags', action='store_true',
+                        help='print compilation flags to compile extension '
+                             'modules directly')
+
+    # The with-BLAS variant could be added if there's user demand. Unclear
+    # if there are packages that need this, and also integrate with a build
+    # system for Python and NumPy flags. SciPy and scikit-image need the
+    # no-BLAS variant.
+    group.add_argument('--cflags-pythran-only', action='store_true',
+                       help='print compilation flags for usage by a build '
+                            'system (doesn\'t include Python, NumPy or BLAS '
+                            'flags).'
+                       )
+
+    parser.add_argument('--include-dir', action='store_true',
+                        help=(
+                            'print Pythran include directory '
+                            '(matches `pythran.get_include()`).')
+                        )
 
     parser.add_argument('--libs', action='store_true',
                         help='print linker flags')
 
     parser.add_argument('--no-python', action='store_true',
                         help='do not include Python-related flags')
+
+    parser.add_argument('-V', '--version',
+                        action='version',
+                        version=pythran.version.__version__)
 
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help=(
@@ -335,6 +361,21 @@ def run():
                         )
 
     args = parser.parse_args(sys.argv[1:])
+
+    # This should not rely on distutils/setuptools, or anything else not in the
+    # stdlib. Please don't add imports higher up.
+    if args.cflags_pythran_only:
+        compile_flags = [
+                "-DENABLE_PYTHON_MODULE",
+                "-DPYTHRAN_BLAS_NONE",
+                ]
+        print(" ".join(compile_flags), f"-I{get_include()}")
+        return None
+
+
+    import distutils.ccompiler
+    import distutils.sysconfig
+    import numpy
 
     args.python = not args.no_python
 
@@ -382,24 +423,29 @@ def run():
 
     if args.libs or args.verbose >= 2:
         ldflags = []
-        ldflags.extend((compiler_obj.library_dir_option(include))
+        ldflags.extend(('-L' + compiler_obj.library_dir_option(include))
                        for include in extension['library_dirs'])
         ldflags.extend((compiler_obj.library_option(include))
                        for include in extension['libraries'])
 
         if args.python:
-            libpl = distutils.sysconfig.get_config_var('LIBPL')
-            if libpl:
-                ldflags.append(libpl)
             libs = distutils.sysconfig.get_config_var('LIBS')
             if libs:
                 ldflags.extend(shsplit(libs))
-            ldflags.append(compiler_obj.library_option('python')
-                           + distutils.sysconfig.get_config_var('VERSION'))
+            libdir = distutils.sysconfig.get_config_var('LIBDIR')
+            pylib = distutils.sysconfig.get_config_var('LDLIBRARY')
+            if libdir and pylib:
+                ldflags.append(os.path.join(libdir, pylib))
+            else:
+                ldflags.append(compiler_obj.library_option('python')
+                               + distutils.sysconfig.get_config_var('VERSION'))
 
         logger.info('LDFLAGS = '.rjust(10) + ' '.join(ldflags))
         if args.libs:
             output.extend(ldflags)
+
+    if args.include_dir:
+        output.append(get_include())
 
     if output:
         print(' '.join(output))

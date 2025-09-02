@@ -1,0 +1,138 @@
+{
+  "meta": {
+    "name": "ydb",
+    "maintainer": "ydb <ydb@yandex-team.ru>",
+    "description": "Package with opensource YDB for Kubernetes with debug",
+    "version": "{branch}.{revision}"
+  },
+  "params": {
+    "docker_build_network": "host",
+    "docker_registry": "cr.yandex",
+    "docker_repository": "crp2lrlsrs36odlvd8dv",
+    "docker_target": "release"
+  },
+  "build": {
+    "build_type": "release",
+    "targets": [
+        "ydb/apps/ydbd",
+        "ydb/apps/ydb",
+        "contrib/libs/libiconv/dynamic",
+        "contrib/libs/libidn/dynamic",
+        "contrib/libs/libaio/dynamic"
+    ],
+    "flags": [
+      {
+          "name": "OPENSOURCE",
+          "value": "yes"
+      },
+      {
+          "name": "HARDENING",
+          "value": "yes"
+      },
+      {
+          "name": "CFLAGS",
+          "value": "-fno-omit-frame-pointer"
+      },
+      {
+          "name": "SPLIT_DWARF_VALUE",
+          "value": "yes"
+      }
+    ],
+    "target-platforms": [
+      "default-linux-x86_64"
+    ]
+  },
+  "data": [
+    {
+      "source": {
+        "type": "ARCADIA",
+        "path": "ydb/deploy/docker/Dockerfile"
+      },
+      "destination": {
+        "path": "/Dockerfile"
+      }
+    },
+    {
+      "source": {
+        "type": "ARCADIA",
+        "path": "AUTHORS"
+      },
+      "destination": {
+        "path": "/AUTHORS"
+      }
+    },
+    {
+      "source": {
+        "type": "ARCADIA",
+        "path": "LICENSE"
+      },
+      "destination": {
+        "path": "/LICENSE"
+      }
+    },
+    {
+      "source": {
+        "type": "ARCADIA",
+        "path": "README.md"
+      },
+      "destination": {
+        "path": "/README.md"
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libiconv/dynamic/libiconv.so"
+      },
+      "destination": {
+        "path": "/libiconv.so"
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libidn/dynamic/liblibidn-dynamic.so"
+      },
+      "destination": {
+        "path": "/liblibidn-dynamic.so"
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libaio/dynamic/liblibaio-dynamic.so"
+      },
+      "destination": {
+        "path": "/liblibaio-dynamic.so"
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "ydb/apps/ydbd/ydbd"
+      },
+      "destination": {
+        "path": "/ydbd",
+        "attributes": {
+          "mode": {
+            "value": "a+x"
+          }
+        }
+      }
+    },
+    {
+      "source": {
+          "type": "BUILD_OUTPUT",
+          "path": "ydb/apps/ydb/ydb"
+      },
+      "destination": {
+        "path": "/ydb",
+        "attributes": {
+          "mode": {
+            "value": "a+x"
+          }
+        }
+      }
+    }
+  ]
+}

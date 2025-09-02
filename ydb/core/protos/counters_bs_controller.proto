@@ -28,6 +28,11 @@ enum ESimpleCounters {
     COUNTER_DISK_SCRUB_CUR_DISKS = 18 [(CounterOpts) = {Name: "CurrentlyScrubbedDisks"}];
     COUNTER_DISK_SCRUB_CUR_GROUPS = 19 [(CounterOpts) = {Name: "CurrentlyScrubbedGroups"}];
     COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS = 20 [(CounterOpts) = {Name: "SelfHealUnreassignableGroups"}];
+    COUNTER_GROUP_LAYOUT_SANITIZER_INVALID_GROUPS = 21 [(CounterOpts) = {Name: "GroupLayoutSanitizerInvlaidGroups"}];
+    COUNTER_PDISKS_WITHOUT_INFERRED_SETTINGS = 22 [(CounterOpts) = {Name: "PDisksWithoutInferredSettings"}];
+    COUNTER_PDISKS_WITH_INFERRED_SETTINGS_UNKNOWN = 23 [(CounterOpts) = {Name: "PDisksWithInferredSettingsUnknown"}];
+    COUNTER_VDISKS_WITH_SMALL_SIZE_IN_UNITS_OCCUPYING_LARGER_VSLOT = 24 [(CounterOpts) = {Name: "VDisksWithSmallSizeInUnitsOccupyingLargerVSlot"}];
+    COUNTER_VDISKS_WITH_LARGE_SIZE_IN_UNITS_OCCUPYING_MULTIPLE_SMALLER_VSLOTS = 25 [(CounterOpts) = {Name: "VDisksWithLargeSizeInUnitsOccupyingMultipleSmallerVSlots"}];
 }
 
 enum ECumulativeCounters {
@@ -84,6 +89,8 @@ enum ECumulativeCounters {
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_REQUESTS = 45 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscRequests"}];
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_OK = 46 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscOk"}];
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_ERR = 47 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscErr"}];
+
+    COUNTER_CONFIGCMD_CHANGE_GROUP_SIZE_IN_UNITS_USEC = 48 [(CounterOpts) = {Name: "ChangeGroupSizeInUnits"}];
 }
 
 enum EPercentileCounters {
@@ -275,4 +282,8 @@ enum ETxTypes {
     TXTYPE_DECOMMIT_GROUP = 26 [(TxTypeOpts) = {Name: "TTxDecommitGroup"}];
     TXTYPE_UPDATE_GROUP = 27 [(TxTypeOpts) = {Name: "TTxUpdateGroup"}];
     TXTYPE_DELETE_BLOB_DEPOT = 28 [(TxTypeOpts) = {Name: "TTxDeleteBlobDepot"}];
+    TXTYPE_COMMIT_CONFIG = 29 [(TxTypeOpts) = {Name: "TTxCommitConfig"}];
+    TXTYPE_UPDATE_SHRED = 30 [(TxTypeOpts) = {Name: "TTxUpdateShred"}];
+    TXTYPE_CHECK_UNSYNCED = 31 [(TxTypeOpts) = {Name: "TTxCheckUnsynced"}];
+    TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
 }

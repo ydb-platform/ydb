@@ -1,0 +1,10 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let data (SqlColumnOrderFromYson '"[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]"))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf data))'('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

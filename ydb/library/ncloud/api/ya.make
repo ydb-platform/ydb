@@ -5,9 +5,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/client/nc_private/accessservice
+    ydb/public/api/client/nc_private/iam/v1
     ydb/library/actors/core
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/base
 )
 

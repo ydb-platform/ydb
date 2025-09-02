@@ -540,14 +540,15 @@ class TestYqStreaming(TestYdsBase):
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         data = [
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:00Z"),
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:20Z"),
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:42Z"),
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:01:02Z"),
+            '{"event_class": "ManagedKubernetesEvent", "time": "2024-01-03T00:00:00Z"}',
+            '{"event_class": "ManagedKubernetesEvent", "time": "2024-01-03T00:00:15Z"}',
+            '{"event_class": "ManagedKubernetesEvent", "time": "2024-01-03T00:00:30Z"}',
+            '{"event_class": "ManagedKubernetesEvent", "time": "2024-01-03T00:00:45Z"}',
+            '{"event_class": "ManagedKubernetesEvent", "time": "2024-01-03T00:01:00Z"}',
         ]
         self.write_stream(data, self.input_topic)
 
-        read_data = self.read_stream(1)
+        read_data = self.read_stream(3)
         logging.info("Data was read: {}".format(read_data))
         assert len(read_data) == 3
 

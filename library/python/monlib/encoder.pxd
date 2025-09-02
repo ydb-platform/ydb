@@ -40,6 +40,10 @@ cdef extern from "library/cpp/monlib/encode/json/json.h" namespace "NMonitoring"
     cdef void DecodeJson(TStringBuf data, IMetricConsumer* c)
 
 
+cdef extern from "library/cpp/monlib/encode/prometheus/prometheus.h" namespace "NMonitoring" nogil:
+    cdef IMetricEncoderPtr EncoderPrometheus(IOutputStream* out, TStringBuf metricNameLabel)
+
+
 cdef extern from "library/cpp/monlib/encode/spack/spack_v1.h" namespace "NMonitoring" nogil:
     cdef IMetricEncoderPtr EncoderSpackV1(IOutputStream* out, ETimePrecision, ECompression)
 
@@ -77,3 +81,5 @@ cdef class Encoder:
     cdef Encoder create_spack(object stream, ETimePrecision timePrecision, ECompression compression)
     @staticmethod
     cdef Encoder create_json(object stream, int indent)
+    @staticmethod
+    cdef Encoder create_prometheus(object stream, bytes metricNameLabel)

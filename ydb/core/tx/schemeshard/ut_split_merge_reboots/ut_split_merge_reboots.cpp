@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -394,6 +394,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"Jack", "Marla", "Marla Singer", "Robert", "Robert Paulson", "Tyler Durden", ""})});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(SplitTableOneToOneWithReboots) {
+        TTestWithReboots t(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                                    Name: "Table"
+                                    Columns { Name: "key1"       Type: "Utf8"}
+                                    Columns { Name: "key2"       Type: "Uint32"}
+                                    Columns { Name: "Value"      Type: "Utf8"}
+                                    KeyColumnNames: ["key1", "key2"]
+                                    SplitBoundary {
+                                        KeyPrefix {
+                                            Tuple { Optional { Text: "Jack" } }
+                                        }
+                                    })");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                                   {NLs::PartitionKeys({"Jack", ""})});
+            }
+
+            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
+                                SourceTabletId: 72075186233409546
+                                AllowOneToOneSplitMerge: true
+                                )");
+            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
+                                SourceTabletId: 72075186233409547
+                                AllowOneToOneSplitMerge: true
+                                )");
+
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            t.TestEnv->TestWaitTabletDeletion(runtime, {72075186233409546, 72075186233409547}); //delete src
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                                   {NLs::PartitionKeys({"Jack", ""})});
             }
         });
     }

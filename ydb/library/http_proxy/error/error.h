@@ -10,8 +10,9 @@ struct TErrorClass {
     const TString ErrorCode;
     const ui32 HttpStatusCode;
     const TString DefaultMessage;
+    const ui32 Id;
 
-    TErrorClass(TString errorCode, ui32 httpStatusCode, TString defaultMessage);
+    TErrorClass(TString errorCode, ui32 httpStatusCode, TString defaultMessage, ui32 id);
     TErrorClass() = delete;
     TErrorClass(const TErrorClass&) = delete;
     TErrorClass(TErrorClass&&) = delete;
@@ -20,8 +21,14 @@ struct TErrorClass {
         return RegisteredCodes;
     }
 
+    static const std::tuple<TString, ui32> GetErrorAndCode(ui32 id);
+    static ui32 GetId(const TString& code);
+    static TMaybe<ui32> GetHttpStatus(const TString& code);
+
 private:
     static THashSet<TString> RegisteredCodes;
+    static THashMap<ui32, std::tuple<TString, ui32>> IdToErrorAndCode;
+    static THashMap<TString, ui32> ErrorToId;
 };
 
 struct TSQSException: public yexception {

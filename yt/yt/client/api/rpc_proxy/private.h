@@ -12,7 +12,7 @@ namespace NYT::NApi::NRpcProxy {
 struct TStickyTransactionParameters
 {
     // Empty if not supported.
-    TString ProxyAddress;
+    std::string ProxyAddress;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,13 +26,13 @@ YT_DEFINE_GLOBAL(const NLogging::TLogger, RpcProxyClientLogger, "RpcProxyClient"
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TString, TString> ParseProxyUrlAliasingRules(TString envConfig);
+THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& envConfig);
 void ApplyProxyUrlAliasingRules(
-    TString& url,
-    const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules = std::nullopt);
-TString NormalizeHttpProxyUrl(
-    TString url,
-    const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules = std::nullopt);
+    std::string& url,
+    const THashMap<std::string, std::string>& proxyUrlAliasingRules = {});
+std::string NormalizeHttpProxyUrl(
+    std::string url,
+    const THashMap<std::string, std::string>& proxyUrlAliasingRules = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

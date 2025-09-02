@@ -1,0 +1,33 @@
+diff --git a/include/__tuple/sfinae_helpers.h b/include/__tuple/sfinae_helpers.h
+index a785cec..4a6ff1f 100644
+--- a/include/__tuple/sfinae_helpers.h
++++ b/include/__tuple/sfinae_helpers.h
+@@ -41,7 +41,7 @@ struct __tuple_sfinae_base {
+   static auto __do_test(...) -> false_type;
+ 
+   template <class _FromArgs, class _ToArgs>
+-  using __constructible = decltype(__do_test<is_constructible>(_ToArgs{}, _FromArgs{}));
++  using __constructible = decltype(__do_test<is_constructible>(declval<_ToArgs>(), declval<_FromArgs>()));
+ };
+ 
+ // __tuple_constructible
+@@ -49,11 +49,17 @@ struct __tuple_sfinae_base {
+ template <class _Tp,
+           class _Up,
+           bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
+-          bool = __tuple_like_ext<_Up>::value>
++          bool = __tuple_like_ext<_Up>::value,
++          class = void>
+ struct __tuple_constructible : public false_type {};
+ 
+ template <class _Tp, class _Up>
+-struct __tuple_constructible<_Tp, _Up, true, true>
++struct __tuple_constructible<
++    _Tp,
++    _Up,
++    true,
++    true,
++    typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
+     : public __tuple_sfinae_base::__constructible< typename __make_tuple_types<_Tp>::type,
+                                                    typename __make_tuple_types<_Up>::type > {};
+ 

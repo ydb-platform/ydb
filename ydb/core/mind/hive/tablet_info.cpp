@@ -22,6 +22,7 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , ResourceMetricsAggregates(Hive.GetDefaultResourceMetricsAggregates())
     , Weight(0)
     , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
+    , NodeFilter(hive)
 {}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
@@ -291,7 +292,6 @@ bool TTabletInfo::BecomeStopped() {
 }
 
 void TTabletInfo::BecomeUnknown(TNodeInfo* node) {
-    Y_ABORT_UNLESS(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
     Y_ABORT_UNLESS(Node == nullptr || node == Node);
     Node = node;
     ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
@@ -312,7 +312,7 @@ const TVector<i64>& TTabletInfo::GetTabletAllowedMetricIds() const {
 
 bool TTabletInfo::HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource) {
     switch (resource) {
-        case EResourceToBalance::ComputeResources: { 
+        case EResourceToBalance::ComputeResources: {
             auto isComputeMetric = [](i64 metricId) {
                 return metricId == NKikimrTabletBase::TMetrics::kCPUFieldNumber ||
                        metricId == NKikimrTabletBase::TMetrics::kMemoryFieldNumber ||
@@ -492,11 +492,7 @@ void TTabletInfo::ActualizeCounter() {
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {
-    if (IsLeader()) {
-        return AsLeader().NodeFilter;
-    } else {
-        return AsFollower().FollowerGroup.NodeFilter;
-    }
+    return NodeFilter;
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {

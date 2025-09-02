@@ -7,8 +7,8 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/minikql_compile/compile_context.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
@@ -106,7 +106,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     bool PrepareParams(TTransactionContext &txc, const TAppData *appData) {
         Y_UNUSED(txc);
         if (SourceProgram.Params.Binary) {
-            SerializedMiniKQLParams = SourceProgram.Program.Binary;
+            SerializedMiniKQLParams = SourceProgram.Params.Binary;
             return true;
         }
 

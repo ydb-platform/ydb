@@ -2,12 +2,22 @@ import io
 import os
 import os.path
 from threading import Lock
+from typing import Any, Callable, Dict, Optional, Tuple
 
-from flask import Flask
-from flask_cors import CORS
+try:
+    from flask import Flask
+    from flask_cors import CORS
+except ImportError:
+    import warnings
+
+    warnings.warn(
+        "When using MotoServer, ensure that you install moto[server] to have all dependencies!\n"
+    )
+    raise
 
 import moto.backends as backends
 import moto.backend_index as backend_index
+from moto.core import BackendDict, DEFAULT_ACCOUNT_ID
 from moto.core.utils import convert_to_flask_response
 
 from .utilities import AWSTestHelper, RegexConverter
@@ -40,20 +50,22 @@ SIGNING_ALIASES = {
 SERVICE_BY_VERSION = {"2009-04-15": "sdb"}
 
 
-class DomainDispatcherApplication(object):
+class DomainDispatcherApplication:
     """
     Dispatch requests to different applications based on the "Host:" header
     value. We'll match the host header value with the url_bases of each backend.
     """
 
-    def __init__(self, create_app, service=None):
+    def __init__(
+        self, create_app: Callable[[str], Flask], service: Optional[str] = None
+    ):
         self.create_app = create_app
         self.lock = Lock()
-        self.app_instances = {}
+        self.app_instances: Dict[str, Flask] = {}
         self.service = service
         self.backend_url_patterns = backend_index.backend_url_patterns
 
-    def get_backend_for_host(self, host):
+    def get_backend_for_host(self, host: str) -> Any:
 
         if host == "moto_api":
             return host
@@ -65,18 +77,18 @@ class DomainDispatcherApplication(object):
             return host
 
         for backend, pattern in self.backend_url_patterns:
-            if pattern.match("http://%s" % host):
+            if pattern.match(f"http://{host}"):
                 return backend
 
         if "amazonaws.com" in host:
-            print(
-                "Unable to find appropriate backend for {}."
-                "Remember to add the URL to urls.py, and run scripts/update_backend_index.py to index it.".format(
-                    host
-                )
+            print(  # noqa
+                f"Unable to find appropriate backend for {host}."
+                "Remember to add the URL to urls.py, and run scripts/update_backend_index.py to index it."
             )
 
-    def infer_service_region_host(self, body, environ):
+    def infer_service_region_host(
+        self, body: Optional[str], environ: Dict[str, Any]
+    ) -> str:
         auth = environ.get("HTTP_AUTHORIZATION")
         target = environ.get("HTTP_X_AMZ_TARGET")
         service = None
@@ -88,7 +100,14 @@ class DomainDispatcherApplication(object):
             try:
                 credential_scope = auth.split(",")[0].split()[1]
                 _, _, region, service, _ = credential_scope.split("/")
-                service = SIGNING_ALIASES.get(service.lower(), service)
+                path = environ.get("PATH_INFO", "")
+                if service.lower() == "execute-api" and path.startswith(
+                    "/@connections"
+                ):
+                    # APIGateway Management API
+                    pass
+                else:
+                    service = SIGNING_ALIASES.get(service.lower(), service)
                 service = service.lower()
             except ValueError:
                 # Signature format does not match, this is exceptional and we can't
@@ -104,7 +123,7 @@ class DomainDispatcherApplication(object):
                 service, region = UNSIGNED_REQUESTS.get(service, DEFAULT_SERVICE_REGION)
             elif action and action in UNSIGNED_ACTIONS:
                 # See if we can match the Action to a known service
-                service, region = UNSIGNED_ACTIONS.get(action)
+                service, region = UNSIGNED_ACTIONS[action]
             if not service:
                 service, region = self.get_service_from_body(body, environ)
             if not service:
@@ -120,9 +139,7 @@ class DomainDispatcherApplication(object):
         elif service == "mediastore" and not target:
             # All MediaStore API calls have a target header
             # If no target is set, assume we're trying to reach the mediastore-data service
-            host = "data.{service}.{region}.amazonaws.com".format(
-                service=service, region=region
-            )
+            host = f"data.{service}.{region}.amazonaws.com"
         elif service == "dynamodb":
             if environ["HTTP_X_AMZ_TARGET"].startswith("DynamoDBStreams"):
                 host = "dynamodbstreams"
@@ -136,25 +153,24 @@ class DomainDispatcherApplication(object):
                 else:
                     host = "dynamodb"
         elif service == "sagemaker":
-            host = "api.{service}.{region}.amazonaws.com".format(
-                service=service, region=region
-            )
+            if environ["PATH_INFO"].endswith("invocations"):
+                host = f"runtime.{service}.{region}.amazonaws.com"
+            else:
+                host = f"api.{service}.{region}.amazonaws.com"
         elif service == "timestream":
-            host = "ingest.{service}.{region}.amazonaws.com".format(
-                service=service, region=region
-            )
+            host = f"ingest.{service}.{region}.amazonaws.com"
         elif service == "s3" and (
             path.startswith("/v20180820/") or "s3-control" in environ["HTTP_HOST"]
         ):
             host = "s3control"
+        elif service == "ses" and path.startswith("/v2/"):
+            host = "sesv2"
         else:
-            host = "{service}.{region}.amazonaws.com".format(
-                service=service, region=region
-            )
+            host = f"{service}.{region}.amazonaws.com"
 
         return host
 
-    def get_application(self, environ):
+    def get_application(self, environ: Dict[str, Any]) -> Flask:
         path_info = environ.get("PATH_INFO", "")
 
         # The URL path might contain non-ASCII text, for instance unicode S3 bucket names
@@ -182,7 +198,7 @@ class DomainDispatcherApplication(object):
                 self.app_instances[backend] = app
             return app
 
-    def _get_body(self, environ):
+    def _get_body(self, environ: Dict[str, Any]) -> Optional[str]:
         body = None
         try:
             # AWS requests use querystrings as the body (Action=x&Data=y&...)
@@ -197,10 +213,12 @@ class DomainDispatcherApplication(object):
         finally:
             if body:
                 # We've consumed the body = need to reset it
-                environ["wsgi.input"] = io.StringIO(body)
+                environ["wsgi.input"] = io.BytesIO(body.encode("utf-8"))
         return body
 
-    def get_service_from_body(self, body, environ):
+    def get_service_from_body(
+        self, body: Optional[str], environ: Dict[str, Any]
+    ) -> Tuple[Optional[str], Optional[str]]:
         # Some services have the SDK Version in the body
         # If the version is unique, we can derive the service from it
         version = self.get_version_from_body(body)
@@ -210,22 +228,24 @@ class DomainDispatcherApplication(object):
             return SERVICE_BY_VERSION[version], region
         return None, None
 
-    def get_version_from_body(self, body):
+    def get_version_from_body(self, body: Optional[str]) -> Optional[str]:
         try:
-            body_dict = dict(x.split("=") for x in body.split("&"))
+            body_dict = dict(x.split("=") for x in body.split("&"))  # type: ignore
             return body_dict["Version"]
         except (AttributeError, KeyError, ValueError):
             return None
 
-    def get_action_from_body(self, body):
+    def get_action_from_body(self, body: Optional[str]) -> Optional[str]:
         try:
             # AWS requests use querystrings as the body (Action=x&Data=y&...)
-            body_dict = dict(x.split("=") for x in body.split("&"))
+            body_dict = dict(x.split("=") for x in body.split("&"))  # type: ignore
             return body_dict["Action"]
         except (AttributeError, KeyError, ValueError):
             return None
 
-    def get_service_from_path(self, environ):
+    def get_service_from_path(
+        self, environ: Dict[str, Any]
+    ) -> Tuple[Optional[str], Optional[str]]:
         # Moto sometimes needs to send a HTTP request to itself
         # In which case it will send a request to 'http://localhost/service_region/whatever'
         try:
@@ -235,12 +255,12 @@ class DomainDispatcherApplication(object):
         except (AttributeError, KeyError, ValueError):
             return None, None
 
-    def __call__(self, environ, start_response):
+    def __call__(self, environ: Dict[str, Any], start_response: Any) -> Any:
         backend_app = self.get_application(environ)
         return backend_app(environ, start_response)
 
 
-def create_backend_app(service):
+def create_backend_app(service: str) -> Flask:
     from werkzeug.routing import Map
 
     current_file = os.path.abspath(__file__)
@@ -250,7 +270,7 @@ def create_backend_app(service):
     # Create the backend_app
     backend_app = Flask("moto", template_folder=template_dir)
     backend_app.debug = True
-    backend_app.service = service
+    backend_app.service = service  # type: ignore[attr-defined]
     CORS(backend_app)
 
     # Reset view functions to reset the app
@@ -259,15 +279,20 @@ def create_backend_app(service):
     backend_app.url_map.converters["regex"] = RegexConverter
 
     backend_dict = backends.get_backend(service)
-    if "us-east-1" in backend_dict:
-        backend = backend_dict["us-east-1"]
+    # Get an instance of this backend.
+    # We'll only use this backend to resolve the URL's, so the exact region/account_id is irrelevant
+    if isinstance(backend_dict, BackendDict):
+        if "us-east-1" in backend_dict[DEFAULT_ACCOUNT_ID]:
+            backend = backend_dict[DEFAULT_ACCOUNT_ID]["us-east-1"]
+        else:
+            backend = backend_dict[DEFAULT_ACCOUNT_ID]["global"]
     else:
         backend = backend_dict["global"]
 
     for url_path, handler in backend.flask_paths.items():
         view_func = convert_to_flask_response(handler)
         if handler.__name__ == "dispatch":
-            endpoint = "{0}.dispatch".format(handler.__self__.__name__)
+            endpoint = f"{handler.__self__.__name__}.dispatch"
         else:
             endpoint = view_func.__name__
 

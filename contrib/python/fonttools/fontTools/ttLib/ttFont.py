@@ -26,37 +26,47 @@ class TTFont(object):
     accessing tables. Tables will be only decompiled when necessary, ie. when
     they're actually accessed. This means that simple operations can be extremely fast.
 
-    Example usage::
+    Example usage:
 
-            >> from fontTools import ttLib
-            >> tt = ttLib.TTFont("afont.ttf") # Load an existing font file
-            >> tt['maxp'].numGlyphs
-            242
-            >> tt['OS/2'].achVendID
-            'B&H\000'
-            >> tt['head'].unitsPerEm
-            2048
+    .. code-block:: pycon
 
-    For details of the objects returned when accessing each table, see :ref:`tables`.
-    To add a table to the font, use the :py:func:`newTable` function::
+        >>>
+        >> from fontTools import ttLib
+        >> tt = ttLib.TTFont("afont.ttf") # Load an existing font file
+        >> tt['maxp'].numGlyphs
+        242
+        >> tt['OS/2'].achVendID
+        'B&H\000'
+        >> tt['head'].unitsPerEm
+        2048
 
-            >> os2 = newTable("OS/2")
-            >> os2.version = 4
-            >> # set other attributes
-            >> font["OS/2"] = os2
+    For details of the objects returned when accessing each table, see the
+    :doc:`tables </ttLib/tables>` documentation.
+    To add a table to the font, use the :py:func:`newTable` function:
+
+    .. code-block:: pycon
+
+        >>>
+        >> os2 = newTable("OS/2")
+        >> os2.version = 4
+        >> # set other attributes
+        >> font["OS/2"] = os2
 
     TrueType fonts can also be serialized to and from XML format (see also the
-    :ref:`ttx` binary)::
+    :doc:`ttx </ttx>` binary):
 
-            >> tt.saveXML("afont.ttx")
-            Dumping 'LTSH' table...
-            Dumping 'OS/2' table...
-            [...]
+    .. code-block:: pycon
 
-            >> tt2 = ttLib.TTFont() # Create a new font object
-            >> tt2.importXML("afont.ttx")
-            >> tt2['maxp'].numGlyphs
-            242
+        >>
+        >> tt.saveXML("afont.ttx")
+        Dumping 'LTSH' table...
+        Dumping 'OS/2' table...
+        [...]
+
+        >> tt2 = ttLib.TTFont() # Create a new font object
+        >> tt2.importXML("afont.ttx")
+        >> tt2['maxp'].numGlyphs
+        242
 
     The TTFont object may be used as a context manager; this will cause the file
     reader to be closed after the context ``with`` block is exited::
@@ -249,9 +259,8 @@ class TTFont(object):
                 "head"
             ]  # make sure 'head' is loaded so the recalculation is actually done
 
-        tags = list(self.keys())
-        if "GlyphOrder" in tags:
-            tags.remove("GlyphOrder")
+        tags = self.keys()
+        tags.pop(0)  # skip GlyphOrder tag
         numTables = len(tags)
         # write to a temporary stream to allow saving to unseekable streams
         writer = SFNTWriter(
@@ -297,14 +306,9 @@ class TTFont(object):
         self.disassembleInstructions = disassembleInstructions
         self.bitmapGlyphDataFormat = bitmapGlyphDataFormat
         if not tables:
-            tables = list(self.keys())
-            if "GlyphOrder" not in tables:
-                tables = ["GlyphOrder"] + tables
+            tables = self.keys()
             if skipTables:
-                for tag in skipTables:
-                    if tag in tables:
-                        tables.remove(tag)
-        numTables = len(tables)
+                tables = [tag for tag in tables if tag not in skipTables]
 
         if writeVersion:
             from fontTools import version
@@ -327,8 +331,7 @@ class TTFont(object):
         else:
             path, ext = os.path.splitext(writer.filename)
 
-        for i in range(numTables):
-            tag = tables[i]
+        for tag in tables:
             if splitTables:
                 tablePath = path + "." + tagToIdentifier(tag) + ext
                 tableWriter = xmlWriter.XMLWriter(
@@ -583,10 +586,8 @@ class TTFont(object):
         # temporary cmap and by the real cmap in case we don't find a unicode
         # cmap.
         numGlyphs = int(self["maxp"].numGlyphs)
-        glyphOrder = [None] * numGlyphs
+        glyphOrder = ["glyph%.5d" % i for i in range(numGlyphs)]
         glyphOrder[0] = ".notdef"
-        for i in range(1, numGlyphs):
-            glyphOrder[i] = "glyph%.5d" % i
         # Set the glyph order, so the cmap parser has something
         # to work with (so we don't get called recursively).
         self.glyphOrder = glyphOrder
@@ -596,17 +597,16 @@ class TTFont(object):
         # this naming table will usually not cover all glyphs in the font.
         # If the font has no Unicode cmap table, reversecmap will be empty.
         if "cmap" in self:
-            reversecmap = self["cmap"].buildReversed()
+            reversecmap = self["cmap"].buildReversedMin()
         else:
             reversecmap = {}
         useCount = {}
-        for i in range(numGlyphs):
-            tempName = glyphOrder[i]
+        for i, tempName in enumerate(glyphOrder):
             if tempName in reversecmap:
                 # If a font maps both U+0041 LATIN CAPITAL LETTER A and
                 # U+0391 GREEK CAPITAL LETTER ALPHA to the same glyph,
                 # we prefer naming the glyph as "A".
-                glyphName = self._makeGlyphName(min(reversecmap[tempName]))
+                glyphName = self._makeGlyphName(reversecmap[tempName])
                 numUses = useCount[glyphName] = useCount.get(glyphName, 0) + 1
                 if numUses > 1:
                     glyphName = "%s.alt%d" % (glyphName, numUses - 1)
@@ -858,8 +858,7 @@ class GlyphOrder(object):
             "The 'id' attribute is only for humans; " "it is ignored when parsed."
         )
         writer.newline()
-        for i in range(len(glyphOrder)):
-            glyphName = glyphOrder[i]
+        for i, glyphName in enumerate(glyphOrder):
             writer.simpletag("GlyphID", id=i, name=glyphName)
             writer.newline()
 
@@ -981,14 +980,16 @@ def tagToIdentifier(tag):
     letters get an underscore after the letter. Trailing spaces are
     trimmed. Illegal characters are escaped as two hex bytes. If the
     result starts with a number (as the result of a hex escape), an
-    extra underscore is prepended. Examples::
+    extra underscore is prepended. Examples:
+    .. code-block:: pycon
 
-            >>> tagToIdentifier('glyf')
-            '_g_l_y_f'
-            >>> tagToIdentifier('cvt ')
-            '_c_v_t'
-            >>> tagToIdentifier('OS/2')
-            'O_S_2f_2'
+        >>>
+        >> tagToIdentifier('glyf')
+        '_g_l_y_f'
+        >> tagToIdentifier('cvt ')
+        '_c_v_t'
+        >> tagToIdentifier('OS/2')
+        'O_S_2f_2'
     """
     import re
 

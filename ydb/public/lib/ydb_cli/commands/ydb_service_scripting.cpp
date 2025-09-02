@@ -33,34 +33,23 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
-    AddFormats(config, {
-        EOutputFormat::Pretty,
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonUnicodeArray,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::JsonBase64Array,
-        EOutputFormat::Parquet,
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode,
+        EDataFormat::JsonUnicodeArray,
+        EDataFormat::JsonBase64,
+        EDataFormat::JsonBase64Array,
+        EDataFormat::Parquet,
     });
 
     AddParametersOption(config);
+    AddLegacyParametersFileOption(config);
 
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddDefaultParamFormats(config);
+    AddLegacyStdinFormats(config);
 
-    AddStdinFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64,
-        EOutputFormat::Raw,
-        EOutputFormat::Csv,
-        EOutputFormat::Tsv
-    }, {
-        EOutputFormat::NoFraming,
-        EOutputFormat::NewlineDelimited
-    });
-
-    AddParametersStdinOption(config, "script");
+    AddBatchParametersOptions(config, "script");
+    AddLegacyBatchParametersOptions(config);
 
     config.SetFreeArgsNum(0);
 
@@ -82,10 +71,12 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
 
 void TCommandExecuteYqlScript::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseInputFormats();
+    ParseOutputFormats();
     if (!Script && !ScriptFile) {
-        throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
-            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of script\" (\"--script\", \"-s\") "
+            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
@@ -94,7 +85,7 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    if(FlameGraphPath && FlameGraphPath->Empty())
+    if(FlameGraphPath && FlameGraphPath->empty())
     {
         throw TMisuseException() << "FlameGraph path can not be empty.";
     }
@@ -102,7 +93,8 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
-    NScripting::TScriptingClient client(CreateDriver(config));
+    TDriver driver = CreateDriver(config);
+    NScripting::TScriptingClient client(driver);
 
     if (Explain) {
         NScripting::TExplainYqlRequestSettings settings;
@@ -110,7 +102,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
 
         auto result = client.ExplainYqlScript(Script, settings).GetValueSync();
 
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         PrintExplainResult(result);
     } else {
         NScripting::TExecuteYqlRequestSettings settings;
@@ -119,14 +111,12 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                                && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
             throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
-                                        + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
+                                        + (CollectStatsMode.empty() ? "none" : CollectStatsMode) + '.';
         }
 
-        if (!Parameters.empty() || !IsStdinInteractive()) {
-            ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-                ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+        if (!Parameters.empty() || InputParamStream) {
             THolder<TParamsBuilder> paramBuilder;
-            while (GetNextParams(paramBuilder)) {
+            while (GetNextParams(driver, Script, paramBuilder, config.IsVerbose())) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,
                         paramBuilder->Build(),
@@ -134,7 +124,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                 );
 
                 auto result = asyncResult.GetValueSync();
-                ThrowOnError(result);
+                NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
                 PrintResponseHeader(result);
                 PrintResponse(result);
             }
@@ -144,7 +134,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                     FillSettings(settings)
             );
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             PrintResponseHeader(result);
             PrintResponse(result);
         }
@@ -156,7 +146,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
 void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& result) {
     {
         TResultSetPrinter printer(OutputFormat);
-        const TVector<TResultSet>& resultSets = result.GetResultSets();
+        const std::vector<TResultSet>& resultSets = result.GetResultSets();
         for (auto resultSetIt = resultSets.begin(); resultSetIt != resultSets.end(); ++resultSetIt) {
             if (resultSetIt != resultSets.begin()) {
                 printer.Reset();
@@ -165,8 +155,8 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
-    if (stats.Defined()) {
+    const std::optional<NTable::TQueryStats>& stats = result.GetStats();
+    if (stats.has_value()) {
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
 
         auto fullStats = stats->GetPlan();
@@ -174,11 +164,11 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
             Cout << Endl << "Full statistics:" << Endl;
 
             TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
-            queryPlanPrinter.Print(*fullStats);
+            queryPlanPrinter.Print(TString{*fullStats});
 
             if (FlameGraphPath) {
                 try {
-                    NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats);
+                    NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, TString{*fullStats});
                     Cout << "Resource usage flame graph is successfully saved to " << *FlameGraphPath << Endl;
                 }
                 catch (const yexception& ex) {
@@ -191,7 +181,7 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
 
 void TCommandExecuteYqlScript::PrintExplainResult(NScripting::TExplainYqlResult& result) {
     TQueryPlanPrinter queryPlanPrinter(OutputFormat);
-    queryPlanPrinter.Print(result.GetPlan());
+    queryPlanPrinter.Print(TString{result.GetPlan()});
 }
 
 }

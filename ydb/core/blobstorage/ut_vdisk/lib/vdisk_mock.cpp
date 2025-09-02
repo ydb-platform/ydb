@@ -37,7 +37,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         VCtx.Reset(new TVDiskContext(ctx.SelfID, Top, new ::NMonitoring::TDynamicCounters, VDiskId,
-                ctx.ExecutorThread.ActorSystem, NPDisk::DEVICE_TYPE_UNKNOWN));
+                ctx.ActorSystem(), NPDisk::DEVICE_TYPE_UNKNOWN));
         Become(&TVDiskMockActor::StateFunc);
     }
 

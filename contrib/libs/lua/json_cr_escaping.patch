@@ -1,0 +1,12 @@
+Index: common/json.lua
+===================================================================
+--- common/json.lua	(revision 1131457)
++++ common/json.lua	(working copy)
+@@ -333,6 +333,7 @@
+   s = string.gsub(s,'\\','\\\\')
+   s = string.gsub(s,'"','\\"')
+   s = string.gsub(s,"'","\\'")
++  s = string.gsub(s,'\r','\\r')
+   s = string.gsub(s,'\n','\\n')
+   s = string.gsub(s,'\t','\\t')
+   return s 

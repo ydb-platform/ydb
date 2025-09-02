@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include "actors.h"
 #include "kafka_fetch_actor.h"
@@ -35,7 +36,7 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
         TVector<NKikimr::NPQ::TPartitionFetchRequest> partPQRequests;
         PrepareFetchRequestData(topicIndex, partPQRequests);
         auto ruPerRequest = topicIndex == 0 && Context->Config.GetMeteringV2Enabled();
-        NKikimr::NPQ::TFetchRequestSettings request(Context->DatabasePath, partPQRequests, FetchRequestData->MaxWaitMs, FetchRequestData->MaxBytes, Context->RlContext, *Context->UserToken, 0, ruPerRequest);
+        NKikimr::NPQ::TFetchRequestSettings request(Context->DatabasePath, partPQRequests, FetchRequestData->MaxWaitMs, FetchRequestData->MaxBytes, Context->RlContext, Context->UserToken, 0, ruPerRequest);
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);
         PendingResponses++;
@@ -59,7 +60,7 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
-        partPQRequest.ClientId = Context->GroupId.Empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
+        partPQRequest.ClientId = Context->GroupId.empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
     }
 }
 
@@ -148,7 +149,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         }
 
         lastOffset = result.GetOffset();
-        lastTimestamp = result.GetWriteTimestampMS();
+        lastTimestamp = result.GetCreateTimestampMS();
         auto& record = recordsBatch.Records[recordIndex];
 
         record.DataChunk = NKikimr::GetDeserializedData(result.GetData());
@@ -166,6 +167,31 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                 record.Headers.push_back(header);
             }
         }
+
+        TKafkaHeader header;
+        header.CodecKeyStr = "__codec";
+        header.Key = header.CodecKeyStr;
+
+        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(record.DataChunk.GetCodec() + 1);
+        switch (codec) {
+            case NYdb::NTopic::ECodec::RAW:
+                header.CodecValueStr = "RAW";
+                break;
+            case NYdb::NTopic::ECodec::GZIP:
+                header.CodecValueStr = "GZIP";
+                break;
+            case NYdb::NTopic::ECodec::LZOP:
+                header.CodecValueStr = "LZOP";
+                break;
+            case NYdb::NTopic::ECodec::ZSTD:
+                header.CodecValueStr = "ZSTD";
+                break;
+            default:
+                header.CodecValueStr = std::to_string(static_cast<uint32_t>(codec));
+        }
+
+        header.Value = header.CodecValueStr;
+        record.Headers.push_back(header);
 
         record.Value = record.DataChunk.GetData();
         record.OffsetDelta = lastOffset - baseOffset;

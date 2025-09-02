@@ -1,0 +1,12 @@
+--- a/src/nfagraph/ng_is_equal.h
++++ b/src/nfagraph/ng_is_equal.h
+@@ -51,6 +51,9 @@ u64a hash_holder(const NGHolder &g);
+     size_t operator()(const std::shared_ptr<const NGHolder> &h) const {
+         return hash_holder(*h);
+     }
++    size_t operator()(const std::shared_ptr<NGHolder> &h) const {
++        return hash_holder(*h);
++    }
+ };
+
+ struct NGHolderEqual {

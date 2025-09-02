@@ -37,14 +37,14 @@ namespace NTest {
             return Remap_;
         }
 
-        void Make(IPages*) noexcept
+        void Make(IPages*)
         {
             State.Init(0);
         }
 
-        EReady Seek(TRawVals key, ESeek seek) noexcept
+        EReady Seek(TRawVals key, ESeek seek)
         {
-            Y_ABORT_UNLESS(seek == ESeek::Exact, "Db Select(...) is a point lookup");
+            Y_ENSURE(seek == ESeek::Exact, "Db Select(...) is a point lookup");
 
             ITransactionMapPtr txMap;
             if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {
@@ -54,12 +54,12 @@ namespace NTest {
             return (Ready = Base.Select(Table, key, Scheme->Tags(), State, /* readFlags */ 0, Snapshot, txMap));
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return (Ready = EReady::Gone);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return State;
         }

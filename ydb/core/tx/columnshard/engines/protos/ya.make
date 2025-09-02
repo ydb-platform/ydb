@@ -1,12 +1,14 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     portion_info.proto
+    index.proto
 )
 
 PEERDIR(
-    ydb/core/tx/columnshard/engines/scheme/statistics/protos
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
+    ydb/core/tx/columnshard/common/protos
 
 )
 

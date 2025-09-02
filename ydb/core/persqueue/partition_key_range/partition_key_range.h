@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/yql/public/decimal/yql_wide_int.h>
+#include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/maybe.h>
 

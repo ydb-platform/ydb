@@ -1,10 +1,8 @@
 IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
 
-YQL_UDF_YDB_TEST()
+YQL_UDF_TEST()
 
 DEPENDS(ydb/library/yql/udfs/common/clickhouse/client)
-
-TIMEOUT(300)
 
 SIZE(MEDIUM)
 

@@ -1,4 +1,6 @@
 #include "alter_sharding.h"
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/string/type.h>
 
 namespace NKikimr::NKqp {
@@ -24,6 +26,10 @@ void TAlterShardingOperation::DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& 
     scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
     scheme.MutableAlterColumnTable()->SetName(GetStoreName());
     scheme.MutableAlterColumnTable()->MutableReshardColumnTable()->SetIncrease(*Increase);
+}
+
+void TAlterShardingOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& /*scheme*/) const {
+    AFL_VERIFY(false);
 }
 
 }

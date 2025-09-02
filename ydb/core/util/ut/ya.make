@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/util)
 FORK_SUBTESTS()
 IF (WITH_VALGRIND)
     SPLIT_FACTOR(30)
-    TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -22,7 +20,6 @@ SRCS(
     bits_ut.cpp
     btree_cow_ut.cpp
     btree_ut.cpp
-    cache_cache_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
     concurrent_rw_hash_ut.cpp

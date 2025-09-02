@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/zstd
+disable_includes:
+  - zstd.c
+exclude_from_macros:
+  - zstandard/backend_cffi.py
+copy:
+  - c-ext/*

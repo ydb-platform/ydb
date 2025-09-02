@@ -1,0 +1,16 @@
+--- contrib/libs/libidn/lib/gl/cdefs.h	(index)
++++ contrib/libs/libidn/lib/gl/cdefs.h	(working tree)
+@@ -489,13 +489,6 @@
+       [!!sizeof (struct { int __error_if_negative: (expr) ? 2 : -1; })]
+ #endif
+ 
+-/* Gnulib avoids including these, as they don't work on non-glibc or
+-   older glibc platforms.  */
+-#ifndef __GNULIB_CDEFS
+-# include <bits/wordsize.h>
+-# include <bits/long-double.h>
+-#endif
+-
+ #if __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI == 1
+ # ifdef __REDIRECT
+ 

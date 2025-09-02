@@ -14,7 +14,8 @@ namespace NKikimr {
 
     public:
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests) override {
+                TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests,
+                const TAccelerationParams& accelerationParams) override {
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -55,7 +56,7 @@ namespace NKikimr {
                     state.Id.ToString().c_str(), ui32(state.WholeSituation));
             state.WholeSituation = TBlobState::ESituation::Present;
             const EStrategyOutcome outcome = TPut3dcStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false).Process(logCtx,
-                state, info, blackboard, groupDiskRequests);
+                state, info, blackboard, groupDiskRequests, accelerationParams);
             switch (outcome) {
                 case EStrategyOutcome::IN_PROGRESS:
                     state.WholeSituation = TBlobState::ESituation::Unknown;
@@ -80,7 +81,7 @@ namespace NKikimr {
                         TLogoBlobID id(state.Id, partIdx + 1);
                         groupDiskRequests.AddGet(disk.OrderNumber, id, needed);
                         diskPart.Requested = needed;
-                        A_LOG_DEBUG_SX(logCtx, "3DCGR10", "sending Get"
+                        DSP_LOG_DEBUG_SX(logCtx, "3DCGR10", "sending Get"
                                 << " diskIdx# " << diskIdx
                                 << " OrderNumber# " << disk.OrderNumber
                                 << " Requested# " << diskPart.Requested.ToString()
@@ -158,7 +159,7 @@ namespace NKikimr {
                 }
             }
 
-            A_LOG_DEBUG_SX(logCtx, "3DCGR02", "CheckForFailureErrorNoData"
+            DSP_LOG_DEBUG_SX(logCtx, "3DCGR02", "CheckForFailureErrorNoData"
                 << " state# " << state.ToString());
 
             // check if we do not excess the fail model

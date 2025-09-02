@@ -16,7 +16,7 @@ namespace NTable {
 
 using namespace NTabletFlatScheme;
 
-using NKikimrSchemeOp::ECompactionStrategy;
+using NKikimrCompaction::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
@@ -38,37 +38,21 @@ public:
 
         }
 
-        bool IsTheSame(const TRoom &room) const noexcept
-        {
-            return
-                Main == room.Main
-                && Blobs == room.Blobs
-                && Outer == room.Outer;
-        }
-
         ui8 Main = DefaultChannel;      /* Primary channel for page collection  */
-        ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */
+        TVector<ui8> Blobs = {DefaultChannel};     /* Channels for external blobs   */
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };
 
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
-
-        bool IsTheSame(const TFamily &other) const noexcept
-        {
-            return
-                Room == other.Room
-                && Cache == other.Cache
-                && Codec == other.Codec
-                && Small == other.Small
-                && Large == other.Large;
-        }
+        using ECacheMode = NPage::ECacheMode;
 
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
         ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
+        ECacheMode CacheMode = ECacheMode::Regular;
     };
 
     using TColumn = NTable::TColumn;
@@ -103,6 +87,10 @@ public:
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
+
+        // When true this table has an in-memory caching enabled that has not been processed yet
+        mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
+        mutable bool PendingCacheModeChange = false; // has unprocessed NPage::ECacheMode change
     };
 
     struct TRedo {
@@ -128,7 +116,7 @@ public:
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
-        ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+        ECompactionStrategy DefaultCompactionStrategy = NKikimrCompaction::CompactionStrategyGenerational;
     };
 
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
@@ -152,7 +140,7 @@ public:
         return Tables.empty();
     }
 
-    const TRoom* DefaultRoomFor(ui32 id) const noexcept
+    const TRoom* DefaultRoomFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id))
             return table->Rooms.FindPtr(DefaultRoom);
@@ -160,7 +148,7 @@ public:
         return nullptr;
     }
 
-    const TFamily* DefaultFamilyFor(ui32 id) const noexcept
+    const TFamily* DefaultFamilyFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id))
             return table->Families.FindPtr(TColumn::LeaderFamily);
@@ -168,15 +156,15 @@ public:
         return nullptr;
     }
 
-    ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept
+    ECompactionStrategy CompactionStrategyFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;
-            if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
-                if (strategy == NKikimrSchemeOp::CompactionStrategySharded) {
+            if (strategy != NKikimrCompaction::CompactionStrategyUnset) {
+                if (strategy == NKikimrCompaction::CompactionStrategySharded) {
                     // Sharded strategy doesn't exist anymore
                     // Use the safe generational strategy instead
-                    strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+                    strategy = NKikimrCompaction::CompactionStrategyGenerational;
                 }
                 return strategy;
             }
@@ -184,7 +172,6 @@ public:
 
         return Executor.DefaultCompactionStrategy;
     }
-
 
     THashMap<ui32, TTableInfo> Tables;
     THashMap<TString, ui32> TableNames;
@@ -224,6 +211,7 @@ class TAlter {
 public:
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
+    using ECacheMode = NPage::ECacheMode;
 
     TAlter(IAlterSink* sink = nullptr)
         : Sink(sink)
@@ -240,14 +228,17 @@ public:
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
     TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null = { });
+    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
-    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
+    TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec);
+    TAlter& SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode);
+    TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
-    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer);
+    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);
     TAlter& SetExecutorFastLogPolicy(bool allow);

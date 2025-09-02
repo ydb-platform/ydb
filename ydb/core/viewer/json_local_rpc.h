@@ -1,20 +1,11 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/json/json_writer.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 struct TEvLocalRpcPrivate {
     enum EEv {
@@ -24,38 +15,27 @@ struct TEvLocalRpcPrivate {
     };
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    template<class TProtoResult>
-    struct TEvGrpcRequestResult : NActors::TEventLocal<TEvGrpcRequestResult<TProtoResult>, EvGrpcRequestResult> {
-        TProtoResult Message;
-        std::optional<NYdb::TStatus> Status;
-
-        TEvGrpcRequestResult()
-        {}
-    };
 };
 
-using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
-
 template <class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoService, class TRpcEv>
-class TJsonLocalRpc : public TActorBootstrapped<TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>> {
+class TJsonLocalRpc : public TViewerPipeClient {
     using TThis = TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>;
-    using TBase = TActorBootstrapped<TThis>;
+    using TBase = TViewerPipeClient;
 
-    using TBase::Send;
-    using TBase::PassAway;
-    using TBase::Become;
+    struct TEvGrpcRequestResult : NActors::TEventLocal<TEvGrpcRequestResult, TEvLocalRpcPrivate::EvGrpcRequestResult> {
+        TProtoResponse Response;
+        //std::optional<NYdb::TStatus> Status;
+
+        TEvGrpcRequestResult(TProtoResponse response)
+            : Response(std::move(response))
+        {}
+    };
 
 protected:
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-    TProtoRequest Request;
-    TAutoPtr<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>> Result;
-
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
-    TString Database;
+    using TBase::ReplyAndPassAway;
+    using TRequestProtoType = TProtoRequest;
+    std::vector<HTTP_METHOD> AllowedMethods = {};
+    std::unique_ptr<TEvGrpcRequestResult> Result;
     NThreading::TFuture<TProtoResponse> RpcFuture;
 
 public:
@@ -63,13 +43,11 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonLocalRpc(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonLocalRpc(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TBase(viewer, ev, TRequestProtoType::descriptor()->name())
     {}
 
-    TProtoRequest Params2Proto(const TCgiParameters& params) {
-        TProtoRequest request;
+    void Params2Proto(const TCgiParameters& params, TRequestProtoType& request) {
         using google::protobuf::Descriptor;
         using google::protobuf::Reflection;
         using google::protobuf::FieldDescriptor;
@@ -119,125 +97,133 @@ public:
                 }
             }
         }
-        return request;
     }
 
-    TProtoRequest Params2Proto() {
-        TProtoRequest request;
-        NProtobufJson::TJson2ProtoConfig json2ProtoConfig;
-        auto postData = Event->Get()->Request.GetPostContent();
-        if (!postData.empty()) {
-            try {
-                NProtobufJson::Json2Proto(postData, request, json2ProtoConfig);
-            }
-            catch (const yexception& e) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", e.what()));
-            }
-        } else {
-            const auto& params(Event->Get()->Request.GetParams());
-            return Params2Proto(params);
-        }
-        return request;
-    }
-
-    bool PostToRequest() {
-        auto postData = Event->Get()->Request.GetPostContent();
-        if (!postData.empty()) {
-            try {
-                NProtobufJson::Json2Proto(postData, Request, {});
-                return true;
-            }
-            catch (const yexception& e) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", e.what()));
-                return false;
+    virtual bool ValidateRequest(TRequestProtoType& request) {
+        using google::protobuf::Descriptor;
+        using google::protobuf::Reflection;
+        using google::protobuf::FieldDescriptor;
+        const Descriptor& descriptor = *TRequestProtoType::GetDescriptor();
+        const Reflection& reflection = *TRequestProtoType::GetReflection();
+        for (int idx = 0; idx < descriptor.field_count(); ++idx) {
+            const FieldDescriptor* field = descriptor.field(idx);
+            const auto& options(field->options());
+            if (options.HasExtension(Ydb::required)) {
+                if (options.GetExtension(Ydb::required)) {
+                    if (!reflection.HasField(request, field)) {
+                        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", TStringBuilder() << "field '" << field->name() << "' is required"));
+                        return false;
+                    }
+                }
             }
         }
         return true;
     }
 
-    void SendGrpcRequest() {
-        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), Database, Event->Get()->UserToken, TlsActivationContext->ActorSystem());
-        RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TlsActivationContext->ActorSystem()]
-                            (const NThreading::TFuture<TProtoResponse>& future) {
-            auto& response = future.GetValueSync();
-            auto result = MakeHolder<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>>();
-            if constexpr (TRpcEv::IsOp) {
-                if (response.operation().ready() && response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                    TProtoResult rs;
-                    response.operation().result().UnpackTo(&rs);
-                    result->Message = std::move(rs);
-                }
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(response.operation().issues(), issues);
-                result->Status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), std::move(issues));
-            } else {
-                result->Message = response;
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(response.issues(), issues);
-                result->Status = NYdb::TStatus(NYdb::EStatus(response.status()), std::move(issues));
+    bool Params2Proto(TRequestProtoType& request) {
+        auto postData = Event->Get()->Request.GetPostContent();
+        if (!postData.empty()) {
+            try {
+                NProtobufJson::Json2Proto(postData, request);
             }
+            catch (const yexception& e) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", e.what()));
+                return false;
+            }
+        }
+        Params2Proto(Params, request);
+        if (!ValidateRequest(request)) {
+            return false;
+        }
+        return true;
+    }
 
-            actorSystem->Send(actorId, result.Release());
+    void SendGrpcRequest(TRequestProtoType&& request) {
+        // TODO(xenoxeno): pass trace id
+        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database, Event->Get()->UserToken, TActivationContext::ActorSystem());
+        RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TActivationContext::ActorSystem()]
+                            (const NThreading::TFuture<TProtoResponse>& future) {
+            actorSystem->Send(actorId, new TEvGrpcRequestResult(future.GetValueSync()));
         });
     }
 
     virtual void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), true);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-
-        SendGrpcRequest();
-
-        Become(&TThis::StateRequested, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        if (!AllowedMethods.empty() && std::find(AllowedMethods.begin(), AllowedMethods.end(), Event->Get()->Request.GetMethod()) == AllowedMethods.end()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Method is not allowed"));
+        }
+        if (Database.empty()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
+        }
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        TRequestProtoType request;
+        if (!Params2Proto(request)) {
+            return;
+        }
+        SendGrpcRequest(std::move(request));
+        Become(&TThis::StateRequested, Timeout, new TEvents::TEvWakeup());
     }
 
-    void Handle(typename TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>::TPtr& ev) {
-        Result = ev->Release();
+    void Handle(TEvGrpcRequestResult::TPtr& ev) {
+        Result.reset(ev->Release().Release());
         ReplyAndPassAway();
     }
 
     STATEFN(StateRequested) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>, Handle);
+            hFunc(TEvGrpcRequestResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void ReplyAndPassAway() {
-        if (Result && Result->Status) {
-            if (!Result->Status->IsSuccess()) {
-                NJson::TJsonValue json;
-                TString message;
-                MakeErrorReply(json, message, Result->Status.value());
-                TStringStream stream;
-                NJson::WriteJson(&stream, &json);
-                if (Result->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    return ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get(), "application/json", stream.Str()));
+        if (Result) {
+            auto& response = Result->Response;
+            std::optional<NYdb::TStatus> status;
+            NJson::TJsonValue body;
+            if constexpr (TRpcEv::IsOp) {
+                if constexpr (!std::is_same_v<TProtoResult, Ydb::Operations::Operation>) {
+                    NYql::TIssues issues;
+                    NYql::IssuesFromMessage(response.operation().issues(), issues);
+                    status = NYdb::TStatus(NYdb::EStatus(response.operation().status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
+                }
+                if (response.operation().ready() && response.operation().has_result()) {
+                    TProtoResult rs;
+                    response.operation().result().UnpackTo(&rs);
+                    Proto2Json(rs, body);
                 } else {
-                    return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json", stream.Str()));
+                    Proto2Json(response.operation(), body);
                 }
             } else {
-                TStringStream json;
-                TProtoToJson::ProtoToJson(json, Result->Message, JsonSettings);
-                return ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()));
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(response.issues(), issues);
+                status = NYdb::TStatus(NYdb::EStatus(response.status()), NYdb::NAdapters::ToSdkIssues(std::move(issues)));
+                Proto2Json(response, body);
+            }
+
+            if (!status || status->IsSuccess()) {
+                return ReplyAndPassAway(GetHTTPOKJSON(body));
+            } else {
+                if (status) {
+                    NJson::TJsonValue json;
+                    TString message;
+                    MakeJsonErrorReply(json, message, status.value());
+                    TStringStream stream;
+                    NJson::WriteJson(&stream, &json);
+                    if (status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
+                        return ReplyAndPassAway(GetHTTPFORBIDDEN("application/json", stream.Str()), message);
+                    } else {
+                        return ReplyAndPassAway(GetHTTPBADREQUEST("application/json", stream.Str()), message);
+                    }
+                } else {
+                    return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No status"), "internal error");
+                }
             }
         } else {
-            return ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get()));
+            return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No result"), "internal error");
         }
-    }
-
-
-    void HandleTimeout() {
-        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
-    }
-
-    void ReplyAndPassAway(TString data) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
     }
 };
 
-
-}
-}
+}  // namespace NKikimr::NViewer

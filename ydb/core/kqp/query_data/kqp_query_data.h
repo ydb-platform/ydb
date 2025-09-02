@@ -1,10 +1,11 @@
 #pragma once
 
+#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
@@ -79,19 +80,21 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
+    const TVector<TString>* ColumnHints = nullptr;
     TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
-    Ydb::ResultSet TrailingResult;
     bool HasTrailingResult = false;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
         const TVector<ui32>* сolumnOrder,
+        const TVector<TString>* columnHints,
         const TMaybe<ui32>& queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
+        , ColumnHints(columnHints)
         , QueryResultIndex(queryResultIndex)
     {}
 
@@ -99,11 +102,11 @@ struct TKqpExecuterTxResult {
         const NKikimr::NMiniKQL::THolderFactory& factory);
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
-    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* ExtractTrailingYdb(google::protobuf::Arena* arena);
+    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
+    bool HasTrailingResults();
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
-    void FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite);
+    void FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
 };
 
 struct TTimeAndRandomProvider {
@@ -205,6 +208,7 @@ private:
     THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
+    THashSet<ui32> BuiltResultIndexes;
     mutable TPartitionedParamMap PartitionedParams;
 
 public:
@@ -215,11 +219,10 @@ public:
     TQueryData(TTxAllocatorState::TPtr allocatorState);
     ~TQueryData();
 
-    const TParamMap& GetParams();
-
     const TParamProtobufMap& GetParamsProtobuf();
 
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv();
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory();
 
     TTxAllocatorState::TPtr GetAllocState() { return AllocState; }
     NKikimr::NMiniKQL::TType* GetParameterType(const TString& name);
@@ -242,23 +245,25 @@ public:
         return resultIndex < TxResults[txIndex].size();
     }
 
+    void AddBuiltResultIndex(ui32 resultIndex) {
+        BuiltResultIndexes.insert(resultIndex);
+    }
+
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
     void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
         NMiniKQL::TTypeEnvironment& txTypeEnv);
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
-    void ParseParameters(const NKikimrMiniKQL::TParams& parameters);
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
-    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
-    Ydb::ResultSet* ExtractTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
+    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, TMaybe<ui64> rowsLimitPerWrite);
+    bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);
     TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
-    const NKikimrMiniKQL::TParams* GetParameterMiniKqlValue(const TString& name);
     const Ydb::TypedValue* GetParameterTypedValue(const TString& name);
 
     NYql::NDqProto::TData SerializeParamValue(const TString& name);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/tx/replication/common/worker_id.h>
 
 #include <util/generic/hash_set.h>
@@ -42,9 +43,18 @@ public:
     bool HasSession() const;
     ui32 GetSession() const;
 
+    bool IsDataEnded() const;
+    void SetDataEnded(bool value);
+
+    void SetHeartbeat(const TRowVersion& value);
+    bool HasHeartbeat() const;
+    const TRowVersion& GetHeartbeat() const;
+
 private:
     THolder<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;
+    bool DataEnded = false;
+    TMaybe<TRowVersion> Heartbeat;
 };
 
 }

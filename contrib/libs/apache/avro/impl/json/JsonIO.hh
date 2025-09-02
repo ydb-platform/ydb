@@ -34,7 +34,7 @@ namespace avro {
 namespace json {
 
 inline char toHex(unsigned int n) {
-    return (n < 10) ? (n + '0') : (n + 'a' - 10);
+    return static_cast<char>((n < 10) ? (n + '0') : (n + 'a' - 10));
 }
 
 class AVRO_DECL JsonParser : boost::noncopyable {
@@ -263,11 +263,22 @@ class AVRO_DECL JsonGenerator {
         out_.write(toHex((static_cast<unsigned char>(c)) % 16));
     }
 
-    void escapeUnicode(uint32_t c) {
+    void escapeUnicode16(uint32_t c) {
         out_.write('\\');
         out_.write('u');
-        writeHex((c >> 8) & 0xff);
-        writeHex(c & 0xff);
+        writeHex(static_cast<char>((c >> 8) & 0xff));
+        writeHex(static_cast<char>(c & 0xff));
+    }
+    void escapeUnicode(uint32_t c) {
+        if (c < 0x10000) {
+            escapeUnicode16(c);
+        } else if (c < 0x110000) {
+            c -= 0x10000;
+            escapeUnicode16(((c >> 10) & 0x3ff) | 0xd800);
+            escapeUnicode16((c & 0x3ff) | 0xdc00);
+        } else {
+            throw Exception("Invalid code-point: {}", c);
+        }
     }
     void doEncodeString(const char *b, size_t len, bool binary) {
         const char *e = b + len;
@@ -310,7 +321,6 @@ class AVRO_DECL JsonGenerator {
                 switch (*p) {
                     case '\\':
                     case '"':
-                    case '/':
                         escape(*p, b, p);
                         break;
                     case '\b':

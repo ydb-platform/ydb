@@ -11,7 +11,10 @@ namespace NYT::NDetail {
 
 ui64 RoundUpFileSize(ui64 size);
 
-bool UseLocalModeOptimization(const TClientContext& context, const IClientRetryPolicyPtr& clientRetryPolicy);
+bool UseLocalModeOptimization(
+    const IRawClientPtr& rawClient,
+    const TClientContext& context,
+    const IClientRetryPolicyPtr& clientRetryPolicy);
 
 TString GetOperationWebInterfaceUrl(TStringBuf serverName, TOperationId operationId);
 

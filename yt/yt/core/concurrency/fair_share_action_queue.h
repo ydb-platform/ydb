@@ -4,9 +4,11 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/profiling/public.h>
+
+#include <yt/yt/core/threading/thread.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NConcurrency {
 
@@ -25,10 +27,11 @@ DEFINE_REFCOUNTED_TYPE(IFairShareActionQueue)
 ////////////////////////////////////////////////////////////////////////////////
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NThreading::TThreadOptions threadOptions = {},
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,9 +48,10 @@ struct IEnumIndexedFairShareActionQueue
 
 template <typename EQueue, typename EBucket = EQueue>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues = {},
-    NProfiling::IRegistryImplPtr registry = {});
+    NThreading::TThreadOptions threadOptions = {},
+    NProfiling::IRegistryPtr registry = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

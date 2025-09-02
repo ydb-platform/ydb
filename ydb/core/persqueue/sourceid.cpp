@@ -101,30 +101,33 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
     SourceIdsWithHeartbeat.erase(sourceId);
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
     , LastHeartbeat(std::move(heartbeat))
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
     , CreateTimestamp(createTs)
+    , ProducerEpoch(producerEpoch)
     , Explicit(true)
     , KeyRange(std::move(keyRange))
 {
@@ -133,7 +136,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
     }
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const {
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i16> producerEpoch) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
     if (copy.MinSeqNo == 0) {
@@ -141,12 +144,13 @@ TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) 
     }
     copy.Offset = offset;
     copy.WriteTimestamp = writeTs;
+    copy.ProducerEpoch = producerEpoch;
 
     return copy;
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const {
-    auto copy = Updated(seqNo, offset, writeTs);
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch) const {
+    auto copy = Updated(seqNo, offset, writeTs, producerEpoch);
     copy.LastHeartbeat = std::move(heartbeat);
 
     return copy;
@@ -161,6 +165,7 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     result.Offset = ReadAs<ui64>(data, pos);
     result.WriteTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
     result.CreateTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
+    result.ProducerEpoch = ReadAs<TMaybe<i16>>(data, pos);
 
     Y_ABORT_UNLESS(result.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, result.SeqNo);
     Y_ABORT_UNLESS(result.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, result.Offset);
@@ -172,13 +177,14 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
     Y_ABORT_UNLESS(!Explicit);
     Y_ABORT_UNLESS(!KeyRange);
 
-    data.Resize(4 * sizeof(ui64));
+    data.Resize(4 * sizeof(ui64) + sizeof(TMaybe<i16>));
     ui32 pos = 0;
 
     Write<ui64>(SeqNo, data, pos);
     Write<ui64>(Offset, data, pos);
     Write<ui64>(WriteTimestamp.MilliSeconds(), data, pos);
     Write<ui64>(CreateTimestamp.MilliSeconds(), data, pos);
+    Write<TMaybe<i16>>(ProducerEpoch, data, pos);
 }
 
 TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
@@ -188,6 +194,9 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     result.Offset = proto.GetOffset();
     result.WriteTimestamp = TInstant::FromValue(proto.GetWriteTimestamp());
     result.CreateTimestamp = TInstant::FromValue(proto.GetCreateTimestamp());
+    if (proto.HasProducerEpoch()) {
+        result.ProducerEpoch = proto.GetProducerEpoch();
+    }
     result.Explicit = proto.GetExplicit();
     if (result.Explicit) {
         result.State = ConvertState(proto.GetState());
@@ -209,6 +218,9 @@ void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     proto.SetWriteTimestamp(WriteTimestamp.GetValue());
     proto.SetCreateTimestamp(CreateTimestamp.GetValue());
     proto.SetExplicit(Explicit);
+    if (ProducerEpoch) {
+        proto.SetProducerEpoch(*ProducerEpoch);
+    }
     if (Explicit) {
         proto.SetState(ConvertState(State));
     }
@@ -225,6 +237,7 @@ bool TSourceIdInfo::operator==(const TSourceIdInfo& rhs) const {
         && Offset == rhs.Offset
         && WriteTimestamp == rhs.WriteTimestamp
         && CreateTimestamp == rhs.CreateTimestamp
+        && ProducerEpoch == rhs.ProducerEpoch
         && Explicit == rhs.Explicit
         && State == rhs.State;
 }
@@ -235,6 +248,7 @@ void TSourceIdInfo::Out(IOutputStream& out) const {
         << " Offset: " << Offset
         << " WriteTimestamp: " << WriteTimestamp.GetValue()
         << " CreateTimestamp: " << CreateTimestamp.GetValue()
+        << " ProducerEpoch: " << ProducerEpoch
         << " Explicit: " << (Explicit ? "true" : "false")
         << " State: " << State
     << " }";
@@ -530,55 +544,60 @@ void THeartbeatEmitter::Process(const TString& sourceId, THeartbeat&& heartbeat)
 
 TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
     if (Storage.ExplicitSourceIds.size() != (Storage.SourceIdsWithHeartbeat.size() + NewSourceIdsWithHeartbeat.size())) {
+        // there is no quorum
         return Nothing();
     }
 
     if (SourceIdsByHeartbeat.empty()) {
+        // there is no new heartbeats, nothing to emit
         return Nothing();
     }
 
-    if (!NewSourceIdsWithHeartbeat.empty()) { // just got quorum
-        if (!Storage.SourceIdsByHeartbeat.empty() && Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
+    if (Storage.SourceIdsByHeartbeat.empty()) {
+        // got quorum, memory state
+        return GetFromDiff(SourceIdsByHeartbeat.begin());
+    }
+
+    if (!NewSourceIdsWithHeartbeat.empty()) {
+        // got quorum, mixed state
+        if (Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
             return GetFromStorage(Storage.SourceIdsByHeartbeat.begin());
         } else {
             return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
-    } else if (SourceIdsByHeartbeat.begin()->first > Storage.SourceIdsByHeartbeat.begin()->first) {
-        auto storage = Storage.SourceIdsByHeartbeat.begin();
-        auto diff = SourceIdsByHeartbeat.begin();
+    }
 
-        TMaybe<TRowVersion> newVersion;
-        while (storage != Storage.SourceIdsByHeartbeat.end()) {
-            const auto& [version, sourceIds] = *storage;
+    TMaybe<TRowVersion> emitVersion;
 
-            auto rest = sourceIds.size();
-            for (const auto& sourceId : sourceIds) {
-                auto it = Heartbeats.find(sourceId);
-                if (it != Heartbeats.end() && it->second.Version > version && version <= diff->first) {
-                    --rest;
-                } else {
-                    break;
-                }
-            }
+    for (auto it = Storage.SourceIdsByHeartbeat.begin(), end = Storage.SourceIdsByHeartbeat.end(); it != end; ++it) {
+        const auto& [version, sourceIds] = *it;
+        auto rest = sourceIds.size();
 
-            if (!rest) {
-                if (++storage != Storage.SourceIdsByHeartbeat.end()) {
-                    newVersion = storage->first;
-                } else {
-                    newVersion = diff->first;
-                }
+        for (const auto& sourceId : sourceIds) {
+            if (Heartbeats.contains(sourceId) && Heartbeats.at(sourceId).Version > version) {
+                --rest;
             } else {
                 break;
             }
         }
 
-        if (newVersion) {
-            storage = Storage.SourceIdsByHeartbeat.find(*newVersion);
-            if (storage != Storage.SourceIdsByHeartbeat.end()) {
-                return GetFromStorage(storage);
-            } else {
-                return GetFromDiff(diff);
-            }
+        if (rest) {
+            break;
+        }
+
+        if (auto next = std::next(it); next != end && next->first < SourceIdsByHeartbeat.begin()->first) {
+            emitVersion = next->first;
+        } else {
+            emitVersion = SourceIdsByHeartbeat.begin()->first;
+            break;
+        }
+    }
+
+    if (emitVersion) {
+        if (auto it = Storage.SourceIdsByHeartbeat.find(*emitVersion); it != Storage.SourceIdsByHeartbeat.end()) {
+            return GetFromStorage(it);
+        } else {
+            return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
     }
 

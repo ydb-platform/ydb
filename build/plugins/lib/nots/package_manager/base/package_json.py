@@ -2,9 +2,8 @@ import json
 import logging
 import os
 
-from six import iteritems
-
 from .utils import build_pj_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,8 @@ class PackageJson(object):
     DEV_DEP_KEY = "devDependencies"
     PEER_DEP_KEY = "peerDependencies"
     OPT_DEP_KEY = "optionalDependencies"
-    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY)
+    PNPM_OVERRIDES_KEY = "pnpm.overrides"
+    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY, PNPM_OVERRIDES_KEY)
 
     WORKSPACE_SCHEMA = "workspace:"
 
@@ -92,12 +92,16 @@ class PackageJson(object):
 
     def dependencies_iter(self):
         for key in self.DEP_KEYS:
-            deps = self.data.get(key)
+            if key == self.PNPM_OVERRIDES_KEY:
+                deps = self.data.get("pnpm", {}).get("overrides", {})
+            else:
+                deps = self.data.get(key)
+
             if not deps:
                 continue
 
-            for name, spec in iteritems(deps):
-                yield (name, spec)
+            for name, spec in deps.items():
+                yield name, spec
 
     def has_dependencies(self):
         first_dep = next(self.dependencies_iter(), None)
@@ -130,9 +134,7 @@ class PackageJson(object):
 
         return None
 
-    # TODO: FBP-1254
-    # def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
-    def get_workspace_dep_spec_paths(self):
+    def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
         """
         Returns names and paths from specifiers of the defined workspace dependencies.
         :rtype: list[tuple[str, str]]
@@ -178,7 +180,13 @@ class PackageJson(object):
 
         for name, rel_path in self.get_workspace_dep_spec_paths():
             dep_path = os.path.normpath(os.path.join(pj_dir, rel_path))
-            dep_pj = PackageJson.load(build_pj_path(dep_path))
+            dep_pj_path = build_pj_path(dep_path)
+            try:
+                dep_pj = PackageJson.load(dep_pj_path)
+            except IOError as e:
+                logger.debug(f"{self.path}: cannot load {name}: {e}. Process dependency as empty package.")
+                dep_pj = PackageJson(dep_pj_path)
+                dep_pj.data = {"name": name}
 
             if name != dep_pj.get_name():
                 raise PackageJsonWorkspaceError(
@@ -247,3 +255,6 @@ class PackageJson(object):
             messages.extend([f"  - {key}" for key in missing_overrides])
 
         return (not messages, messages)
+
+    def get_pnpm_patched_dependencies(self) -> dict[str, str]:
+        return self.data.get("pnpm", {}).get("patchedDependencies", {})

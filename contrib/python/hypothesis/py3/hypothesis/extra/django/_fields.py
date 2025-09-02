@@ -10,10 +10,10 @@
 
 import re
 import string
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
-from typing import Any, Callable, Dict, Type, TypeVar, Union
+from typing import Any, Callable, TypeVar, Union
 
 import django
 from django import forms as df
@@ -57,7 +57,9 @@ def integers_for_field(min_value, max_value):
 def timezones():
     # From Django 4.0, the default is to use zoneinfo instead of pytz.
     assert getattr(django.conf.settings, "USE_TZ", False)
-    if getattr(django.conf.settings, "USE_DEPRECATED_PYTZ", True):
+    if django.VERSION < (5, 0, 0) and getattr(
+        django.conf.settings, "USE_DEPRECATED_PYTZ", True
+    ):
         from hypothesis.extra.pytz import timezones
     else:
         from hypothesis.strategies import timezones
@@ -66,8 +68,8 @@ def timezones():
 
 
 # Mapping of field types, to strategy objects or functions of (type) -> strategy
-_FieldLookUpType = Dict[
-    Type[AnyField],
+_FieldLookUpType = dict[
+    type[AnyField],
     Union[st.SearchStrategy, Callable[[Any], st.SearchStrategy]],
 ]
 _global_field_lookup: _FieldLookUpType = {
@@ -113,7 +115,12 @@ def register_for(field_type):
 @register_for(df.DateTimeField)
 def _for_datetime(field):
     if getattr(django.conf.settings, "USE_TZ", False):
-        return st.datetimes(timezones=timezones())
+        # avoid https://code.djangoproject.com/ticket/35683
+        return st.datetimes(
+            min_value=datetime.min + timedelta(days=1),
+            max_value=datetime.max - timedelta(days=1),
+            timezones=timezones(),
+        )
     return st.datetimes()
 
 
@@ -262,8 +269,57 @@ def _for_form_boolean(field):
     return st.booleans()
 
 
+def _model_choice_strategy(field):
+    def _strategy():
+        if field.choices is None:
+            # The field was instantiated with queryset=None, and not
+            # subsequently updated.
+            raise InvalidArgument(
+                "Cannot create strategy for ModelChoicesField with no choices"
+            )
+        elif hasattr(field, "_choices"):
+            # The choices property was set manually.
+            choices = field._choices
+        else:
+            # choices is not None, and was not set manually, so we
+            # must have a QuerySet.
+            choices = field.queryset
+
+        if not choices.ordered:
+            raise InvalidArgument(
+                f"Cannot create strategy for {field.__class__.__name__} with a choices "
+                "attribute derived from a QuerySet without an explicit ordering - this may "
+                "cause Hypothesis to produce unstable results between runs."
+            )
+
+        return st.sampled_from(
+            [
+                (
+                    choice.value
+                    if isinstance(choice, df.models.ModelChoiceIteratorValue)
+                    else choice  # Empty value, if included.
+                )
+                for choice, _ in field.choices
+            ]
+        )
+
+    # Accessing field.choices causes database access, so defer the strategy.
+    return st.deferred(_strategy)
+
+
+@register_for(df.ModelChoiceField)
+def _for_model_choice(field):
+    return _model_choice_strategy(field)
+
+
+@register_for(df.ModelMultipleChoiceField)
+def _for_model_multiple_choice(field):
+    min_size = 1 if field.required else 0
+    return st.lists(_model_choice_strategy(field), min_size=min_size, unique=True)
+
+
 def register_field_strategy(
-    field_type: Type[AnyField], strategy: st.SearchStrategy
+    field_type: type[AnyField], strategy: st.SearchStrategy
 ) -> None:
     """Add an entry to the global field-to-strategy lookup used by
     :func:`~hypothesis.extra.django.from_field`.
@@ -299,7 +355,13 @@ def from_field(field: F) -> st.SearchStrategy[Union[F, None]]:
     instance attributes such as string length and validators.
     """
     check_type((dm.Field, df.Field), field, "field")
-    if getattr(field, "choices", False):
+
+    # The following isinstance check must occur *before* the getattr
+    # check. In the case of ModelChoicesField, evaluating
+    # field.choices causes database access, which we want to avoid if
+    # we don't have a connection (the generated strategies for
+    # ModelChoicesField defer evaluation of `choices').
+    if not isinstance(field, df.ModelChoiceField) and getattr(field, "choices", False):
         choices: list = []
         for value, name_or_optgroup in field.choices:
             if isinstance(name_or_optgroup, (list, tuple)):

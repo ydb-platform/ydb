@@ -89,8 +89,10 @@ static int test_io(const char *file, unsigned long usecs, unsigned *drops,
 			goto err;
 		}
 		offset = BS * (rand() % BUFFERS);
-		if (fault && i == ENTRIES + 4)
+		if (fault && i == ENTRIES + 4) {
+			free(vecs[i].iov_base);
 			vecs[i].iov_base = NULL;
+		}
 		io_uring_prep_readv(sqe, fd, &vecs[i], 1, offset);
 
 		ret = io_uring_submit(&ring);
@@ -524,8 +526,18 @@ int main(int argc, char *argv[])
 	}
 
 	unlink(fname);
+	if(vecs != NULL) {
+		for (i = 0; i < BUFFERS; i++)
+			free(vecs[i].iov_base);
+	}
+	free(vecs);
 	return T_EXIT_PASS;
 err:
 	unlink(fname);
+	if(vecs != NULL) {
+		for (i = 0; i < BUFFERS; i++)
+			free(vecs[i].iov_base);
+	}
+	free(vecs);
 	return T_EXIT_FAIL;
 }

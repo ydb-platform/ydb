@@ -19,7 +19,7 @@ NRpc::IChannelPtr CreateTimestampProviderChannel(
 NRpc::IChannelPtr CreateTimestampProviderChannelFromAddresses(
     TRemoteTimestampProviderConfigPtr config,
     NRpc::IChannelFactoryPtr channelFactory,
-    const std::vector<TString>& addresses);
+    const std::vector<std::string>& addresses);
 
 ITimestampProviderPtr CreateBatchingTimestampProvider(
     ITimestampProviderPtr underlying,
@@ -36,6 +36,11 @@ ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
 ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
     const TRemoteTimestampProviderConfigPtr& config,
     const NRpc::IChannelFactoryPtr& channelFactory);
+
+ITimestampProviderPtr CreateBatchingRemoteTimestampProvider(
+    const TRemoteTimestampProviderConfigPtr& config,
+    const NRpc::IChannelFactoryPtr& channelFactory,
+    bool allowOldClocks);
 
 TAlienRemoteTimestampProvidersMap CreateAlienTimestampProvidersMap(
     const std::vector<TAlienTimestampProviderConfigPtr>& configs,

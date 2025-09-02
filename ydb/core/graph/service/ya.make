@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/graph/api
+    ydb/public/sdk/cpp/src/client/params
 )
 
 END()

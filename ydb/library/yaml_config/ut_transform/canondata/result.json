@@ -22,6 +22,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/bridge-mirror-3dc-3-nodes.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/block-4-2.yaml.result.json"
         }
     ],
@@ -46,6 +49,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/bridge-mirror-3dc-3-nodes.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/block-4-2.yaml.result.json"
@@ -74,6 +80,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/bridge-mirror-3dc-3-nodes.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/block-4-2.yaml.result.json"
         }
     ],
@@ -100,7 +109,68 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/bridge-mirror-3dc-3-nodes.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/block-4-2.yaml.result.json"
+        }
+    ],
+    "test_transform.TestYamlConfigTransformations.test_domains_config[dump]": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/storage-pool-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/storage-pool-types-distconf.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-valid.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-unmatched-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-storage-pool.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-storage-pool-distconf.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-missing-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/multinode-missing-all.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_/domains-config.yaml.result.json"
+        }
+    ],
+    "test_transform.TestYamlConfigTransformations.test_domains_config[dump_ds_init]": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/storage-pool-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/storage-pool-types-distconf.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-valid.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-unmatched-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-storage-pool.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-storage-pool-distconf.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-missing-types.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/multinode-missing-all.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_domains_config_dump_ds_init_/domains-config.yaml.result.json"
         }
     ],
     "test_transform.TestYamlConfigTransformations.test_simplified[dump]": [
@@ -114,6 +184,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/ram.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/nvme.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-9-nodes.yaml.result.json"
         },
         {
@@ -123,10 +196,19 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-3-nodes-distconf.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/drive.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk-type-short.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk-type-short-single.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/block-4-2.yaml.result.json"
@@ -143,6 +225,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/ram.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/nvme.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-9-nodes.yaml.result.json"
         },
         {
@@ -152,10 +237,19 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-3-nodes-distconf.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/drive.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk-type-short.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk-type-short-single.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/block-4-2.yaml.result.json"

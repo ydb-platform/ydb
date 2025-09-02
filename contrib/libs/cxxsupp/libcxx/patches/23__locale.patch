@@ -1,0 +1,22 @@
+diff --git a/include/__locale b/include/__locale
+index 4b38276..8784b24 100644
+--- a/include/__locale
++++ b/include/__locale
+@@ -17,6 +17,7 @@
+ #include <__type_traits/make_unsigned.h>
+ #include <__utility/no_destroy.h>
+ #include <__utility/private_constructor_tag.h>
++#include <atomic>
+ #include <cctype>
+ #include <clocale>
+ #include <cstdint>
+@@ -128,8 +129,7 @@ private:
+ };
+ 
+ class _LIBCPP_EXPORTED_FROM_ABI locale::id {
+-  once_flag __flag_;
+-  int32_t __id_;
++  std::atomic<int32_t> __id_;
+ 
+   static int32_t __next_id;
+ 

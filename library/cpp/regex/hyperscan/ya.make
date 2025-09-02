@@ -5,7 +5,6 @@ PEERDIR(
     contrib/libs/hyperscan/runtime_core2
     contrib/libs/hyperscan/runtime_corei7
     contrib/libs/hyperscan/runtime_avx2
-    contrib/libs/hyperscan/runtime_avx512
 )
 
 SRCS(

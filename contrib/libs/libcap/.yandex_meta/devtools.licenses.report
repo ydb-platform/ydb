@@ -1,0 +1,73 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause OR GPL-2.0-only 39bba7d2cf0ba1036f2a6e2be52fe3f0
+BELONGS ya.make
+FILE_INCLUDE License found in files: License at line 108, License at line 110, License at line 129, License at line 130, License at line 147, License at line 156, License at line 163, License at line 167, License at line 178, License at line 219, License at line 221, License at line 223, License at line 226, License at line 229, License at line 231, License at line 241, License at line 246, License at line 247, License at line 249, License at line 253, License at line 273, License at line 277, License at line 280, License at line 281, License at line 284, License at line 289, License at line 293, License at line 343, License at line 344, License at line 350, License at line 352, License at line 367, License at line 381, License at line 385, License at line 59, License at line 61, License at line 64
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        License [47:385]
+
+KEEP     BSD-3-Clause OR GPL-2.0-only 9801b92e06f8e38d81aa64773c49253c
+BELONGS ya.make
+    License text:
+        Full text of gpl-2.0.txt:
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        License [44:44]
+
+KEEP     BSD-3-Clause OR GPL-2.0-only a66950ad4ac39f02c3520e1eb2ff698b
+BELONGS ya.make
+FILE_INCLUDE License found in files: License at line 24
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        License [1:40]
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 95.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        License [1:40]

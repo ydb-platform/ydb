@@ -17,7 +17,7 @@
 
 namespace NKikimr {
 
-std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
+std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth) {
     std::vector<TCertificateAuthorizationParams> certAuthParams;
     certAuthParams.reserve(clientCertificateAuth.ClientCertificateDefinitionsSize());
 
@@ -33,9 +33,19 @@ std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(c
             }
             dn.AddRDN(std::move(rdn));
         }
-        if (dn) {
+        std::optional<TCertificateAuthorizationParams::TRDN> subjectDns;
+        if (const auto& subjectDnsCfg = clientCertificateDefinition.GetSubjectDns(); subjectDnsCfg.ValuesSize() || subjectDnsCfg.SuffixesSize()) {
+            TCertificateAuthorizationParams::TRDN& dns = subjectDns.emplace(TString());
+            for (const auto& value: subjectDnsCfg.GetValues()) {
+                dns.AddValue(value);
+            }
+            for (const auto& suffix: subjectDnsCfg.GetSuffixes()) {
+                dns.AddSuffix(suffix);
+            }
+        }
+        if (dn || subjectDns) {
             std::vector<TString> groups(clientCertificateDefinition.GetMemberGroups().cbegin(), clientCertificateDefinition.GetMemberGroups().cend());
-            certAuthParams.emplace_back(std::move(dn), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
+            certAuthParams.emplace_back(std::move(dn), std::move(subjectDns), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
         }
     }
 
@@ -130,8 +140,8 @@ int FillNameFromProps(X509_NAME* name, const TProps& props) {
         return 1;
     }
 
-    if (!props.Coutry.empty()) {
-        X509_NAME_add_entry_by_txt(name, SN_countryName, MBSTRING_ASC, (const unsigned char*)props.Coutry.c_str(), -1, -1, 0);
+    if (!props.Country.empty()) {
+        X509_NAME_add_entry_by_txt(name, SN_countryName, MBSTRING_ASC, (const unsigned char*)props.Country.c_str(), -1, -1, 0);
     }
 
     if (!props.State.empty()) {
@@ -236,19 +246,35 @@ X509Ptr GenerateSelfSignedCertificate(PKeyPtr& pkey, const TProps& props) {
 
 
     /* Actually sign the certificate with our key. */
-    errNo = X509_sign(x509.get(), pkey.get(), EVP_sha1());
+    errNo = X509_sign(x509.get(), pkey.get(), EVP_sha256());
     CHECK(errNo, "Error signing certificate.");
 
     return std::move(x509);
 }
 
-std::string WriteAsPEM(PKeyPtr& pkey) {
+int GetPasswordCallback(char* buf, int size, int /*rwflag*/, void* userData) {
+    CHECK(userData, "Nonnull userData is expected");
+    CHECK(size > 0, "Positive size is expected");
+    std::string* password = reinterpret_cast<std::string*>(userData);
+    size_t passwordSize = std::min(static_cast<size_t>(size), password->size());
+    memcpy(buf, password->data(), passwordSize);
+    return static_cast<int>(passwordSize);
+}
+
+std::string WriteAsPEM(PKeyPtr& pkey, const std::string& password = {}) {
     std::array<char, maxCertSize> buf{0};
 
     auto bio = BIOPtr(BIO_new(BIO_s_mem()));
     CHECK(bio, "Unable to create BIO structure.");
 
-    PEM_write_bio_RSAPrivateKey(bio.get(), EVP_PKEY_get0_RSA(pkey.get()), nullptr, nullptr, 0, nullptr, nullptr);
+    pem_password_cb* passwordCallback = nullptr;
+    void* userData = nullptr;
+    if (!password.empty()) {
+        userData = const_cast<std::string*>(&password); // Our callback does not modify the password, so const_cast is safe here.
+        passwordCallback = &GetPasswordCallback;
+    }
+
+    PEM_write_bio_RSAPrivateKey(bio.get(), EVP_PKEY_get0_RSA(pkey.get()), nullptr, nullptr, 0, passwordCallback, userData);
 
     BIO_read(bio.get(), buf.data(), maxCertSize - 1);
 
@@ -377,7 +403,7 @@ X509REQPtr GenerateRequest(PKeyPtr& pkey, const TProps& props) {
     return std::move(request);
 }
 
-X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
+X509Ptr SignRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
     auto* pktmp = X509_REQ_get0_pubkey(request.get()); // X509_REQ_get0_pubkey returns the key, that shouldn't freed
     CHECK(pktmp, "Error unpacking public key from request.");
 
@@ -428,7 +454,7 @@ X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, co
     }
 
     /* Actually sign the certificate with our key. */
-    errNo = X509_sign(x509.get(), rootKey.get(), EVP_sha1());
+    errNo = X509_sign(x509.get(), rootKey.get(), EVP_sha256());
     CHECK(errNo, "Error signing certificate.");
 
     pktmp = nullptr;
@@ -455,13 +481,18 @@ TCertAndKey GenerateSignedCert(const TCertAndKey& rootCA, const TProps& props) {
 
     auto rootCert = ReadCertAsPEM(rootCA.Certificate);
     auto rootKey = ReadPrivateKeyAsPEM(rootCA.PrivateKey);
-    auto cert = SingRequest(request, rootCert, rootKey, props); // NID_authority_key_identifier must see ca
+    auto cert = SignRequest(request, rootCert, rootKey, props); // NID_authority_key_identifier must see ca
 
     TCertAndKey result;
     result.Certificate = WriteAsPEM(cert);
     result.PrivateKey = WriteAsPEM(keys);
 
     return result;
+}
+
+std::string TCertAndKey::GetKeyWithPassword(const std::string& password) const {
+    PKeyPtr key = ReadPrivateKeyAsPEM(PrivateKey);
+    return WriteAsPEM(key, password);
 }
 
 void VerifyCert(const std::string& cert, const std::string& caCert) {
@@ -475,7 +506,7 @@ TProps TProps::AsCA() {
     TProps props;
 
     props.SecondsValid = 3*365 * 24 * 60 *60; // 3 years
-    props.Coutry = "RU";
+    props.Country = "RU";
     props.State = "MSK";
     props.Location = "MSK";
     props.Organization = "YA";

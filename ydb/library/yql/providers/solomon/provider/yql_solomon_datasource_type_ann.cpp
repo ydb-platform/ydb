@@ -1,8 +1,11 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+
+#include <util/string/strip.h>
+#include <util/string/split.h>
 
 namespace NYql {
 
@@ -31,10 +34,15 @@ public:
         AddHandler({TSoReadObject::CallableName()}, Hndl(&TSelf::HandleRead));
         AddHandler({TSoObject::CallableName()}, Hndl(&TSelf::HandleSoObject));
         AddHandler({TSoSourceSettings::CallableName()}, Hndl(&TSelf::HandleSoSourceSettings));
+        AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 12U, ctx)) {
+        if (!EnsureArgsCount(*input, 17, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TSoSourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 
@@ -62,6 +70,16 @@ public:
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
             return TStatus::Error;
         }
+
+        auto& labelNameAliases = *input->Child(TSoSourceSettings::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& requiredLabelNames = *input->Child(TSoSourceSettings::idx_RequiredLabelNames);
+        if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
+            return TStatus::Error;
+        }
         
         auto& from = *input->Child(TSoSourceSettings::idx_From);
         if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from", from, ctx)) {
@@ -73,13 +91,25 @@ public:
             return TStatus::Error;
         }
 
+        auto& selectors = *input->Child(TSoSourceSettings::idx_Selectors);
+        if (!EnsureAtom(selectors, ctx)) {
+            return TStatus::Error;
+        }
+        bool hasSelectors = !selectors.Content().empty();
+
+        if (hasSelectors && !State_->Configuration->_EnableRuntimeListing.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "runtime listing is disabled, use `program` parameter"));
+            return TStatus::Error;
+        }
+
         auto& program = *input->Child(TSoSourceSettings::idx_Program);
         if (!EnsureAtom(program, ctx)) {
             return TStatus::Error;
         }
+        bool hasProgram = !program.Content().empty();
 
-        if (program.Content().empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "program must be specified"));
+        if (hasSelectors && hasProgram) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "either program or selectors must be specified"));
             return TStatus::Error;
         }
 
@@ -105,6 +135,11 @@ public:
             return TStatus::Error;
         }
 
+        auto& totalMetricsCount = *input->Child(TSoSourceSettings::idx_TotalMetricsCount);
+        if (!EnsureAtom(totalMetricsCount, ctx)) {
+            return TStatus::Error;
+        }
+
         const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
         return TStatus::Ok;
@@ -125,7 +160,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 9U, 10U, ctx)) {
             return TStatus::Error;
         }
 
@@ -144,6 +179,21 @@ public:
 
         auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& labelNameAliases = *input->Child(TSoReadObject::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& requiredLabelNames = *input->Child(TSoReadObject::idx_RequiredLabelNames);
+        if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& totalMetricsCount = *input->Child(TSoReadObject::idx_TotalMetricsCount);
+        if (!EnsureAtom(totalMetricsCount, ctx)) {
             return TStatus::Error;
         }
 
@@ -170,7 +220,7 @@ public:
                 }
                 columnOrder.push_back(ToString(col));
             }
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         const auto type = rowType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -179,6 +229,23 @@ public:
             ctx.MakeType<TListExprType>(type)
         }));
 
+        return TStatus::Ok;
+    }
+
+    TStatus HandleConfig(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TCoConfigure::idx_World), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataSource(*input->Child(TCoConfigure::idx_DataSource), SolomonProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
         return TStatus::Ok;
     }
 

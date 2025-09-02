@@ -83,6 +83,11 @@ void TRemoteReaderConfigBase::Register(TRegistrar registrar)
     registrar.Parameter("net_queue_size_factor", &TThis::NetQueueSizeFactor)
         .Default(0.5);
 
+    registrar.Parameter("cached_block_count_factor", &TThis::CachedBlockCountFactor)
+        .Default(0.0);
+    registrar.Parameter("cached_block_size_factor", &TThis::CachedBlockSizeFactor)
+        .Default(0.0);
+
     registrar.Parameter("suspicious_node_grace_period", &TThis::SuspiciousNodeGracePeriod)
         .Default();
 
@@ -172,6 +177,10 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
         .Default(false);
+    registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
+        .Default();
+    registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -187,6 +196,50 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         // These are supposed to be not greater than PassCount and RetryCount.
         config->LookupRequestPassCount = std::min(config->LookupRequestPassCount, config->PassCount);
         config->LookupRequestRetryCount = std::min(config->LookupRequestRetryCount, config->RetryCount);
+
+        if (config->PartialPeerProbingTimeouts.size() > 5) {
+            THROW_ERROR_EXCEPTION(
+                "List of \"partial_peer_probing_timeouts\" contains %v elements, maximum allowed amount is 5",
+                config->PartialPeerProbingTimeouts.size());
+        }
+
+        if (!config->PartialPeerProbingTimeouts.empty()) {
+            SortBy(config->PartialPeerProbingTimeouts, [] (const auto& peerCountAndTimeout) {
+                return peerCountAndTimeout.second;
+            });
+
+            int pairIndex = 1;
+            while (pairIndex < std::ssize(config->PartialPeerProbingTimeouts)) {
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].second ==
+                    config->PartialPeerProbingTimeouts[pairIndex].second)
+                {
+                    THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" cannot contain equal timeouts");
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first ==
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers encountered multiple times",
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                if (config->PartialPeerProbingTimeouts[pairIndex - 1].first <
+                    config->PartialPeerProbingTimeouts[pairIndex].first)
+                {
+                    THROW_ERROR_EXCEPTION(
+                        "In list of \"partial_peer_probing_timeouts\" timeout for %v peers must be larger than for %v peers",
+                        config->PartialPeerProbingTimeouts[pairIndex - 1].first,
+                        config->PartialPeerProbingTimeouts[pairIndex].first);
+                }
+
+                ++pairIndex;
+            }
+
+            if (config->PartialPeerProbingTimeouts.back().first <= 0) {
+                THROW_ERROR_EXCEPTION("List of \"partial_peer_probing_timeouts\" can only contain peer counts larger than zero");
+            }
+        }
     });
 }
 
@@ -203,6 +256,8 @@ void TBlockFetcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("use_uncompressed_block_cache", &TThis::UseUncompressedBlockCache)
         .Default(true);
+    registrar.Parameter("group_out_of_order_blocks", &TThis::GroupOutOfOrderBlocks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->GroupSize > config->WindowSize) {
@@ -222,7 +277,7 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)
         .Default(TDuration::Minutes(2));
     registrar.Parameter("replication_reader_timeout", &TThis::ReplicationReaderTimeout)
-        .Default(TDuration::Seconds(60));
+        .Default(TDuration::Seconds(300));
     registrar.Parameter("replication_reader_failure_timeout", &TThis::ReplicationReaderFailureTimeout)
         .Default(TDuration::Minutes(10));
 }
@@ -261,6 +316,8 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("node_rpc_timeout", &TThis::NodeRpcTimeout)
         .Default(TDuration::Seconds(300));
+    registrar.Parameter("probe_put_blocks_timeout", &TThis::ProbePutBlocksTimeout)
+        .Default(TDuration::Seconds(60));
     registrar.Parameter("upload_replication_factor", &TThis::UploadReplicationFactor)
         .GreaterThanOrEqual(1)
         .Default(2);
@@ -273,7 +330,7 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
-    registrar.Parameter("node_ping_interval", &TThis::NodePingPeriod)
+    registrar.Parameter("node_ping_period", &TThis::NodePingPeriod)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("populate_cache", &TThis::PopulateCache)
         .Default(false);
@@ -292,6 +349,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
+
+    registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {
@@ -378,6 +438,10 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .GreaterThan(0)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
+
+    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+        .Default()
+        .DontSerializeDefault();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,6 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -297,6 +297,9 @@ public:
             }
             alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
+        if (settings.HasSchemeLimits()) {
+            alterData->MergeSchemeLimits(settings.GetSchemeLimits());
+        }
 
         if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
             alterData->SetAuditSettings(*auditSettings);
@@ -332,7 +335,7 @@ public:
         context.SS->PersistTxState(db, OperationId);
         context.OnComplete.ActivateTx(OperationId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.Base()->IncShardsInside(shardsToCreate);
 
         SetState(NextState());

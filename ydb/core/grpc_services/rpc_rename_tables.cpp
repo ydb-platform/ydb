@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include "service_table.h"
 #include "rpc_calls.h"
@@ -38,7 +39,7 @@ private:
         auto& transaction = *record.MutableTransaction();
 
         if (req->tables().empty()) {
-            Request_->RaiseIssue(NYql::TIssue("Emply move list"));
+            Request_->RaiseIssue(NYql::TIssue("Empty move list"));
             return Reply(StatusIds::BAD_REQUEST, ctx);
         }
 

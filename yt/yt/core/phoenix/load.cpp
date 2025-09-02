@@ -6,13 +6,13 @@
 
 #include <library/cpp/iterator/zip.h>
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = PhoenixLogger;
+constinit const auto Logger = PhoenixLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,10 +28,6 @@ bool AreFieldSchemasEquivalent(
 
     for (const auto& [lhsFieldDescriptor, rhsFieldSchema] : Zip(lhsTypeDescriptor.Fields(), rhsTypeSchema->Fields)) {
         if (lhsFieldDescriptor->GetTag() != rhsFieldSchema->Tag) {
-            return false;
-        }
-
-        if (lhsFieldDescriptor->IsDeprecated() != rhsFieldSchema->Deprecated) {
             return false;
         }
     }
@@ -71,10 +67,10 @@ std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniver
                 << TErrorAttribute("load_template", loadTypeSchema->Template);
         }
 
-        if (auto nativeBaseTypeTags = nativeTypeDescriptor->GetBaseTypeTags(); loadTypeSchema->BaseTypeTags != nativeBaseTypeTags) {
+        if (loadTypeSchema->BaseTypeTags != nativeTypeDescriptor->BaseTypeTags()) {
             THROW_ERROR_EXCEPTION("Type %v has different base types in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_base_type_tags", nativeBaseTypeTags)
+                << TErrorAttribute("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
                 << TErrorAttribute("load_base_type_tags", loadTypeSchema->BaseTypeTags);
         }
 
@@ -157,4 +153,4 @@ TLoadSessionGuard::~TLoadSessionGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

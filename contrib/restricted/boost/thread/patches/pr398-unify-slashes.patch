@@ -1,0 +1,31 @@
+From 8811487643d9a89c01135304704dec556c646881 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Sun, 4 Feb 2024 13:03:02 +0100
+Subject: [PATCH] Use forward slashes to separate include files
+
+We use automatic dependency tracking for #includes, and wrl includes have to be tracked differently whenever we are cross-compiling the code.
+
+This PR unifies such tracking. Forward slashes work just fine on Windows.
+---
+ src/win32/thread.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/win32/thread.cpp b/src/win32/thread.cpp
+index 000ab8779..45c2651fb 100644
+--- a/src/win32/thread.cpp
++++ b/src/win32/thread.cpp
+@@ -34,10 +34,10 @@
+ #include <mutex>
+ #include <atomic>
+ #include <Activation.h>
+-#include <wrl\client.h>
+-#include <wrl\event.h>
+-#include <wrl\wrappers\corewrappers.h>
+-#include <wrl\ftm.h>
++#include <wrl/client.h>
++#include <wrl/event.h>
++#include <wrl/wrappers/corewrappers.h>
++#include <wrl/ftm.h>
+ #include <windows.system.threading.h>
+ #pragma comment(lib, "runtimeobject.lib")
+ #endif

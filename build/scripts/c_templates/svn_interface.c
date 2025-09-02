@@ -1,6 +1,7 @@
 // Used indirectly. See build/scripts/vcs_info.py
 // ya-bin dump vcs-info > vcs.json
 // python build/scripts/vcs_info.py vcs.json out.c build/scripts/c_templates/svn_interface.c <any_prefix>library/cpp/svnversion<any_suffix>
+// DO_NOT_STYLE because this script is sometimes implicilty added as a styling target to STYLE_CPP
 
 #include "build/scripts/c_templates/svnversion.h"
 
@@ -144,6 +145,14 @@ const char* GetProgramBuildDate() {
 const char* GetCustomVersion() {
 #if defined(CUSTOM_VERSION)
     return CUSTOM_VERSION;
+#else
+    return "";
+#endif
+}
+
+const char* GetReleaseVersion() {
+#if defined(RELEASE_VERSION)
+    return RELEASE_VERSION;
 #else
     return "";
 #endif

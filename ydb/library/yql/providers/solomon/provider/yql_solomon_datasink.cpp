@@ -1,13 +1,13 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -20,6 +20,7 @@ public:
         , TypeAnnotationTransformer_(CreateSolomonDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSinkExecTransformer(State_))
         , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_))
+        , LogicalOptProposalTransformer_(CreateSolomonLogicalOptProposalTransformer(State_))
     {
     }
 
@@ -54,6 +55,10 @@ public:
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptProposalTransformer_;
+    }
+
+    IGraphTransformer& GetLogicalOptProposalTransformer() override {
+        return *LogicalOptProposalTransformer_;
     }
 
     bool CanParse(const TExprNode& node) override {
@@ -172,6 +177,7 @@ private:
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
     THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    THolder<IGraphTransformer> LogicalOptProposalTransformer_;
 };
 
 

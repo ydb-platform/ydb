@@ -23,7 +23,7 @@ namespace NMonitoring {
         {
         }
 
-        void Collect(double value, ui64 count) override {
+        void Collect(double value, ui64 count) noexcept override {
             ui32 index = Max<ui32>();
             if (value <= StartValue_) {
                 index = 0;
@@ -36,7 +36,7 @@ namespace NMonitoring {
             Values_.Add(index, count);
         }
 
-        void Reset() override {
+        void Reset() noexcept override {
             Values_.Reset();
         }
 
@@ -45,6 +45,21 @@ namespace NMonitoring {
                     StartValue_, BucketWidth_, Values_.Copy());
         }
 
+        THolder<IHistogramCollector> Clone() override {
+            return MakeHolder<TLinearHistogramCollector>(TLinearHistogramCollector(Values_, StartValue_, BucketWidth_));
+        }
+
+    private:
+        TLinearHistogramCollector(TAtomicsArray const& values, TBucketBound startValue, TBucketBound bucketWidth)
+            : Values_(values.Size())
+            , StartValue_(startValue)
+            , BucketWidth_(bucketWidth)
+            , MaxValue_(startValue + bucketWidth * (values.Size() - 2))
+        {
+            for(size_t i = 0; i < Values_.Size(); ++i) {
+                Values_.Add(i, values[i]);
+            }
+        }
     private:
         TAtomicsArray Values_;
         TBucketBound StartValue_;

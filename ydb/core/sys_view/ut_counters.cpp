@@ -75,7 +75,7 @@ void CreateDatabasesAndTables(TTestEnv& env) {
 Y_UNIT_TEST_SUITE(DbCounters) {
 
     Y_UNIT_TEST(TabletsSimple) {
-        TTestEnv env(1, 2, 0, 0, true);
+        TTestEnv env(1, 2, {.EnableSVP = true});
         CreateDatabasesAndTables(env);
 
         for (size_t iter = 0; iter < 30; ++iter) {

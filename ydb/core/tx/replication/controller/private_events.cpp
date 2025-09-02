@@ -4,6 +4,19 @@
 
 namespace NKikimr::NReplication::NController {
 
+TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry::TAddEntry(
+        TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config)
+    : Kind(kind)
+    , Config(config)
+{
+}
+
+TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry::TFailedEntry(const TString& srcPath, const NYdb::TStatus& error)
+    : SrcPath(srcPath)
+    , Error(error)
+{
+}
+
 TEvPrivate::TEvDiscoveryTargetsResult::TEvDiscoveryTargetsResult(ui64 rid, TVector<TAddEntry>&& toAdd, TVector<ui64>&& toDel)
     : ReplicationId(rid)
     , ToAdd(std::move(toAdd))
@@ -179,11 +192,11 @@ TString TEvPrivate::TEvDescribeTargetsResult::ToString() const {
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {
-    stream << value.first.Name << " (" << value.first.Type << ")";
+    stream << value.Config->GetSrcPath() << " (" << value.Kind << ")";
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry, stream, value) {
-    stream << value.first << ": " << value.second.GetStatus() << " (";
-    value.second.GetIssues().PrintTo(stream, true);
+    stream << value.SrcPath << ": " << value.Error.GetStatus() << " (";
+    value.Error.GetIssues().PrintTo(stream, true);
     stream << ")";
 }

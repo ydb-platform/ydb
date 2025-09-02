@@ -109,6 +109,7 @@ AWS_AUTH_API extern const struct aws_string *g_aws_signing_credential_query_para
 AWS_AUTH_API extern const struct aws_string *g_aws_signing_date_name;
 AWS_AUTH_API extern const struct aws_string *g_aws_signing_signed_headers_query_param_name;
 AWS_AUTH_API extern const struct aws_string *g_aws_signing_security_token_name;
+AWS_AUTH_API extern const struct aws_string *g_aws_signing_s3session_token_name;
 AWS_AUTH_API extern const struct aws_string *g_signature_type_sigv4a_http_request;
 
 /**

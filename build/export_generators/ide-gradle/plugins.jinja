@@ -1,0 +1,47 @@
+{#- empty string #}
+plugins {
+{%- if mainClass %}
+    `application`
+{%- else %}
+    `java-library`
+{%- endif %}
+{%- if publish %}
+    `maven-publish`
+    `signing`
+{%- endif -%}
+{%- if with_kotlin and kotlin_version %}
+    kotlin("jvm") version "{{ kotlin_version }}"
+{%-     if with_kotlinc_plugin_allopen|length %}
+    kotlin("plugin.allopen") version "{{ kotlin_version }}"
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_lombok|length %}
+    kotlin("plugin.lombok") version "{{ kotlin_version }}"
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_noarg|length %}
+    kotlin("plugin.noarg") version "{{ kotlin_version }}"
+{%-     endif -%}
+{%-     if with_kotlinc_plugin_serialization|length %}
+    kotlin("plugin.serialization") version "{{ kotlin_version }}"
+{%-     endif -%}
+{%-     if with_kapt or with_test_kapt %}
+    kotlin("kapt") version "{{ kotlin_version }}"
+{%-     endif -%}
+{%- endif -%}
+
+{%- if with_errorprone or with_test_errorprone %}
+    id("net.ltgt.errorprone") version "{{ ver_errorprone }}"
+{%- endif -%}
+
+{%- if with_lombok_plugin %}
+    id("io.freefair.lombok") version "{{ ver_lombok_plugin }}"
+{%- endif %}
+}
+
+{%- if jdk_version %}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
+    }
+}
+{%  endif -%}

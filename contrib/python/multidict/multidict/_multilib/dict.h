@@ -5,15 +5,33 @@
 extern "C" {
 #endif
 
-typedef struct {  // 16 or 24 for GC prefix
-    PyObject_HEAD  // 16
+#include "htkeys.h"
+#include "pythoncapi_compat.h"
+#include "state.h"
+
+#if PY_VERSION_HEX >= 0x030c00f0
+#define MANAGED_WEAKREFS
+#endif
+
+typedef struct {
+    PyObject_HEAD
+#ifndef MANAGED_WEAKREFS
     PyObject *weaklist;
-    pair_list_t pairs;
+#endif
+    mod_state *state;
+    Py_ssize_t used;
+
+    uint64_t version;
+    bool is_ci;
+
+    htkeys_t *keys;
 } MultiDictObject;
 
 typedef struct {
     PyObject_HEAD
+#ifndef MANAGED_WEAKREFS
     PyObject *weaklist;
+#endif
     MultiDictObject *md;
 } MultiDictProxyObject;
 

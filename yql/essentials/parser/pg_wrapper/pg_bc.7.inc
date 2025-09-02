@@ -1,0 +1,45 @@
+LLVM_BC(
+    postgresql/src/backend/access/tablesample/bernoulli.c
+    postgresql/src/backend/utils/adt/genfile.c
+    postgresql/src/backend/utils/adt/quote.c
+    postgresql/src/backend/utils/adt/tid.c
+    postgresql/src/backend/utils/misc/rls.c
+    pg_kernels.7.cpp
+
+    NAME PgFuncs7
+
+    SYMBOLS
+    arrow_bttidcmp
+    arrow_currtid_byrelname
+    arrow_hashtid
+    arrow_hashtidextended
+    arrow_pg_read_binary_file_all
+    arrow_pg_read_binary_file_all_missing
+    arrow_pg_read_binary_file_off_len
+    arrow_pg_read_binary_file_off_len_missing
+    arrow_pg_read_file
+    arrow_pg_read_file_all
+    arrow_pg_read_file_all_missing
+    arrow_pg_read_file_off_len
+    arrow_pg_read_file_off_len_missing
+    arrow_pg_stat_file
+    arrow_pg_stat_file_1arg
+    arrow_quote_ident
+    arrow_quote_literal
+    arrow_quote_nullable
+    arrow_row_security_active
+    arrow_row_security_active_name
+    arrow_tideq
+    arrow_tidge
+    arrow_tidgt
+    arrow_tidin
+    arrow_tidlarger
+    arrow_tidle
+    arrow_tidlt
+    arrow_tidne
+    arrow_tidout
+    arrow_tidrecv
+    arrow_tidsend
+    arrow_tidsmaller
+    arrow_tsm_bernoulli_handler
+)

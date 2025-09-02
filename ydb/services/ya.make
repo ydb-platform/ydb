@@ -2,7 +2,9 @@ RECURSE(
     auth
     backup
     bg_tasks
+    bridge
     cms
+    config
     datastreams
     deprecated/persqueue_v0
     discovery
@@ -20,5 +22,8 @@ RECURSE(
     persqueue_v1
     rate_limiter
     replication
+    tablet
+    view
     ydb
+    ymq
 )

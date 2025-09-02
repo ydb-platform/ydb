@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 namespace NKikimr::NMiniKQL {
 

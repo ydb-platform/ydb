@@ -1,0 +1,10 @@
+{"cs_ext_list_price"="\x83\7\xE1\xFC";"cs_ext_tax"="\x82\4p";"cs_sales_price"="\x82\7\x86";};
+{"cs_ext_list_price"="\x83\3\x11P";"cs_ext_tax"="\x82\x1BS";"cs_sales_price"="\x82\0143";};
+{"cs_ext_list_price"="\x83\x0B{\x94";"cs_ext_tax"="\x82\0229";"cs_sales_price"="\x82\x1B\x9D";};
+{"cs_ext_list_price"="\x83\x10\x98i";"cs_ext_tax"="\x82Q\x91";"cs_sales_price"="\x82\x0C\xE8";};
+{"cs_ext_list_price"="\x83\x15\x1B\xE8";"cs_ext_tax"="\x82\xA2\x1C";"cs_sales_price"="\x82@\xD8";};
+{"cs_ext_list_price"="\x83\x08\xF3Z";"cs_ext_tax"="\x82pD";"cs_sales_price"="\x82\x1D)";};
+{"cs_ext_list_price"="\x83\6\xF6\xB0";"cs_ext_tax"="\x82\x08\xBC";"cs_sales_price"="\x82\t\xED";};
+{"cs_ext_list_price"="\x83\x08\xBC\xD4";"cs_ext_tax"="\x82\n\xAD";"cs_sales_price"="\x82\x19T";};
+{"cs_ext_list_price"="\x82\x14r";"cs_ext_tax"="\x82\0011";"cs_sales_price"="\x82\7v";};
+{"cs_ext_list_price"="\x83\2\xC6\xB8";"cs_ext_tax"="\x82\n\x83";"cs_sales_price"="\x82\n\xF4";};

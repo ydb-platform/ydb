@@ -6,15 +6,19 @@ so commands which don't always hit the network (e.g. list w/o --outdated or
 --uptodate) don't need waste time importing PipSession and friends.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys
+from functools import lru_cache
 from optparse import Values
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
+
+from pip._vendor import certifi
 
 from pip._internal.cli.base_command import Command
 from pip._internal.cli.command_context import CommandContextMixIn
-from pip._internal.exceptions import CommandError
 
 if TYPE_CHECKING:
     from ssl import SSLContext
@@ -24,9 +28,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _create_truststore_ssl_context() -> Optional["SSLContext"]:
+@lru_cache
+def _create_truststore_ssl_context() -> SSLContext | None:
     if sys.version_info < (3, 10):
-        raise CommandError("The truststore feature is only available for Python 3.10+")
+        logger.debug("Disabling truststore because Python version isn't 3.10+")
+        return None
 
     try:
         import ssl
@@ -36,10 +42,13 @@ def _create_truststore_ssl_context() -> Optional["SSLContext"]:
 
     try:
         from pip._vendor import truststore
-    except ImportError as e:
-        raise CommandError(f"The truststore feature is unavailable: {e}")
+    except ImportError:
+        logger.warning("Disabling truststore because platform isn't supported")
+        return None
 
-    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.load_verify_locations(certifi.where())
+    return ctx
 
 
 class SessionCommandMixin(CommandContextMixIn):
@@ -49,10 +58,10 @@ class SessionCommandMixin(CommandContextMixIn):
 
     def __init__(self) -> None:
         super().__init__()
-        self._session: Optional["PipSession"] = None
+        self._session: PipSession | None = None
 
     @classmethod
-    def _get_index_urls(cls, options: Values) -> Optional[List[str]]:
+    def _get_index_urls(cls, options: Values) -> list[str] | None:
         """Return a list of index urls from user-provided options."""
         index_urls = []
         if not getattr(options, "no_index", False):
@@ -65,7 +74,7 @@ class SessionCommandMixin(CommandContextMixIn):
         # Return None rather than an empty list
         return index_urls or None
 
-    def get_default_session(self, options: Values) -> "PipSession":
+    def get_default_session(self, options: Values) -> PipSession:
         """Get a default-managed session."""
         if self._session is None:
             self._session = self.enter_context(self._build_session(options))
@@ -78,22 +87,16 @@ class SessionCommandMixin(CommandContextMixIn):
     def _build_session(
         self,
         options: Values,
-        retries: Optional[int] = None,
-        timeout: Optional[int] = None,
-        fallback_to_certifi: bool = False,
-    ) -> "PipSession":
+        retries: int | None = None,
+        timeout: int | None = None,
+    ) -> PipSession:
         from pip._internal.network.session import PipSession
 
         cache_dir = options.cache_dir
         assert not cache_dir or os.path.isabs(cache_dir)
 
-        if "truststore" in options.features_enabled:
-            try:
-                ssl_context = _create_truststore_ssl_context()
-            except Exception:
-                if not fallback_to_certifi:
-                    raise
-                ssl_context = None
+        if "legacy-certs" not in options.deprecated_features_enabled:
+            ssl_context = _create_truststore_ssl_context()
         else:
             ssl_context = None
 
@@ -124,6 +127,7 @@ class SessionCommandMixin(CommandContextMixIn):
                 "https": options.proxy,
             }
             session.trust_env = False
+            session.pip_proxy = options.proxy
 
         # Determine if we can prompt the user for authentication or not
         session.auth.prompting = not options.no_input
@@ -132,7 +136,7 @@ class SessionCommandMixin(CommandContextMixIn):
         return session
 
 
-def _pip_self_version_check(session: "PipSession", options: Values) -> None:
+def _pip_self_version_check(session: PipSession, options: Values) -> None:
     from pip._internal.self_outdated_check import pip_self_version_check as check
 
     check(session, options)
@@ -157,16 +161,15 @@ class IndexGroupCommand(Command, SessionCommandMixin):
         if options.disable_pip_version_check or options.no_index:
             return
 
-        # Otherwise, check if we're using the latest version of pip available.
-        session = self._build_session(
-            options,
-            retries=0,
-            timeout=min(5, options.timeout),
-            # This is set to ensure the function does not fail when truststore is
-            # specified in use-feature but cannot be loaded. This usually raises a
-            # CommandError and shows a nice user-facing error, but this function is not
-            # called in that try-except block.
-            fallback_to_certifi=True,
-        )
-        with session:
-            _pip_self_version_check(session, options)
+        try:
+            # Otherwise, check if we're using the latest version of pip available.
+            session = self._build_session(
+                options,
+                retries=0,
+                timeout=min(5, options.timeout),
+            )
+            with session:
+                _pip_self_version_check(session, options)
+        except Exception:
+            logger.warning("There was an error checking the latest version of pip.")
+            logger.debug("See below for error", exc_info=True)

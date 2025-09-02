@@ -33,7 +33,7 @@ public:
     bool IsRawReaderExhausted() const override;
 
 private:
-    THolder<TNodeTableReader> NodeReader_;
+    std::unique_ptr<TNodeTableReader> NodeReader_;
     TVector<const ::google::protobuf::Descriptor*> Descriptors_;
 };
 

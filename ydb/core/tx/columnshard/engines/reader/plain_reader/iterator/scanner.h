@@ -2,6 +2,7 @@
 #include "source.h"
 #include "interval.h"
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -74,24 +75,16 @@ private:
     std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
-    THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
+    THashMap<ui32, std::unique_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
     ui64 ZeroCount = 0;
-    bool AbortFlag = false;
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
-    void OnSentDataFromInterval(const ui32 intervalIdx) const {
-        if (AbortFlag) {
-            return;
-        }
-        auto it = FetchingIntervals.find(intervalIdx);
-        AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", intervalIdx)("count", FetchingIntervals.size());
-        it->second->OnPartSendingComplete();
-    }
+    void OnSentDataFromInterval(const TPartialSourceAddress& address) const;
 
     bool IsReverse() const;
     void Abort();
@@ -110,12 +103,14 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK, 
-        std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader);
+    void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
+        std::optional<NArrow::TShardedRecordBatch>&& batch,
+        const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
+        const ui32 intervalIdx, TPlainReadData& reader);
 
     TConclusionStatus Start();
 
-    TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 

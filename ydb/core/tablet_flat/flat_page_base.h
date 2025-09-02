@@ -277,20 +277,20 @@ struct TCompare {
         : Info(keys)
         , KeyCellDefaults(keyDefaults)
     {
-        Y_ABORT_UNLESS(KeyCellDefaults->size() >= Info.size());
+        Y_ENSURE(KeyCellDefaults->size() >= Info.size());
     }
 
-    bool operator()(const TRecord &record, TCells key) const noexcept
+    bool operator()(const TRecord &record, TCells key) const
     {
         return Compare(record, key) < 0;
     }
 
-    bool operator()(TCells key, const TRecord &record) const noexcept
+    bool operator()(TCells key, const TRecord &record) const
     {
         return Compare(record, key) > 0;
     }
 
-    int Compare(const TRecord &rec, const TCells key) const noexcept
+    int Compare(const TRecord &rec, const TCells key) const
     {
         for (TPos it = 0; it < Min(key.size(), KeyCellDefaults->size()); it++) {
             const TCell left = it < Info.size() ? rec.Cell(Info[it]) : KeyCellDefaults[it];

@@ -21,6 +21,10 @@ namespace NFake {
         EvCompacted = Base_ + 14,
         EvCompact   = Base_ + 15,
         EvCall      = Base_ + 16,
+        EvDataCleaned = Base_ + 17,
+        EvBlobStorageContainsRequest = Base_ + 18,
+        EvBlobStorageContainsResponse = Base_ + 19,
+        EvBlobStorageDeferGC = Base_ + 20,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -50,17 +54,27 @@ namespace NFake {
 
     struct TEvExecute : public TEventLocal<TEvExecute, EvExecute> {
         using ITransaction = NTabletFlatExecutor::ITransaction;
+        using IExecutor = NTabletFlatExecutor::NFlatExecutorSetup::IExecutor;
+        using TLambda = std::function<void (IExecutor*, const TActorContext&)>;
 
-        TEvExecute(TAutoPtr<ITransaction> func) {
-            THolder<ITransaction> h(func.Release());
-            Funcs.push_back(std::move(h));
+        TEvExecute(ITransaction* tx) {
+            Txs.emplace_back(tx);
         }
 
-        TEvExecute(TVector<THolder<ITransaction>> funcs)
-            : Funcs(std::move(funcs))
+        TEvExecute(THolder<ITransaction> tx) {
+            Txs.push_back(std::move(tx));
+        }
+
+        TEvExecute(TVector<THolder<ITransaction>> txs)
+            : Txs(std::move(txs))
         { }
 
-        TVector<THolder<ITransaction>> Funcs;
+        TEvExecute(TLambda&& lambda) {
+            Lambdas.push_back(std::move(lambda));
+        }
+
+        TVector<THolder<ITransaction>> Txs;
+        TVector<TLambda> Lambdas;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
@@ -74,6 +88,12 @@ namespace NFake {
         TEvCompacted(ui32 table) : Table(table) { }
 
         ui64 Table;
+    };
+
+    struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> {
+        TEvDataCleaned(ui64 vacuumGeneration) : VacuumGeneration(vacuumGeneration) { }
+
+        ui64 VacuumGeneration;
     };
 
     struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {
@@ -93,6 +113,28 @@ namespace NFake {
         TEvCall(TCallback callback) : Callback(std::move(callback)) { }
 
         TCallback Callback;
+    };
+
+    struct TEvBlobStorageContainsRequest :  public TEventLocal<TEvBlobStorageContainsRequest, EvBlobStorageContainsRequest> {
+        TEvBlobStorageContainsRequest(TString value)
+            : Value(value)
+        { }
+
+        const TString Value;
+    };
+
+    struct TEvBlobStorageContainsResponse :  public TEventLocal<TEvBlobStorageContainsResponse, EvBlobStorageContainsResponse> {
+        struct TBlobInfo {
+            TLogoBlobID BlobId;
+            bool Keep;
+            bool DoNotKeep;
+        };
+
+        TEvBlobStorageContainsResponse(TVector<TBlobInfo> contains)
+            : Contains(std::move(contains))
+        { }
+
+        const TVector<TBlobInfo> Contains;
     };
 
 }

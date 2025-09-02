@@ -1,7 +1,7 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_import_helpers.h"
-#include "schemeshard_import.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import.h"
+#include "schemeshard_import_helpers.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -55,7 +55,7 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         case TImportInfo::EState::Cancelled:
             Self->ImportsByUid.erase(importInfo->Uid);
             Self->Imports.erase(importInfo->Id);
-            Self->PersistRemoveImport(db, importInfo);
+            Self->PersistRemoveImport(db, *importInfo);
             return respond(Ydb::StatusIds::SUCCESS);
 
         case TImportInfo::EState::Waiting:

@@ -9,6 +9,7 @@ from typing import Dict, Any, Sequence
 
 import yatest.common
 
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 
 LOGGER = make_logger(__name__)
@@ -38,7 +39,7 @@ class DockerComposeHelper:
         self.docker_compose_yml_path = docker_compose_yml_path
 
         with open(self.docker_compose_yml_path) as f:
-            self.docker_compose_yml_data = yaml.load(f)
+            self.docker_compose_yml_data = yaml.load(f, Loader=yaml.SafeLoader)
 
     def get_external_port(self, service_name: str, internal_port: int) -> int:
         cmd = [
@@ -110,7 +111,22 @@ class DockerComposeHelper:
     def get_container_name(self, service_name: str) -> str:
         return self.docker_compose_yml_data['services'][service_name]['container_name']
 
-    def list_ydb_tables(self) -> Sequence[str]:
+    def list_tables(self, dataSourceKind: EGenericDataSourceKind) -> Sequence[str]:
+        match dataSourceKind:
+            case EGenericDataSourceKind.CLICKHOUSE:
+                return self.list_clickhouse_tables()
+            case EGenericDataSourceKind.YDB:
+                return self._list_ydb_tables()
+            case EGenericDataSourceKind.MYSQL:
+                return self._list_mysql_tables()
+            case EGenericDataSourceKind.MS_SQL_SERVER:
+                return self._list_ms_sql_server_tables()
+            case EGenericDataSourceKind.ORACLE:
+                return self._list_oracle_tables()
+            case _:
+                raise ValueError("invalid data source kind: {dataSourceKind}")
+
+    def _list_ydb_tables(self) -> Sequence[str]:
         cmd = [
             self.docker_bin_path,
             'exec',
@@ -157,3 +173,113 @@ class DockerComposeHelper:
                 result.append(item['path'])
 
         return result
+
+    def _list_mysql_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["mysql"]
+        password = params["environment"]["MYSQL_ROOT_PASSWORD"]
+        db = params["environment"]["MYSQL_DATABASE"]
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'mysql',
+            f'--password={password}',
+            db,
+            '-e',
+            f'SELECT table_name FROM information_schema.tables WHERE table_schema = "{db}"',
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
+        else:
+            return out.splitlines()[2:]
+
+    def _list_oracle_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["oracle"]
+        password = params["environment"]["ORACLE_PWD"]
+        username = params["environment"]["TEST_USER_NAME"]  # also serves as default sceheme name for user
+
+        bash_command = f"sqlplus -S {username}/{password} << EOF \nSELECT table_name FROM user_tables; \nEOF"
+        cmd = [self.docker_bin_path, 'exec', params["container_name"], 'bash', '-c', bash_command]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
+        else:
+            lines = out.splitlines()
+            return lines[3 : len(lines) - 3]
+
+    def _list_ms_sql_server_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["ms_sql_server"]
+        password = params["environment"]["SA_PASSWORD"]
+        db = 'master'
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            '/opt/mssql-tools18/bin/sqlcmd',
+            '-C',
+            '-S',
+            'localhost',
+            '-U',
+            'sa',
+            '-d',
+            db,
+            '-P',
+            password,
+            '-Q',
+            "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'",
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
+        else:
+            lines = [x.strip() for x in out.splitlines()]
+            return lines[3:]
+
+    def _list_clickhouse_server_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["clickhouse"]
+        db = 'db'
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'clickhouse-client',
+            '--database',
+            db,
+            '--query',
+            "SHOW TABLES;",
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
+        else:
+            lines = [x.strip() for x in out.splitlines()]
+            return lines

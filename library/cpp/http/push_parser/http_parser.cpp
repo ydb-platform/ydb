@@ -44,6 +44,10 @@ TString THttpParser::GetBestCompressionScheme() const {
     return TString();
 }
 
+const THashSet<TString>& THttpParser::AcceptedEncodings() const {
+    return AcceptEncodings_;
+}
+
 bool THttpParser::FirstLineParser() {
     if (Y_UNLIKELY(!ReadLine())) {
         return false;
@@ -60,6 +64,11 @@ bool THttpParser::FirstLineParser() {
             ParseHttpVersion(httpVersion);
             GetNext(s, ' ', statusCode);
             RetCode_ = FromString<unsigned>(statusCode);
+
+            if (RetCode_ < 200 || RetCode_ == 204 || RetCode_ == 304) {
+                // RFC9112 6.3
+                BodyNotExpected_ = true;
+            }
         } else {
             // Request-Line   = Method SP Request-URI SP HTTP-Version CRLF
             TStringBuf httpVersion = s.After(' ').After(' ');
@@ -119,7 +128,7 @@ bool THttpParser::ContentParser() {
     } else {
         if (MessageType_ == Request) {
             return OnEndParsing(); //RFC2616 4.4-5
-        } else if (Y_UNLIKELY(BodyNotExpected_ || RetCode() < 200 || RetCode() == 204 || RetCode() == 304)) {
+        } else if (Y_UNLIKELY(BodyNotExpected_)) {
             return OnEndParsing(); //RFC2616 4.4-1
         }
 
@@ -131,6 +140,11 @@ bool THttpParser::ContentParser() {
 }
 
 bool THttpParser::ChunkedContentParser() {
+    if (BodyNotExpected_) {
+        // RFC9112 6.1,6.3
+        return OnEndParsing();
+    }
+
     DBGOUT("ReadChunkedContent");
     TChunkInputState& ci = *ChunkInputState_;
 
@@ -261,13 +275,9 @@ void THttpParser::OnEof() {
     throw THttpException() << TStringBuf("incompleted http response");
 }
 
-bool THttpParser::DecodeContent() {
-    if (!DecodeContent_) {
-        return false;
-    }
-
+bool THttpParser::DecodeContent(TString& decodedContent) const {
     if (!ContentEncoding_ || ContentEncoding_ == "identity" || ContentEncoding_ == "none") {
-        DecodedContent_ = Content_;
+        decodedContent = Content_;
         return false;
     }
 
@@ -277,7 +287,7 @@ bool THttpParser::DecodeContent() {
         if (!GzipAllowMultipleStreams_) {
             decompressor.SetAllowMultipleStreams(false);
         }
-        DecodedContent_ = decompressor.ReadAll();
+        decodedContent = decompressor.ReadAll();
     } else if (ContentEncoding_ == "deflate") {
 
         //https://tools.ietf.org/html/rfc1950
@@ -291,14 +301,14 @@ bool THttpParser::DecodeContent() {
         }
 
         try {
-            DecodedContent_ = TZLibDecompress(&in, definitelyNoZlibHeader ? ZLib::Raw : ZLib::ZLib).ReadAll();
+            decodedContent = TZLibDecompress(&in, definitelyNoZlibHeader ? ZLib::Raw : ZLib::ZLib).ReadAll();
         }
         catch(...) {
             if (definitelyNoZlibHeader) {
                 throw;
             }
             TMemoryInput retryInput(Content_.data(), Content_.size());
-            DecodedContent_ = TZLibDecompress(&retryInput, ZLib::Raw).ReadAll();
+            decodedContent = TZLibDecompress(&retryInput, ZLib::Raw).ReadAll();
         }
     } else if (ContentEncoding_.StartsWith("z-")) {
         // opposite for library/cpp/http/io/stream.h
@@ -313,13 +323,13 @@ bool THttpParser::DecodeContent() {
             throw THttpParseException() << "Unsupported content-encoding method: " << exc.AsStrBuf();
         }
         NBlockCodecs::TDecodedInput decoder(&in, codec);
-        DecodedContent_ = decoder.ReadAll();
+        decodedContent = decoder.ReadAll();
     } else if (ContentEncoding_ == "lz4") {
         const auto* codec = NBlockCodecs::Codec(TStringBuf(ContentEncoding_));
-        DecodedContent_ = codec->Decode(Content_);
+        decodedContent = codec->Decode(Content_);
     } else if (ContentEncoding_ == "br") {
         TBrotliDecompress decoder(&in);
-        DecodedContent_ = decoder.ReadAll();
+        decodedContent = decoder.ReadAll();
     } else {
         throw THttpParseException() << "Unsupported content-encoding method: " << ContentEncoding_;
     }

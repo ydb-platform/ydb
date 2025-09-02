@@ -2176,6 +2176,13 @@ _PyGC_DumpShutdownStats(PyInterpreterState *interp)
     }
 }
 
+static void
+finalize_unlink_gc_head(PyGC_Head *gc) {
+    PyGC_Head *prev = GC_PREV(gc);
+    PyGC_Head *next = GC_NEXT(gc);
+    _PyGCHead_SET_NEXT(prev, next);
+    _PyGCHead_SET_PREV(next, prev);
+}
 
 void
 _PyGC_Fini(PyInterpreterState *interp)
@@ -2184,9 +2191,25 @@ _PyGC_Fini(PyInterpreterState *interp)
     Py_CLEAR(gcstate->garbage);
     Py_CLEAR(gcstate->callbacks);
 
-    /* We expect that none of this interpreters objects are shared
-       with other interpreters.
-       See https://github.com/python/cpython/issues/90228. */
+    /* Prevent a subtle bug that affects sub-interpreters that use basic
+     * single-phase init extensions (m_size == -1).  Those extensions cause objects
+     * to be shared between interpreters, via the PyDict_Update(mdict, m_copy) call
+     * in import_find_extension().
+     *
+     * If they are GC objects, their GC head next or prev links could refer to
+     * the interpreter _gc_runtime_state PyGC_Head nodes.  Those nodes go away
+     * when the interpreter structure is freed and so pointers to them become
+     * invalid.  If those objects are still used by another interpreter and
+     * UNTRACK is called on them, a crash will happen.  We untrack the nodes
+     * here to avoid that.
+     *
+     * This bug was originally fixed when reported as gh-90228.  The bug was
+     * re-introduced in gh-94673.
+     */
+    for (int i = 0; i < NUM_GENERATIONS; i++) {
+        finalize_unlink_gc_head(&gcstate->generations[i].head);
+    }
+    finalize_unlink_gc_head(&gcstate->permanent_generation.head);
 }
 
 /* for debugging */
@@ -2422,6 +2445,23 @@ PyObject_GC_IsFinalized(PyObject *obj)
     return 0;
 }
 
+static int
+visit_generation(gcvisitobjects_t callback, void *arg, struct gc_generation *gen)
+{
+    PyGC_Head *gc_list, *gc;
+    gc_list = &gen->head;
+    for (gc = GC_NEXT(gc_list); gc != gc_list; gc = GC_NEXT(gc)) {
+        PyObject *op = FROM_GC(gc);
+        Py_INCREF(op);
+        int res = callback(op, arg);
+        Py_DECREF(op);
+        if (!res) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 void
 PyUnstable_GC_VisitObjects(gcvisitobjects_t callback, void *arg)
 {
@@ -2430,18 +2470,11 @@ PyUnstable_GC_VisitObjects(gcvisitobjects_t callback, void *arg)
     int origenstate = gcstate->enabled;
     gcstate->enabled = 0;
     for (i = 0; i < NUM_GENERATIONS; i++) {
-        PyGC_Head *gc_list, *gc;
-        gc_list = GEN_HEAD(gcstate, i);
-        for (gc = GC_NEXT(gc_list); gc != gc_list; gc = GC_NEXT(gc)) {
-            PyObject *op = FROM_GC(gc);
-            Py_INCREF(op);
-            int res = callback(op, arg);
-            Py_DECREF(op);
-            if (!res) {
-                goto done;
-            }
+        if (visit_generation(callback, arg, &gcstate->generations[i])) {
+            goto done;
         }
     }
+    visit_generation(callback, arg, &gcstate->permanent_generation);
 done:
     gcstate->enabled = origenstate;
 }

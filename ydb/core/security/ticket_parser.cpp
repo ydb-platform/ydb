@@ -15,6 +15,7 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         Unknown,
         Unsupported,
         AccessService,
+        NebiusAccessService,
         Builtin,
         Login,
         ApiKey, // IAM api_key

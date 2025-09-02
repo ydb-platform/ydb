@@ -1,5 +1,6 @@
 #include "blobstorage_hulllog.h"
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 
@@ -36,7 +37,7 @@ namespace NKikimr {
             }
 
             if (HugeKeeperNotice) {
-                Y_ABORT_UNLESS(HugeKeeperId);
+                Y_VERIFY_S(HugeKeeperId, VCtx->VDiskLogPrefix);
                 actorSystem->Send(HugeKeeperId, HugeKeeperNotice.release());
             }
         }

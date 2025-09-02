@@ -1,0 +1,18 @@
+--- a/src/core/lib/iomgr/tcp_server_posix.cc
++++ b/src/core/lib/iomgr/tcp_server_posix.cc
+@@ -38,5 +38,6 @@
+ #include <util/generic/string.h>
+ #include <util/string/cast.h>
++#include <util/system/yassert.h>
+ 
+ #include "y_absl/strings/str_cat.h"
+ #include "y_absl/strings/str_format.h"
+@@ -209,6 +209,8 @@
+       if (errno == EAGAIN || errno == ECONNABORTED || errno == EWOULDBLOCK) {
+         grpc_fd_notify_on_read(sp->emfd, &sp->read_closure);
+         return;
++      } else if (errno == ENFILE) {
++        Y_ABORT("grpc failed accept4: %s", strerror(errno));
+       }
+       gpr_mu_lock(&sp->server->mu);
+       if (!sp->server->shutdown_listeners) {

@@ -5,12 +5,10 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:16)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -24,6 +22,7 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/services/metadata
     ydb/core/tx
+    ydb/core/util
     ydb/public/lib/yson_value
 )
 
@@ -31,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_columnshard_schema.cpp
+    ut_columnshard_move_table.cpp
 )
 
 END()

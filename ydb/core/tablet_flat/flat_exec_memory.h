@@ -19,7 +19,7 @@ namespace NTabletFlatExecutor {
         using IOps = NActors::IActorOps;
 
         struct TUsed {
-            void Describe(IOutputStream &out) const noexcept
+            void Describe(IOutputStream &out) const
             {
                 out << "Memory{" << Static << " dyn " << Dynamic << "}";
             }
@@ -55,7 +55,7 @@ namespace NTabletFlatExecutor {
 
         const TUsed& Stats() const noexcept { return Used; }
 
-        ui64 RemainedStatic(const TSeat &seat) noexcept
+        ui64 RemainedStatic(const TSeat &seat)
         {
             ui64 txLimit = Profile->GetStaticTxMemoryLimit()
                 ? Profile->GetStaticTxMemoryLimit() : Max<ui64>();
@@ -71,7 +71,7 @@ namespace NTabletFlatExecutor {
             return Min(remain, tabletLimit - Used.Static);
         }
 
-        void RequestLimit(TSeat &seat, ui64 desired) noexcept
+        void RequestLimit(TSeat &seat, ui64 desired)
         {
             seat.CurrentMemoryLimit = desired;
 
@@ -101,7 +101,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void AcquiredMemory(TSeat &seat, ui32 task) noexcept
+        void AcquiredMemory(TSeat &seat, ui32 task)
         {
             seat.TaskId = task;
 
@@ -115,7 +115,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void ReleaseMemory(TSeat &seat) noexcept
+        void ReleaseMemory(TSeat &seat)
         {
             if (!seat.TaskId) {
                 FreeStatic(seat, seat.CapturedMemory ? seat.CapturedMemory->Size : 0);
@@ -168,7 +168,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void ReleaseTxData(TSeat &seat) noexcept
+        void ReleaseTxData(TSeat &seat)
         {
             if (seat.CapturedMemory) {
 
@@ -202,7 +202,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void AttachMemory(TSeat &seat) noexcept
+        void AttachMemory(TSeat &seat)
         {
             const ui64 taskId = seat.AttachedMemory->GCToken->TaskId;
             const ui64 bytes = seat.AttachedMemory->GCToken->Size;
@@ -276,9 +276,9 @@ namespace NTabletFlatExecutor {
             seat.AttachedMemory = nullptr;
         }
 
-        void AllocStatic(TSeat &seat, ui64 newLimit) noexcept
+        void AllocStatic(TSeat &seat, ui64 newLimit)
         {
-            Y_ABORT_UNLESS(newLimit >= seat.CurrentTxDataLimit + seat.MemoryTouched);
+            Y_ENSURE(newLimit >= seat.CurrentTxDataLimit + seat.MemoryTouched);
 
             Used.Static -= seat.CurrentMemoryLimit;
             seat.CurrentMemoryLimit = newLimit;
@@ -291,12 +291,12 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void FreeStatic(TSeat &seat, ui64 hold) noexcept
+        void FreeStatic(TSeat &seat, ui64 hold)
         {
             if (seat.TaskId)
                 return;
 
-            Y_ABORT_UNLESS(seat.CurrentMemoryLimit >= hold);
+            Y_ENSURE(seat.CurrentMemoryLimit >= hold);
             ui64 release = seat.CurrentMemoryLimit - hold;
             Used.Static -= release;
 
@@ -307,7 +307,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void RunMemoryGC() noexcept
+        void RunMemoryGC()
         {
             GCScheduled = false;
 
@@ -339,14 +339,14 @@ namespace NTabletFlatExecutor {
             ScheduleGC();
         }
 
-        void ScheduleGC() noexcept
+        void ScheduleGC()
         {
             if (Tokens && !std::exchange(GCScheduled, true))
                 Ops->Schedule(TDuration::Minutes(1),
                     new TEvents::TEvWakeup(ui64(EWakeTag::Memory)));
         }
 
-        void DumpStateToHTML(IOutputStream &out) noexcept
+        void DumpStateToHTML(IOutputStream &out)
         {
             HTML(out) {
                 DIV_CLASS("row") {out << "profile: " << Profile->ShortDebugString(); }
@@ -361,18 +361,18 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void SetProfiles(TResourceProfilesPtr profiles) noexcept
+        void SetProfiles(TResourceProfilesPtr profiles)
         {
             Profiles = profiles ? profiles : new TResourceProfiles;
         }
 
-        void UseProfile(ETablet type, const TString &name) noexcept
+        void UseProfile(ETablet type, const TString &name)
         {
             Profile = Profiles->GetProfile(type, name);
         }
 
     private:
-        void CaptureDynamic(TSeat &seat) noexcept
+        void CaptureDynamic(TSeat &seat)
         {
             const auto type =  GetTaskType(seat.CapturedMemory->Size);
 
@@ -403,7 +403,7 @@ namespace NTabletFlatExecutor {
             Ops->Send(MakeResourceBrokerID(), event.Release(), 0);
         }
 
-        TString GetTaskType(ui64 limit) const noexcept
+        TString GetTaskType(ui64 limit) const
         {
             if (limit <= Profile->GetSmallTxMemoryLimit())
                 return Profile->GetSmallTxTaskType();

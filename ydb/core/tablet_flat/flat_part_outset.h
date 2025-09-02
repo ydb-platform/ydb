@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "flat_sausage_packet.h"
-#include "flat_sausage_fetch.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -11,10 +10,9 @@ namespace NTable {
         // fully identified by this LargeGlobId
         NPageCollection::TLargeGlobId LargeGlobId;
         // loaded meta page
-        TIntrusiveConstPtr<NPageCollection::TPageCollection> Packet;
-        TVector<NPageCollection::TLoadedPage> Sticky;
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> PageCollection;
 
-        void ParsePacket(TSharedData meta);
+        void ParsePageCollection(TSharedData meta);
     };
 
     struct TPartComponents {

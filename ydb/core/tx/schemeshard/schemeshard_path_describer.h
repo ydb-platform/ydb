@@ -47,6 +47,8 @@ class TPathDescriber {
     void DescribeExternalDataSource(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeBackupCollection(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
 
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)
@@ -80,6 +82,19 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId
+);
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+);
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
 );
 
 } // NSchemeShard

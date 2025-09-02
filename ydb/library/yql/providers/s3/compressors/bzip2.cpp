@@ -1,12 +1,36 @@
 #include "bzip2.h"
-
-#include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
 #include "output_queue_impl.h"
 
-namespace NYql {
+#include <contrib/libs/libbz2/bzlib.h>
 
-namespace NBzip2 {
+#include <util/generic/size_literals.h>
+
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NBzip2 {
+
+namespace {
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+
+    bz_stream BzStream_;
+
+    void InitDecoder();
+    void FreeDecoder();
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source)
@@ -57,12 +81,10 @@ bool TReadBuffer::nextImpl() {
 
                 break;
             default:
-                ythrow yexception() << "Bzip error: " << code;
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Bzip error: " << code;
         }
     }
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -132,12 +154,14 @@ private:
     TOutputQueue<0> InputQueue;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> blockSize100k) {
     return std::make_unique<TCompressor>(blockSize100k.value_or(9));
 }
 
-}
-
-}
+} // namespace NYql::NBzip2

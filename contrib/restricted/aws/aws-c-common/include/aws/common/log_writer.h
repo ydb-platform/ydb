@@ -9,6 +9,8 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_allocator;
 struct aws_string;
 
@@ -69,5 +71,6 @@ AWS_COMMON_API
 void aws_log_writer_clean_up(struct aws_log_writer *writer);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LOG_WRITER_H */

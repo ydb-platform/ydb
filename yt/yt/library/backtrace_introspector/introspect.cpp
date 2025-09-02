@@ -32,7 +32,7 @@ using namespace NBacktrace;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = BacktraceIntrospectorLogger;
+constinit const auto Logger = BacktraceIntrospectorLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,8 +63,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                 YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
                     fiberId);
 
-                const auto& propagatingStorage = *NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
-                const auto* traceContext = TryGetTraceContextFromPropagatingStorage(propagatingStorage);
+                const auto* propagatingStorage = NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
+                const auto* traceContext = propagatingStorage ? TryGetTraceContextFromPropagatingStorage(*propagatingStorage) : nullptr;
 
                 TFiberIntrospectionInfo info{
                     .State = EFiberState::Waiting,
@@ -162,7 +162,7 @@ void FormatBacktrace(TStringBuilder* builder, const std::vector<const void*>& ba
     if (!backtrace.empty()) {
         builder->AppendString("Backtrace:\n");
         SymbolizeBacktrace(
-            MakeRange(backtrace),
+            TRange(backtrace),
             [&] (TStringBuf str) {
                 builder->AppendFormat("  %v", str);
             });
@@ -183,7 +183,7 @@ TString FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& in
         if (info.TraceId) {
             builder.AppendFormat("Trace id: %v\n", info.TraceId);
         }
-        if (info.TraceLoggingTag) {
+        if (!info.TraceLoggingTag.empty()) {
             builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTag);
         }
         FormatBacktrace(&builder, info.Backtrace);
@@ -210,7 +210,7 @@ TString FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>& inf
         if (info.TraceId) {
             builder.AppendFormat("Trace id: %v\n", info.TraceId);
         }
-        if (info.TraceLoggingTag) {
+        if (!info.TraceLoggingTag.empty()) {
             builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTag);
         }
         FormatBacktrace(&builder, info.Backtrace);

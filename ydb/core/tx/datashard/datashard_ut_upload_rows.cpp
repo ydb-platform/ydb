@@ -195,12 +195,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
+        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST_TWIN(TestUploadRowsLocks, StreamLookup) {
+    Y_UNIT_TEST(TestUploadRowsLocks) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

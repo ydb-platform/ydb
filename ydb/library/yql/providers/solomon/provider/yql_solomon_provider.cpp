@@ -1,13 +1,13 @@
 #include "yql_solomon_provider.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, bool supportRtmrMode) {
-    return [gateway, supportRtmrMode] (
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode) {
+    return [gateway, credentialsFactory, supportRtmrMode] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -33,6 +33,7 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
         solomonState->SupportRtmrMode = supportRtmrMode;
         solomonState->Types = typeCtx.Get();
         solomonState->Gateway = gateway;
+        solomonState->CredentialsFactory = credentialsFactory;
         solomonState->DqIntegration = CreateSolomonDqIntegration(solomonState);
         if (gatewaysConfig) {
             solomonState->Configuration->Init(gatewaysConfig->GetSolomon(), typeCtx);

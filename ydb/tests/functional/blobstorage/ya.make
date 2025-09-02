@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     test_pdisk_format_info.py
     test_replication.py
@@ -8,31 +8,25 @@ TEST_SRCS(
     test_tablet_channel_migration.py
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
-    TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
 SPLIT_FACTOR(20)
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
     contrib/python/PyHamcrest
 )
 

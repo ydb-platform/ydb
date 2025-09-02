@@ -4,6 +4,7 @@
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
 
@@ -28,6 +29,11 @@ class TReplication::TImpl: public TLagProvider {
             : Ptr(iface)
         {
         }
+
+        inline ITarget* operator->() const {
+            Y_ABORT_UNLESS(Ptr);
+            return Ptr.Get();
+        }
     };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
@@ -35,14 +41,22 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+    }
+
+    ui64 GetExpectedSecretResolverCookie() const {
+        return SecretResolverCookie;
     }
 
     template <typename... Args>
     ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(self, id, std::forward<Args>(args)...);
+            return new TTargetTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::IndexTable:
+            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::Transfer:
+            return new TTargetTransfer(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -55,15 +69,10 @@ class TReplication::TImpl: public TLagProvider {
             case NKikimrReplication::TReplicationConfig::kEverything:
                 return ErrorState("Not implemented");
 
-            case NKikimrReplication::TReplicationConfig::kSpecific: {
-                TVector<std::pair<TString, TString>> paths;
-                for (const auto& target : Config.GetSpecific().GetTargets()) {
-                    paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
-                }
-
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+            case NKikimrReplication::TReplicationConfig::kSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
                 break;
-            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());
@@ -72,21 +81,23 @@ class TReplication::TImpl: public TLagProvider {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Progress(ctx);
+            target->Progress(ctx);
         }
     }
 
 public:
-    template <typename T>
-    explicit TImpl(ui64 id, const TPathId& pathId, T&& config)
+    template <typename T, typename D>
+    explicit TImpl(ui64 id, const TPathId& pathId, T&& config, D&& database)
         : ReplicationId(id)
         , PathId(pathId)
         , Config(std::forward<T>(config))
+        , Database(std::forward<D>(database))
     {
     }
 
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
+        TargetTablePaths.clear();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         TLagProvider::AddPendingLag(id);
@@ -107,29 +118,55 @@ public:
 
     void RemoveTarget(ui64 id) {
         Targets.erase(id);
+        TargetTablePaths.clear();
+    }
+
+    const TVector<TString>& GetTargetTablePaths() const {
+        if (!TargetTablePaths) {
+            TargetTablePaths.reserve(Targets.size());
+            for (const auto& [_, target] : Targets) {
+                switch (target->GetKind()) {
+                case ETargetKind::Table:
+                case ETargetKind::IndexTable:
+                case ETargetKind::Transfer:
+                    TargetTablePaths.push_back(target->GetDstPath());
+                    break;
+                }
+            }
+        }
+
+        return TargetTablePaths;
     }
 
     void Progress(const TActorContext& ctx) {
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
+            const auto& endpoint = params.GetEndpoint();
+            const auto& database = params.GetDatabase();
+            const bool ssl = params.GetEnableSsl();
+            const auto& caCert = params.GetCaCert();
 
-            switch (params.GetCredentialsCase()) {
-            case NKikimrReplication::TConnectionParams::kStaticCredentials:
-                if (!params.GetStaticCredentials().HasPassword()) {
-                    return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+            if (endpoint.empty()) {
+                ydbProxy.Reset(CreateLocalYdbProxy(Database));
+            } else {
+                switch (params.GetCredentialsCase()) {
+                case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                    if (!params.GetStaticCredentials().HasPassword()) {
+                        return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetStaticCredentials()));
+                    break;
+                case NKikimrReplication::TConnectionParams::kOAuthToken:
+                    if (!params.GetOAuthToken().HasToken()) {
+                        return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken()));
+                    break;
+                default:
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                    break;
                 }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
-                break;
-            case NKikimrReplication::TConnectionParams::kOAuthToken:
-                if (!params.GetOAuthToken().HasToken()) {
-                    return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
-                }
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
-                break;
-            default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
-                break;
             }
 
             if (ydbProxy) {
@@ -143,6 +180,7 @@ public:
 
         switch (State) {
         case EState::Ready:
+        case EState::Paused:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
@@ -162,7 +200,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Shutdown(ctx);
+            target->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
@@ -179,6 +217,14 @@ public:
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         Config = config;
+    }
+
+    void ResetCredentials(const TActorContext& ctx) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &YdbProxy}) {
+            if (auto actorId = std::exchange(*x, {})) {
+                ctx.Send(actorId, new TEvents::TEvPoison());
+            }
+        }
     }
 
     void ErrorState(TString issue) {
@@ -200,25 +246,29 @@ private:
     TString Tenant;
 
     NKikimrReplication::TReplicationConfig Config;
+    TString Database;
     EState State = EState::Ready;
     TString Issue;
+    EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
+    mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
+    ui64 SecretResolverCookie = 0;
     TActorId YdbProxy;
     TActorId TenantResolver;
     TActorId TargetDiscoverer;
 
 }; // TImpl
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, config))
+TReplication::TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config, const TString& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, config, database))
 {
 }
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config)))
+TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config, TString&& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config), std::move(database)))
 {
 }
 
@@ -228,17 +278,17 @@ static auto ParseConfig(const TString& config) {
     return cfg;
 }
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config)))
+TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config, const TString& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config), database))
 {
 }
 
-ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    return Impl->AddTarget(this, kind, srcPath, dstPath);
+ui64 TReplication::AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    return Impl->AddTarget(this, kind, config);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    Impl->AddTarget(this, id, kind, srcPath, dstPath);
+TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    Impl->AddTarget(this, id, kind, config);
     return Impl->FindTarget(id);
 }
 
@@ -252,6 +302,10 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
 
 void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
+}
+
+const TVector<TString>& TReplication::GetTargetTablePaths() const {
+    return Impl->GetTargetTablePaths();
 }
 
 void TReplication::Progress(const TActorContext& ctx) {
@@ -282,8 +336,16 @@ void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
     Impl->SetConfig(std::move(config));
 }
 
+void TReplication::ResetCredentials(const TActorContext& ctx) {
+    Impl->ResetCredentials(ctx);
+}
+
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
+}
+
+const TString& TReplication::GetDatabase() const {
+    return Impl->Database;
 }
 
 void TReplication::SetState(EState state, TString issue) {
@@ -296,6 +358,14 @@ TReplication::EState TReplication::GetState() const {
 
 const TString& TReplication::GetIssue() const {
     return Impl->Issue;
+}
+
+TReplication::EState TReplication::GetDesiredState() const {
+    return Impl->DesiredState;
+}
+
+void TReplication::SetDesiredState(EState state) {
+    Impl->DesiredState = state;
 }
 
 void TReplication::SetNextTargetId(ui64 value) {
@@ -318,6 +388,10 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     default:
         Y_ABORT("unreachable");
     }
+}
+
+ui64 TReplication::GetExpectedSecretResolverCookie() const {
+    return Impl->GetExpectedSecretResolverCookie();
 }
 
 void TReplication::SetTenant(const TString& value) {
@@ -346,7 +420,7 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 }
 
 bool TReplication::CheckAlterDone() const {
-    return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
+    return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
 void TReplication::UpdateLag(ui64 targetId, TDuration lag) {

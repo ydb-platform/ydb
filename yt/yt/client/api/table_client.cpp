@@ -1,5 +1,7 @@
 #include "table_client.h"
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -32,6 +34,10 @@ void Serialize(const TMultiTablePartition& partition, NYson::IYsonConsumer* cons
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("table_ranges").Value(partition.TableRanges)
+            .DoIf(static_cast<bool>(partition.Cookie), [&] (TFluentMap fluent) {
+                auto ysonString = NYson::ConvertToYsonString(partition.Cookie);
+                fluent.Item("cookie").Value(ysonString.AsStringBuf());
+            })
             .Item("aggregate_statistics").Value(partition.AggregateStatistics)
         .EndMap();
 }
@@ -49,4 +55,3 @@ void Serialize(const TMultiTablePartitions& partitions, NYson::IYsonConsumer* co
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

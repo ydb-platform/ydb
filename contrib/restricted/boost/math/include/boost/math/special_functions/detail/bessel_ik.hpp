@@ -1,4 +1,5 @@
 //  Copyright (c) 2006 Xiaogang Zhang
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,14 +11,17 @@
 #pragma once
 #endif
 
-#include <cmath>
-#include <cstdint>
+#include <boost/math/tools/config.hpp>
+#include <boost/math/tools/cstdint.hpp>
+#include <boost/math/tools/numeric_limits.hpp>
+#include <boost/math/tools/type_traits.hpp>
+#include <boost/math/tools/series.hpp>
+#include <boost/math/special_functions/sign.hpp>
 #include <boost/math/special_functions/round.hpp>
 #include <boost/math/special_functions/gamma.hpp>
 #include <boost/math/special_functions/sin_pi.hpp>
 #include <boost/math/constants/constants.hpp>
 #include <boost/math/policies/error_handling.hpp>
-#include <boost/math/tools/config.hpp>
 
 // Modified Bessel functions of the first and second kind of fractional order
 
@@ -30,13 +34,13 @@ struct cyl_bessel_i_small_z
 {
    typedef T result_type;
 
-   cyl_bessel_i_small_z(T v_, T z_) : k(0), v(v_), mult(z_*z_/4)
+   BOOST_MATH_GPU_ENABLED cyl_bessel_i_small_z(T v_, T z_) : k(0), v(v_), mult(z_*z_/4)
    {
       BOOST_MATH_STD_USING
       term = 1;
    }
 
-   T operator()()
+   BOOST_MATH_GPU_ENABLED T operator()()
    {
       T result = term;
       ++k;
@@ -52,7 +56,7 @@ private:
 };
 
 template <class T, class Policy>
-inline T bessel_i_small_z_series(T v, T x, const Policy& pol)
+BOOST_MATH_GPU_ENABLED inline T bessel_i_small_z_series(T v, T x, const Policy& pol)
 {
    BOOST_MATH_STD_USING
    T prefix;
@@ -69,7 +73,7 @@ inline T bessel_i_small_z_series(T v, T x, const Policy& pol)
       return prefix;
 
    cyl_bessel_i_small_z<T, Policy> s(v, x);
-   std::uintmax_t max_iter = policies::get_max_series_iterations<Policy>();
+   boost::math::uintmax_t max_iter = policies::get_max_series_iterations<Policy>();
 
    T result = boost::math::tools::sum_series(s, boost::math::policies::get_epsilon<T, Policy>(), max_iter);
 
@@ -80,7 +84,7 @@ inline T bessel_i_small_z_series(T v, T x, const Policy& pol)
 // Calculate K(v, x) and K(v+1, x) by method analogous to
 // Temme, Journal of Computational Physics, vol 21, 343 (1976)
 template <typename T, typename Policy>
-int temme_ik(T v, T x, T* result_K, T* K1, const Policy& pol)
+BOOST_MATH_GPU_ENABLED int temme_ik(T v, T x, T* result_K, T* K1, const Policy& pol)
 {
     T f, h, p, q, coef, sum, sum1, tolerance;
     T a, b, c, d, sigma, gamma1, gamma2;
@@ -157,7 +161,7 @@ int temme_ik(T v, T x, T* result_K, T* K1, const Policy& pol)
 // Evaluate continued fraction fv = I_(v+1) / I_v, derived from
 // Abramowitz and Stegun, Handbook of Mathematical Functions, 1972, 9.1.73
 template <typename T, typename Policy>
-int CF1_ik(T v, T x, T* fv, const Policy& pol)
+BOOST_MATH_GPU_ENABLED int CF1_ik(T v, T x, T* fv, const Policy& pol)
 {
     T C, D, f, a, b, delta, tiny, tolerance;
     unsigned long k;
@@ -204,7 +208,7 @@ int CF1_ik(T v, T x, T* fv, const Policy& pol)
 // z1 / z0 = U(v+1.5, 2v+1, 2x) / U(v+0.5, 2v+1, 2x), see
 // Thompson and Barnett, Computer Physics Communications, vol 47, 245 (1987)
 template <typename T, typename Policy>
-int CF2_ik(T v, T x, T* Kv, T* Kv1, const Policy& pol)
+BOOST_MATH_GPU_ENABLED int CF2_ik(T v, T x, T* Kv, T* Kv1, const Policy& pol)
 {
     BOOST_MATH_STD_USING
     using namespace boost::math::constants;
@@ -278,7 +282,7 @@ int CF2_ik(T v, T x, T* Kv, T* Kv1, const Policy& pol)
     }
     policies::check_series_iterations<T>("boost::math::bessel_ik<%1%>(%1%,%1%) in CF2_ik", k, pol);
 
-    if(x >= tools::log_max_value<T>())
+    if(-x < tools::log_min_value<T>())
        *Kv = exp(0.5f * log(pi<T>() / (2 * x)) - x - log(S));
     else
       *Kv = sqrt(pi<T>() / (2 * x)) * exp(-x) / S;
@@ -297,7 +301,7 @@ enum{
 // Compute I(v, x) and K(v, x) simultaneously by Temme's method, see
 // Temme, Journal of Computational Physics, vol 19, 324 (1975)
 template <typename T, typename Policy>
-int bessel_ik(T v, T x, T* result_I, T* result_K, int kind, const Policy& pol)
+BOOST_MATH_GPU_ENABLED int bessel_ik(T v, T x, T* result_I, T* result_K, int kind, const Policy& pol)
 {
     // Kv1 = K_(v+1), fv = I_(v+1) / I_v
     // Ku1 = K_(u+1), fu = I_(u+1) / I_u
@@ -314,7 +318,7 @@ int bessel_ik(T v, T x, T* result_I, T* result_K, int kind, const Policy& pol)
     using namespace boost::math::tools;
     using namespace boost::math::constants;
 
-    static const char* function = "boost::math::bessel_ik<%1%>(%1%,%1%)";
+    constexpr auto function = "boost::math::bessel_ik<%1%>(%1%,%1%)";
 
     if (v < 0)
     {
@@ -322,85 +326,99 @@ int bessel_ik(T v, T x, T* result_I, T* result_K, int kind, const Policy& pol)
         v = -v;                             // v is non-negative from here
         kind |= need_k;
     }
+
+    T scale = 1;
+    T scale_sign = 1;
+
     n = iround(v, pol);
     u = v - n;                              // -1/2 <= u < 1/2
     BOOST_MATH_INSTRUMENT_VARIABLE(n);
     BOOST_MATH_INSTRUMENT_VARIABLE(u);
 
-    BOOST_MATH_ASSERT(x > 0); // Error handling for x <= 0 handled in cyl_bessel_i and cyl_bessel_k
-
-    // x is positive until reflection
-    W = 1 / x;                                 // Wronskian
-    if (x <= 2)                                // x in (0, 2]
+    if (((kind & need_i) == 0) && (fabs(4 * v * v - 25) / (8 * x) < tools::forth_root_epsilon<T>()))
     {
-        temme_ik(u, x, &Ku, &Ku1, pol);             // Temme series
-    }
-    else                                       // x in (2, \infty)
-    {
-        CF2_ik(u, x, &Ku, &Ku1, pol);               // continued fraction CF2_ik
-    }
-    BOOST_MATH_INSTRUMENT_VARIABLE(Ku);
-    BOOST_MATH_INSTRUMENT_VARIABLE(Ku1);
-    prev = Ku;
-    current = Ku1;
-    T scale = 1;
-    T scale_sign = 1;
-    for (k = 1; k <= n; k++)                   // forward recurrence for K
-    {
-        T fact = 2 * (u + k) / x;
-        // Check for overflow: if (max - |prev|) / fact > max, then overflow
-        // (max - |prev|) / fact > max
-        // max * (1 - fact) > |prev|
-        // if fact < 1: safe to compute overflow check
-        // if fact >= 1:  won't overflow
-        const bool will_overflow = (fact < 1)
-          ? tools::max_value<T>() * (1 - fact) > fabs(prev)
-          : false;
-        if(!will_overflow && ((tools::max_value<T>() - fabs(prev)) / fact < fabs(current)))
-        {
-           prev /= current;
-           scale /= current;
-           scale_sign *= ((boost::math::signbit)(current) ? -1 : 1);
-           current = 1;
-        }
-        next = fact * current + prev;
-        prev = current;
-        current = next;
-    }
-    Kv = prev;
-    Kv1 = current;
-    BOOST_MATH_INSTRUMENT_VARIABLE(Kv);
-    BOOST_MATH_INSTRUMENT_VARIABLE(Kv1);
-    if(kind & need_i)
-    {
-       T lim = (4 * v * v + 10) / (8 * x);
-       lim *= lim;
-       lim *= lim;
-       lim /= 24;
-       if((lim < tools::epsilon<T>() * 10) && (x > 100))
-       {
-          // x is huge compared to v, CF1 may be very slow
-          // to converge so use asymptotic expansion for large
-          // x case instead.  Note that the asymptotic expansion
-          // isn't very accurate - so it's deliberately very hard
-          // to get here - probably we're going to overflow:
-          Iv = asymptotic_bessel_i_large_x(v, x, pol);
-       }
-       else if((v > 0) && (x / v < 0.25))
-       {
-          Iv = bessel_i_small_z_series(v, x, pol);
-       }
-       else
-       {
-          CF1_ik(v, x, &fv, pol);                         // continued fraction CF1_ik
-          Iv = scale * W / (Kv * fv + Kv1);                  // Wronskian relation
-       }
+       // A&S 9.7.2
+       Iv = boost::math::numeric_limits<T>::quiet_NaN(); // any value will do
+       T mu = 4 * v * v;
+       T eight_z = 8 * x;
+       Kv = 1 + (mu - 1) / eight_z + (mu - 1) * (mu - 9) / (2 * eight_z * eight_z) + (mu - 1) * (mu - 9) * (mu - 25) / (6 * eight_z * eight_z * eight_z);
+       Kv *= exp(-x) * constants::root_pi<T>() / sqrt(2 * x);
     }
     else
-       Iv = std::numeric_limits<T>::quiet_NaN(); // any value will do
-
-    if (reflect)
     {
+       BOOST_MATH_ASSERT(x > 0); // Error handling for x <= 0 handled in cyl_bessel_i and cyl_bessel_k
+
+       // x is positive until reflection
+       W = 1 / x;                                 // Wronskian
+       if (x <= 2)                                // x in (0, 2]
+       {
+          temme_ik(u, x, &Ku, &Ku1, pol);             // Temme series
+       }
+       else                                       // x in (2, \infty)
+       {
+          CF2_ik(u, x, &Ku, &Ku1, pol);               // continued fraction CF2_ik
+       }
+       BOOST_MATH_INSTRUMENT_VARIABLE(Ku);
+       BOOST_MATH_INSTRUMENT_VARIABLE(Ku1);
+       prev = Ku;
+       current = Ku1;
+       for (k = 1; k <= n; k++)                   // forward recurrence for K
+       {
+          T fact = 2 * (u + k) / x;
+          // Check for overflow: if (max - |prev|) / fact > max, then overflow
+          // (max - |prev|) / fact > max
+          // max * (1 - fact) > |prev|
+          // if fact < 1: safe to compute overflow check
+          // if fact >= 1:  won't overflow
+          const bool will_overflow = (fact < 1)
+             ? tools::max_value<T>() * (1 - fact) > fabs(prev)
+             : false;
+          if (!will_overflow && ((tools::max_value<T>() - fabs(prev)) / fact < fabs(current)))
+          {
+             prev /= current;
+             scale /= current;
+             scale_sign *= ((boost::math::signbit)(current) ? -1 : 1);
+             current = 1;
+          }
+          next = fact * current + prev;
+          prev = current;
+          current = next;
+       }
+       Kv = prev;
+       Kv1 = current;
+       BOOST_MATH_INSTRUMENT_VARIABLE(Kv);
+       BOOST_MATH_INSTRUMENT_VARIABLE(Kv1);
+       if (kind & need_i)
+       {
+          T lim = (4 * v * v + 10) / (8 * x);
+          lim *= lim;
+          lim *= lim;
+          lim /= 24;
+          if ((lim < tools::epsilon<T>() * 10) && (x > 100))
+          {
+             // x is huge compared to v, CF1 may be very slow
+             // to converge so use asymptotic expansion for large
+             // x case instead.  Note that the asymptotic expansion
+             // isn't very accurate - so it's deliberately very hard
+             // to get here - probably we're going to overflow:
+             Iv = asymptotic_bessel_i_large_x(v, x, pol);
+          }
+          else if ((v > 0) && (x / v < 0.25))
+          {
+             Iv = bessel_i_small_z_series(v, x, pol);
+          }
+          else
+          {
+             CF1_ik(v, x, &fv, pol);                         // continued fraction CF1_ik
+             Iv = scale * W / (Kv * fv + Kv1);                  // Wronskian relation
+          }
+       }
+       else
+          Iv = boost::math::numeric_limits<T>::quiet_NaN(); // any value will do
+    }
+    if (reflect && (kind & need_i))
+    {
+        BOOST_MATH_ASSERT(fabs(v - n - u) < tools::forth_root_epsilon<T>());
         T z = (u + n % 2);
         T fact = (2 / pi<T>()) * (boost::math::sin_pi(z, pol) * Kv);
         if(fact == 0)

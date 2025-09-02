@@ -10,13 +10,15 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 namespace NKikimr {
 
@@ -57,6 +59,7 @@ namespace NKikimr {
             TIntrusivePtr<TFormatFactory> Formats;
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+            std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 
             ~TMine();
         };
@@ -109,6 +112,8 @@ namespace NKikimr {
         NKikimrConfig::TGraphConfig GraphConfig;
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
         NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
+        NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
+        NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
 
     private:

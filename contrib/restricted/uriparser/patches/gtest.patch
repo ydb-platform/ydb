@@ -1,0 +1,9 @@
+--- a/test/test.cpp
++++ b/test/test.cpp
+@@ -2234,6 +2233,0 @@
+-
+-
+-int main(int argc, char ** argv) {
+-	::testing::InitGoogleTest(&argc, argv);
+-	return RUN_ALL_TESTS();
+-}

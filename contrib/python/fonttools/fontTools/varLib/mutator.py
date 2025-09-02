@@ -1,10 +1,19 @@
 """
 Instantiate a variation font.  Run, eg:
 
-$ fonttools varLib.mutator ./NotoSansArabic-VF.ttf wght=140 wdth=85
+.. code-block:: sh
+
+    $ fonttools varLib.mutator ./NotoSansArabic-VF.ttf wght=140 wdth=85
+
+.. warning::
+   ``fontTools.varLib.mutator`` is deprecated in favor of :mod:`fontTools.varLib.instancer`
+   which provides equivalent full instancing and also supports partial instancing.
+   Please migrate CLI usage to ``fonttools varLib.instancer`` and API usage to
+   :func:`fontTools.varLib.instancer.instantiateVariableFont`.
 """
 
 from fontTools.misc.fixedTools import floatToFixedToFloat, floatToFixed
+from fontTools.misc.loggingTools import deprecateFunction
 from fontTools.misc.roundTools import otRound
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont, newTable
@@ -157,12 +166,18 @@ def interpolate_cff2_metrics(varfont, topDict, glyphOrder, loc):
             hmtx[gname] = tuple(entry)
 
 
+@deprecateFunction(
+    "use fontTools.varLib.instancer.instantiateVariableFont instead "
+    "for either full or partial instancing",
+)
 def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
     """Generate a static instance from a variable TTFont and a dictionary
     defining the desired location along the variable font's axes.
     The location values must be specified as user-space coordinates, e.g.:
 
-            {'wght': 400, 'wdth': 100}
+    .. code-block::
+
+        {'wght': 400, 'wdth': 100}
 
     By default, a new TTFont object is returned. If ``inplace`` is True, the
     input varfont is modified and reduced to a static font.
@@ -404,7 +419,9 @@ def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
             if set(excludedUnicodeLangIDs) == set(range(len((varfont["ltag"].tags)))):
                 del varfont["ltag"]
         varfont["name"].names[:] = [
-            n for n in varfont["name"].names if n.nameID not in exclude
+            n
+            for n in varfont["name"].names
+            if n.nameID < 256 or n.nameID not in exclude
         ]
 
     if "wght" in location and "OS/2" in varfont:

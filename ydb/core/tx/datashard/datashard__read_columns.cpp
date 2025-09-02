@@ -86,7 +86,7 @@ public:
         , BlockBuilder(std::move(blockBuilder))
     {}
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -95,8 +95,8 @@ public:
         return hello;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
-        Y_ABORT_UNLESS(seq == 0, "Unexpected repeated Seek");
+    EScan Seek(TLead& lead, ui64 seq) override {
+        Y_ENSURE(seq == 0, "Unexpected repeated Seek");
 
         lead.To(ValueColumns, From.Key.GetCells(), From.Inclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper);
         lead.Until(To.Key.GetCells(), To.Inclusive);
@@ -104,11 +104,11 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         const auto& keyTypes = Scheme->Keys->BasicTypes();
 
-        Y_ABORT_UNLESS(key.size() == keyTypes.size());
-        Y_ABORT_UNLESS((*row).size() == ValueColumnTypes.size());
+        Y_ENSURE(key.size() == keyTypes.size());
+        Y_ENSURE((*row).size() == ValueColumnTypes.size());
 
         TDbTupleRef rowKey(keyTypes.data(), key.data(), keyTypes.size());
         TDbTupleRef rowValues(ValueColumnTypes.data(), (*row).data(), ValueColumnTypes.size());
@@ -127,10 +127,10 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
-        if (reason == EAbort::None) {
+        if (status == EStatus::Done) {
             TString buffer = BlockBuilder->Finish();
             buffer.resize(BlockBuilder->Bytes());
             BlockBuilder.reset();
@@ -146,10 +146,11 @@ public:
                         << Result->Record.GetBlocks().size() << ") shardFinished: " << ShardFinished);
         } else {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan failed for table [" << TableName << "]");
+                        << " Read columns scan failed for table [" << TableName << "]"
+                        << ", status: " << status);
 
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            Result->Record.SetErrorDescription("Scan aborted");
+            Result->Record.SetErrorDescription(TStringBuilder() << "Scan finished unsuccessfully with status " << status);
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
@@ -158,11 +159,11 @@ public:
         return this;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    void Describe(IOutputStream& str) const noexcept override {
+    void Describe(IOutputStream& str) const override {
         str << "ReadColumnsScan table: ["<< TableName << "]shard: " << TabletId;
     }
 
@@ -284,7 +285,7 @@ public:
         TSerializedCellVec fromKeyCells(Ev->Get()->Record.GetFromKey());
         KeyFrom.clear();
         for (ui32 i = 0; i < fromKeyCells.GetCells().size(); ++i) {
-            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
         }
         KeyFrom.resize(tableInfo.KeyColumnTypes.size());
         InclusiveFrom = Ev->Get()->Record.GetFromKeyInclusive();

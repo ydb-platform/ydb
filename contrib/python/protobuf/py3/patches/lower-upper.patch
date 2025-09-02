@@ -1,0 +1,17 @@
+diff --git a/python/google/protobuf/pyext/message.cc b/python/google/protobuf/pyext/message.cc
+index 3ff31e2..31d4003 100644
+--- a/python/google/protobuf/pyext/message.cc
++++ b/python/google/protobuf/pyext/message.cc
+@@ -121,11 +121,7 @@ namespace message_meta {
+ namespace {
+ // Copied over from internal 'google/protobuf/stubs/strutil.h'.
+ inline void LowerString(std::string* s) {
+-  std::string::iterator end = s->end();
+-  for (std::string::iterator i = s->begin(); i != end; ++i) {
+-    // tolower() changes based on locale.  We don't want this!
+-    if ('A' <= *i && *i <= 'Z') *i += 'a' - 'A';
+-  }
++  s->to_lower();
+ }
+ }  // namespace
+ 

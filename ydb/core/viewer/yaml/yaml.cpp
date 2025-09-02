@@ -47,6 +47,9 @@ YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor*
         int oneofFields = descriptor->oneof_decl_count();
         for (int idx = 0; idx < oneofFields; ++idx) {
             const OneofDescriptor* fieldDescriptor = descriptor->oneof_decl(idx);
+            if (fieldDescriptor->name().StartsWith("_")) {
+                continue;
+            }
             properties[fieldDescriptor->name()]["type"] = "oneOf";
         }
         for (int idx = 0; idx < fields; ++idx) {
@@ -57,10 +60,7 @@ YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor*
                 property.reset(property["items"]);
             }
             if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-                if (fieldDescriptor->message_type()->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {
-                    property["type"] = "string";
-                    property["format"] = "date-time";
-                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
+                if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
                     property["type"] = "string";
                     property["example"] = "3600s";
                 } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::BoolValue::descriptor()->full_name()) {

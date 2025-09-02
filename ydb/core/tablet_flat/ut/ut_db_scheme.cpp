@@ -10,6 +10,7 @@ namespace {
     struct TModel {
         using ECodec = NKikimr::NTable::NPage::ECodec;
         using ECache = NKikimr::NTable::NPage::ECache;
+        using ECacheMode = NKikimr::NTable::NPage::ECacheMode;
 
         enum ETokens : ui32 {
             TableId = 1,
@@ -37,9 +38,11 @@ namespace {
             using namespace NKikimr;
 
             bld.AddTable("table1", TableId);
-            bld.SetRoom(TableId, StoreIdOut, ChannelOut, ChannelBlobs, ChannelOut);
+            bld.SetRoom(TableId, StoreIdOut, ChannelOut, {ChannelBlobs}, ChannelOut);
             bld.AddFamily(TableId, GroupId1, StoreIdDef);
-            bld.SetFamily(TableId, GroupId1, ECache::Ever, ECodec::LZ4);
+            bld.SetFamilyCompression(TableId, GroupId1, ECodec::LZ4);
+            bld.SetFamilyCacheMode(TableId, GroupId1, ECacheMode::TryKeepInMemory);
+            bld.SetFamilyCache(TableId, GroupId1, ECache::Ever);
             bld.AddFamily(TableId, GroupId2, StoreIdOut);
             bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false);
             bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false);
@@ -69,20 +72,52 @@ namespace {
                 UNIT_ASSERT(family->Cache == ECache::Ever);
                 UNIT_ASSERT(family->Codec == ECodec::LZ4);
                 UNIT_ASSERT(family->Large == Max<ui32>());
+                UNIT_ASSERT(family->CacheMode == ECacheMode::TryKeepInMemory);
             } else {
                 UNIT_FAIL("Cannot find primary group in scheme");
             }
 
             UNIT_ASSERT(table.Families.find(GroupId2)->second.Room == StoreIdOut);
             UNIT_ASSERT(table.Rooms.find(StoreIdDef)->second.Main == ChannelDef);
-            UNIT_ASSERT(table.Rooms.find(StoreIdDef)->second.Blobs == ChannelDef);
+            UNIT_ASSERT(table.Rooms.find(StoreIdDef)->second.Blobs == std::vector<ui8>{ChannelDef});
             UNIT_ASSERT(table.Rooms.find(StoreIdOut)->second.Main == ChannelOut);
-            UNIT_ASSERT(table.Rooms.find(StoreIdOut)->second.Blobs == ChannelBlobs);
+            UNIT_ASSERT(table.Rooms.find(StoreIdOut)->second.Blobs == std::vector<ui8>{ChannelBlobs});
         }
     };
 
     struct TCompare {
         using TTableInfo = TScheme::TTableInfo;
+
+        static bool IsTheSame(const TScheme::TRoom &a, const TScheme::TRoom &b) noexcept
+        {
+            return
+                a.Main == b.Main
+                && a.Blobs == b.Blobs
+                && a.Outer == b.Outer;
+        }
+
+        static bool IsTheSame(const TScheme::TFamily &a, const TScheme::TFamily &b) noexcept
+        {
+            return
+                a.Room == b.Room
+                && a.Cache == b.Cache
+                && a.Codec == b.Codec
+                && a.Small == b.Small
+                && a.Large == b.Large
+                && a.CacheMode == b.CacheMode;
+        }
+
+        static bool IsTheSame(const TColumn &a, const TColumn &b) noexcept
+        {
+            return
+                a.Id == b.Id
+                && a.PType == b.PType
+                && a.PTypeMod == b.PTypeMod
+                && a.KeyOrder == b.KeyOrder
+                && a.Name == b.Name
+                && a.Family == b.Family
+                && a.NotNull == b.NotNull;
+        }
 
         bool Do(ui32 table, const TScheme &left, const TScheme &right) const
         {
@@ -115,7 +150,7 @@ namespace {
 
                 if (on == with.end()) {
                     // Sometimes will be replaced with log line
-                } else if (!it.second.IsTheSame(on->second)) {
+                } else if (!IsTheSame(it.second, on->second)) {
                     // Sometimes will be replaced with log line
                 } else
                     continue;

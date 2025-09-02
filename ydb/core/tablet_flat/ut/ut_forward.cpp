@@ -40,14 +40,14 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(ui32 page, EPage) noexcept override
+        ui64 AddToQueue(ui32 page, EPage) override
         {
             Pages.push_back(page);
 
             return Large->Relation(page).Size;
         }
 
-        TDeque<TScreen::THole> Trace() noexcept
+        TDeque<TScreen::THole> Trace()
         {
             return dynamic_cast<NFwd::TBlobs&>(*Cache).Traced();
         }
@@ -114,7 +114,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, EPage::Opaque);
+                Cache->Fill(page, {}, EPage::Opaque);
             }
 
             UNIT_ASSERT(Cache->Stat.Saved == Cache->Stat.Fetch);
@@ -148,9 +148,9 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage type) override
         {
-            Y_ABORT_UNLESS(type == Part->GetPageType(pageId, { }));
+            Y_ENSURE(type == Part->GetPageType(pageId, { }));
 
             Queue.push_back(pageId);
 
@@ -196,7 +196,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+                Cache->Fill(page, {}, Part->GetPageType(page.PageId, {}));
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
@@ -237,7 +237,7 @@ namespace {
             Shuffle(load.begin(), load.end(), Rnd);
 
             for (auto &page : load) {
-                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+                Cache->Fill(page, {}, Part->GetPageType(page.PageId, {}));
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());

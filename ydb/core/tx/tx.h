@@ -240,7 +240,7 @@ struct TTestTxConfig {
     static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;
 };
 
-struct TEvSubDomain {
+namespace TEvSubDomain {
     enum EEv {
         EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
         EvConfigureStatus,

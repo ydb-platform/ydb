@@ -1,0 +1,107 @@
+--- contrib/python/cffi/py3/c/_cffi_backend.c	(index)
++++ contrib/python/cffi/py3/c/_cffi_backend.c	(working tree)
+@@ -294,7 +294,6 @@ typedef union {
+     unsigned long long m_longlong;
+     float m_float;
+     double m_double;
+-    long double m_longdouble;
+ } union_alignment;
+ 
+ typedef struct {
+--- contrib/python/cffi/py3/c/lib_obj.c	(index)
++++ contrib/python/cffi/py3/c/lib_obj.c	(working tree)
+@@ -15,6 +15,18 @@
+    __getattr__.
+ */
+ 
++#if defined(_asan_enabled_)
++void __lsan_ignore_object(const void* p);
++#endif
++
++inline static void MarkAsIntentionallyLeaked(const void* ptr) {
++#if defined(_asan_enabled_)
++     __lsan_ignore_object(ptr);
++#else
++     (void)ptr;
++#endif
++}
++
+ struct CPyExtFunc_s {
+     PyMethodDef md;
+     void *direct_fn;
+@@ -340,6 +352,7 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
+                 PyErr_NoMemory();
+                 return NULL;
+             }
++            MarkAsIntentionallyLeaked(data);
+             ((void(*)(char*))g->address)(data);
+         }
+         x = convert_to_object(data, ct);
+--- contrib/python/cffi/py3/c/misc_win32.h	(index)
++++ contrib/python/cffi/py3/c/misc_win32.h	(working tree)
+@@ -8,30 +8,6 @@
+ 
+ static DWORD cffi_tls_index = TLS_OUT_OF_INDEXES;
+ 
+-BOOL WINAPI DllMain(HINSTANCE hinstDLL,
+-                    DWORD     reason_for_call,
+-                    LPVOID    reserved)
+-{
+-    LPVOID p;
+-
+-    switch (reason_for_call) {
+-
+-    case DLL_THREAD_DETACH:
+-        if (cffi_tls_index != TLS_OUT_OF_INDEXES) {
+-            p = TlsGetValue(cffi_tls_index);
+-            if (p != NULL) {
+-                TlsSetValue(cffi_tls_index, NULL);
+-                cffi_thread_shutdown(p);
+-            }
+-        }
+-        break;
+-
+-    default:
+-        break;
+-    }
+-    return TRUE;
+-}
+-
+ static void init_cffi_tls(void)
+ {
+     if (cffi_tls_index == TLS_OUT_OF_INDEXES) {
+--- contrib/python/cffi/py3/c/wchar_helper.h	(index)
++++ contrib/python/cffi/py3/c/wchar_helper.h	(working tree)
+@@ -20,7 +20,7 @@ static PyObject *
+ _my_PyUnicode_FromChar32(const cffi_char32_t *w, Py_ssize_t size)
+ {
+     PyObject *unicode;
+-    register Py_ssize_t i;
++    Py_ssize_t i;
+     Py_ssize_t alloc;
+     const cffi_char32_t *orig_w;
+ 
+@@ -38,7 +38,7 @@ _my_PyUnicode_FromChar32(const cffi_char32_t *w, Py_ssize_t size)
+ 
+     /* Copy the wchar_t data into the new object */
+     {
+-        register Py_UNICODE *u;
++        Py_UNICODE *u;
+         u = PyUnicode_AS_UNICODE(unicode);
+         for (i = size; i > 0; i--) {
+             if (*w > 0xFFFF) {
+--- contrib/python/cffi/py3/cffi/recompiler.py	(index)
++++ contrib/python/cffi/py3/cffi/recompiler.py	(working tree)
+@@ -287,10 +287,8 @@ class Recompiler:
+             self.write_c_source_to_f(f, preamble)
+ 
+     def _rel_readlines(self, filename):
+-        g = open(os.path.join(os.path.dirname(__file__), filename), 'r')
+-        lines = g.readlines()
+-        g.close()
+-        return lines
++        import pkgutil
++        return pkgutil.get_data('cffi', filename).decode('utf-8').splitlines(True)
+ 
+     def write_c_source_to_f(self, f, preamble):
+         self._f = f

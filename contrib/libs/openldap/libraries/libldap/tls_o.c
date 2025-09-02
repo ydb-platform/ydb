@@ -302,7 +302,7 @@ tlso_stecpy( char *dst, const char *src, const char *end )
 /* OpenSSL 1.1.1 uses a separate API for TLS1.3 ciphersuites.
  * Try to find any TLS1.3 ciphers in the given list of suites.
  */
-static void
+static int
 tlso_ctx_cipher13( tlso_ctx *ctx, char *suites, char **oldsuites )
 {
 	char tls13_suites[1024], *ts = tls13_suites, *te = tls13_suites + sizeof(tls13_suites);
@@ -310,12 +310,12 @@ tlso_ctx_cipher13( tlso_ctx *ctx, char *suites, char **oldsuites )
 	char sname[128];
 	STACK_OF(SSL_CIPHER) *cs;
 	SSL *s = SSL_new( ctx );
-	int ret;
+	int ret = 0;
 
 	*oldsuites = NULL;
 
 	if ( !s )
-		return;
+		return ret;
 
 	*ts = '\0';
 
@@ -362,8 +362,9 @@ tlso_ctx_cipher13( tlso_ctx *ctx, char *suites, char **oldsuites )
 	SSL_free( s );
 
 	/* If no TLS1.3 ciphersuites were specified, leave current settings untouched. */
-	if ( tls13_suites[0] )
-		SSL_CTX_set_ciphersuites( ctx, tls13_suites );
+	if ( tls13_suites[0] && !SSL_CTX_set_ciphersuites( ctx, tls13_suites ))
+		ret = -1;
+	return ret;
 }
 #endif /* OpenSSL 1.1.1 */
 
@@ -435,7 +436,14 @@ tlso_ctx_init( struct ldapoptions *lo, struct ldaptls *lt, int is_server, char *
 	if ( lo->ldo_tls_ciphersuite ) {
 		char *oldsuites = lt->lt_ciphersuite;
 #if OPENSSL_VERSION_NUMBER >= 0x10101000
-		tlso_ctx_cipher13( ctx, lt->lt_ciphersuite, &oldsuites );
+		if ( tlso_ctx_cipher13( ctx, lt->lt_ciphersuite, &oldsuites ))
+		{
+			Debug1( LDAP_DEBUG_ANY,
+				   "TLS: could not set TLSv1.3 cipher list %s.\n",
+				   lo->ldo_tls_ciphersuite );
+			tlso_report_error( errmsg );
+			return -1;
+		}
 #endif
 		if ( oldsuites && !SSL_CTX_set_cipher_list( ctx, oldsuites ) )
 		{
@@ -1186,15 +1194,19 @@ tlso_session_pinning( LDAP *ld, tls_session *sess, char *hashalg, struct berval 
 			goto done;
 		}
 
-		EVP_DigestInit_ex( mdctx, md, NULL );
-		EVP_DigestUpdate( mdctx, key.bv_val, key.bv_len );
-		EVP_DigestFinal_ex( mdctx, (unsigned char *)keyhash.bv_val, &len );
-		keyhash.bv_len = len;
+		if ( EVP_DigestInit_ex( mdctx, md, NULL ) &&
+			EVP_DigestUpdate( mdctx, key.bv_val, key.bv_len ) &&
+			EVP_DigestFinal_ex( mdctx, (unsigned char *)keyhash.bv_val, &len ))
+			keyhash.bv_len = len;
+		else
+			rc = -1;
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
 		EVP_MD_CTX_free( mdctx );
 #else
 		EVP_MD_CTX_destroy( mdctx );
 #endif
+		if ( rc )
+			goto done;
 	} else {
 		keyhash = key;
 	}

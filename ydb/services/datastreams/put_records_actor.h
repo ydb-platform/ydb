@@ -262,7 +262,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Die(const TActorContext& ctx) {
-        TRlHelpers::PassAway(TDerived::SelfId());
+        TRlHelpers::PassAway(this->SelfId());
         TBase::Die(ctx);
     }
 
@@ -282,16 +282,16 @@ namespace NKikimr::NDataStreams::V1 {
         if (!error.empty()) {
             return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                        error, ctx);
+                                        error);
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
-                                            << " is denied", ctx);
+                                            << " is denied");
             }
         }
         NACLib::TUserToken token(this->Request_->GetSerializedToken());
@@ -312,6 +312,7 @@ namespace NKikimr::NDataStreams::V1 {
         entry.Path = NKikimr::SplitPath(this->GetTopicPath());
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
+        schemeCacheRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
         schemeCacheRequest->ResultSet.emplace_back(entry);
         ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }
@@ -324,7 +325,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
-        if (AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(this->ActorContext())->EnforceUserTokenRequirement || AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
@@ -332,7 +333,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access for stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), this->ActorContext());
+                                            << token.GetUserSID());
             }
         }
 
@@ -346,7 +347,7 @@ namespace NKikimr::NDataStreams::V1 {
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
                                         TStringBuilder() << "write to mirrored stream "
                                         << this->GetProtoRequest()->stream_name()
-                                        << " is forbidden", this->ActorContext());
+                                        << " is forbidden");
         }
 
 
@@ -526,10 +527,10 @@ namespace NKikimr::NDataStreams::V1 {
             if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException"
                 || putRecordsResult.records(0).error_code() == "ThrottlingException")
             {
-                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message(), ctx);
+                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message());
             }
             //TODO: other codes - access denied and so on
-            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message(), ctx);
+            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message());
 
         }
     }

@@ -1,7 +1,6 @@
 extern "C" {
 
 #define VECTORWISE
-#define LINUX
 #define TPCH
 #define RNG_TEST
 
@@ -12,5 +11,6 @@ extern "C" {
 
 void InitTpchGen(DSS_HUGE scale);
 void GenSeed(int tableNum, DSS_HUGE rowsCount);
+DSS_HUGE SetState(int table, double sf, long procs, long step, DSS_HUGE* extraRows);
 
 }

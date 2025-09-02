@@ -7,8 +7,7 @@
 #include <util/generic/vector.h>
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NWrappers {
+namespace NKikimr::NWrappers {
 
 using namespace Aws::S3::Model;
 
@@ -221,5 +220,4 @@ void Out(IOutputStream& out, const TStringOutcome& outcome) {
     OutOutcome(out, outcome);
 }
 
-} // NWrappers
-} // NKikimr
+} // NKikimr::NWrappers

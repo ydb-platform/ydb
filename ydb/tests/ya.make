@@ -1,11 +1,18 @@
 RECURSE(
+    compatibility
+    datashard
+    example
     fq
     functional
     library
     library/sqs
     olap
     oss
-    perf
+    postgres_integrations
+    solomon
+    sql
+    stability
+    stress
     supp
     tools
 )

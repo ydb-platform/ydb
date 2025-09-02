@@ -1,6 +1,7 @@
+#include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_data_source.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -94,6 +95,7 @@ class TCreateExternalDataSource : public TSubOperation {
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
+                                const TOperationContext& context,
                                 const TPath& dstPath,
                                 const TString& acl,
                                 bool acceptExisted) {
@@ -112,7 +114,7 @@ class TCreateExternalDataSource : public TSubOperation {
 
         if (checks) {
             checks
-                .IsValidLeafName()
+                .IsValidLeafName(context.UserToken.Get())
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
@@ -215,11 +217,6 @@ class TCreateExternalDataSource : public TSubOperation {
         context.SS->PersistTxState(db, OperationId);
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -239,6 +236,13 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
             result, parentPath, Transaction, /* isCreate */ true));
@@ -246,7 +250,7 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, acl, acceptExisted));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result,
                                                 externalDataSourceDescription,
@@ -275,7 +279,8 @@ public:
                                                           context.SS,
                                                           context.OnComplete);
 
-        UpdatePathSizeCounts(parentPath, dstPath);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -297,6 +302,30 @@ public:
 } // namespace
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateExternalDataSource().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateExternalDataSource()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          const TTxTransaction& tx,
@@ -342,6 +371,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
 
     return {MakeSubOperation<TCreateExternalDataSource>(id, tx)};
 }
+
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalDataSource>(id, state);

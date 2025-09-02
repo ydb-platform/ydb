@@ -1,6 +1,6 @@
+#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_table.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
 #include <utility>
@@ -61,9 +61,9 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalTable);
 
-        const auto pathId                = txState->TargetPathId;
-        const auto dataSourcePathId      = txState->SourcePathId;
-        const auto path                  = TPath::Init(pathId, context.SS);
+        const auto pathId = txState->TargetPathId;
+        const auto dataSourcePathId = txState->SourcePathId;
+        const auto path = TPath::Init(pathId, context.SS);
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr dataSourcePathPtr =
             context.SS->PathsById.at(dataSourcePathId);
@@ -128,18 +128,14 @@ private:
     }
 
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
-                                       const TPath& dstPath,
-                                       const TString& acl) {
+                                       const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalTable)
-            .IsValidLeafName()
-            .DepthLimit()
-            .PathsLimit()
-            .DirChildrenLimit()
-            .IsValidACL(acl);
+            ;
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -252,12 +248,12 @@ private:
         if (!isSameDataSource) {
             auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
             reference.SetPath(dstPath.PathString());
-            PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
+            externalTable->PathId.ToProto(reference.MutablePathId());
 
             EraseIf(*oldDataSource->ExternalTableReferences.MutableReferences(),
                     [pathId = externalTable->PathId](
                         const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
-                        return PathIdFromPathId(reference.GetPathId()) == pathId;
+                        return TPathId::FromProto(reference.GetPathId()) == pathId;
                     });
         }
     }
@@ -267,24 +263,27 @@ private:
         NIceDb::TNiceDb& db,
         const TPathElement::TPtr& externalTable,
         const TExternalTableInfo::TPtr& externalTableInfo,
+        const TExternalTableInfo::TPtr& oldExternalTableInfo,
         const TPathId& externalDataSourcePathId,
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathId& oldExternalDataSourcePathId,
         const TExternalDataSourceInfo::TPtr& oldExternalDataSource,
-        const TString& acl,
         bool isSameDataSource) const {
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
 
-
-        if (!acl.empty()) {
-            externalTable->ApplyACL(acl);
-        }
         context.SS->PersistPath(db, externalTable->PathId);
 
         if (!isSameDataSource) {
             context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
             context.SS->PersistExternalDataSource(db, oldExternalDataSourcePathId, oldExternalDataSource);
         }
+
+        for (const auto& [oldColId, _] : oldExternalTableInfo->Columns) {
+            if (!externalTableInfo->Columns.contains(oldColId)) {
+                db.Table<Schema::MigratedColumns>().Key(externalTable->PathId.OwnerId, externalTable->PathId.LocalPathId, oldColId).Delete();
+            }
+        }
+
         context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
         context.SS->PersistTxState(db, OperationId);
     }
@@ -302,18 +301,24 @@ public:
 
         LOG_N("TAlterExternalTable Propose"
             << ": opId# " << OperationId
-            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists:" << externalTableDescription.GetReplaceIfExists());
+            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists: " << externalTableDescription.GetReplaceIfExists());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const auto parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
@@ -376,9 +381,9 @@ public:
                                                 oldDataSource,
                                                 IsSameDataSource);
 
-        PersistExternalTable(context, db, externalTable, externalTableInfo,
+        PersistExternalTable(context, db, externalTable, externalTableInfo, oldExternalTableInfo,
                              dataSourcePath->PathId, externalDataSource,
-                             OldDataSourcePathId, oldDataSource, acl,
+                             OldDataSourcePathId, oldDataSource,
                              IsSameDataSource);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,

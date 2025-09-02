@@ -1,15 +1,13 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     test_query_cache.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
@@ -17,7 +15,5 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
 )
-
-REQUIREMENTS(ram:11)
 
 END()

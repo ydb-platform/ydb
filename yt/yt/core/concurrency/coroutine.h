@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/actions/callback.h>
 
+#include <library/cpp/yt/misc/concepts.h>
+
 #include <util/system/context.h>
 
 #include <optional>
@@ -108,7 +110,7 @@ public:
     // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
-        const EExecutionStackKind stackKind = EExecutionStackKind::Small);
+        EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     template <class... TParams>
     const std::optional<R>& Run(TParams&&... params);
@@ -142,7 +144,7 @@ public:
     // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
-        const EExecutionStackKind stackKind = EExecutionStackKind::Small);
+        EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     template <class... TParams>
     bool Run(TParams&&... params);

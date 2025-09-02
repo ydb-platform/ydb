@@ -83,7 +83,13 @@ message TRequestHeader
      * suppress_expiration_timeout_renewal  113
      * workload_descriptor                  114
      * custom_metadata                      115
+     * allow_resolve_from_sequoia_object    118
+     * resolve_depth                        119
      * ssl_credentials_ext                  120
+     * request_peer_kind_ext                121
+     * caused_by_node_expiration            124
+     * multiproxy_target_ext                125
+     * target_master_peer_ext               126
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */
@@ -106,6 +112,7 @@ message TBalancingExt
     optional bool enable_stickiness = 1;
     optional int32 sticky_group_size = 2 [default = 1];
     optional bool enable_client_stickiness = 3;
+    optional uint64 balancing_hint = 4;
 }
 
 message TCredentialsExt
@@ -133,11 +140,25 @@ message TCustomMetadataExt
     map<string, bytes> entries = 1;
 }
 
+message TMultiproxyTargetExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TMultiproxyTargetExt multiproxy_target_ext = 125;
+    }
+
+    optional string cluster = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
+
+    // NB: In some cases we deliberately omit setting these fields.
+    optional string service = 7;
+    optional string method = 8;
 
     // If omitted then OK is assumed.
     optional NYT.NProto.TError error = 2;

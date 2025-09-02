@@ -10,7 +10,7 @@
 
 from weakref import WeakKeyDictionary
 
-from hypothesis.control import note
+from hypothesis.control import note, should_note
 from hypothesis.errors import InvalidState
 from hypothesis.internal.reflection import (
     convert_positional_arguments,
@@ -18,7 +18,7 @@ from hypothesis.internal.reflection import (
     proxies,
     repr_call,
 )
-from hypothesis.strategies._internal.strategies import SearchStrategy
+from hypothesis.strategies._internal.strategies import RecurT, SearchStrategy
 
 
 class FunctionStrategy(SearchStrategy):
@@ -33,7 +33,7 @@ class FunctionStrategy(SearchStrategy):
         # garbage-collected at the end of each example, reducing memory use.
         self._cache = WeakKeyDictionary()
 
-    def calc_is_empty(self, recur):
+    def calc_is_empty(self, recur: RecurT) -> bool:
         return recur(self.returns)
 
     def do_draw(self, data):
@@ -50,13 +50,15 @@ class FunctionStrategy(SearchStrategy):
                 cache = self._cache.setdefault(inner, {})
                 if key not in cache:
                     cache[key] = data.draw(self.returns)
-                    rep = repr_call(self.like, args, kwargs, reorder=False)
-                    note(f"Called function: {rep} -> {cache[key]!r}")
+                    if should_note():  # optimization to avoid needless repr_call
+                        rep = repr_call(self.like, args, kwargs, reorder=False)
+                        note(f"Called function: {rep} -> {cache[key]!r}")
                 return cache[key]
             else:
                 val = data.draw(self.returns)
-                rep = repr_call(self.like, args, kwargs, reorder=False)
-                note(f"Called function: {rep} -> {val!r}")
+                if should_note():
+                    rep = repr_call(self.like, args, kwargs, reorder=False)
+                    note(f"Called function: {rep} -> {val!r}")
                 return val
 
         return inner

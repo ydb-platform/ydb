@@ -1,21 +1,23 @@
 #pragma once
 
-#include "error.h"
+#include "public.h"
+
+#include <library/cpp/yt/error/error.h>
 
 #include <library/cpp/yt/memory/blob.h>
+#include <library/cpp/yt/memory/simple_memory_usage_tracker.h>
+#include <library/cpp/yt/memory/ref.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IMemoryUsageTracker
-    : public TRefCounted
+    : public ISimpleMemoryUsageTracker
 {
     virtual TError TryAcquire(i64 size) = 0;
     virtual TError TryChange(i64 size) = 0;
     //! Returns true unless overcommit occurred.
-    virtual bool Acquire(i64 size) = 0;
-    virtual void Release(i64 size) = 0;
     virtual void SetLimit(i64 size) = 0;
     virtual i64 GetLimit() const = 0;
     virtual i64 GetUsed() const = 0;
@@ -34,9 +36,23 @@ struct IMemoryUsageTracker
     virtual TSharedRef Track(
         TSharedRef reference,
         bool keepHolder = false) = 0;
+    virtual TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool keepHolder) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IReservingMemoryUsageTracker
+    : public IMemoryUsageTracker
+{
+    virtual void ReleaseUnusedReservation() = 0;
+    virtual TError TryReserve(i64 size) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,7 +106,7 @@ private:
     i64 Granularity_ = 0;
 
     void MoveFrom(TMemoryUsageTrackerGuard&& other);
-    TError SetSizeGeneric(i64 size, auto acquirer);
+    TError SetSizeImpl(i64 size, auto acquirer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,10 +161,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRef TrackMemory(
+TErrorOr<TSharedRef> TryTrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRef reference,
     bool keepExistingTracking = false);
+
 TSharedRefArray TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRefArray array,

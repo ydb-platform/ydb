@@ -4,7 +4,7 @@
 
 #include <util/generic/string.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
@@ -20,7 +20,7 @@ constexpr int TypicalTagCount = 6;
 
 using TTagIdList = TCompactVector<TTagId, TypicalTagCount>;
 
-using TTag = std::pair<TString, TString>;
+using TTag = std::pair<std::string, std::string>;
 
 using TTagList = TCompactVector<TTag, TypicalTagCount>;
 
@@ -47,11 +47,6 @@ public:
     const TTagIndexList& Alternative() const;
 
     const std::vector<std::pair<TDynamicTagPtr, TTagIndex>>& DynamicTags() const;
-
-    template <class TFn>
-    void Range(
-        const TTagIdList& tags,
-        TFn fn) const;
 
     void Resize(int size);
     void SetEnabled(bool enabled);
@@ -96,6 +91,21 @@ public:
 
 private:
     TTagList Tags_;
+};
+
+class TTagIdSet
+    : public TProjectionSet
+{
+public:
+    TTagIdSet(const TProjectionSet& projections, const TTagIdList& tagIds);
+
+    template <class TFn>
+    void Range(TFn fn) const;
+
+    void SetTagId(TTagIndex tagIndex, TTagId tag);
+
+private:
+    TTagIdList TagIds_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

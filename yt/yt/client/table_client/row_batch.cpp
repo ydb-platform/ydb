@@ -41,7 +41,7 @@ IUnversionedRowBatchPtr CreateBatchFromUnversionedRows(
 
         int GetRowCount() const override
         {
-            return static_cast<int>(Rows_.size());
+            return std::ssize(Rows_);
         }
 
         TSharedRange<TUnversionedRow> MaterializeRows() override
@@ -101,7 +101,7 @@ IVersionedRowBatchPtr CreateBatchFromVersionedRows(
 
         int GetRowCount() const override
         {
-            return static_cast<int>(Rows_.size());
+            return std::ssize(Rows_);
         }
 
         TSharedRange<TVersionedRow> MaterializeRows() override

@@ -1,0 +1,498 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Libpng               147dc0e952990823ef472540ecd32e49
+BELONGS ya.make
+FILE_INCLUDE TRADEMARK found in files: TRADEMARK at line 1
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 15.44
+        Match type      : TEXT
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        TRADEMARK [1:8]
+
+KEEP     Libpng               1942a89dbd61e16b215bc61494170e4d
+BELONGS ya.make
+    License text:
+         * Some files in the "scripts" directory have other copyright owners,
+         * but are released under this license.
+         *
+         * libpng versions 0.5, May 1995, through 0.88, January 1996, are
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [122:125]
+
+KEEP     Libpng               1d940ec90e4aa15211472accfdd6ed04
+BELONGS ya.make
+    License text:
+        Copyright (c) 1996-1997 Andreas Dilger, are derived from libpng-0.88,
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [88:88]
+
+KEEP     Libpng               224bcee9a35938d1a8891ca9437e34f9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2000 Glenn Randers-Pehrson, are derived from
+         * libpng-0.96, and are distributed according to the same disclaimer and
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [100:101]
+
+KEEP     Libpng               2258163fda85c81b35966fee33b40b5b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 60.81
+        Match type      : TEXT
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [79:140]
+
+KEEP     Libpng               254aadd201002dc2215b08754257c4ad
+BELONGS ya.make
+    License text:
+          Added a reference to the libpng license in each file.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        CHANGES [2339:2339]
+
+KEEP     Libpng               3a05dbc8218dced9bf7960ae06850ddd
+BELONGS ya.make
+FILE_IGNORE include/png.h found in files: arm/arm_init.c at line 9, arm/filter_neon.S at line 7, arm/filter_neon_intrinsics.c at line 10, arm/palette_neon_intrinsics.c at line 9, intel/filter_sse2_intrinsics.c at line 10, intel/intel_init.c at line 10, mips/filter_mmi_inline_assembly.c at line 8, mips/filter_msa_intrinsics.c at line 9, mips/mips_init.c at line 10, png.c at line 10, pngconf.h at line 12, pngdebug.h at line 10, pngerror.c at line 10, pngget.c at line 10, pnginfo.h at line 10, pngmem.c at line 10, pngpread.c at line 10, pngpriv.h at line 10, pngread.c at line 10, pngrio.c at line 10, pngrtran.c at line 10, pngrutil.c at line 10, pngset.c at line 10, pngstruct.h at line 10, pngtrans.c at line 10, pngwio.c at line 10, pngwrite.c at line 10, pngwtran.c at line 10, pngwutil.c at line 10, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 9
+FILE_IGNORE png.h found in files: arm/arm_init.c at line 9, arm/filter_neon.S at line 7, arm/filter_neon_intrinsics.c at line 10, arm/palette_neon_intrinsics.c at line 9, intel/filter_sse2_intrinsics.c at line 10, intel/intel_init.c at line 10, mips/filter_mmi_inline_assembly.c at line 8, mips/filter_msa_intrinsics.c at line 9, mips/mips_init.c at line 10, png.c at line 10, pngconf.h at line 12, pngdebug.h at line 10, pngerror.c at line 10, pngget.c at line 10, pnginfo.h at line 10, pngmem.c at line 10, pngpread.c at line 10, pngpriv.h at line 10, pngread.c at line 10, pngrio.c at line 10, pngrtran.c at line 10, pngrutil.c at line 10, pngset.c at line 10, pngstruct.h at line 10, pngtrans.c at line 10, pngwio.c at line 10, pngwrite.c at line 10, pngwtran.c at line 10, pngwutil.c at line 10, powerpc/filter_vsx_intrinsics.c at line 9, powerpc/powerpc_init.c at line 9
+    License text:
+         * This code is released under the libpng license.
+         * For conditions of distribution and use, see the disclaimer
+         * and license in png.h
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        arm/arm_init.c [7:9]
+        arm/filter_neon.S [5:7]
+        arm/filter_neon_intrinsics.c [8:10]
+        arm/palette_neon_intrinsics.c [7:9]
+        intel/filter_sse2_intrinsics.c [8:10]
+        intel/intel_init.c [8:10]
+        mips/filter_mmi_inline_assembly.c [6:8]
+        mips/filter_msa_intrinsics.c [7:9]
+        mips/mips_init.c [8:10]
+        png.c [8:10]
+        pngconf.h [10:12]
+        pngdebug.h [8:10]
+        pngerror.c [8:10]
+        pngget.c [8:10]
+        pnginfo.h [8:10]
+        pngmem.c [8:10]
+        pngpread.c [8:10]
+        pngpriv.h [8:10]
+        pngread.c [8:10]
+        pngrio.c [8:10]
+        pngrtran.c [8:10]
+        pngrutil.c [8:10]
+        pngset.c [8:10]
+        pngstruct.h [8:10]
+        pngtrans.c [8:10]
+        pngwio.c [8:10]
+        pngwrite.c [8:10]
+        pngwtran.c [8:10]
+        pngwutil.c [8:10]
+        powerpc/filter_vsx_intrinsics.c [7:9]
+        powerpc/powerpc_init.c [7:9]
+
+KEEP     Libpng               419f10c6f64f7f94b607500def672b4c
+BELONGS ya.make
+    License text:
+        derived from libpng-1.0.6, and are distributed according to the same
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [50:50]
+
+KEEP     libpng-2.0           4beda1c70e573a3713d776864e366f19
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libpng-2.0
+        Score           : 93.22
+        Match type      : TEXT
+        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
+    Files with this license:
+        png.h [35:64]
+
+KEEP     Libpng               4bf58b7572cda8b7eb2355dfa5b6069b
+BELONGS ya.make
+FILE_IGNORE include/png.h found in files: pnglibconf.h at line 10
+FILE_IGNORE png.h found in files: pnglibconf.h at line 10
+    License text:
+        /* This code is released under the libpng license. */
+        /* For conditions of distribution and use, see the disclaimer */
+        /* and license in png.h */
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        pnglibconf.h [8:10]
+
+KEEP     libpng-2.0           5208e45400f1dd9d333b740e7fdfe0aa
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 1
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: libpng-2.0
+        Score           : 95.76
+        Match type      : TEXT
+        Links           : http://www.libpng.org/pub/png/src/libpng-LICENSE.txt, https://spdx.org/licenses/libpng-2.0
+    Files with this license:
+        LICENSE [1:42]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 57999f604e5825fbd6cf183bd21ff5a7
+BELONGS ya.make
+FILE_IGNORE include/png.h found in files: CHANGES at line 527
+FILE_IGNORE png.h found in files: CHANGES at line 527
+    # changes file
+    License text:
+          Added "Libpng is OSI Certified Open Source Software" statement to png.h
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        CHANGES [527:527]
+
+KEEP     Libpng               6b2439904246134939cdf008b304af8a
+BELONGS ya.make
+    License text:
+            the libpng license.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        CHANGES [2692:2692]
+
+SKIP     LicenseRef-scancode-free-unknown 7223032bb9df755f6ce7298a13e95cee
+BELONGS ya.make
+    # we have no contrib in libpng directory
+    License text:
+        files that are distributed with libpng have other copyright owners, and
+        are released under other open source licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        LICENSE [74:75]
+
+KEEP     Libpng               7600efc02108131a57254bd359eb81ec
+BELONGS ya.make
+FILE_IGNORE include/png.h found in files: INSTALL at line 463
+FILE_IGNORE png.h found in files: INSTALL at line 463
+    License text:
+        This document is released under the libpng license.
+        For conditions of distribution and use, see the disclaimer
+        and license in png.h.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        INSTALL [461:463]
+
+KEEP     Libpng               7efd0a90adbbc5ab678061147a6c1b22
+BELONGS ya.make
+    License text:
+        Some files in the "scripts" directory have other copyright owners,
+        but are released under this license.
+        libpng versions 0.5, May 1995, through 0.88, January 1996, are
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [100:103]
+
+KEEP     Libpng               8052e10193c850afb17b137c4fefb079
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: png.h at line 10
+    License text:
+         * This code is released under the libpng license. (See LICENSE, below.)
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [10:10]
+
+KEEP     Libpng               89f1af56c09553ceb984867cb39121fd
+BELONGS ya.make
+    License text:
+        released under the libpng license described below. The modifications are
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [5:5]
+
+SKIP     LicenseRef-scancode-free-unknown 95502569dcf2568eaa3effc6d65a8c30
+BELONGS ya.make
+    # Regards ci and contrib directories which we do not store
+    License text:
+        of the tools-generated files that are distributed with libpng, have
+        other copyright owners, and are released under other open source
+        licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        AUTHORS [60:62]
+
+KEEP     Libpng               a1fa29c834710a6f595de023fcd8738f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996-1997 Andreas Dilger, are derived from libpng-0.88,
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [110:110]
+
+KEEP     Libpng               a4cede44049edd3aa6708c55870aa4e2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 60.81
+        Match type      : TEXT
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [101:162]
+
+KEEP     Libpng               b3dffe414d279acaf02a20ca7ddac567
+BELONGS ya.make
+    License text:
+         * released under the libpng license described below. The modifications are
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [27:27]
+
+KEEP     Libpng               b962c792285cc610bb3aed619261d8a9
+BELONGS ya.make
+FILE_INCLUDE INSTALL found in files: README at line 110
+FILE_INCLUDE LICENSE found in files: README at line 111
+    License text:
+            INSTALL       =>  Instructions to install libpng
+            LICENSE       =>  License to use and redistribute libpng
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        README [110:111]
+
+KEEP     MIT                  c77269c6dd6f51bfbe84805b0c8a235f
+BELONGS ya.make
+    License text:
+          Relicensed the CI scripts to the MIT License.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        CHANGES [6160:6160]
+
+KEEP     Libpng               c8298e366a3ed11e6a851c27f5f62556
+BELONGS ya.make
+    License text:
+        other copyright owners, but are released under the libpng license.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        AUTHORS [57:57]
+
+SKIP     LicenseRef-scancode-free-unknown d21cb537845df6d3bd33063822351d5a
+BELONGS ya.make
+    # we have no contrib in libpng directory
+    License text:
+         * files that are distributed with libpng have other copyright owners, and
+         * are released under other open source licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        png.h [96:97]
+
+KEEP     Libpng               d25adc0a2183d65a4e22d7e88851e2ff
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998-2000 Glenn Randers-Pehrson, are derived from
+        libpng-0.96, and are distributed according to the same disclaimer and
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [78:79]
+
+KEEP     Libpng               d63e65265a41bd1533d43bdbd32e0b94
+BELONGS ya.make
+    License text:
+            necessarily under the libpng license, and that some makefiles have
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        CHANGES [5527:5527]
+
+KEEP     Libpng               d71f918f487643ebd6b9a8bd6ab5539c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 17.56
+        Match type      : TEXT
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [72:93]
+
+KEEP     Libpng               e9bb4f8fbab91484ba62ccb1611b70bb
+BELONGS ya.make
+    License text:
+         * derived from libpng-1.0.6, and are distributed according to the same
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        png.h [72:72]
+
+KEEP     Libpng               e9ec5df2670a4a277520cf3f626cccae
+BELONGS ya.make
+    License text:
+          Refer to the libpng license instead of the libpng license in each file.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        CHANGES [2342:2342]
+
+KEEP     Libpng               eedcb004636ffbb973655257d0a0476d
+BELONGS ya.make
+    License text:
+          Fixed a typo in the libpng license v2.
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        CHANGES [6101:6101]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer fc06b30972b7cf612e820f3e79c9095c
+BELONGS ya.make
+    # warrantly disclaimer
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        LICENSE [64:71]
+
+KEEP     Libpng               fc125ac8e86409d9543ae23600641ce9
+BELONGS ya.make
+    License text:
+        derived from libpng-1.0.6, and are distributed according to the same
+        disclaimer and license as libpng-1.0.6 with the following individuals
+    Scancode info:
+        Original SPDX id: Libpng
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://libpng.org/pub/png/src/libpng-LICENSE.txt, http://www.libpng.org/pub/png/libpng.html, https://spdx.org/licenses/Libpng
+    Files with this license:
+        LICENSE [50:51]

@@ -7,11 +7,14 @@
 
 #include <util/system/types.h>
 #include <util/generic/strbuf.h>
+#include <util/folder/path.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NDq {
 
 struct TFileSpillingServiceConfig {
     TString Root;
+    TString SpillingSessionId = CreateGuidAsString();
     ui64 MaxTotalSize = 0;
     ui64 MaxFileSize = 0;
     ui64 MaxFilePartSize = 0;
@@ -25,6 +28,8 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
     const char name[12] = "dq_lfspill";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
+
+TFsPath GetTmpSpillingRootForCurrentUser();
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead);
 

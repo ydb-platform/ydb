@@ -10,6 +10,10 @@
 #pragma once
 #endif
 
+#include <boost/math/tools/config.hpp>
+#include <boost/math/tools/assert.hpp>
+#include <boost/math/policies/error_handling.hpp>
+#include <boost/math/special_functions/gamma.hpp>
 #include <boost/math/special_functions/detail/bessel_j0.hpp>
 #include <boost/math/special_functions/detail/bessel_j1.hpp>
 #include <boost/math/special_functions/detail/bessel_jy.hpp>
@@ -24,7 +28,7 @@
 namespace boost { namespace math { namespace detail{
 
 template <typename T, typename Policy>
-T bessel_jn(int n, T x, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T bessel_jn(int n, T x, const Policy& pol)
 {
     T value(0), factor, current, prev, next;
 
@@ -72,7 +76,7 @@ T bessel_jn(int n, T x, const Policy& pol)
     {
         prev = bessel_j0(x);
         current = bessel_j1(x);
-        policies::check_series_iterations<T>("boost::math::bessel_j_n<%1%>(%1%,%1%)", n, pol);
+        policies::check_series_iterations<T>("boost::math::bessel_j_n<%1%>(%1%,%1%)", static_cast<unsigned>(n), pol);
         for (int k = 1; k < n; k++)
         {
             value = (2 * k * current / x) - prev;
@@ -92,7 +96,7 @@ T bessel_jn(int n, T x, const Policy& pol)
         prev = fn;
         current = 1;
         // Check recursion won't go on too far:
-        policies::check_series_iterations<T>("boost::math::bessel_j_n<%1%>(%1%,%1%)", n, pol);
+        policies::check_series_iterations<T>("boost::math::bessel_j_n<%1%>(%1%,%1%)", static_cast<unsigned>(n), pol);
         for (int k = n; k > 0; k--)
         {
             T fact = 2 * k / x;

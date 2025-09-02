@@ -45,7 +45,7 @@
  %define tmp    r11
  %define tmp2   r10
  %define return rax
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -118,8 +118,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -149,13 +149,8 @@ section .text
 %define xmask0f   zmm14
 
 align 16
-global gf_2vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_2vect_mad_avx512, function
 func(gf_2vect_mad_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_2vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_2vect_mad_avx512)
-%endif
-
 	FUNC_SAVE
 	sub	len, 64
 	jl	.return_fail

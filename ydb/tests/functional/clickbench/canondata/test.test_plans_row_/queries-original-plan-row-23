@@ -59,7 +59,13 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/row/hits",
                                                         "ReadColumns": [
+                                                            "CounterID (-\u221e, +\u221e)",
+                                                            "EventDate (-\u221e, +\u221e)",
+                                                            "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
+                                                            "WatchID (-\u221e, +\u221e)",
                                                             "AdvEngineID",
                                                             "Age",
                                                             "BrowserCountry",
@@ -72,11 +78,8 @@
                                                             "ConnectTiming",
                                                             "CookieEnable",
                                                             "CounterClass",
-                                                            "CounterID",
                                                             "DNSTiming",
                                                             "DontCountHits",
-                                                            "EventDate",
-                                                            "EventTime",
                                                             "FUniqID",
                                                             "FetchTiming",
                                                             "FlashMajor",
@@ -159,19 +162,10 @@
                                                             "UserAgent",
                                                             "UserAgentMajor",
                                                             "UserAgentMinor",
-                                                            "UserID",
-                                                            "WatchID",
                                                             "WindowClientHeight",
                                                             "WindowClientWidth",
                                                             "WindowName",
                                                             "WithHash"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "CounterID (-\u221e, +\u221e)",
-                                                            "EventDate (-\u221e, +\u221e)",
-                                                            "UserID (-\u221e, +\u221e)",
-                                                            "EventTime (-\u221e, +\u221e)",
-                                                            "WatchID (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
                                                         "Table": "clickbench/plans/row/hits"
@@ -191,7 +185,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

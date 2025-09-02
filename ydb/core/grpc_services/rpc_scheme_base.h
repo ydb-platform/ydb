@@ -100,7 +100,7 @@ protected:
             Y_ABORT_UNLESS(SchemeShardTabletId);
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-            SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, SchemeShardTabletId));
+            SchemePipeActorId_ = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeShardTabletId));
         }
 
         Y_ABORT_UNLESS(SchemePipeActorId_);

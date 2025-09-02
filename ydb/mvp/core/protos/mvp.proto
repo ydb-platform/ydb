@@ -38,6 +38,11 @@ message TStaffApiUserTokenInfo {
     optional string Token = 2;
 }
 
+enum EAccessServiceType {
+    yandex_v2 = 1;
+    nebius_v1 = 2;
+};
+
 message TTokensConfig {
     optional string StaffApiUserToken = 1; // Ydb auth config
     repeated TJwtInfo JwtInfo = 2; // JWT data for TTokensConfig
@@ -46,6 +51,7 @@ message TTokensConfig {
     repeated TMetadataTokenInfo MetadataTokenInfo = 5; // IAM token from metadata
     repeated TStaticCredentialsInfo StaticCredentialsInfo = 6; // Data for create token from static credentials
     optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
+    optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
 }
 
 message TOpenIdClientConfig {

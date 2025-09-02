@@ -198,6 +198,7 @@ message StreamWriteMessage {
             oneof message_write_status {
                 Written written = 2;
                 Skipped skipped = 3;
+                WrittenInTx written_in_tx = 4;
             }
 
             message Written {
@@ -212,6 +213,9 @@ message StreamWriteMessage {
                     REASON_UNSPECIFIED = 0;
                     REASON_ALREADY_WRITTEN = 1;
                 }
+            }
+
+            message WrittenInTx {
             }
         }
 
@@ -684,6 +688,10 @@ message StreamDirectReadMessage {
 
         // Messages data
         StreamReadMessage.ReadResponse.PartitionData partition_data = 3;
+
+        // Total size in bytes of this response as calculated by server.
+        // See ReadRequest comment above.
+        int64 bytes_size = 4;
     }
 }
 
@@ -748,9 +756,10 @@ message CommitOffsetRequest {
     int64 partition_id = 3;
     // Path of consumer.
     string consumer = 4;
-
     // Processed offset.
     int64 offset = 5;
+    // Read session identifier from StreamRead RPC.
+    string read_session_id = 6;
 }
 
 // Commit offset response sent from server to client.
@@ -805,6 +814,8 @@ message Consumer {
         google.protobuf.Duration max_read_time_lag = 2;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 3;
+        // The difference between the write timestamp of the last commited message and the current time.
+        google.protobuf.Duration max_committed_time_lag = 5;
         // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
@@ -842,6 +853,8 @@ enum AutoPartitioningStrategy {
     AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
     // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
     AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 // Partitioning settings for topic.
@@ -1019,6 +1032,13 @@ message DescribeTopicResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message PartitionKeyRange {
+    // Inclusive left border. Emptiness means -inf.
+    optional bytes from_bound = 1;
+    // Exclusive right border. Emptiness means +inf.
+    optional bytes to_bound = 2;
+}
+
 // Describe topic result message that will be inside DescribeTopicResponse.operation.
 message DescribeTopicResult {
     // Description of scheme object.
@@ -1087,6 +1107,8 @@ message DescribeTopicResult {
 
         // Partition location, filled only when include_location in request is true.
         PartitionLocation partition_location = 6;
+
+        PartitionKeyRange key_range = 7;
     }
 
     message TopicStats {
@@ -1198,6 +1220,8 @@ message DescribeConsumerResult {
         google.protobuf.Duration max_read_time_lag = 6;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 7;
+        // The difference between the write timestamp of the last commited message and the current time.
+        google.protobuf.Duration max_committed_time_lag = 13;
 
         // How much bytes were read during several windows statistics from this partition.
         MultipleWindowsStat bytes_read = 8;

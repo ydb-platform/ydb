@@ -7,8 +7,8 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     ydb/core/tablet_flat
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

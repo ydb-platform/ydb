@@ -36,16 +36,20 @@ public:
             {T::AllocatedSize::ColumnId, {E::kInfoFieldNumber, V::kAllocatedSizeFieldNumber}},
             {T::AvailableSize::ColumnId, {E::kInfoFieldNumber, V::kAvailableSizeFieldNumber}},
             {T::Status::ColumnId, {E::kInfoFieldNumber, V::kStatusV2FieldNumber}},
+            {T::State::ColumnId, {E::kInfoFieldNumber, V::kStateFieldNumber}},
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
+            {T::Replicated::ColumnId, {E::kInfoFieldNumber, V::kReplicatedFieldNumber}},
+            {T::DiskSpace::ColumnId, {E::kInfoFieldNumber, V::kDiskSpaceFieldNumber}},
         };
         return fieldMap;
     }
 };
 
-THolder<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TVSlotsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TVSlotsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

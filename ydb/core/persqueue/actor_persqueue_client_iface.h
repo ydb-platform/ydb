@@ -2,8 +2,8 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/logger/actor.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/logger/log.h>
@@ -50,6 +50,11 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         ui64 maxMemoryUsageBytes,
         TMaybe<TLog> logger = Nothing()
+    ) const = 0;
+
+    virtual NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult> GetTopicDescription(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
     ) const = 0;
 
     virtual ~IPersQueueMirrorReaderFactory() = default;
@@ -105,6 +110,7 @@ public:
             .ConsumerName(config.GetConsumer())
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
+            .AutoPartitioningSupport(true)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
         if (logger) {
             settings.Log(logger.GetRef());
@@ -118,6 +124,22 @@ public:
 
         NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
         return topicClient.CreateReadSession(settings);
+    }
+
+    NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult> GetTopicDescription(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
+    ) const override {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(credentialsProviderFactory)
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        NYdb::NTopic::TTopicClient topicClient(*Driver, clientSettings);
+        return topicClient.DescribeTopic(config.GetTopic());
     }
 };
 

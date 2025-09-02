@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+VERSION(1.54.3)
+
 LICENSE(
     BSD-3-Clause AND
     MIT

@@ -30,6 +30,7 @@ public:
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
     NOlap::ISnapshotSchema::TPtr BatchSchema;
+    NKikimrDataEvents::TEvWrite::TOperation Operation;
     TString IncomingData;
     NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Upsert;
 };

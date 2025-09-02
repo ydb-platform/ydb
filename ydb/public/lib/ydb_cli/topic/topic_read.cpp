@@ -26,6 +26,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<i64> limit,
         bool commit,
         bool wait,
+        TPartitionReadOffsetMap partitionReadOffset,
         EMessagingFormat format,
         TVector<ETopicMetadataField> metadataFields,
         ETransformBody transform,
@@ -35,6 +36,7 @@ namespace NYdb::NConsoleClient {
         , MessagingFormat_(format)
         , Transform_(transform)
         , Limit_(limit)
+        , PartitionReadOffset_(std::move(partitionReadOffset))
         , Commit_(commit)
         , Wait_(wait) {
     }
@@ -43,7 +45,8 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<NTopic::IReadSession> readSession,
         TTopicReaderSettings params)
         : ReadSession_(readSession)
-        , ReaderParams_(params) {
+        , ReaderParams_(params)
+        , PartitionReadOffset_(ReaderParams_.PartitionReadOffset()) {
     }
 
     void TTopicReader::Init() {
@@ -75,7 +78,7 @@ namespace NYdb::NConsoleClient {
     }
 
     namespace {
-        const TString FormatBody(const TString& body, ETransformBody transform) {
+        const std::string FormatBody(const std::string& body, ETransformBody transform) {
             if (transform == ETransformBody::Base64) {
                 return Base64Encode(body);
             }
@@ -188,6 +191,12 @@ namespace NYdb::NConsoleClient {
                 defCommit.Add(message);
             }
 
+            if (!PartitionReadOffset_.empty()) {
+                if (ui64* nextOffset = MapFindPtr(PartitionReadOffset_, event->GetPartitionSession()->GetPartitionId())) {
+                    *nextOffset = message.GetOffset() + 1; // memorize next offset for the case of session soft restart
+                }
+            }
+
             if (MessagesLeft_ == MessagesLimitUnlimited) {
                 continue;
             }
@@ -211,10 +220,11 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
-        event->Confirm();
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
+        event->Confirm(readOffset);
 
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
-        if (event->GetCommittedOffset() == event->GetEndOffset()) {
+        if (event->GetCommittedOffset() == event->GetEndOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             readingStatus = EReadingStatus::PartitionWithoutData;
         } else {
             ++PartitionsBeingRead_;
@@ -231,6 +241,15 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
+    std::optional<uint64_t> TTopicReader::GetNextReadOffset(ui64 partitionId) const {
+        if (!PartitionReadOffset_.empty()) {
+            if (const ui64* offset = MapFindPtr(PartitionReadOffset_, partitionId)) {
+                return *offset;
+            }
+        }
+        return std::nullopt;
+    }
+
     int TTopicReader::HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* event) {
         ui64 sessionId = event->GetPartitionSession()->GetPartitionSessionId();
         if (!HasSession(sessionId)) {
@@ -239,7 +258,8 @@ namespace NYdb::NConsoleClient {
 
         auto status = ActivePartitionSessions_.find(sessionId);
         EReadingStatus currentPartitionStatus = status->second.second;
-        if (event->GetEndOffset() == event->GetCommittedOffset()) {
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
+        if (event->GetEndOffset() == event->GetCommittedOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             if (currentPartitionStatus == EReadingStatus::PartitionWithData) {
                 --PartitionsBeingRead_;
             }
@@ -283,6 +303,16 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
+    int TTopicReader::HandleEndPartitionSessionEvent(NTopic::TReadSessionEvent::TEndPartitionSessionEvent *event) {
+        if (!HasSession(event->GetPartitionSession()->GetPartitionSessionId())) {
+            return EXIT_SUCCESS;
+        }
+
+        event->Confirm();
+
+        return EXIT_SUCCESS;
+    }
+
     int TTopicReader::HandleEvent(NYdb::NTopic::TReadSessionEvent::TEvent& event, IOutputStream& output) {
         if (auto* dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
             return HandleDataReceivedEvent(dataEvent, output);
@@ -292,12 +322,14 @@ namespace NYdb::NConsoleClient {
             return HandleCommitOffsetAcknowledgementEvent(commitEvent);
         } else if (auto* partitionStatusEvent = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
             return HandlePartitionSessionStatusEvent(partitionStatusEvent);
-        } else if (auto* stopPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) { 
+        } else if (auto* stopPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
             return HandleStopPartitionSessionEvent(stopPartitionSessionEvent);
         } else if (auto* partitionSessionClosedEvent = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
             return HandlePartitionSessionClosedEvent(partitionSessionClosedEvent);
+        } else if (auto* endPartitionSessionEvent = std::get_if<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+            return HandleEndPartitionSessionEvent(endPartitionSessionEvent);
         } else if (auto* sessionClosedEvent = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-            ThrowOnError(*sessionClosedEvent);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(*sessionClosedEvent);
             return 1;
         }
         return 0;
@@ -317,7 +349,7 @@ namespace NYdb::NConsoleClient {
             if (future.HasValue()) {
                 // TODO(shmel1k@): throttling?
                 // TODO(shmel1k@): think about limiting size of events
-                TVector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
+                std::vector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
                 for (auto& event : events) {
                     if (int status = HandleEvent(event, output); status) {
                         return status;

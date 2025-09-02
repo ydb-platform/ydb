@@ -1,8 +1,11 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/public/lib/value/value.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
 
 Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
     Y_UNIT_TEST(Fake) {
@@ -51,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         AsyncMkDir(runtime, ++txId, "MyRoot", "dir");
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
@@ -119,9 +122,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                            {NLs::InExternalSubdomain});
     }
 
-    Y_UNIT_TEST_FLAG(CreateAndAlterWithoutEnablingTx, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAGS(CreateAndAlterWithoutEnablingTx, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "dir");
@@ -137,15 +144,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
-            R"(
-                Name: "USER_0"
-                ExternalSchemeShard: true
-            )",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            ),
             {{NKikimrScheme::StatusInvalidParameter, "ExtSubDomain without coordinators/mediators"}}
         );
     }
 
-    Y_UNIT_TEST_FLAG(CreateAndAlter, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAGS(CreateAndAlter, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
         ui64 txId = 100;
@@ -156,41 +167,49 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                Name: "USER_0"
-                PlanResolution: 50
-                Coordinators: 3
-                Mediators: 3
-                TimeCastBucketsPerMediator: 2
-            )",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    PlanResolution: 50
+                    Coordinators: 3
+                    Mediators: 3
+                    TimeCastBucketsPerMediator: 2
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            ),
             {{NKikimrScheme::StatusInvalidParameter, "ExtSubDomain without ExternalSchemeShard"}}
         );
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                StoragePools {
-                    Name: "pool-1"
-                    Kind: "pool-kind-1"
-                }
-                StoragePools {
-                    Name: "pool-2"
-                    Kind: "pool-kind-2"
-                }
-                StoragePools {
-                    Name: "/dc-1/users/tenant-1:hdd"
-                    Kind: "hdd"
-                }
-                StoragePools {
-                    Name: "/dc-1/users/tenant-1:hdd-1"
-                    Kind: "hdd-1"
-                }
-                PlanResolution: 50
-                Coordinators: 1
-                Mediators: 1
-                TimeCastBucketsPerMediator: 2
-                ExternalSchemeShard: true
-                Name: "USER_0"
-            )"
+            Sprintf(R"(
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "pool-kind-1"
+                    }
+                    StoragePools {
+                        Name: "pool-2"
+                        Kind: "pool-kind-2"
+                    }
+                    StoragePools {
+                        Name: "/dc-1/users/tenant-1:hdd"
+                        Kind: "hdd"
+                    }
+                    StoragePools {
+                        Name: "/dc-1/users/tenant-1:hdd-1"
+                        Kind: "hdd-1"
+                    }
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    ExternalSchemeShard: true
+                    Name: "USER_0"
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
         );
 
         env.TestWaitNotification(runtime, {txId, txId - 1, txId - 2});
@@ -247,7 +266,64 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::Finished});
     }
 
-    Y_UNIT_TEST_FLAG(CreateAndAlterTwice, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAGS(CreateAndSameAlterTwice, AlterDatabaseCreateHiveFirst, ExternalHive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        const TString alterText = Sprintf(R"(
+            Name: "USER_0"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "pool-1"
+                Kind: "hdd"
+            }
+
+            ExternalHive: %s
+            )",
+            ToString(ExternalHive).c_str()
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", alterText);
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", alterText);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        UNIT_ASSERT(tenantSchemeShard != 0
+            && tenantSchemeShard != (ui64)-1
+            && tenantSchemeShard != TTestTxConfig::SchemeShard
+        );
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::StoragePoolsEqual({"pool-1"}),
+        });
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::StoragePoolsEqual({"pool-1"})
+        });
+    }
+
+    Y_UNIT_TEST_FLAGS(CreateAndAlterAlterAddStoragePool, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
         ui64 txId = 100;
@@ -258,34 +334,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                Name: "USER_0"
-                ExternalSchemeShard: true
-                PlanResolution: 50
-                Coordinators: 1
-                Mediators: 1
-                TimeCastBucketsPerMediator: 2
-                StoragePools {
-                    Name: "pool-1"
-                    Kind: "hdd"
-                }
-            )"
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
         );
 
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                Name: "USER_0"
-                StoragePools {
-                    Name: "pool-1"
-                    Kind: "hdd"
-                }
-                StoragePools {
-                    Name: "pool-2"
-                    Kind: "hdd-1"
-                }
-            )"
+            Sprintf(R"(
+                    Name: "USER_0"
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+                    StoragePools {
+                        Name: "pool-2"
+                        Kind: "hdd-1"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
         );
         env.TestWaitNotification(runtime, txId);
 
@@ -322,30 +406,248 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::UserAttrsEqual({{"user__attr_1", "value"}})});
     }
 
-    Y_UNIT_TEST(CreateWithOnlyDotsNotAllowed) {
+    Y_UNIT_TEST_FLAGS(CreateAndAlterAlterSameStoragePools, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
         ui64 txId = 100;
 
-        TestMkDir(runtime, ++txId, "/MyRoot", ".", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "..", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "...", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", "................", {NKikimrScheme::StatusSchemeError});
-        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA");
-        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.");
-        TestMkDir(runtime, ++txId, "/MyRoot", "a.............");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......");
-        TestMkDir(runtime, ++txId, "/MyRoot", ".............a");
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", {NKikimrScheme::StatusSchemeError});
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", {NKikimrScheme::StatusSchemeError});
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+                    DatabaseQuotas {
+                        data_size_hard_quota: 1288490188800
+                        data_size_soft_quota: 1224065679360
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+        });
+
+        UNIT_ASSERT(tenantSchemeShard != 0
+            && tenantSchemeShard != (ui64)-1
+            && tenantSchemeShard != TTestTxConfig::SchemeShard
+        );
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::StoragePoolsEqual({"pool-1"})
+        });
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::StoragePoolsEqual({"pool-1"})
+        });
+    }
+
+    Y_UNIT_TEST_FLAGS(AlterWithPlainAlterSubdomain, AlterDatabaseCreateHiveFirst, ExternalHive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        // Create extsubdomain
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        // Altering extsubdomain but with plain altersubdomain should succeed
+        // (post tenant migration compatibility)
+
+        //NOTE: SubDomain and not ExtSubdomain
+        TestAlterSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST_FLAGS(AlterTwiceAndWithPlainAlterSubdomain, AlterDatabaseCreateHiveFirst, ExternalHive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        AsyncAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        // TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        const auto firstAlterTxId = txId;
+
+        //NOTE: SubDomain vs ExtSubDomain
+        TestAlterSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            ),
+            {{NKikimrScheme::StatusMultipleModifications}}
+        );
+
+        env.TestWaitNotification(runtime, firstAlterTxId);
+    }
+
+    Y_UNIT_TEST_FLAG(CreateWithOnlyDotsNotAllowed, SystemNamesProtection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(SystemNamesProtection));
+        ui64 txId = 100;
+
+        TVector<TExpectedResult> expectedSuccess = {{NKikimrScheme::StatusAccepted}};
+        TVector<TExpectedResult> expectedDotPrefixError = {{NKikimrScheme::StatusSchemeError, "prefix is reserved by the system: '.'"}};
+        TVector<TExpectedResult> expectedAllDotsError = {{NKikimrScheme::StatusSchemeError, "is not allowed path part contains only dots"}};
+        auto expectedA = (SystemNamesProtection ? expectedDotPrefixError : expectedAllDotsError);
+        auto expectedB = (SystemNamesProtection ? expectedDotPrefixError : expectedSuccess);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "..", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "...", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", "................", expectedA);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", "a.............", expectedSuccess);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......", expectedB);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".............a", expectedB);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: ".")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "..")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "...")", expectedA);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "................")", expectedA);
     }
 
     Y_UNIT_TEST_FLAG(CreateWithExtraPathSymbolsAllowed, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TSchemeLimits lowLimits;
@@ -1082,9 +1384,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         testCreations();
     }
 
-    Y_UNIT_TEST_FLAG(Drop, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAGS(Drop, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
 
@@ -1093,18 +1399,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                Name: "USER_0"
-                ExternalSchemeShard: true
-                PlanResolution: 50
-                Coordinators: 1
-                Mediators: 1
-                TimeCastBucketsPerMediator: 2
-                StoragePools {
-                    Name: "pool-1"
-                    Kind: "hdd"
-                }
-            )"
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
         );
 
         env.TestWaitNotification(runtime, {txId, txId - 1});
@@ -1139,16 +1449,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
+        const ui64 AdditionalHiveTablet = (ExternalHive ? 1 : 0);
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir/table_1"),
                            {NLs::PathRedirected,
                             NLs::PathsInsideDomain(0),
-                            NLs::ShardsInsideDomain(3)});
+                            NLs::ShardsInsideDomain(3 + AdditionalHiveTablet)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/dir/table_1"),
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::PathsInsideDomain(2),
-                            NLs::ShardsInsideDomain(5)});
+                            NLs::ShardsInsideDomain(5 + AdditionalHiveTablet)});
 
         TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId);
@@ -1164,14 +1476,157 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
+        // env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
-    Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAG(DropWithDeadTenantHive, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        // EnableAlterDatabaseCreateHiveFirst = false puts extsubdomain's system tablets into the root hive control.
+        // EnableAlterDatabaseCreateHiveFirst = true puts extsubdomain's tenant hive into the root hive control
+        // and other system tablets into the tenant hive control.
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "USER_0"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "pool-1"
+                Kind: "hdd"
+            }
+
+            ExternalHive: true
+        )");
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        ui64 tenantHiveId = 0;
+        TPathId subdomainPathId;
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/USER_0");
+            TestDescribeResult(describe, {
+                NLs::PathExist,
+                NLs::IsExternalSubDomain("USER_0"),
+                NLs::ExtractDomainHive(&tenantHiveId),
+            });
+            TSubDomainKey subdomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
+            subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
+        }
+
+        // check that there is a new path in the root schemeshard
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId.LocalPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId.LocalPathId));
+
+        // check what extsubdomain's system tablets controls root hive
+        const auto expectedTabletsInRootHive = [&]() {
+            if (AlterDatabaseCreateHiveFirst) {
+                return std::vector<ETabletType::EType>({
+                    ETabletType::Hive,
+                });
+            } else {
+                return std::vector<ETabletType::EType>{{
+                    ETabletType::Hive,
+                    ETabletType::SchemeShard,
+                    ETabletType::Coordinator,
+                    ETabletType::Mediator
+                }};
+            }
+        }();
+        {
+            const auto& expectedTypes = expectedTabletsInRootHive;
+            const auto tablets = HiveGetSubdomainTablets(runtime, TTestTxConfig::Hive, subdomainPathId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablets.size(), expectedTypes.size(), "-- unexpected tablet count in root hive for the tenant");
+            for (const auto& tablet : tablets) {
+                Cerr << "root hive, tablets for subdomain " << subdomainPathId << ", tablet type " << tablet.GetTabletType() << Endl;
+                auto found = std::find(expectedTypes.begin(), expectedTypes.end(), tablet.GetTabletType());
+                UNIT_ASSERT_C(found != expectedTypes.end(), "-- root hive holds tablet of unexpected type " << tablet.GetTabletType());
+            }
+        }
+
+        // check what extsubdomain's system tablets controls tenant hive
+        const auto expectedTabletsInTenantHive = [&]() {
+            if (AlterDatabaseCreateHiveFirst) {
+                return std::vector<ETabletType::EType>{{
+                    ETabletType::SchemeShard,
+                    ETabletType::Coordinator,
+                    ETabletType::Mediator
+                }};
+            } else {
+                return std::vector<ETabletType::EType>{};
+            }
+        }();
+        {
+            const auto& expectedTypes = expectedTabletsInTenantHive;
+            const auto tablets = HiveGetSubdomainTablets(runtime, tenantHiveId, subdomainPathId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablets.size(), expectedTypes.size(), "-- unexpected tablet count in tenant hive");
+            for (const auto& tablet : tablets) {
+                Cerr << "tenant hive, tablets for subdomain " << subdomainPathId << ", tablet type " << tablet.GetTabletType() << Endl;
+                auto found = std::find(expectedTypes.begin(), expectedTypes.end(), tablet.GetTabletType());
+                UNIT_ASSERT_C(found != expectedTypes.end(), "-- root hive holds tablet of unexpected type " << tablet.GetTabletType());
+            }
+        }
+
+        // extsubdomain drop should be independent of tenant hive's state.
+        // It must correctly remove database whether tenant nodes and tablets are alive or not.
+        //
+        // Make tenant hive inaccessible by stopping its tablet.
+        // In real life that could be, for example, due to absence of tenant nodes.
+        //
+        // Tenant hive is controlled by the root hive (running at node 0).
+        HiveStopTablet(runtime, TTestTxConfig::Hive, tenantHiveId, 0);
+
+        // drop extsubdomain
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathExist,
+            NLs::PathsInsideDomain(0),
+            NLs::ShardsInsideDomain(0)
+        });
+
+        // check that extsubdomain's system tablets are deleted from the root hive
+        // and not-working state of the tenant hive is unable to hinder that
+        {
+            const auto tablets = HiveGetSubdomainTablets(runtime, TTestTxConfig::Hive, subdomainPathId);
+            UNIT_ASSERT_C(tablets.size() == 0, TStringBuilder()
+                << "-- existing subdomain's system tablets in the root hive: expected 0, got " << tablets.size()
+            );
+        }
+
+        // check that extsubdomain's path is really erased from the root schemeshard
+
+        {
+            const auto result = ReadLocalTableRecords(runtime, TTestTxConfig::SchemeShard, "SystemShardsToDelete", "ShardIdx");
+            const auto records = NKikimr::NClient::TValue::Create(result)[0]["List"];
+            //DEBUG:  Cerr << "TEST: SystemShardsToDelete: " << records.GetValueText<NKikimr::NClient::TFormatJSON>() << Endl;
+            //DEBUG:  Cerr << "TEST: " << records.DumpToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(records.Size(), 0);
+        }
+
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId.LocalPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId.LocalPathId));
+    }
+
+    Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -1209,27 +1664,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST_FLAG(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(Name: "USER_0")"
         );
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                Name: "USER_0"
-                ExternalSchemeShard: true
-                PlanResolution: 50
-                Coordinators: 1
-                Mediators: 1
-                TimeCastBucketsPerMediator: 2
-                StoragePools {
-                    Name: "pool-1"
-                    Kind: "hdd"
-                }
-            )"
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
         );
         env.TestWaitNotification(runtime, {txId, txId - 1});
 

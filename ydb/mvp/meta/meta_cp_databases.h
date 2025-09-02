@@ -1,26 +1,30 @@
 #pragma once
-#include <random>
-#include <util/generic/hash_set.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
-#include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/core_ydbc_impl.h>
 #include <ydb/mvp/core/merger.h>
+
+#include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/http/http.h>
+
+#include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/lib/deprecated/client/grpc_client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
+#include <util/generic/hash_set.h>
+#include <random>
 
 namespace NMVP {
 
@@ -43,7 +47,6 @@ public:
     TDuration DatabaseRequestRetryDelta = TDuration::MilliSeconds(50);
     TString ControlPlaneName;
     TString MvpTokenName;
-    bool Light = false;
 
     THandlerActorMetaCpDatabasesGET(
             const NActors::TActorId& httpProxyId,
@@ -56,11 +59,11 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+            Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
@@ -74,7 +77,7 @@ public:
         if (result.IsSuccess()) {
             Session = result.GetSession();
             TString query = TStringBuilder() << "DECLARE $name AS Utf8; SELECT * FROM `" + Location.RootDomain + "/ydb/MasterClusterExt.db` WHERE name=$name";
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             NHttp::TUrlParameters parameters(Request.Request->URL);
             TString name(parameters["cluster_name"]);
@@ -100,7 +103,7 @@ public:
     }
 
     void SendDatabaseRequest(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
         yandex::cloud::priv::ydb::v1::ListAllDatabasesRequest cpRequest;
         //cpRequest.set_page_size(1000);
@@ -127,6 +130,16 @@ public:
         connection->DoRequest(cpRequest, std::move(responseCb), &yandex::cloud::priv::ydb::v1::DatabaseService::Stub::AsyncListAll, meta);
     }
 
+    TString GetAuthHeaderValue(const TString& tokenName) {
+        if (TMVP::DbUserTokenSource) {
+            NHttp::THeaders headers(Request.Request->Headers);
+            TStringBuf header = headers.Get("Authorization");
+            return TString(header);
+        } else {
+            return ::GetAuthHeaderValue(tokenName);
+        }
+    }
+
     void Handle(TEvPrivate::TEvDataQueryResult::TPtr event, const NActors::TActorContext& ctx) {
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         NHttp::THttpOutgoingResponsePtr response;
@@ -146,11 +159,20 @@ public:
                 }
                 if (balancer) {
                     TString balancerEndpoint;
-                    if (Request.Parameters["light"] == "1") {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=0&offload_merge=1&storage=1&nodes=0&users=0&timeout=55000");
+                    TStringBuilder balancerEndpointBuilder;
+                    balancerEndpointBuilder << "/tenantinfo";
+                    if (Request.Parameters["light"] == "0") {
+                        balancerEndpointBuilder << "?tablets=1";
                     } else {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=1&offload_merge=1&storage=1&nodes=1&users=1&timeout=55000");
+                        balancerEndpointBuilder << "?tablets=0"; // default
                     }
+                    if (Request.Parameters["offload"] == "1") {
+                        balancerEndpointBuilder << "&offload_merge=1";
+                    } else {
+                        balancerEndpointBuilder << "&offload_merge=0"; // default
+                    }
+                    balancerEndpointBuilder << "&storage=1&nodes=0&users=0&timeout=55000";
+                    balancerEndpoint = GetApiUrl(balancer, balancerEndpointBuilder);
                     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(balancerEndpoint);
                     TString authHeaderValue = GetAuthHeaderValue(apiUserTokenName);
                     if (balancerEndpoint.StartsWith("https") && !authHeaderValue.empty()) {
@@ -196,9 +218,17 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        TStringBuf status = event->Get()->Response->Status;
-        if (event->Get()->Error.empty() && status == "200") {
+        if (event->Get()->Error.empty() && event->Get()->Response && event->Get()->Response->Status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
+        } else {
+            if (event->Get()->Response && event->Get()->Response->Status.size() == 3) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Response->Reverse(Request.Request)));
+            } else if (!event->Get()->Error.empty()) {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateResponseServiceUnavailable(Request.Request, event->Get()->Error, "text/plain")));
+            } else {
+                ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateResponseServiceUnavailable(Request.Request, "Endpoint returned unknown status", "text/plain")));
+            }
+            return Die(ctx);
         }
         if (--Requests == 0) {
             ReplyAndDie(ctx);
@@ -206,7 +236,7 @@ public:
     }
 
     void HandleTimeout(const NActors::TActorContext& ctx) {
-        ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseGatewayTimeout()));
+        ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateResponseGatewayTimeout(Request.Request)));
         Die(ctx);
     }
 
@@ -214,7 +244,6 @@ public:
         NProtobufJson::TProto2JsonConfig proto2JsonConfig = NProtobufJson::TProto2JsonConfig()
                 .SetMapAsObject(true)
                 .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumValueMode::EnumName);
-
 
         std::unordered_map<TString, const yandex::cloud::priv::ydb::v1::Database*> indexDatabaseById;
         std::unordered_map<TString, const yandex::cloud::priv::ydb::v1::Database*> indexDatabaseByName;
@@ -230,16 +259,23 @@ public:
         databases.SetType(NJson::JSON_ARRAY);
 
         NJson::TJsonValue::TArray tenantArray(TenantInfo["TenantInfo"].GetArray());
-        std::sort(tenantArray.begin(), tenantArray.end(), [](const NJson::TJsonValue& a, const NJson::TJsonValue& b) -> bool {
-            return a["Name"].GetStringRobust() < b["Name"].GetStringRobust();
-        });
+        TString filterDatabase = Request.Parameters["database_name"];
+        if (!filterDatabase) {
+            std::sort(tenantArray.begin(), tenantArray.end(), [](const NJson::TJsonValue& a, const NJson::TJsonValue& b) -> bool {
+                return a["Name"].GetStringRobust() < b["Name"].GetStringRobust();
+            });
+        }
         for (const NJson::TJsonValue& tenant : tenantArray) {
+            if (filterDatabase && tenant["Name"].GetStringRobust() != filterDatabase) {
+                continue;
+            }
             NJson::TJsonValue& jsonDatabase = databases.AppendValue(NJson::TJsonValue());
             jsonDatabase = std::move(tenant);
             TString id = jsonDatabase["Id"].GetStringRobust();
             if (!id.empty()) {
                 indexJsonDatabaseById[id] = &jsonDatabase;
             }
+            bool foundDatabase = false;
             NJson::TJsonValue* jsonUserAttributes;
             if (jsonDatabase.GetValuePointer("UserAttributes", &jsonUserAttributes)) {
                 NJson::TJsonValue* jsonDatabaseId;
@@ -248,16 +284,26 @@ public:
                         auto itDatabase = indexDatabaseById.find(jsonDatabaseId->GetStringRobust());
                         if (itDatabase != indexDatabaseById.end()) {
                             NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                            foundDatabase = true;
+                        }
+                        if (!foundDatabase) {
+                            auto itDatabase = indexDatabaseByName.find(jsonDatabaseId->GetStringRobust());
+                            if (itDatabase != indexDatabaseByName.end()) {
+                                NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                                foundDatabase = true;
+                            }
                         }
                     }
                 }
             }
-            NJson::TJsonValue* jsonName;
-            if (jsonDatabase.GetValuePointer("Name", &jsonName)) {
-                if (jsonName->GetType() == NJson::JSON_STRING) {
-                    auto itDatabase = indexDatabaseByName.find(jsonName->GetStringRobust());
-                    if (itDatabase != indexDatabaseByName.end()) {
-                        NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+            if (!foundDatabase) {
+                NJson::TJsonValue* jsonName;
+                if (jsonDatabase.GetValuePointer("Name", &jsonName)) {
+                    if (jsonName->GetType() == NJson::JSON_STRING) {
+                        auto itDatabase = indexDatabaseByName.find(jsonName->GetStringRobust());
+                        if (itDatabase != indexDatabaseByName.end()) {
+                            NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                        }
                     }
                 }
             }
@@ -309,7 +355,7 @@ public:
         }
 
         TString body(NJson::WriteJson(root, false));
-        NHttp::THttpOutgoingResponsePtr response = Request.Request->CreateResponseOK(body, "application/json; charset=utf-8");
+        NHttp::THttpOutgoingResponsePtr response = CreateResponseOK(Request.Request, body, "application/json; charset=utf-8");
         ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         Die(ctx);
     }

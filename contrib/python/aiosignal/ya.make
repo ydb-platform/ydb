@@ -2,12 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(1.3.1)
+VERSION(1.4.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/frozenlist
+    contrib/python/typing-extensions
 )
 
 NO_LINT()
@@ -15,7 +16,6 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     aiosignal/__init__.py
-    aiosignal/__init__.pyi
 )
 
 RESOURCE_FILES(

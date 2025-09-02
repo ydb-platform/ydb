@@ -127,6 +127,7 @@ AWS_STATIC_IMPL
 size_t aws_atomic_fetch_xor(volatile struct aws_atomic_var *var, size_t n) {
     return aws_atomic_fetch_xor_explicit(var, n, aws_memory_order_seq_cst);
 }
+AWS_EXTERN_C_END
 
 /* Include the backend implementation now, because we'll use its typedefs and #defines below */
 #if defined(__GNUC__) || defined(__clang__)
@@ -142,7 +143,5 @@ size_t aws_atomic_fetch_xor(volatile struct aws_atomic_var *var, size_t n) {
 #endif
 
 #include <aws/common/atomics_fallback.inl>
-
-AWS_EXTERN_C_END
 
 #endif /* AWS_COMMON_ATOMICS_INL */

@@ -2,14 +2,14 @@
 {%- set OPTIONS_ORDER_AFTER_LINKS = ['target_link_options'] -%}
 
 {%- for OPTION in OPTIONS_ORDER_BEFORE_LINKS -%}
-{{  TargetOptions(name, current_target.is_fake_module, current_target.target_options, OPTION, []) }}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, OPTION, []) }}
 {%- endfor -%}
 
 {%- include "[generator]/target_links.jinja" -%}
 
 {%- for OPTION in OPTIONS_ORDER_AFTER_LINKS -%}
-{{  TargetOptions(name, current_target.is_fake_module, current_target.target_options, OPTION, []) }}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, OPTION, []) }}
 {%- endfor -%}
 
 {#- Then all other options -#}
-{{  TargetOptions(name, current_target.is_fake_module, current_target.target_options, "", OPTIONS_ORDER_BEFORE_LINKS + OPTIONS_ORDER_AFTER_LINKS) }}
+{{  TargetOptions(name, is_really_fake_module, current_target.target_options, "", OPTIONS_ORDER_BEFORE_LINKS + OPTIONS_ORDER_AFTER_LINKS) }}

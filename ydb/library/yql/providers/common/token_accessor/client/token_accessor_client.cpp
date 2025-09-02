@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.grpc.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/atomic/bool.h>
 #include <library/cpp/threading/future/core/future.h>
 
@@ -160,7 +160,7 @@ public:
         Impl->Stop();
     }
 
-    TString GetAuthInfo() const override {
+    std::string GetAuthInfo() const override {
         return Impl->GetTicket();
     }
 

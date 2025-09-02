@@ -1,0 +1,22 @@
+--- contrib/python/numpy/py3/numpy/core/src/multiarray/temp_elide.c	(index)
++++ contrib/python/numpy/py3/numpy/core/src/multiarray/temp_elide.c	(working tree)
+@@ -86,7 +86,7 @@
+ #if defined HAVE_EXECINFO_H
+ #include <execinfo.h>
+ #elif defined HAVE_LIBUNWIND_H
+-#include <libunwind.h>
++#error #include <libunwind.h>
+ #endif
+ 
+ /*
+--- contrib/python/numpy/py3/numpy/linalg/umath_linalg.cpp	(index)
++++ contrib/python/numpy/py3/numpy/linalg/umath_linalg.cpp	(working tree)
+@@ -54,7 +54,7 @@ using dispatch_scalar = typename std::conditional<std::is_scalar<typ>::value, sc
+ #if defined HAVE_EXECINFO_H
+ #include <execinfo.h>
+ #elif defined HAVE_LIBUNWIND_H
+-#include <libunwind.h>
++#error #include <libunwind.h>
+ #endif
+ void
+ dbg_stack_trace()

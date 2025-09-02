@@ -9,6 +9,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(2.17)
+
 PEERDIR(
     contrib/libs/lcms2
     contrib/libs/libjpeg-turbo

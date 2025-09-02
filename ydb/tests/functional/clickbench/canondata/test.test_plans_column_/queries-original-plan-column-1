@@ -35,7 +35,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -43,7 +43,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -51,8 +61,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -63,20 +73,38 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableFullScan",
+                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 2
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": "AdvEngineID != 0",
+                                                        "Pushdown": "True"
+                                                    },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
-                                                            "AdvEngineID"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
                                                             "EventTime (-\u221e, +\u221e)",
-                                                            "WatchID (-\u221e, +\u221e)"
+                                                            "WatchID (-\u221e, +\u221e)",
+                                                            "AdvEngineID"
                                                         ],
                                                         "Scan": "Parallel",
                                                         "SsaProgram": {
@@ -119,30 +147,15 @@
                                                                     }
                                                                 },
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 108
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 108
+                                                                                "Id": 41
                                                                             }
                                                                         ]
                                                                     }
                                                                 }
-                                                            ],
-                                                            "Version": 5
+                                                            ]
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }
@@ -159,7 +172,10 @@
                         ],
                         "Subplan Name": "CTE precompute_0_0"
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
@@ -99,10 +99,11 @@ TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransact
 
 //// TQueryBase
 
-TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database)
+TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser)
     : LogComponent(logComponent)
     , Database(std::move(database))
     , SessionId(std::move(sessionId))
+    , IsSystemUser(isSystemUser)
 {}
 
 void TQueryBase::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
@@ -127,10 +128,10 @@ void TQueryBase::Bootstrap() {
     }
 
     if (SessionId) {
-        LOG_D("Bootstrap. Database: " << Database << ", SessionId: " << SessionId);
+        LOG_D("Bootstrap. Database: " << Database << ", SessionId: " << SessionId << ", IsSystemUser: " << IsSystemUser << ", run query");
         RunQuery();
     } else {
-        LOG_D("Bootstrap. Database: " << Database);
+        LOG_D("Bootstrap. Database: " << Database << ", IsSystemUser: " << IsSystemUser << ", run create session");
         RunCreateSession();
     }
 }
@@ -151,6 +152,8 @@ void TQueryBase::RunCreateSession() const {
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         SessionId = ev->Get()->SessionId;
+        LOG_T("Successfully created session: " << SessionId << ", run query");
+
         DeleteSession = true;
         RunQuery();
         Y_ABORT_UNLESS(Finished || RunningQuery);
@@ -164,6 +167,7 @@ void TQueryBase::RunDeleteSession() const {
     using TDeleteSessionRequest = TGrpcRequestOperationCall<Table::DeleteSessionRequest, Table::DeleteSessionResponse>;
 
     Y_ABORT_UNLESS(SessionId);
+    LOG_T("Delete session: " << SessionId);
 
     Table::DeleteSessionRequest request;
     request.set_session_id(SessionId);
@@ -193,7 +197,7 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
     Y_ABORT_UNLESS(!RunningQuery);
     RequestStartTime = TInstant::Now();
     RunningQuery = true;
-    LOG_D("RunDataQuery: " << sql);
+    LOG_D("RunDataQuery with SessionId: " << SessionId << ", TxId: " << TxId << ", text: " << sql);
 
     Table::ExecuteDataQueryRequest request;
     request.set_session_id(SessionId);
@@ -221,7 +225,13 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
         txControlProto->set_commit_tx(true);
     }
 
-    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    TMaybe<TString> token = Nothing();
+    if (IsSystemUser) {
+        token = NACLib::TSystemUsers::Metadata().SerializeAsString();
+    }
+
+    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
+        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
@@ -230,7 +240,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
     TxId = ev->Get()->Result.tx_meta().id();
-    LOG_D("TEvDataQueryResult " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+    LOG_D("DataQuery #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
 
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         ResultSets.clear();
@@ -259,7 +269,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
-    LOG_D("RunStreamQuery: " << sql);
+    LOG_D("RunStreamQuery with text: " << sql);
 
     Table::ExecuteScanQueryRequest request;
     request.set_mode(Table::ExecuteScanQueryRequest::MODE_EXEC);
@@ -269,8 +279,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    auto facilityProvider = CreateFacilityProviderSameMailbox(ActorContext(), channelBufferSize);
-    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), facilityProvider, &DoExecuteScanQueryRequest, true);
+    StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(std::move(request), Database, Nothing(), ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 
@@ -290,7 +299,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     NumberRequests++;
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
-    LOG_D("TEvStreamQueryResultPart " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+    LOG_D("StreamQueryResultPart #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
     if (ev->Get()->Status != StatusIds::SUCCESS) {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
@@ -393,7 +402,7 @@ void TQueryBase::CommitTransaction() {
     Y_ABORT_UNLESS(SessionId);
     Y_ABORT_UNLESS(TxId);
     RunningCommit = true;
-    LOG_D("Commit transaction: " << TxId);
+    LOG_D("Commit transaction: " << TxId << " in session: " << SessionId);
 
     Table::CommitTransactionRequest request;
     request.set_session_id(SessionId);
@@ -419,7 +428,7 @@ void TQueryBase::RollbackTransaction() const {
 
     Y_ABORT_UNLESS(SessionId);
     Y_ABORT_UNLESS(TxId);
-    LOG_D("Rollback transaction: " << TxId);
+    LOG_D("Rollback transaction: " << TxId << " in session: " << SessionId);
 
     Table::RollbackTransactionRequest request;
     request.set_session_id(SessionId);
@@ -456,6 +465,7 @@ TString TQueryBase::LogPrefix() const {
     if (Y_LIKELY(OperationName)) {
         result << "[" << OperationName << "] ";
     }
+    result << "OwnerId: " << Owner << ", ActorId: " << SelfId() << ", ";
     if (Y_LIKELY(TraceId)) {
         result << "TraceId: " << TraceId << ", ";
     }
@@ -463,6 +473,10 @@ TString TQueryBase::LogPrefix() const {
         result << "State: " << StateDescription << ", ";
     }
     return result;
+}
+
+TQueryBase::TLogInfo TQueryBase::GetLogInfo() const {
+    return {.LogComponent = LogComponent, .OperationName = OperationName, .TraceId = TraceId};
 }
 
 void TQueryBase::ClearTimeInfo() {
@@ -473,6 +487,50 @@ void TQueryBase::ClearTimeInfo() {
 TDuration TQueryBase::GetAverageTime() const {
     Y_ABORT_UNLESS(NumberRequests);
     return AmountRequestsTime / NumberRequests;
+}
+
+//// TQueryRetryActorBase
+
+void TQueryRetryActorBase::UpdateLogInfo(const TQueryBase::TLogInfo& logInfo, const TActorId& ownerId, const TActorId& selfId) {
+    LogComponent = logInfo.LogComponent;
+    OperationName = logInfo.OperationName;
+    TraceId = logInfo.TraceId;
+    OwnerId = ownerId;
+    SelfId = selfId;
+}
+
+TString TQueryRetryActorBase::LogPrefix() const {
+    TStringBuilder result = TStringBuilder() << "[TQueryRetryActor] ";
+    if (Y_LIKELY(OperationName)) {
+        result << "[" << OperationName << "] ";
+    }
+    result << "OwnerId: " << OwnerId << ", ActorId: " << SelfId << ", ";
+    if (Y_LIKELY(TraceId)) {
+        result << "TraceId: " << TraceId << ", ";
+    }
+    return result;
+}
+
+ERetryErrorClass TQueryRetryActorBase::Retryable(Ydb::StatusIds::StatusCode status) {
+    if (status == Ydb::StatusIds::SUCCESS) {
+        return ERetryErrorClass::NoRetry;
+    }
+
+    if (status == Ydb::StatusIds::INTERNAL_ERROR
+        || status == Ydb::StatusIds::UNAVAILABLE
+        || status == Ydb::StatusIds::BAD_SESSION
+        || status == Ydb::StatusIds::SESSION_EXPIRED
+        || status == Ydb::StatusIds::SESSION_BUSY
+        || status == Ydb::StatusIds::ABORTED) {
+        return ERetryErrorClass::ShortRetry;
+    }
+
+    if (status == Ydb::StatusIds::OVERLOADED
+        || status == Ydb::StatusIds::UNDETERMINED) {
+        return ERetryErrorClass::LongRetry;
+    }
+
+    return ERetryErrorClass::NoRetry;
 }
 
 } // namespace NKikimr

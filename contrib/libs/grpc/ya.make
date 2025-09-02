@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.54.2)
+VERSION(1.54.3)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.3.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -23,20 +23,7 @@ PEERDIR(
     contrib/libs/re2
     contrib/libs/xxhash
     contrib/libs/zlib
-    contrib/restricted/abseil-cpp-tstring/y_absl/algorithm
-    contrib/restricted/abseil-cpp-tstring/y_absl/base
-    contrib/restricted/abseil-cpp-tstring/y_absl/container
-    contrib/restricted/abseil-cpp-tstring/y_absl/flags
-    contrib/restricted/abseil-cpp-tstring/y_absl/functional
-    contrib/restricted/abseil-cpp-tstring/y_absl/hash
-    contrib/restricted/abseil-cpp-tstring/y_absl/memory
-    contrib/restricted/abseil-cpp-tstring/y_absl/meta
-    contrib/restricted/abseil-cpp-tstring/y_absl/random
-    contrib/restricted/abseil-cpp-tstring/y_absl/status
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
-    contrib/restricted/abseil-cpp-tstring/y_absl/time
-    contrib/restricted/abseil-cpp-tstring/y_absl/utility
+    contrib/restricted/abseil-cpp-tstring
     library/cpp/resource
 )
 

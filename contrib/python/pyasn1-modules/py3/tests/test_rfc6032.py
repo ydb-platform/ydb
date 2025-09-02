@@ -10,7 +10,6 @@ import unittest
 
 from pyasn1.codec.der.decoder import decode as der_decoder
 from pyasn1.codec.der.encoder import encode as der_encoder
-from pyasn1.compat.octets import str2octs
 
 from pyasn1_modules import pem
 from pyasn1_modules import rfc5652
@@ -64,7 +63,7 @@ YIZIAWUCAQVCMRAEDnB0Zi1rZGMtODEyMzc0
         self.assertFalse(rest)
         self.assertTrue(keyid.prettyPrint())
         self.assertEqual(attrVal0, der_encoder(keyid))
-        self.assertEqual(str2octs('ptf-kdc-812374'), keyid)
+        self.assertEqual(b'ptf-kdc-812374', keyid)
 
     def testOpenTypes(self):
         substrate = pem.readBase64fromText(self.encrypted_key_pkg_pem_text)
@@ -86,8 +85,8 @@ YIZIAWUCAQVCMRAEDnB0Zi1rZGMtODEyMzc0
             self.assertNotEqual('0x', attr['attrValues'][0].prettyPrint()[:2])
 
             if attr['attrType'] == rfc6032.id_aa_KP_contentDecryptKeyID:
-                self.assertEqual(str2octs(
-                    'ptf-kdc-812374'), attr['attrValues'][0])
+                self.assertEqual(
+                    b'ptf-kdc-812374', attr['attrValues'][0])
 
 
 suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

@@ -1,5 +1,5 @@
 #include "controller_impl.h"
-#include "util.h"
+#include "target_transfer.h"
 
 #include <util/string/join.h>
 
@@ -43,23 +43,32 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
-                const auto kind = TargetKindFromEntryType(target.first.Type);
-                const auto& srcPath = target.first.Name;
-                const auto& dstPath = target.second;
+                const auto tid = Replication->AddTarget(target.Kind, target.Config);
+                
+                TString transformLambda;
+                TString runAsUser;
+                TString directoryPath;
+                if (auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(target.Config)) {
+                    transformLambda = p->GetTransformLambda();
+                    runAsUser = p->GetRunAsUser();
+                    directoryPath = p->GetDirectoryPath();
+                }
 
-                const auto tid = Replication->AddTarget(kind, srcPath, dstPath);
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
-                    NIceDb::TUpdate<Schema::Targets::Kind>(kind),
-                    NIceDb::TUpdate<Schema::Targets::SrcPath>(srcPath),
-                    NIceDb::TUpdate<Schema::Targets::DstPath>(dstPath)
+                    NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
+                    NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
+                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
+                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
+                    NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
+                    NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
                 CLOG_N(ctx, "Add target"
                     << ": rid# " << rid
                     << ", tid# " << tid
-                    << ", kind# " << kind
-                    << ", srcPath# " << srcPath
-                    << ", dstPath# " << dstPath);
+                    << ", kind# " << target.Kind
+                    << ", srcPath# " << target.Config->GetSrcPath()
+                    << ", dstPath# " << target.Config->GetDstPath());
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

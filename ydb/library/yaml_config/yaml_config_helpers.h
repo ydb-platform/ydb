@@ -37,4 +37,6 @@ void IterateMut(
 
 void IterateMut(NJson::TJsonValue& json, const TStringBuf& path, std::function<void(const std::vector<ui32>&, NJson::TJsonValue&)> onElem);
 
+ui64 GetConfigHash(const TString& config);
+
 }

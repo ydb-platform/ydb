@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+import "ydb/public/api/client/nc_private/common/v1/operation.proto";
+import "ydb/public/api/client/nc_private/iam/v1/tenant_user_account.proto";
+import "ydb/public/api/client/nc_private/iam/v1/service_account.proto";
+import "ydb/public/api/client/nc_private/iam/v1/user_account.proto";
+
+
+option java_multiple_files = true;
+option java_outer_classname = "ProfileServiceProto";
+option java_package = "ai.nebius.iam.identity.v1";
+
+service ProfileService {
+  option (api_service_name) = "cpl.iam";
+  option (service_visibility) = PUBLIC;
+  option (audit.service_audit).enabled = true;
+
+  rpc Get(GetProfileRequest) returns (GetProfileResponse) {
+    option (audit.method_audit).enabled.multiple_audited_activities = {
+      default_activity: {
+        action: GET,
+        resource_type: "useraccount"
+      },
+      audited_activities: [
+        {
+          action: GET,
+          resource_type: "serviceaccount"
+        }
+      ]
+    };
+  };
+  rpc UpdateAttributes(UpdateProfileAttributesRequest) returns (common.v1.Operation) {
+    option (method_visibility) = PRIVATE;
+    option (audit.method_audit).enabled.default_activity = { action: UPDATE, resource_type: "useraccount" };
+  }
+}
+
+
+message GetProfileRequest{
+}
+
+message GetProfileResponse {
+  oneof profile{
+    UserProfile user_profile = 1;
+    ServiceAccountProfile service_account_profile = 2;
+    AnonymousAccount anonymous_profile = 3;
+  }
+}
+
+message ListProfileResponse{
+  repeated GetProfileResponse items = 1;
+}
+
+message UserProfile {
+  string id = 1;
+  UserAccountExternalId federation_info = 2;
+  oneof attributes_optional {
+    UserAttributes attributes = 3;
+    Error retrieving_error = 4;
+  }
+  repeated UserTenantInfo tenants = 5;
+}
+
+message UserTenantInfo {
+  string tenant_id = 1;
+  string tenant_user_account_id = 2;
+}
+
+message ServiceAccountProfile {
+  ServiceAccount info = 1;
+}
+
+message AnonymousAccount {
+}
+
+message UpdateProfileAttributesRequest {
+  UserAttributes attributes = 1; // [
+  //   (buf.validate.field).required = true
+  // ];
+}

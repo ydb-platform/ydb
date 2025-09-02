@@ -96,7 +96,7 @@ static NodePtr makeNode(const string &t, SymbolTable &st, const string &ns) {
     if (it != st.end()) {
         return NodePtr(new NodeSymbolic(asSingleAttribute(n), it->second));
     }
-    throw Exception(boost::format("Unknown type: %1%") % n.fullname());
+    throw Exception("Unknown type: {}", n);
 }
 
 /** Returns "true" if the field is in the container */
@@ -112,7 +112,7 @@ json::Object::const_iterator findField(const Entity &e,
 template<typename T>
 void ensureType(const Entity &e, const string &name) {
     if (e.type() != json::type_traits<T>::type()) {
-        throw Exception(boost::format("Json field \"%1%\" is not a %2%: %3%") % name % json::type_traits<T>::name() % e.toString());
+        throw Exception("Json field \"{}\" is not a {}: {}", name, json::type_traits<T>::name(), e.toString());
     }
 }
 
@@ -147,17 +147,20 @@ string getDocField(const Entity &e, const Object &m) {
 
 struct Field {
     const string name;
+    const vector<string> aliases;
     const NodePtr schema;
     const GenericDatum defaultValue;
     const CustomAttributes customAttributes;
-    Field(string n, NodePtr v, GenericDatum dv, const CustomAttributes& ca) : name(std::move(n)), schema(std::move(v)), defaultValue(std::move(dv)), customAttributes(std::move(ca)) {}
+
+    Field(string n, vector<string> a, NodePtr v, GenericDatum dv, const CustomAttributes &ca)
+        : name(std::move(n)), aliases(std::move(a)), schema(std::move(v)), defaultValue(std::move(dv)), customAttributes(ca) {}
 };
 
 static void assertType(const Entity &e, EntityType et) {
     if (e.type() != et) {
-        throw Exception(boost::format("Unexpected type for default value: "
-                                      "Expected %1%, but found %2% in line %3%")
-                        % json::typeToString(et) % json::typeToString(e.type()) % e.line());
+        throw Exception(
+            "Unexpected type for default value: Expected {}, but found {} in line {}",
+            json::typeToString(et), json::typeToString(e.type()), e.line());
     }
 }
 
@@ -216,9 +219,9 @@ static GenericDatum makeGenericDatum(NodePtr n,
             for (size_t i = 0; i < n->leaves(); ++i) {
                 auto it = v.find(n->nameAt(i));
                 if (it == v.end()) {
-                    throw Exception(boost::format(
-                                        "No value found in default for %1%")
-                                    % n->nameAt(i));
+                    throw Exception(
+                        "No value found in default for {}",
+                        n->nameAt(i));
                 }
                 result.setFieldAt(i,
                                   makeGenericDatum(n->leafAt(i), it->second, st));
@@ -256,33 +259,39 @@ static GenericDatum makeGenericDatum(NodePtr n,
         case AVRO_FIXED:
             assertType(e, json::EntityType::String);
             return GenericDatum(n, GenericFixed(n, toBin(e.bytesValue())));
-        default: throw Exception(boost::format("Unknown type: %1%") % t);
+        default: throw Exception("Unknown type: {}", t);
     }
 }
 
-static const std::unordered_set<std::string>& getKnownFields() {
+static const std::unordered_set<std::string> &getKnownFields() {
     // return known fields
     static const std::unordered_set<std::string> kKnownFields =
-        {"name", "type", "default", "doc", "size", "logicalType",
+        {"name", "type", "aliases", "default", "doc", "size", "logicalType",
          "values", "precision", "scale", "namespace"};
-      return kKnownFields;
+    return kKnownFields;
 }
 
-static void getCustomAttributes(const Object& m, CustomAttributes &customAttributes)
-{
-  // Don't add known fields on primitive type and fixed type into custom
-  // fields.
-  const std::unordered_set<std::string>& kKnownFields = getKnownFields();
-  for (const auto &entry : m) {
-    if (kKnownFields.find(entry.first) == kKnownFields.end()) {
-      customAttributes.addAttribute(entry.first, entry.second.stringValue());
+static void getCustomAttributes(const Object &m, CustomAttributes &customAttributes) {
+    // Don't add known fields on primitive type and fixed type into custom
+    // fields.
+    const std::unordered_set<std::string> &kKnownFields = getKnownFields();
+    for (const auto &entry : m) {
+        if (kKnownFields.find(entry.first) == kKnownFields.end()) {
+            customAttributes.addAttribute(entry.first, entry.second.stringValue());
+        }
     }
-  }
 }
 
 static Field makeField(const Entity &e, SymbolTable &st, const string &ns) {
     const Object &m = e.objectValue();
-    const string &n = getStringField(e, m, "name");
+    string n = getStringField(e, m, "name");
+    vector<string> aliases;
+    string aliasesName = "aliases";
+    if (containsField(m, aliasesName)) {
+        for (const auto &alias : getArrayField(e, m, aliasesName)) {
+            aliases.emplace_back(alias.stringValue());
+        }
+    }
     auto it = findField(e, m, "type");
     auto it2 = m.find("default");
     NodePtr node = makeNode(it->second, st, ns);
@@ -293,34 +302,35 @@ static Field makeField(const Entity &e, SymbolTable &st, const string &ns) {
     // Get custom attributes
     CustomAttributes customAttributes;
     getCustomAttributes(m, customAttributes);
-
-    return Field(n, node, d, customAttributes);
+    return Field(std::move(n), std::move(aliases), node, d, customAttributes);
 }
 
 // Extended makeRecordNode (with doc).
 static NodePtr makeRecordNode(const Entity &e, const Name &name,
                               const string *doc, const Object &m,
                               SymbolTable &st, const string &ns) {
-    const Array &v = getArrayField(e, m, "fields");
     concepts::MultiAttribute<string> fieldNames;
+    vector<vector<string>> fieldAliases;
     concepts::MultiAttribute<NodePtr> fieldValues;
     concepts::MultiAttribute<CustomAttributes> customAttributes;
     vector<GenericDatum> defaultValues;
-
-    for (const auto &it : v) {
+    string fields = "fields";
+    for (const auto &it : getArrayField(e, m, fields)) {
         Field f = makeField(it, st, ns);
         fieldNames.add(f.name);
+        fieldAliases.push_back(f.aliases);
         fieldValues.add(f.schema);
         defaultValues.push_back(f.defaultValue);
         customAttributes.add(f.customAttributes);
     }
+
     NodeRecord *node;
     if (doc == nullptr) {
         node = new NodeRecord(asSingleAttribute(name), fieldValues, fieldNames,
-                              defaultValues, customAttributes);
+                              fieldAliases, defaultValues, customAttributes);
     } else {
         node = new NodeRecord(asSingleAttribute(name), asSingleAttribute(*doc),
-                              fieldValues, fieldNames, defaultValues, customAttributes);
+                              fieldValues, fieldNames, fieldAliases, defaultValues, customAttributes);
     }
     return NodePtr(node);
 }
@@ -335,9 +345,10 @@ static LogicalType makeLogicalType(const Entity &e, const Object &m) {
     if (typeField == "decimal") {
         LogicalType decimalType(LogicalType::DECIMAL);
         try {
-            decimalType.setPrecision(getLongField(e, m, "precision"));
+            // Precision probably won't go over 38 and scale beyond -77/+77
+            decimalType.setPrecision(static_cast<int32_t>(getLongField(e, m, "precision")));
             if (containsField(m, "scale")) {
-                decimalType.setScale(getLongField(e, m, "scale"));
+                decimalType.setScale(static_cast<int32_t>(getLongField(e, m, "scale")));
             }
         } catch (Exception &ex) {
             // If any part of the logical type is malformed, per the standard we
@@ -367,11 +378,12 @@ static LogicalType makeLogicalType(const Entity &e, const Object &m) {
 
 static NodePtr makeEnumNode(const Entity &e,
                             const Name &name, const Object &m) {
-    const Array &v = getArrayField(e, m, "symbols");
+    string symbolsName = "symbols";
+    const Array &v = getArrayField(e, m, symbolsName);
     concepts::MultiAttribute<string> symbols;
     for (const auto &it : v) {
         if (it.type() != json::EntityType::String) {
-            throw Exception(boost::format("Enum symbol not a string: %1%") % it.toString());
+            throw Exception("Enum symbol not a string: {}", it.toString());
         }
         symbols.add(it.stringValue());
     }
@@ -384,12 +396,12 @@ static NodePtr makeEnumNode(const Entity &e,
 
 static NodePtr makeFixedNode(const Entity &e,
                              const Name &name, const Object &m) {
-    int v = static_cast<int>(getLongField(e, m, "size"));
+    int64_t v = getLongField(e, m, "size");
     if (v <= 0) {
-        throw Exception(boost::format("Size for fixed is not positive: %1%") % e.toString());
+        throw Exception("Size for fixed is not positive: {}", e.toString());
     }
     NodePtr node =
-        NodePtr(new NodeFixed(asSingleAttribute(name), asSingleAttribute(v)));
+        NodePtr(new NodeFixed(asSingleAttribute(name), asSingleAttribute(static_cast<size_t>(v))));
     if (containsField(m, "doc")) {
         node->setDoc(getDocField(e, m));
     }
@@ -422,21 +434,31 @@ static NodePtr makeMapNode(const Entity &e, const Object &m,
 static Name getName(const Entity &e, const Object &m, const string &ns) {
     const string &name = getStringField(e, m, "name");
 
+    Name result;
     if (isFullName(name)) {
-        return Name(name);
+        result = Name(name);
     } else {
         auto it = m.find("namespace");
         if (it != m.end()) {
             if (it->second.type() != json::type_traits<string>::type()) {
-                throw Exception(boost::format(
-                                    "Json field \"%1%\" is not a %2%: %3%")
-                                % "namespace" % json::type_traits<string>::name() % it->second.toString());
+                throw Exception(
+                    "Json field \"namespace\" is not a string: {}",
+                    it->second.toString());
             }
-            Name result = Name(name, it->second.stringValue());
-            return result;
+            result = Name(name, it->second.stringValue());
+        } else {
+            result = Name(name, ns);
         }
-        return Name(name, ns);
     }
+
+    std::string aliases = "aliases";
+    if (containsField(m, aliases)) {
+        for (const auto &alias : getArrayField(e, m, aliases)) {
+            result.addAlias(alias.stringValue());
+        }
+    }
+
+    return result;
 }
 
 static NodePtr makeNode(const Entity &e, const Object &m,
@@ -482,11 +504,10 @@ static NodePtr makeNode(const Entity &e, const Object &m,
         return result;
     }
 
-    throw Exception(boost::format("Unknown type definition: %1%")
-                    % e.toString());
+    throw Exception("Unknown type definition: %1%", e.toString());
 }
 
-static NodePtr makeNode(const Entity &e, const Array &m,
+static NodePtr makeNode(const Entity &, const Array &m,
                         SymbolTable &st, const string &ns) {
     concepts::MultiAttribute<NodePtr> mm;
     for (const auto &it : m) {
@@ -500,13 +521,13 @@ static NodePtr makeNode(const json::Entity &e, SymbolTable &st, const string &ns
         case json::EntityType::String: return makeNode(e.stringValue(), st, ns);
         case json::EntityType::Obj: return makeNode(e, e.objectValue(), st, ns);
         case json::EntityType::Arr: return makeNode(e, e.arrayValue(), st, ns);
-        default: throw Exception(boost::format("Invalid Avro type: %1%") % e.toString());
+        default: throw Exception("Invalid Avro type: {}", e.toString());
     }
 }
 json::Object::const_iterator findField(const Entity &e, const Object &m, const string &fieldName) {
     auto it = m.find(fieldName);
     if (it == m.end()) {
-        throw Exception(boost::format("Missing Json field \"%1%\": %2%") % fieldName % e.toString());
+        throw Exception("Missing Json field \"{}\": {}", fieldName, e.toString());
     } else {
         return it;
     }

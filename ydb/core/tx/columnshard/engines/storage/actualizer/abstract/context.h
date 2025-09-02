@@ -13,6 +13,34 @@ namespace NKikimr::NOlap::NActualizer {
 
 class TTieringProcessContext;
 
+class TActualizationContext {
+private:
+    YDB_READONLY_DEF(TInstant, Now);
+
+public:
+    TActualizationContext(const TInstant now)
+        : Now(now) {
+    }
+};
+
+class TActualizationBuildingContext {
+private:
+    YDB_READONLY_DEF(TInstant, Now);
+    const THashMap<ui64, std::shared_ptr<TPortionInfo>>& Portions;
+
+public:
+    TActualizationBuildingContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
+        : Now(now)
+        , Portions(portions) {
+    }
+
+    const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
+        auto it = Portions.find(portionId);
+        AFL_VERIFY(it != Portions.end());
+        return it->second;
+    }
+};
+
 class TAddExternalContext {
 private:
     YDB_READONLY_DEF(TInstant, Now);

@@ -1,7 +1,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -20,11 +20,11 @@ public:
         , StartKey(std::move(startKey))
     {}
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "StatisticsScan";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -37,13 +37,13 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), StartKey.GetCells(), ESeek::Lower);
 
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Y_UNUSED(key);
         auto rowCells = *row;
         for (size_t i = 0; i < rowCells.size(); ++i) {
@@ -53,23 +53,25 @@ public:
         return EScan::Feed;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);
 
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrStat::TEvStatisticsResponse::ABORTED);
+        if (status != EStatus::Done) {
+            record.SetStatus(status == EStatus::Exception
+                ? NKikimrStat::TEvStatisticsResponse::STATUS_ERROR
+                : NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             delete this;
             return nullptr;
         }
 
-        record.SetStatus(NKikimrStat::TEvStatisticsResponse::SUCCESS);
+        record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
         auto tags = Scheme->Tags();
         for (size_t t = 0; t < tags.size(); ++t) {
             auto* column = record.AddColumns();
@@ -78,7 +80,7 @@ public:
             auto countMinSketch = CountMinSketches[t]->AsStringBuf();
             auto* statCMS = column->AddStatistics();
             statCMS->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statCMS->SetData(countMinSketch.Data(), countMinSketch.Size());
+            statCMS->SetData(countMinSketch.data(), countMinSketch.size());
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
@@ -132,16 +134,16 @@ void TDataShard::HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev
     auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
     response->Record.SetShardTabletId(TabletID());
 
-    const auto& tableId = record.GetTableId();
-    if (PathOwnerId != tableId.GetOwnerId()) {
-        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::ERROR);
+    const auto& pathId = record.GetTable().GetPathId();
+    if (PathOwnerId != pathId.GetOwnerId()) {
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
 
-    auto infoIt = TableInfos.find(tableId.GetTableId());
+    auto infoIt = TableInfos.find(pathId.GetLocalId());
     if (infoIt == TableInfos.end()) {
-        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::ERROR);
+        response->Record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }

@@ -1,0 +1,12 @@
+diff --git a/include/__config b/include/__config
+index 0b4f9ef..f804928 100644
+--- a/include/__config
++++ b/include/__config
+@@ -1517,4 +1517,7 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+ 
+ #endif // __cplusplus
+ 
++#include <__config_epilogue.h>
++
+ #endif // _LIBCPP___CONFIG
++

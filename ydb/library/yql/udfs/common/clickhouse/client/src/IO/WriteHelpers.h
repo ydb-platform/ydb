@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util/generic/yexception.h"
 #include <cstring>
 #include <cstdio>
 #include <limits>
@@ -731,6 +732,37 @@ template <char delimiter = '-'>
 inline void writeDateText(ExtendedDayNum date, WriteBuffer & buf)
 {
     writeDateText<delimiter>(LocalDate(date), buf);
+}
+
+template <char delimiter = '-'>
+inline void writeDateTextFormat(LocalDate date, WriteBuffer & buf, const String& format)
+{
+    struct tm input_tm;
+    memset(&input_tm, 0, sizeof(tm));
+    input_tm.tm_mday = date.day();
+    input_tm.tm_mon = date.month() - 1;
+    input_tm.tm_year = date.year() - 1900;
+
+    size_t size = Max<size_t>(format.size() * 2 + 1, 107);
+    TTempBuf tmp(size);
+    int r = strftime(tmp.Data(), tmp.Size(), format.c_str(), &input_tm);
+    if (r > 0) {
+        buf.write(tmp.Data(), r);
+        return;
+    }
+    ythrow yexception() << "Can't format date in format " << format;
+}
+
+template <char delimiter = '-'>
+inline void writeDateTextFormat(DayNum date, WriteBuffer & buf, const String& format)
+{
+    writeDateTextFormat(LocalDate(date), buf, format);
+}
+
+template <char delimiter = '-'>
+inline void writeDateTextFormat(ExtendedDayNum date, WriteBuffer & buf, const String& format)
+{
+    writeDateTextFormat(LocalDate(date), buf, format);
 }
 
 /// In the format YYYY-MM-DD HH:MM:SS

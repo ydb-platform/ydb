@@ -13,9 +13,17 @@ enum EDataTransportVersion {
     DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 = 60000;
 }
 
+enum EValuePackerVersion {
+    VALUE_PACKER_VERSION_UNSPECIFIED = 0;
+    VALUE_PACKER_VERSION_V0 = 1;
+    VALUE_PACKER_VERSION_V1 = 2;
+}
+
 message TData {
     uint32 TransportVersion = 1;
     bytes Raw = 2;
-    uint32 Rows = 3;
+    uint32 Chunks = 3;
     optional uint32 PayloadId = 4;
+    uint32 Rows = 5;
+    EValuePackerVersion ValuePackerVersion = 6;
 }

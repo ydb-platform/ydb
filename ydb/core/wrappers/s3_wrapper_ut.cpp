@@ -3,11 +3,13 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
@@ -17,7 +19,19 @@ using namespace NKikimr;
 using namespace NKikimr::NWrappers;
 using namespace Aws::S3::Model;
 
-class TS3MockTest: public NUnitTest::TTestBase, private NExternalStorage::TS3User {
+namespace {
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    NKikimr::InitAwsAPI();
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    NKikimr::ShutdownAwsAPI();
+}
+
+}
+
+class TS3MockTest: public NUnitTest::TTestBase {
     using TS3Mock = NWrappers::NTestHelpers::TS3Mock;
 
     static auto MakeClientConfig(ui16 port) {
@@ -48,8 +62,8 @@ public:
     }
 
     void TearDown() override {
-        S3Mock.Reset();
         Runtime.Reset();
+        S3Mock.Reset();
     }
 
     ui16 GetPort() const {

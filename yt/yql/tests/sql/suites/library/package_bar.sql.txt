@@ -1,0 +1,7 @@
+$do_bar = ($value) -> {
+    return AsStruct(
+        $value as bar
+    );
+};
+
+export $do_bar;

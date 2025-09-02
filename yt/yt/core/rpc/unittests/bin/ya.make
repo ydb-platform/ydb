@@ -1,4 +1,4 @@
-PROGRAM()
+PROGRAM(rpc-test-service)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

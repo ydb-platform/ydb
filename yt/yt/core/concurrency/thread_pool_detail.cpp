@@ -4,16 +4,17 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <algorithm>
 
 namespace NYT::NConcurrency {
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TThreadPoolBase::TThreadPoolBase(TString threadNamePrefix)
+TThreadPoolBase::TThreadPoolBase(std::string threadNamePrefix)
     : ThreadNamePrefix_(std::move(threadNamePrefix))
     , ShutdownCookie_(RegisterShutdownCallback(
         Format("ThreadPool(%v)", ThreadNamePrefix_),
@@ -21,9 +22,9 @@ TThreadPoolBase::TThreadPoolBase(TString threadNamePrefix)
         /*priority*/ 100))
 { }
 
-void TThreadPoolBase::Configure(int threadCount)
+void TThreadPoolBase::SetThreadCount(int threadCount)
 {
-    DoConfigure(std::clamp(threadCount, 1, MaxThreadCount));
+    DoSetThreadCount(std::clamp(threadCount, 1, MaxThreadCount));
 }
 
 void TThreadPoolBase::Shutdown()
@@ -42,7 +43,7 @@ void TThreadPoolBase::EnsureStarted()
     }
 }
 
-TString TThreadPoolBase::MakeThreadName(int index)
+std::string TThreadPoolBase::MakeThreadName(int index)
 {
     return Format("%v:%v", ThreadNamePrefix_, index);
 }
@@ -79,7 +80,7 @@ int TThreadPoolBase::GetThreadCount()
     return std::ssize(Threads_);
 }
 
-void TThreadPoolBase::DoConfigure(int threadCount)
+void TThreadPoolBase::DoSetThreadCount(int threadCount)
 {
     ThreadCount_.store(threadCount);
     if (StartFlag_.load()) {

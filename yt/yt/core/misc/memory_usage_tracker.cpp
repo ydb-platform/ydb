@@ -1,5 +1,6 @@
 #include "memory_usage_tracker.h"
-#include "singleton.h"
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT {
 
@@ -51,6 +52,13 @@ public:
     }
 
     TSharedRef Track(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
+
+    TErrorOr<TSharedRef> TryTrack(
         TSharedRef reference,
         bool /*keepExistingTracking*/) override
     {
@@ -155,7 +163,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     guard.Size_ = size;
     guard.AcquiredSize_ = size;
     guard.Granularity_ = granularity;
-    return std::move(guard);
+    return guard;
 }
 
 void TMemoryUsageTrackerGuard::Release()
@@ -189,7 +197,7 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
-    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+    auto ignoredError = SetSizeImpl(size, [&] (i64 delta) {
         Tracker_->Acquire(delta);
         return TError{};
     });
@@ -199,12 +207,12 @@ void TMemoryUsageTrackerGuard::SetSize(i64 size)
 
 TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
 {
-    return SetSizeGeneric(size, [&] (i64 delta) {
+    return SetSizeImpl(size, [&] (i64 delta) {
         return Tracker_->TryAcquire(delta);
     });
 }
 
-TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
 {
     if (!Tracker_) {
         return {};
@@ -250,7 +258,7 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
     guard.Size_ = size;
     guard.AcquiredSize_ = acquiredDelta;
     guard.Granularity_ = Granularity_;
-    return std::move(guard);
+    return guard;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -354,7 +362,7 @@ void TMemoryTrackedBlob::Clear()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRef TrackMemory(
+TErrorOr<TSharedRef> TryTrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRef reference,
     bool keepExistingTracking)
@@ -362,7 +370,7 @@ TSharedRef TrackMemory(
     if (!tracker || !reference) {
         return reference;
     }
-    return tracker->Track(reference, keepExistingTracking);
+    return tracker->TryTrack(std::move(reference), keepExistingTracking);
 }
 
 TSharedRefArray TrackMemory(

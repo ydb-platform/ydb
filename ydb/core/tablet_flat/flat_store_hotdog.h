@@ -23,15 +23,13 @@ namespace NTabletFlatExecutor {
         using TColdPart = NTable::TColdPart;
         using TPartComponents = NTable::TPartComponents;
         using TBundle = NKikimrExecutorFlat::TBundle;
-        using TPages = TArrayRef<const NPageCollection::TLoadedPage>;
         using TScreen = NTable::TScreen;
         using TSlices = NTable::TSlices;
 
         TPageCollectionProtoHelper() = delete;
 
-        TPageCollectionProtoHelper(bool meta, bool pages)
+        TPageCollectionProtoHelper(bool meta)
             : PutMeta(meta)
-            , PutPages(pages)
         {
 
         }
@@ -47,16 +45,14 @@ namespace NTabletFlatExecutor {
         static TPartComponents MakePageCollectionComponents(const TBundle &proto, bool unsplit = false);
 
     private:
-        void Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TInfo &cache);
+        void Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection);
         void Bundle(
                 NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
                 const TLargeGlobId &largeGlobId,
-                const NPageCollection::TPageCollection *pack,
-                TPages pages);
+                const NPageCollection::TPageCollection *pack);
 
     private:
         const bool PutMeta = false;     /* Save page collection metablob in bundle  */
-        const bool PutPages = false;    /* Save special pages within bundle */
     };
 }
 }

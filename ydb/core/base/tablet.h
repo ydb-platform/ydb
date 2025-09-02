@@ -64,6 +64,8 @@ struct TEvTablet {
         EvPromoteToLeader,
         EvFGcAck, // from user tablet to follower
         EvLeaseDropped,
+        EvConfirmLeader, // from user tablet to sys tablet
+        EvConfirmLeaderResult, // from sys tablet to user tablet
 
         EvTabletDead = EvBoot + 1024,
         EvFollowerUpdateState, // notifications to guardian
@@ -99,6 +101,13 @@ struct TEvTablet {
         // utilitary
         EvCheckBlobstorageStatusResult = EvBoot + 3072,
         EvResetTabletResult,
+        EvGcForStepAckRequest, // from executer to sys tablet
+        EvGcForStepAckResponse, // from sys tablet to executer
+
+        // between tablet resolver and sys tablet
+        EvTabletStateSubscribe = EvBoot + 3328,
+        EvTabletStateUnsubscribe,
+        EvTabletStateUpdate,
 
         EvEnd
     };
@@ -338,7 +347,16 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {};
+    struct TEvTabletActive : public TEventLocal<TEvTabletActive, EvTabletActive> {
+        TString VersionInfo;
+
+        // Compatibility with legacy external projects
+        TEvTabletActive() = default;
+
+        explicit TEvTabletActive(TString&& versionInfo)
+            : VersionInfo(std::move(versionInfo))
+        {}
+    };
 
     struct TEvDemoted : public TEventLocal<TEvDemoted, EvDemoted> {
         const bool ByIsolation;
@@ -366,6 +384,7 @@ struct TEvTablet {
         const ui32 ConfirmedOnSend;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
@@ -377,6 +396,7 @@ struct TEvTablet {
                 ui32 confirmedOnSend,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
+                THashMap<ui32, float>&& approximateFreeSpaceShareByChannel,
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps)
             : Status(status)
@@ -386,6 +406,7 @@ struct TEvTablet {
             , ConfirmedOnSend(confirmedOnSend)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
+            , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
         {}
@@ -760,10 +781,13 @@ struct TEvTablet {
     struct TEvCheckBlobstorageStatusResult : public TEventLocal<TEvCheckBlobstorageStatusResult, EvCheckBlobstorageStatusResult> {
         TVector<ui32> LightYellowMoveGroups;
         TVector<ui32> YellowStopGroups;
+        TVector<ui32> LightOrangeGroups;
 
-        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups)
+        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups,
+            TVector<ui32> &&lightOrangeGroups)
             : LightYellowMoveGroups(std::move(lightYellowMoveGroups))
             , YellowStopGroups(std::move(yellowStopGroups))
+            , LightOrangeGroups(std::move(lightOrangeGroups))
 
         {}
     };
@@ -775,6 +799,28 @@ struct TEvTablet {
         TEvResetTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
             : Status(status)
             , TabletId(tabletId)
+        {}
+    };
+
+    // will send TEvGcForStepAckResponse when the requested Generation and Step are less
+    // than the actual garbage collected Generation and Step
+    struct TEvGcForStepAckRequest : public TEventLocal<TEvGcForStepAckRequest, EvGcForStepAckRequest> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckRequest(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
+        {}
+    };
+
+    struct TEvGcForStepAckResponse : public TEventLocal<TEvGcForStepAckResponse, EvGcForStepAckResponse> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckResponse(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
         {}
     };
 
@@ -844,6 +890,67 @@ struct TEvTablet {
 
         explicit TEvLeaseDropped(ui64 tabletId) {
             Record.SetTabletID(tabletId);
+        }
+    };
+
+    struct TEvConfirmLeader : TEventLocal<TEvConfirmLeader, EvConfirmLeader> {
+        ui64 TabletID;
+        ui32 Generation;
+
+        TEvConfirmLeader(ui64 tabletId, ui32 generation)
+            : TabletID(tabletId)
+            , Generation(generation)
+        {}
+    };
+
+    struct TEvConfirmLeaderResult : TEventLocal<TEvConfirmLeaderResult, EvConfirmLeaderResult> {
+        ui64 TabletID;
+        ui32 Generation;
+        NKikimrProto::EReplyStatus Status;
+        TString ErrorReason;
+
+        TEvConfirmLeaderResult(ui64 tabletId, ui32 generation, NKikimrProto::EReplyStatus status = NKikimrProto::OK, TString errorReason = {})
+            : TabletID(tabletId)
+            , Generation(generation)
+            , Status(status)
+            , ErrorReason(std::move(errorReason))
+        {}
+    };
+
+    struct TEvTabletStateSubscribe : TEventPB<TEvTabletStateSubscribe, NKikimrTabletBase::TEvTabletStateSubscribe, EvTabletStateSubscribe> {
+        TEvTabletStateSubscribe() = default;
+
+        TEvTabletStateSubscribe(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvTabletStateUnsubscribe : TEventPB<TEvTabletStateUnsubscribe, NKikimrTabletBase::TEvTabletStateUnsubscribe, EvTabletStateUnsubscribe> {
+        TEvTabletStateUnsubscribe() = default;
+
+        TEvTabletStateUnsubscribe(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvTabletStateUpdate : TEventPB<TEvTabletStateUpdate, NKikimrTabletBase::TEvTabletStateUpdate, EvTabletStateUpdate> {
+        using EState = NKikimrTabletBase::TEvTabletStateUpdate::EState;
+
+        TEvTabletStateUpdate() = default;
+
+        TEvTabletStateUpdate(ui64 tabletId, ui64 seqNo, EState state, const TActorId& userActorId = {}) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+            Record.SetState(state);
+            if (userActorId) {
+                ActorIdToProto(userActorId, Record.MutableUserActorId());
+            }
+        }
+
+        TActorId GetUserActorId() const {
+            return ActorIdFromProto(Record.GetUserActorId());
         }
     };
 };

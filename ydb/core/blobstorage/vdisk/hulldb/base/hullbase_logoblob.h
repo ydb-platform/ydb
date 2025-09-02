@@ -5,7 +5,6 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 
@@ -43,6 +42,12 @@ namespace NKikimr {
 
         static TKeyLogoBlob First() {
             return TKeyLogoBlob();
+        }
+
+        static TKeyLogoBlob Inf() {
+            TKeyLogoBlob res;
+            std::ranges::fill(res.Raw, Max<ui64>());
+            return res;
         }
 
         bool IsSameAs(const TKeyLogoBlob& other) const {
@@ -120,8 +125,8 @@ namespace NKikimr {
             ClearData();
         }
 
-        void Merge(const TMemRecLogoBlob& rec, const TKeyLogoBlob& /*key*/) {
-            TIngress::Merge(Ingress, rec.Ingress);
+        void Merge(const TMemRecLogoBlob& rec, const TKeyLogoBlob& /*key*/, bool clearLocal, TBlobStorageGroupType gtype) {
+            TIngress::Merge(Ingress, clearLocal ? rec.Ingress.CopyWithoutLocal(gtype) : rec.Ingress);
         }
 
         ui32 DataSize() const {
@@ -202,6 +207,10 @@ namespace NKikimr {
 
         void ClearLocalParts(const TBlobStorageGroupType &gtype) {
             Ingress = Ingress.CopyWithoutLocal(gtype);
+        }
+
+        void ReplaceLocalParts(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) {
+            Ingress = Ingress.ReplaceLocal(gtype, parts);
         }
 
         TString ToString(const TIngressCache *cache, const TDiskPart *outbound) const {

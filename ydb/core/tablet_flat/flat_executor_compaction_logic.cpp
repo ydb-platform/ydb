@@ -2,6 +2,7 @@
 #include "flat_exec_broker.h"
 #include "flat_dbase_scheme.h"
 #include "flat_comp_create.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/base/appdata.h>
 
@@ -17,13 +18,13 @@ TCompactionLogicState::TSnapRequest::~TSnapRequest()
 TCompactionLogicState::TTableInfo::~TTableInfo()
 {}
 
-TCompactionLogic::TCompactionLogic(THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
+TCompactionLogic::TCompactionLogic(NTable::IMemTableMemoryConsumersCollection *memTableMemoryConsumersCollection,
                                    NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
                                    TAutoPtr<TCompactionLogicState> state,
                                    TString taskNameSuffix)
-    : SharedPageCacheMemTableObserver(std::move(sharedPageCacheMemTableObserver))
+    : MemTableMemoryConsumersCollection(memTableMemoryConsumersCollection)
     , Logger(logger)
     , Broker(broker)
     , Backend(backend)
@@ -37,7 +38,7 @@ TCompactionLogic::~TCompactionLogic()
 
 void TCompactionLogic::Start() {
     auto result = ReflectSchemeChanges();
-    Y_ABORT_UNLESS(!result.StrategyChanges);
+    Y_ENSURE(!result.StrategyChanges);
     State->Snapshots.clear();
 }
 
@@ -50,7 +51,7 @@ void TCompactionLogic::Stop() {
 
 TCompactionLogicState::TSnapshotState TCompactionLogic::SnapToLog(ui32 tableId) {
     auto* info = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(info);
+    Y_ENSURE(info);
     TCompactionLogicState::TSnapshotState ret;
     ret.State = info->Strategy->SnapshotState();
     ret.Strategy = info->StrategyType;
@@ -83,7 +84,7 @@ void TCompactionLogic::UpdateCompactions()
 void TCompactionLogic::RequestChanges(ui32 table)
 {
     auto *tableInfo = State->Tables.FindPtr(table);
-    Y_ABORT_UNLESS(tableInfo);
+    Y_ENSURE(tableInfo);
     tableInfo->ChangesRequested = true;
 }
 
@@ -111,7 +112,7 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
     Y_DEBUG_ABORT_UNLESS(tableInfo);
     TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
 
-    Y_ABORT_UNLESS(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined");
+    Y_ENSURE(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined");
 
     tableInfo->SnapRequests.emplace_back(TCompactionLogicState::TSnapRequest(edge, snapContext));
 
@@ -217,12 +218,12 @@ void TCompactionLogic::TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64
         } else {
             // there was a race and we finished some compaction while our message was waiting
             // so let's notify that we completed it
-            Y_DEBUG_ABORT_UNLESS(tableInfo->SharedPageCacheMemTableRegistration);
-            if (auto& registration = tableInfo->SharedPageCacheMemTableRegistration) {
-                SharedPageCacheMemTableObserver->CompactionComplete(registration);
+            Y_DEBUG_ABORT_UNLESS(tableInfo->MemTableMemoryConsumer);
+            if (auto& consumer = tableInfo->MemTableMemoryConsumer) {
+                MemTableMemoryConsumersCollection->CompactionComplete(consumer);
             }
         }
-    }    
+    }
 }
 
 TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) {
@@ -236,7 +237,7 @@ TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) 
 
 void TCompactionLogic::AllowBorrowedGarbageCompaction(ui32 table) {
     auto *tableInfo = State->Tables.FindPtr(table);
-    Y_ABORT_UNLESS(tableInfo && tableInfo->Strategy, "Cannot AllowBorrowedGarbageCompaction for unexpected table %" PRIu32, table);
+    Y_ENSURE(tableInfo && tableInfo->Strategy, "Cannot AllowBorrowedGarbageCompaction for unexpected table " << table);
     tableInfo->AllowBorrowedGarbageCompaction = true;
     tableInfo->Strategy->AllowBorrowedGarbageCompaction();
 }
@@ -255,24 +256,24 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
         if (auto *policy = table.Policy.Get()) {
             TString err;
             bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info.CompactionPolicy, err);
-            Y_ABORT_UNLESS(ok, "table %s id %u: %s", info.Name.data(), info.Id, err.data());
+            Y_ENSURE(ok, "Cannot change compaction policy for table " << info.Name << " id " << info.Id << ": " << err);
         }
 
         table.Policy = info.CompactionPolicy;
 
         auto newStrategyType = scheme.CompactionStrategyFor(info.Id);
-        Y_ABORT_UNLESS(newStrategyType != NKikimrSchemeOp::CompactionStrategyUnset);
+        Y_ENSURE(newStrategyType != NKikimrCompaction::CompactionStrategyUnset);
 
         if (table.StrategyType != newStrategyType) {
-            if (table.StrategyType != NKikimrSchemeOp::CompactionStrategyUnset) {
+            if (table.StrategyType != NKikimrCompaction::CompactionStrategyUnset) {
                 result.StrategyChanges.push_back({ info.Id, newStrategyType });
                 StrategyChanging(table);
             }
 
-            Y_ABORT_UNLESS(!table.Strategy);
+            Y_ENSURE(!table.Strategy);
             table.StrategyType = newStrategyType;
             table.Strategy = CreateStrategy(info.Id, newStrategyType);
-            Y_ABORT_UNLESS(table.Strategy);
+            Y_ENSURE(table.Strategy);
 
             // Time to start the new strategy
             if (auto* snapshot = State->Snapshots.FindPtr(info.Id)) {
@@ -293,11 +294,11 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
                 table.Strategy->AllowBorrowedGarbageCompaction();
             }
 
-            if (!table.SharedPageCacheMemTableRegistration) {
-                SharedPageCacheMemTableObserver->Register(info.Id);
+            if (!table.MemTableMemoryConsumer) {
+                MemTableMemoryConsumersCollection->Register(info.Id);
             }
         } else {
-            Y_ABORT_UNLESS(table.Strategy);
+            Y_ENSURE(table.Strategy);
             table.Strategy->ReflectSchema();
         }
     }
@@ -314,14 +315,14 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     return result;
 }
 
-void TCompactionLogic::ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration)
+void TCompactionLogic::ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer)
 {
     auto *tableInfo = State->Tables.FindPtr(table);
     if (tableInfo) {
-        registration->SetConsumption(tableInfo->InMem.EstimatedSize);
+        memTableMemoryConsumer->SetConsumption(tableInfo->InMem.EstimatedSize);
 
-        Y_DEBUG_ABORT_UNLESS(!tableInfo->SharedPageCacheMemTableRegistration);
-        tableInfo->SharedPageCacheMemTableRegistration = std::move(registration);
+        Y_DEBUG_ABORT_UNLESS(!tableInfo->MemTableMemoryConsumer);
+        tableInfo->MemTableMemoryConsumer = std::move(memTableMemoryConsumer);
     }
 }
 
@@ -335,22 +336,22 @@ void TCompactionLogic::ReflectRemovedRowVersions(ui32 table)
 
 THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     switch (strategy) {
-        case NKikimrSchemeOp::CompactionStrategyGenerational:
+        case NKikimrCompaction::CompactionStrategyGenerational:
             return NTable::CreateGenCompactionStrategy(
                     tableId, Backend, Broker, Time, Logger, TaskNameSuffix);
 
         default:
-            Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
+            Y_TABLET_ERROR("Unsupported strategy " << NKikimrCompaction::ECompactionStrategy_Name(strategy));
     }
 }
 
 void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
 {
     // Note: should be called even without table.SharedPageCacheMemTableRegistration
-    SharedPageCacheMemTableObserver->Unregister(table.TableId);
+    MemTableMemoryConsumersCollection->Unregister(table.TableId);
 
     if (table.Strategy) {
         // Strategy will cancel all pending and running compactions
@@ -390,6 +391,12 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
 
     table.ChangesRequested = false;
 
+    // Compactions have been cancelled, we may need to resubmit
+    ResubmitCompactions(table);
+}
+
+void TCompactionLogic::ResubmitCompactions(TCompactionLogicState::TTableInfo &table)
+{
     auto &inMem = table.InMem;
 
     auto resubmit = [&](const TString& type, ui32 priority) {
@@ -427,19 +434,27 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
         default:
             break;
     }
+
+    if (table.Strategy &&
+        table.ForcedCompactionState == EForcedCompactionState::None &&
+        table.Strategy->GetLastFinishedForcedCompactionId() < table.LastStartedFullCompactionId)
+    {
+        // We need to start a new forced compaction cycle
+        PrepareForceCompaction(table.TableId);
+    }
 }
 
 void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
     auto *info = State->Tables.FindPtr(table);
-    Y_ABORT_UNLESS(info);
+    Y_ENSURE(info);
     auto &mem = info->InMem;
     mem.EstimatedSize = size;
     mem.Steps += steps;
 
-    if (auto& registration = info->SharedPageCacheMemTableRegistration) {
-        registration->SetConsumption(size);
+    if (auto& consumer = info->MemTableMemoryConsumer) {
+        consumer->SetConsumption(size);
         if (steps == 0) {
-            SharedPageCacheMemTableObserver->CompactionComplete(registration);
+            MemTableMemoryConsumersCollection->CompactionComplete(consumer);
         }
     }
 
@@ -448,7 +463,7 @@ void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
 
 void TCompactionLogic::CheckInMemStats(ui32 table) {
     auto *info = State->Tables.FindPtr(table);
-    Y_ABORT_UNLESS(info);
+    Y_ENSURE(info);
     auto &mem = info->InMem;
 
     const auto &policy = *info->Policy;
@@ -534,12 +549,11 @@ void TCompactionLogic::UpdateLogUsage(const NRedo::TUsage &usage)
 bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
 {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(tableInfo,
-        "Unexpected BeginMemTableCompaction(%" PRIu64 ", %" PRIu32 ") for a dropped table",
-        taskId, tableId);
+    Y_ENSURE(tableInfo,
+        "Unexpected BeginMemTableCompaction(" << taskId << ", " << tableId << ") for a dropped table");
 
     TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
-    Y_ABORT_UNLESS(taskId == inMem.CompactionTask.TaskId);
+    Y_ENSURE(taskId == inMem.CompactionTask.TaskId);
 
     NTable::TSnapEdge edge;
 
@@ -558,7 +572,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         break;
 
     default:
-        Y_ABORT("Invalid inMem.State");
+        Y_TABLET_ERROR("Invalid inMem.State");
     }
 
     ui64 forcedCompactionId = 0;
@@ -577,6 +591,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
             }
             case EForceCompaction::Full: {
                 forcedCompactionId = tableInfo->CurrentForcedMemCompactionId;
+                tableInfo->LastStartedFullCompactionId = forcedCompactionId;
                 break;
             }
         }
@@ -596,11 +611,11 @@ TCompactionLogic::HandleCompaction(
     const auto edge = params->Edge;
 
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(tableInfo, "Unexpected CompleteCompaction for a dropped table");
+    Y_ENSURE(tableInfo, "Unexpected CompleteCompaction for a dropped table");
 
     if (compactionId == tableInfo->InMem.CompactionTask.CompactionId) {
         TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
-        Y_ABORT_UNLESS(params->TaskId == inMem.CompactionTask.TaskId);
+        Y_ENSURE(params->TaskId == inMem.CompactionTask.TaskId);
 
         switch (inMem.State) {
         case ECompactionState::Compaction:
@@ -610,8 +625,8 @@ TCompactionLogic::HandleCompaction(
             inMem.CompactionTask.CompactionId = 0;
             break;
         case ECompactionState::SnapshotCompaction:
-            Y_ABORT_UNLESS(tableInfo->SnapRequests);
-            Y_ABORT_UNLESS(edge == tableInfo->SnapRequests.front().Edge);
+            Y_ENSURE(tableInfo->SnapRequests);
+            Y_ENSURE(edge == tableInfo->SnapRequests.front().Edge);
             if (ret) {
                 ret->CompleteSnapshots.push_back(tableInfo->SnapRequests.front().Context);
                 tableInfo->SnapRequests.pop_front();
@@ -622,7 +637,7 @@ TCompactionLogic::HandleCompaction(
             inMem.CompactionTask.CompactionId = 0;
             break;
         default:
-            Y_ABORT("must not happens, state=%d", (int)inMem.State);
+            Y_TABLET_ERROR("must not happen, state=" << (int)inMem.State);
         }
 
         if (tableInfo->ForcedCompactionState == EForcedCompactionState::CompactingMem) {
@@ -690,13 +705,13 @@ TCompactionLogic::CancelledCompaction(
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(tableInfo);
+    Y_ENSURE(tableInfo);
     tableInfo->Strategy->PartMerged(std::move(partView), 255);
 }
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(tableInfo);
+    Y_ENSURE(tableInfo);
     tableInfo->Strategy->PartMerged(std::move(part), 255);
 }
 
@@ -706,11 +721,13 @@ ui32 TCompactionLogic::BorrowedPartLevel() {
 
 TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ABORT_UNLESS(tableInfo);
+    Y_ENSURE(tableInfo);
     TTableCompactionChanges ret;
     ret.Table = tableId;
     ret.Changes = tableInfo->Strategy->PartsRemoved(parts);
     ret.Strategy = tableInfo->StrategyType;
+    // A call to PartsRemoved has cancelled all ongoing compactions, resubmit them again
+    ResubmitCompactions(*tableInfo);
     return ret;
 }
 
@@ -720,7 +737,7 @@ void TCompactionLogic::SubmitCompactionTask(ui32 table,
                                             ui32 priority,
                                             TCompactionLogicState::TCompactionTask &task)
 {
-    Y_ABORT_UNLESS(generation == 0, "Unexpected gen %" PRIu32 " in compaction logic", generation);
+    Y_ENSURE(generation == 0, "Unexpected gen " << generation << " in compaction logic");
 
     task.Priority = priority;
     task.SubmissionTimestamp = Time->Now();

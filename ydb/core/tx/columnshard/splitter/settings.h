@@ -14,17 +14,50 @@ namespace NKikimr::NOlap::NSplitter {
 
 class TSplitSettings {
 private:
+// DefaultMaxBlobSize - 2 * DefaultMinBlobSize have to been enought to "guarantee" records count > 1 through blobs splitting
     static const inline i64 DefaultMaxBlobSize = 8 * 1024 * 1024;
-    static const inline i64 DefaultMinBlobSize = 4 * 1024 * 1024;
+    static const inline i64 DefaultMinBlobSize = 3 * 1024 * 1024;
+    static const inline i64 DefaultBlobSizeTolerance = 64 * 1024;
+
     static const inline i64 DefaultMinRecordsCount = 10000;
     static const inline i64 DefaultMaxPortionSize = 6 * DefaultMaxBlobSize;
     YDB_ACCESSOR(i64, MaxBlobSize, DefaultMaxBlobSize);
     YDB_ACCESSOR(i64, MinBlobSize, DefaultMinBlobSize);
+    YDB_ACCESSOR(i64, BlobSizeTolerance, DefaultBlobSizeTolerance);
     YDB_ACCESSOR(i64, MinRecordsCount, DefaultMinRecordsCount);
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
+
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "max_bs=" << MaxBlobSize << ";";
+        sb << "min_bs=" << MinBlobSize << ";";
+        sb << "bs_tlrn=" << BlobSizeTolerance << ";";
+        sb << "min_rc=" << MinRecordsCount << ";";
+        sb << "max_ps=" << MaxPortionSize << ";";
+        sb << "}";
+        return sb;
+    }
+
+    ui64 GetExpectedBlobPage() const {
+        return ((ui64)512) << 10;
+    }
+
+    static TSplitSettings BuildForTests(const double scaleKff = 1) {
+        return TSplitSettings().SetMaxBlobSize(1024 * 10 * scaleKff).SetMinBlobSize(256 * 10 * scaleKff);
+    }
+
     ui64 GetExpectedRecordsCountOnPage() const {
         return 1.5 * MinRecordsCount;
+    }
+
+    ui64 GetMinRecordsCountOnPage() const {
+        return 1.5 * MinRecordsCount;
+    }
+
+    ui64 GetMaxRecordsCountOnPage() const {
+        return 7.5 * MinRecordsCount;
     }
 
     ui64 GetExpectedUnpackColumnChunkRawSize() const {
@@ -33,6 +66,10 @@ public:
 
     ui64 GetExpectedPortionSize() const {
         return MaxPortionSize;
+    }
+
+    ui64 GetExpectedPortionRecordsCount() const {
+        return 10 * GetExpectedRecordsCountOnPage();
     }
 };
 

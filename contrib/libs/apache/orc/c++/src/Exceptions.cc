@@ -20,11 +20,11 @@
 
 namespace orc {
 
-  NotImplementedYet::NotImplementedYet(const std::string& what_arg) : logic_error(what_arg) {
+  NotImplementedYet::NotImplementedYet(const std::string& whatArg) : logic_error(whatArg) {
     // PASS
   }
 
-  NotImplementedYet::NotImplementedYet(const char* what_arg) : logic_error(what_arg) {
+  NotImplementedYet::NotImplementedYet(const char* whatArg) : logic_error(whatArg) {
     // PASS
   }
 
@@ -36,11 +36,11 @@ namespace orc {
     // PASS
   }
 
-  ParseError::ParseError(const std::string& what_arg) : runtime_error(what_arg) {
+  ParseError::ParseError(const std::string& whatArg) : runtime_error(whatArg) {
     // PASS
   }
 
-  ParseError::ParseError(const char* what_arg) : runtime_error(what_arg) {
+  ParseError::ParseError(const char* whatArg) : runtime_error(whatArg) {
     // PASS
   }
 
@@ -52,11 +52,11 @@ namespace orc {
     // PASS
   }
 
-  InvalidArgument::InvalidArgument(const std::string& what_arg) : runtime_error(what_arg) {
+  InvalidArgument::InvalidArgument(const std::string& whatArg) : runtime_error(whatArg) {
     // PASS
   }
 
-  InvalidArgument::InvalidArgument(const char* what_arg) : runtime_error(what_arg) {
+  InvalidArgument::InvalidArgument(const char* whatArg) : runtime_error(whatArg) {
     // PASS
   }
 
@@ -68,11 +68,11 @@ namespace orc {
     // PASS
   }
 
-  SchemaEvolutionError::SchemaEvolutionError(const std::string& what_arg) : logic_error(what_arg) {
+  SchemaEvolutionError::SchemaEvolutionError(const std::string& whatArg) : logic_error(whatArg) {
     // PASS
   }
 
-  SchemaEvolutionError::SchemaEvolutionError(const char* what_arg) : logic_error(what_arg) {
+  SchemaEvolutionError::SchemaEvolutionError(const char* whatArg) : logic_error(whatArg) {
     // PASS
   }
 
@@ -82,6 +82,22 @@ namespace orc {
   }
 
   SchemaEvolutionError::~SchemaEvolutionError() noexcept {
+    // PASS
+  }
+
+  CompressionError::CompressionError(const std::string& whatArg) : runtime_error(whatArg) {
+    // PASS
+  }
+
+  CompressionError::CompressionError(const char* whatArg) : runtime_error(whatArg) {
+    // PASS
+  }
+
+  CompressionError::CompressionError(const CompressionError& error) : runtime_error(error) {
+    // PASS
+  }
+
+  CompressionError::~CompressionError() noexcept {
     // PASS
   }
 }  // namespace orc

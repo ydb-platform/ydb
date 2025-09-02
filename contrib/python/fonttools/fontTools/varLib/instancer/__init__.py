@@ -5,7 +5,9 @@ create full instances (i.e. static fonts) from variable fonts, as well as "parti
 variable fonts that only contain a subset of the original variation space.
 
 For example, if you wish to pin the width axis to a given location while also
-restricting the weight axis to 400..700 range, you can do::
+restricting the weight axis to 400..700 range, you can do:
+
+.. code-block:: sh
 
     $ fonttools varLib.instancer ./NotoSans-VF.ttf wdth=85 wght=400:700
 
@@ -17,32 +19,38 @@ and returns a new TTFont representing either a partial VF, or full instance if a
 the VF axes were given an explicit coordinate.
 
 E.g. here's how to pin the wght axis at a given location in a wght+wdth variable
-font, keeping only the deltas associated with the wdth axis::
+font, keeping only the deltas associated with the wdth axis:
+.. code-block:: pycon
 
-| >>> from fontTools import ttLib
-| >>> from fontTools.varLib import instancer
-| >>> varfont = ttLib.TTFont("path/to/MyVariableFont.ttf")
-| >>> [a.axisTag for a in varfont["fvar"].axes]  # the varfont's current axes
-| ['wght', 'wdth']
-| >>> partial = instancer.instantiateVariableFont(varfont, {"wght": 300})
-| >>> [a.axisTag for a in partial["fvar"].axes]  # axes left after pinning 'wght'
-| ['wdth']
+    >>>
+    >> from fontTools import ttLib
+    >> from fontTools.varLib import instancer
+    >> varfont = ttLib.TTFont("path/to/MyVariableFont.ttf")
+    >> [a.axisTag for a in varfont["fvar"].axes]  # the varfont's current axes
+    ['wght', 'wdth']
+    >> partial = instancer.instantiateVariableFont(varfont, {"wght": 300})
+    >> [a.axisTag for a in partial["fvar"].axes]  # axes left after pinning 'wght'
+    ['wdth']
 
 If the input location specifies all the axes, the resulting instance is no longer
 'variable' (same as using fontools varLib.mutator):
+.. code-block:: pycon
 
-| >>> instance = instancer.instantiateVariableFont(
-| ...     varfont, {"wght": 700, "wdth": 67.5}
-| ... )
-| >>> "fvar" not in instance
-| True
+    >>>    
+    >> instance = instancer.instantiateVariableFont(
+    ...     varfont, {"wght": 700, "wdth": 67.5}
+    ... )
+    >> "fvar" not in instance
+    True
 
 If one just want to drop an axis at the default location, without knowing in
 advance what the default value for that axis is, one can pass a `None` value:
+.. code-block:: pycon
 
-| >>> instance = instancer.instantiateVariableFont(varfont, {"wght": None})
-| >>> len(varfont["fvar"].axes)
-| 1
+    >>>
+    >> instance = instancer.instantiateVariableFont(varfont, {"wght": None})
+    >> len(varfont["fvar"].axes)
+    1
 
 From the console script, this is equivalent to passing `wght=drop` as input.
 
@@ -56,25 +64,33 @@ course be combined:
 
 L1
     dropping one or more axes while leaving the default tables unmodified;
+    .. code-block:: pycon
 
-    | >>> font = instancer.instantiateVariableFont(varfont, {"wght": None})
+        >>>
+        >> font = instancer.instantiateVariableFont(varfont, {"wght": None})
 
 L2
     dropping one or more axes while pinning them at non-default locations;
-
-    | >>> font = instancer.instantiateVariableFont(varfont, {"wght": 700})
+    .. code-block:: pycon
+    
+        >>>
+        >> font = instancer.instantiateVariableFont(varfont, {"wght": 700})
 
 L3
     restricting the range of variation of one or more axes, by setting either
     a new minimum or maximum, potentially -- though not necessarily -- dropping
     entire regions of variations that fall completely outside this new range.
-
-    | >>> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300)})
+    .. code-block:: pycon
+    
+        >>>
+        >> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300)})
 
 L4
     moving the default location of an axis, by specifying (min,defalt,max) values:
-
-    | >>> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300, 700)})
+    .. code-block:: pycon
+    
+        >>>
+        >> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300, 700)})
 
 Currently only TrueType-flavored variable fonts (i.e. containing 'glyf' table)
 are supported, but support for CFF2 variable fonts will be added soon.
@@ -104,6 +120,7 @@ from fontTools.cffLib.specializer import (
     specializeCommands,
     generalizeCommands,
 )
+from fontTools.cffLib.CFF2ToCFF import convertCFF2ToCFF
 from fontTools.varLib import builder
 from fontTools.varLib.mvar import MVAR_ENTRIES
 from fontTools.varLib.merger import MutatorMerger
@@ -120,6 +137,7 @@ from enum import IntEnum
 import logging
 import os
 import re
+import io
 from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple, Union
 import warnings
 
@@ -627,7 +645,11 @@ def instantiateCFF2(
     # the Private dicts.
     #
     # Then prune unused things and possibly drop the VarStore if it's empty.
-    # In which case, downgrade to CFF table if requested.
+    #
+    # If the downgrade parameter is True, no actual downgrading is done, but
+    # the function returns True if the VarStore was empty after instantiation,
+    # and hence a downgrade to CFF is possible. In all other cases it returns
+    # False.
 
     log.info("Instantiating CFF2 table")
 
@@ -659,6 +681,7 @@ def instantiateCFF2(
             privateDicts.append(fd.Private)
 
     allCommands = []
+    allCommandPrivates = []
     for cs in charStrings:
         assert cs.private.vstore.otVarStore is varStore  # Or in many places!!
         commands = programToCommands(cs.program, getNumRegions=getNumRegions)
@@ -667,6 +690,7 @@ def instantiateCFF2(
         if specialize:
             commands = specializeCommands(commands, generalizeFirst=not generalize)
         allCommands.append(commands)
+        allCommandPrivates.append(cs.private)
 
     def storeBlendsToVarStore(arg):
         if not isinstance(arg, list):
@@ -705,9 +729,7 @@ def instantiateCFF2(
             minor = varDataCursor[major]
             varDataCursor[major] += 1
 
-            varIdx = (major << 16) + minor
-
-            defaultValue += round(defaultDeltas[varIdx])
+            defaultValue += round(defaultDeltas[major][minor])
             newDefaults.append(defaultValue)
 
             varData = varStore.VarData[major]
@@ -726,8 +748,8 @@ def instantiateCFF2(
         assert varData.ItemCount == 0
 
     # Add charstring blend lists to VarStore so we can instantiate them
-    for commands in allCommands:
-        vsindex = 0
+    for commands, private in zip(allCommands, allCommandPrivates):
+        vsindex = getattr(private, "vsindex", 0)
         for command in commands:
             if command[0] == "vsindex":
                 vsindex = command[1][0]
@@ -736,7 +758,6 @@ def instantiateCFF2(
                 storeBlendsToVarStore(arg)
 
     # Add private blend lists to VarStore so we can instantiate values
-    vsindex = 0
     for opcode, name, arg_type, default, converter in privateDictOperators2:
         if arg_type not in ("number", "delta", "array"):
             continue
@@ -747,6 +768,7 @@ def instantiateCFF2(
                 continue
             values = getattr(private, name)
 
+            # This is safe here since "vsindex" is the first in the privateDictOperators2
             if name == "vsindex":
                 vsindex = values[0]
                 continue
@@ -763,12 +785,14 @@ def instantiateCFF2(
                 storeBlendsToVarStore(value + [count])
 
     # Instantiate VarStore
-    defaultDeltas = instantiateItemVariationStore(varStore, fvarAxes, axisLimits)
+    defaultDeltas = instantiateItemVariationStore(
+        varStore, fvarAxes, axisLimits, hierarchical=True
+    )
 
     # Read back new charstring blends from the instantiated VarStore
     varDataCursor = [0] * len(varStore.VarData)
-    for commands in allCommands:
-        vsindex = 0
+    for commands, private in zip(allCommands, allCommandPrivates):
+        vsindex = getattr(private, "vsindex", 0)
         for command in commands:
             if command[0] == "vsindex":
                 vsindex = command[1][0]
@@ -783,9 +807,16 @@ def instantiateCFF2(
         if arg_type not in ("number", "delta", "array"):
             continue
 
+        vsindex = 0
         for private in privateDicts:
             if not hasattr(private, name):
                 continue
+
+            # This is safe here since "vsindex" is the first in the privateDictOperators2
+            if name == "vsindex":
+                vsindex = values[0]
+                continue
+
             values = getattr(private, name)
             if arg_type == "number":
                 values = [values]
@@ -814,18 +845,13 @@ def instantiateCFF2(
         varData.Item = []
         varData.ItemCount = 0
 
-    # Remove vsindex commands that are no longer needed, collect those that are.
-    usedVsindex = set()
-    for commands in allCommands:
-        if any(isinstance(arg, list) for command in commands for arg in command[1]):
-            vsindex = 0
-            for command in commands:
-                if command[0] == "vsindex":
-                    vsindex = command[1][0]
-                    continue
-                if any(isinstance(arg, list) for arg in command[1]):
-                    usedVsindex.add(vsindex)
-        else:
+    # Collect surviving vsindexes
+    usedVsindex = set(
+        i for i in range(len(varStore.VarData)) if varStore.VarData[i].VarRegionCount
+    )
+    # Remove vsindex commands that are no longer needed
+    for commands, private in zip(allCommands, allCommandPrivates):
+        if not any(isinstance(arg, list) for command in commands for arg in command[1]):
             commands[:] = [command for command in commands if command[0] != "vsindex"]
 
     # Remove unused VarData and update vsindex values
@@ -838,10 +864,14 @@ def instantiateCFF2(
         for command in commands:
             if command[0] == "vsindex":
                 command[1][0] = vsindexMapping[command[1][0]]
+    for private in privateDicts:
+        if hasattr(private, "vsindex"):
+            private.vsindex = vsindexMapping[private.vsindex]
 
     # Remove initial vsindex commands that are implied
-    for commands in allCommands:
-        if commands and commands[0] == ("vsindex", [0]):
+    for commands, private in zip(allCommands, allCommandPrivates):
+        vsindex = getattr(private, "vsindex", 0)
+        if commands and commands[0] == ("vsindex", [vsindex]):
             commands.pop(0)
 
     # Ship the charstrings!
@@ -858,9 +888,9 @@ def instantiateCFF2(
             del private.vstore
 
         if downgrade:
-            from fontTools.cffLib.CFF2ToCFF import convertCFF2ToCFF
+            return True
 
-            convertCFF2ToCFF(varfont)
+    return False
 
 
 def _instantiateGvarGlyph(
@@ -897,7 +927,18 @@ def _instantiateGvarGlyph(
         return
 
     if optimize:
+        # IUP semantics depend on point equality, and so round prior to
+        # optimization to ensure that comparisons that happen now will be the
+        # same as those that happen at render time. This is especially needed
+        # when floating point deltas have been applied to the default position.
+        #     See https://github.com/fonttools/fonttools/issues/3634
+        # Rounding must happen only after calculating glyf metrics above, to
+        # preserve backwards compatibility.
+        #     See 0010a3cd9aa25f84a3a6250dafb119743d32aa40
+        coordinates.toInt()
+
         isComposite = glyf[glyphname].isComposite()
+
         for var in tupleVarStore:
             var.optimize(coordinates, endPts, isComposite=isComposite)
 
@@ -1211,7 +1252,9 @@ class _TupleVarStoreAdapter(object):
         return itemVarStore
 
 
-def instantiateItemVariationStore(itemVarStore, fvarAxes, axisLimits):
+def instantiateItemVariationStore(
+    itemVarStore, fvarAxes, axisLimits, hierarchical=False
+):
     """Compute deltas at partial location, and update varStore in-place.
 
     Remove regions in which all axes were instanced, or fall outside the new axis
@@ -1243,12 +1286,19 @@ def instantiateItemVariationStore(itemVarStore, fvarAxes, axisLimits):
     assert itemVarStore.VarDataCount == newItemVarStore.VarDataCount
     itemVarStore.VarData = newItemVarStore.VarData
 
-    defaultDeltas = {
-        ((major << 16) + minor): delta
-        for major, deltas in enumerate(defaultDeltaArray)
-        for minor, delta in enumerate(deltas)
-    }
-    defaultDeltas[itemVarStore.NO_VARIATION_INDEX] = 0
+    if not hierarchical:
+        defaultDeltas = {
+            ((major << 16) + minor): delta
+            for major, deltas in enumerate(defaultDeltaArray)
+            for minor, delta in enumerate(deltas)
+        }
+        defaultDeltas[itemVarStore.NO_VARIATION_INDEX] = 0
+    else:
+        defaultDeltas = {0xFFFF: {0xFFFF: 0}}  # NO_VARIATION_INDEX
+        for major, deltas in enumerate(defaultDeltaArray):
+            defaultDeltasForMajor = defaultDeltas.setdefault(major, {})
+            for minor, delta in enumerate(deltas):
+                defaultDeltasForMajor[minor] = delta
     return defaultDeltas
 
 
@@ -1331,6 +1381,52 @@ def _isValidAvarSegmentMap(axisTag, segmentMap):
             return False
         previousValue = toCoord
     return True
+
+
+def downgradeCFF2ToCFF(varfont):
+
+    # Save these properties
+    recalcTimestamp = varfont.recalcTimestamp
+    recalcBBoxes = varfont.recalcBBoxes
+
+    # Disable them
+    varfont.recalcTimestamp = False
+    varfont.recalcBBoxes = False
+
+    # Save to memory, reload, downgrade and save again, reload.
+    # We do this dance because the convertCFF2ToCFF changes glyph
+    # names, so following save would fail if any other table was
+    # loaded and referencing glyph names.
+    #
+    # The second save+load is unfortunate but also necessary.
+
+    stream = io.BytesIO()
+    log.info("Saving CFF2 font to memory for downgrade")
+    varfont.save(stream)
+    stream.seek(0)
+    varfont = TTFont(stream, recalcTimestamp=False, recalcBBoxes=False)
+
+    convertCFF2ToCFF(varfont)
+
+    stream = io.BytesIO()
+    log.info("Saving downgraded CFF font to memory")
+    varfont.save(stream)
+    stream.seek(0)
+    varfont = TTFont(stream, recalcTimestamp=False, recalcBBoxes=False)
+
+    # Uncomment, to see test all tables can be loaded. This fails without
+    # the extra save+load above.
+    """
+    for tag in varfont.keys():
+        print("Loading", tag)
+        varfont[tag]
+    """
+
+    # Restore them
+    varfont.recalcTimestamp = recalcTimestamp
+    varfont.recalcBBoxes = recalcBBoxes
+
+    return varfont
 
 
 def instantiateAvar(varfont, axisLimits):
@@ -1621,7 +1717,9 @@ def instantiateVariableFont(
         instantiateVARC(varfont, normalizedLimits)
 
     if "CFF2" in varfont:
-        instantiateCFF2(varfont, normalizedLimits, downgrade=downgradeCFF2)
+        downgradeCFF2 = instantiateCFF2(
+            varfont, normalizedLimits, downgrade=downgradeCFF2
+        )
 
     if "gvar" in varfont:
         instantiateGvar(varfont, normalizedLimits, optimize=optimize)
@@ -1675,6 +1773,12 @@ def instantiateVariableFont(
         # Set Regular/Italic/Bold/Bold Italic bits as appropriate, after the
         # name table has been updated.
         setRibbiBits(varfont)
+
+    if downgradeCFF2:
+        origVarfont = varfont
+        varfont = downgradeCFF2ToCFF(varfont)
+        if inplace:
+            origVarfont.__dict__ = varfont.__dict__.copy()
 
     return varfont
 
@@ -1885,7 +1989,7 @@ def main(args=None):
         if limit is None or limit[0] == limit[2]
     }.issuperset(axis.axisTag for axis in varfont["fvar"].axes)
 
-    instantiateVariableFont(
+    varfont = instantiateVariableFont(
         varfont,
         axisLimits,
         inplace=True,

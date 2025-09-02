@@ -6,8 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/public/lib/ydb_cli/common
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 END()

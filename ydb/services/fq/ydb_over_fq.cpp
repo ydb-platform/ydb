@@ -19,19 +19,6 @@ void TGRpcYdbOverFqService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcYdbOverFqService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcYdbOverFqService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcYdbOverFqService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGrpcTableOverFqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #if defined(ADD_REQUEST) or defined (ADD_REQUEST_IMPL)

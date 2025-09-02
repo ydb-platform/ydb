@@ -2,16 +2,13 @@
 
 #include "transaction_pinger.h"
 
+#include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
+#include <yt/cpp/mapreduce/common/wait_proxy.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>
-
-#include <yt/cpp/mapreduce/common/wait_proxy.h>
-#include <yt/cpp/mapreduce/common/retry_lib.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <util/datetime/base.h>
 
@@ -26,55 +23,61 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 TPingableTransaction::TPingableTransaction(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& parentId,
     ITransactionPingerPtr transactionPinger,
     const TStartTransactionOptions& options)
-    : ClientRetryPolicy_(retryPolicy)
+    : RawClient_(rawClient)
+    , ClientRetryPolicy_(retryPolicy)
     , Context_(context)
     , AbortableRegistry_(NDetail::TAbortableRegistry::Get())
     , AbortOnTermination_(true)
     , AutoPingable_(options.AutoPingable_)
     , Pinger_(std::move(transactionPinger))
 {
-    auto transactionId = NDetail::NRawClient::StartTransaction(
+    auto transactionId = NDetail::RequestWithRetry<TTransactionId>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        context,
-        parentId,
-        options);
-
+        [this, &parentId, &options] (TMutationId& mutationId) {
+            return RawClient_->StartTransaction(mutationId, parentId, options);
+        });
     auto actualTimeout = options.Timeout_.GetOrElse(Context_.Config->TxTimeout);
-    Init(context, transactionId, actualTimeout);
+    Init(rawClient, context, transactionId, actualTimeout);
 }
 
 TPingableTransaction::TPingableTransaction(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& transactionId,
     ITransactionPingerPtr transactionPinger,
     const TAttachTransactionOptions& options)
-    : ClientRetryPolicy_(retryPolicy)
+    : RawClient_(rawClient)
+    , ClientRetryPolicy_(retryPolicy)
     , Context_(context)
     , AbortableRegistry_(NDetail::TAbortableRegistry::Get())
     , AbortOnTermination_(options.AbortOnTermination_)
     , AutoPingable_(options.AutoPingable_)
     , Pinger_(std::move(transactionPinger))
 {
-    auto timeoutNode = NDetail::NRawClient::TryGet(
+    auto timeoutNode = NDetail::RequestWithRetry<TNode>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        context,
-        TTransactionId(),
-        "#" + GetGuidAsString(transactionId) + "/@timeout",
-        TGetOptions());
+        [this, &transactionId] (TMutationId /*mutationId*/) {
+            return RawClient_->TryGet(
+                TTransactionId(),
+                "#" + GetGuidAsString(transactionId) + "/@timeout",
+                TGetOptions());
+        });
     if (timeoutNode.IsUndefined()) {
         throw yexception() << "Transaction " << GetGuidAsString(transactionId) << " does not exist";
     }
     auto timeout = TDuration::MilliSeconds(timeoutNode.AsInt64());
-    Init(context, transactionId, timeout);
+    Init(rawClient, context, transactionId, timeout);
 }
 
 void TPingableTransaction::Init(
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TTransactionId& transactionId,
     TDuration timeout)
@@ -84,12 +87,12 @@ void TPingableTransaction::Init(
     if (AbortOnTermination_) {
         AbortableRegistry_->Add(
             TransactionId_,
-            ::MakeIntrusive<NDetail::TTransactionAbortable>(context, TransactionId_));
+            ::MakeIntrusive<NDetail::TTransactionAbortable>(rawClient, context, TransactionId_));
     }
 
     if (AutoPingable_) {
         // Compute 'MaxPingInterval_' and 'MinPingInterval_' such that 'pingInterval == (max + min) / 2'.
-        auto pingInterval = Context_.Config->PingInterval;
+        auto pingInterval = context.Config->PingInterval;
         auto safeTimeout = timeout - TDuration::Seconds(5);
         MaxPingInterval_ = Max(pingInterval, Min(safeTimeout, pingInterval * 1.5));
         MinPingInterval_ = pingInterval - (MaxPingInterval_ - pingInterval);
@@ -111,12 +114,19 @@ const TTransactionId TPingableTransaction::GetId() const
     return TransactionId_;
 }
 
-const std::pair<TDuration, TDuration> TPingableTransaction::GetPingInterval() const {
+const std::pair<TDuration, TDuration> TPingableTransaction::GetPingInterval() const
+{
     return {MinPingInterval_, MaxPingInterval_};
 }
 
-const TClientContext TPingableTransaction::GetContext() const {
+const TClientContext TPingableTransaction::GetContext() const
+{
     return Context_;
+}
+
+void TPingableTransaction::Ping() const
+{
+    RawClient_->PingTransaction(TransactionId_);
 }
 
 void TPingableTransaction::Commit()
@@ -149,16 +159,18 @@ void TPingableTransaction::Stop(EStopAction action)
 
     switch (action) {
         case EStopAction::Commit:
-            NDetail::NRawClient::CommitTransaction(
+            NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                Context_,
-                TransactionId_);
+                [this] (TMutationId& mutationId) {
+                    RawClient_->CommitTransaction(mutationId, TransactionId_);
+                });
             break;
         case EStopAction::Abort:
-            NDetail::NRawClient::AbortTransaction(
+        NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                Context_,
-                TransactionId_);
+                [this] (TMutationId& mutationId) {
+                    RawClient_->AbortTransaction(mutationId, TransactionId_);
+                });
             break;
         case EStopAction::Detach:
             // Do nothing.
@@ -171,22 +183,28 @@ void TPingableTransaction::Stop(EStopAction action)
 ////////////////////////////////////////////////////////////////////////////////
 
 TYPath Snapshot(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TTransactionId& transactionId,
     const TYPath& path)
 {
-    auto lockId = NDetail::NRawClient::Lock(
+    auto lockId = NDetail::RequestWithRetry<TLockId>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        transactionId,
-        path,
-        ELockMode::LM_SNAPSHOT);
-    auto lockedNodeId = NDetail::NRawClient::Get(
+        [&rawClient, &transactionId, &path] (TMutationId& mutationId) {
+            return rawClient->Lock(
+                mutationId,
+                transactionId,
+                path,
+                ELockMode::LM_SNAPSHOT);
+        });
+
+    auto lockedNodeId = NDetail::RequestWithRetry<TNode>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        transactionId,
-        ::TStringBuilder() << '#' << GetGuidAsString(lockId) << "/@node_id");
+        [&rawClient, &transactionId, &lockId] (TMutationId /*mutationId*/) {
+            return rawClient->Get(
+                transactionId,
+                ::TStringBuilder() << '#' << GetGuidAsString(lockId) << "/@node_id");
+        });
     return "#" + lockedNodeId.AsString();
 }
 

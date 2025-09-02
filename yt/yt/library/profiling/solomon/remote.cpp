@@ -91,7 +91,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
 
     for (TTagId tagId = TagRename_.size(); tagId < dump.tags().size(); tagId++) {
         const auto& remoteTag = dump.tags()[tagId];
-        TagRename_.push_back(Registry_->Tags_.Encode(TTag{remoteTag.key(), remoteTag.value()}));
+        TagRename_.push_back(Registry_->TagRegistry_.Encode(TTag{remoteTag.key(), remoteTag.value()}));
     }
 
     auto oldSensors = std::move(Sensors_);
@@ -159,7 +159,7 @@ void TRemoteRegistry::Detach()
     DoDetach(Sensors_);
 }
 
-void TRemoteRegistry::DoDetach(const THashMap<TString, TRemoteSensorSet>& sensors)
+void TRemoteRegistry::DoDetach(const THashMap<std::string, TRemoteSensorSet>& sensors)
 {
     for (const auto& [name, usedTags] : sensors) {
         auto& sensorSet = Registry_->Sensors_.find(name)->second;

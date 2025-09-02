@@ -1,6 +1,6 @@
 #include "sharding.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 #include <util/string/join.h>
 #include "hash_intervals.h"
@@ -241,13 +241,13 @@ NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     return result;
 }
 
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch) {
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch, arrow::MemoryPool* memoryPool) {
     THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {
         AFL_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
     } else {
-        chunks = NArrow::ShardingSplit(batch, sharding);
+        chunks = NArrow::ShardingSplit(batch, sharding, memoryPool);
     }
     AFL_VERIFY(chunks.size() == sharding.size());
     return chunks;

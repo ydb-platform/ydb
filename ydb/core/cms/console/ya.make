@@ -9,14 +9,21 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_proxy.h
+    configs_dispatcher_proxy.cpp
     console.cpp
     console.h
+    console_audit.cpp
+    console_audit.h
+    console_handshake.cpp
     console_configs_manager.cpp
     console_configs_manager.h
     console_configs_provider.cpp
     console_configs_provider.h
     console_configs_subscriber.cpp
     console_configs_subscriber.h
+    console_configuration_info_collector.cpp
+    console_configuration_info_collector.h
     console_impl.h
     console_tenants_manager.cpp
     console_tenants_manager.h
@@ -51,6 +58,8 @@ SRCS(
     console__update_tenant_state.cpp
     console__update_tenant_pool_config.cpp
     defs.h
+    feature_flags_configurator.cpp
+    feature_flags_configurator.h
     grpc_library_helper.cpp
     http.cpp
     http.h
@@ -65,8 +74,6 @@ SRCS(
     modifications_validator.cpp
     modifications_validator.h
     net_classifier_updater.cpp
-    shared_cache_configurator.cpp
-    shared_cache_configurator.h
     tx_processor.cpp
     tx_processor.h
     util.cpp
@@ -83,7 +90,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
     ydb/core/config/init
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
@@ -94,7 +101,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/yaml_config
     ydb/public/api/protos
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
 )
 
 YQL_LAST_ABI_VERSION()

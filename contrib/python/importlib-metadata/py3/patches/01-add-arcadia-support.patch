@@ -1,0 +1,66 @@
+--- contrib/python/importlib-metadata/py3/.dist-info/METADATA	(index)
++++ contrib/python/importlib-metadata/py3/.dist-info/METADATA	(working tree)
+@@ -15,1 +15,0 @@ Classifier: License :: OSI Approved :: Apache Software License
+-Requires-Dist: zipp>=3.20
+--- contrib/python/importlib-metadata/py3/importlib_metadata/__init__.py	(index)
++++ contrib/python/importlib-metadata/py3/importlib_metadata/__init__.py	(working tree)
+@@ -796,6 +795,59 @@ class PathDistribution(Distribution):
+         return name
+ 
+ 
++class ArcadiaDistribution(Distribution):
++    def __init__(self, prefix):
++        self._prefix = prefix
++        self._path = pathlib.Path(prefix)
++
++    def read_text(self, filename):
++        data = res.resfs_read(f"{self._prefix}{filename}")
++        if data is not None:
++            return data.decode("utf-8")
++
++    read_text.__doc__ = Distribution.read_text.__doc__
++
++    def locate_file(self, path):
++        return self._path.parent / path
++
++
++@install
++class MetadataArcadiaFinder(DistributionFinder):
++    METADATA_NAME = re.compile("^Name: (.*)$", re.MULTILINE)
++    prefixes = {}
++
++    @classmethod
++    def find_distributions(cls, context=DistributionFinder.Context()):
++        found = cls._search_prefixes(context.name)
++        return map(ArcadiaDistribution, found)
++
++    @classmethod
++    def _init_prefixes(cls):
++        cls.prefixes.clear()
++
++        for resource in res.resfs_files():
++            resource = resource.decode("utf-8")
++            if not resource.endswith("METADATA"):
++                continue
++            data = res.resfs_read(resource).decode("utf-8")
++            metadata_name = cls.METADATA_NAME.search(data)
++            if metadata_name:
++                cls.prefixes[Prepared(metadata_name.group(1)).normalized] = resource.removesuffix("METADATA")
++
++    @classmethod
++    def _search_prefixes(cls, name):
++        if not cls.prefixes:
++            cls._init_prefixes()
++
++        if name:
++            try:
++                yield cls.prefixes[Prepared(name).normalized]
++            except KeyError:
++                pass
++        else:
++            yield from sorted(cls.prefixes.values())
++
++
+ def distribution(distribution_name: str) -> Distribution:
+     """Get the ``Distribution`` instance for the named package.
+ 

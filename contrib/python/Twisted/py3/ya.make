@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.3.0)
+VERSION(25.5.0)
 
 LICENSE(MIT)
 
@@ -35,6 +35,7 @@ PY_SRCS(
     twisted/_threads/_threadworker.py
     twisted/_version.py
     twisted/application/__init__.py
+    twisted/application/_client_service.py
     twisted/application/app.py
     twisted/application/internet.py
     twisted/application/reactors.py
@@ -119,6 +120,7 @@ PY_SRCS(
     twisted/internet/_dumbwin32proc.py
     twisted/internet/_glibbase.py
     twisted/internet/_idna.py
+    twisted/internet/_multicast.py
     twisted/internet/_newtls.py
     twisted/internet/_pollingfile.py
     twisted/internet/_posixserialport.py
@@ -307,7 +309,6 @@ PY_SRCS(
     twisted/python/_url.py
     twisted/python/compat.py
     twisted/python/components.py
-    twisted/python/constants.py
     twisted/python/context.py
     twisted/python/deprecate.py
     twisted/python/failure.py
@@ -388,6 +389,7 @@ PY_SRCS(
     twisted/trial/unittest.py
     twisted/trial/util.py
     twisted/web/__init__.py
+    twisted/web/_abnf.py
     twisted/web/_auth/__init__.py
     twisted/web/_auth/basic.py
     twisted/web/_auth/digest.py
@@ -399,6 +401,7 @@ PY_SRCS(
     twisted/web/_responses.py
     twisted/web/_stan.py
     twisted/web/_template_util.py
+    twisted/web/_websocket_impl.py
     twisted/web/client.py
     twisted/web/demo.py
     twisted/web/distrib.py
@@ -416,7 +419,6 @@ PY_SRCS(
     twisted/web/rewrite.py
     twisted/web/script.py
     twisted/web/server.py
-    twisted/web/soap.py
     twisted/web/static.py
     twisted/web/sux.py
     twisted/web/tap.py
@@ -425,6 +427,7 @@ PY_SRCS(
     twisted/web/twcgi.py
     twisted/web/util.py
     twisted/web/vhost.py
+    twisted/web/websocket.py
     twisted/web/wsgi.py
     twisted/web/xmlrpc.py
     twisted/words/__init__.py
@@ -476,6 +479,7 @@ RESOURCE_FILES(
     twisted/newsfragments/.gitignore
     twisted/persisted/newsfragments/9831.misc
     twisted/py.typed
+    twisted/python/_pydoctortemplates/stable-link.js
     twisted/python/_pydoctortemplates/subheader.html
     twisted/python/twisted-completion.zsh
     twisted/runner/newsfragments/11681.misc

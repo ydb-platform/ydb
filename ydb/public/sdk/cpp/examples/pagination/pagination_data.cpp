@@ -4,18 +4,18 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 struct TSchool {
-    TString City;
-    ui32 Number;
-    TString Address;
+    std::string City;
+    uint32_t Number;
+    std::string Address;
 
-    TSchool(const TString& city, ui32 number, const TString& address)
+    TSchool(const std::string& city, uint32_t number, const std::string& address)
         : City(city)
         , Number(number)
         , Address(address) {}
 };
 
 TParams GetTablesDataParams() {
-    TVector<TSchool> schoolsData = {
+    std::vector<TSchool> schoolsData = {
         TSchool("Орлов", 1, "Ст.Халтурина, 2"),
         TSchool("Орлов", 2, "Свободы, 4"),
         TSchool("Яранск", 1, "Гоголя, 25"),

@@ -1,21 +1,16 @@
 #include "comparator.h"
 
 #include "key_bound.h"
+#include "private.h"
 #include "serialize.h"
-
-#include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/serialize.h>
 
 namespace NYT::NTableClient {
 
-using namespace NLogging;
 using namespace NYson;
 using namespace NYTree;
-
-//! Used only for YT_LOG_FATAL below.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientComparator");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -38,20 +33,20 @@ int TComparator::GetLength() const
 
 void TComparator::ValidateKey(const TKey& key) const
 {
-    YT_LOG_FATAL_IF(
+    THROW_ERROR_EXCEPTION_IF(
         key.GetLength() != GetLength(),
-        "Comparator is used with key of different length (Key: %v, Comparator: %v)",
-        key,
-        *this);
+        "Comparator %v is used with key %v of different length",
+        *this,
+        key);
 }
 
 void TComparator::ValidateKeyBound(const TKeyBound& keyBound) const
 {
-    YT_LOG_FATAL_IF(
+    THROW_ERROR_EXCEPTION_IF(
         static_cast<int>(keyBound.Prefix.GetCount()) > GetLength(),
-        "Comparator is used with longer key bound (KeyBound: %v, Comparator: %v)",
-        keyBound,
-        *this);
+        "Comparator %v is used with longer key bound %v",
+        *this,
+        keyBound);
 }
 
 int TComparator::CompareValues(int index, const TUnversionedValue& lhs, const TUnversionedValue& rhs) const
@@ -63,75 +58,6 @@ int TComparator::CompareValues(int index, const TUnversionedValue& lhs, const TU
     }
 
     return valueComparisonResult;
-}
-
-TKeyBound TComparator::StrongerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    YT_VERIFY(lhs);
-    YT_VERIFY(rhs);
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    return (comparisonResult <= 0) ? rhs : lhs;
-}
-
-void TComparator::ReplaceIfStrongerKeyBound(TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    if (!lhs) {
-        lhs = rhs;
-        return;
-    }
-
-    if (!rhs) {
-        return;
-    }
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    if (comparisonResult < 0) {
-        lhs = rhs;
-    }
-}
-
-void TComparator::ReplaceIfStrongerKeyBound(TOwningKeyBound& lhs, const TOwningKeyBound& rhs) const
-{
-    if (!lhs) {
-        lhs = rhs;
-        return;
-    }
-
-    if (!rhs) {
-        return;
-    }
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    if (comparisonResult < 0) {
-        lhs = rhs;
-    }
-}
-
-TKeyBound TComparator::WeakerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    return (comparisonResult >= 0) ? rhs : lhs;
 }
 
 bool TComparator::IsRangeEmpty(const TKeyBound& lowerBound, const TKeyBound& upperBound) const

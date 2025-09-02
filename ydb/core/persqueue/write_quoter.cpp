@@ -10,7 +10,6 @@ TWriteQuoter::TWriteQuoter(
     const TPartitionId& partition,
     TActorId tabletActor,
     ui64 tabletId,
-    bool isLocalDc,
     const TTabletCountersBase& counters
 )
     : TPartitionQuoterBase(
@@ -18,7 +17,6 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
-    , AccountQuotingEnabled(IsQuotingEnabled(pqConfig, isLocalDc))
 {
 }
 
@@ -44,6 +42,10 @@ void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
     }
 }
 
+bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const {
+    return IsQuotingEnabled(pqConfig, PQTabletConfig.GetLocalDC());
+}
+
 void TWriteQuoter::HandleWakeUpImpl() {
 }
 
@@ -53,7 +55,7 @@ void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {
 
 THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
     TActorId actorId;
-    if (GetTabletActor() && AccountQuotingEnabled) {
+    if (GetTabletActor() && GetAccountQuotingEnabled(AppData()->PQConfig)) {
         actorId = TActivationContext::Register(
             new TAccountWriteQuoter(
                 GetTabletActor(),
@@ -97,9 +99,12 @@ IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
 };
 
 TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>&) {
-    if (!AccountQuotingEnabled && !QuotingEnabled) {
+    if (!GetAccountQuotingEnabled(AppData()->PQConfig) && !QuotingEnabled) {
         return nullptr;
     }
+    if (!TopicConverter)
+        return nullptr;
+
     if (!AccountQuotaTracker) {
         AccountQuotaTracker = CreateAccountQuotaTracker();
     }

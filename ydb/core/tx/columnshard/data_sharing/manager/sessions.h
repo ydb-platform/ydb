@@ -28,7 +28,7 @@ public:
         return SharingSessions.Val();
     }
 
-    void Start(const NColumnShard::TColumnShard& shard) const;
+    void Start(NColumnShard::TColumnShard& shard) const;
 
     std::shared_ptr<TSourceSession> GetSourceSession(const TString& sessionId) const {
         auto it = SourceSessions.find(sessionId);

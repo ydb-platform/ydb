@@ -1,6 +1,6 @@
 /* Output an xml of the generated parser, for Bison.
 
-   Copyright (C) 2007, 2009-2015, 2018-2019 Free Software Foundation,
+   Copyright (C) 2007, 2009-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,10 +16,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef PRINT_XML_H_
 # define PRINT_XML_H_
+
+# include <stdio.h>
 
 void xml_indent (FILE *out, int level);
 void xml_puts (FILE *, int, char const *);

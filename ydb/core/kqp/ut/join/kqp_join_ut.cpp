@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -215,7 +215,7 @@ static TDataQueryResult ExecQuery(TSession& session, const TString& query, const
 
     if (checkRewrite) {
         auto explain = session.ExplainDataQuery(query).GetValueSync();
-        UNIT_ASSERT_C(explain.GetAst().Contains("PartitionByKey"), explain.GetAst());
+        UNIT_ASSERT_C(explain.GetAst().contains("PartitionByKey"), explain.GetAst());
     }
 
     return result;
@@ -262,26 +262,39 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(IndexLoookupJoinStructJoin, StreamLookupJoin) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            $a = AsList(AsStruct(AsStruct("Key" as Key) as join_info), AsStruct(AsStruct("Name1" as Key) as join_info));
+            SELECT a.join_info.Key as Key, b.Value as Value from AS_TABLE($a) as a
+            LEFT JOIN `/Root/Join1_3` as b
+            ON a.join_info.Key = b.Key
+            ORDER BY Key
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([["Key";#];["Name1";[1001]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(IdxLookupPartialLeftPredicate) {
@@ -326,22 +339,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
@@ -503,9 +507,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_TWIN(LeftJoinWithNull, StreamLookupJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -623,6 +626,30 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 FormatResultSetYson(result.GetResultSet(0))
             );
         }
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                PRAGMA FilterPushdownOverJoinOptionalSide;
+
+                SELECT t1.Fk1, t1.Key1, t1.Key2, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value FROM `/Root/Join1_1` AS t1
+                LEFT JOIN `/Root/Join1_2` AS t2
+                ON t1.Fk1 = t2.Key
+                LEFT JOIN `/Root/Join1_3` AS t3
+                ON t2.Key = t3.Key
+                WHERE t2.Value IS NULL
+                ORDER BY t1.Key1, t1.Key2;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(
+                R"([
+                    [#;[101];["One"];["no_right_key_1"];#;#;#;#];
+                    [#;[102];["Two"];["no_right_key_2"];#;#;#;#];
+                    [["Name3"];[105];["One"];["no_right_key_3"];#;#;#;#];
+                    [["Name4"];[106];["One"];#;["Name4"];#;#;#];
+                    [["Name4"];[106];["Two"];["Value4"];["Name4"];#;#;#]
+                ])",
+                FormatResultSetYson(result.GetResultSet(0))
+            );
+        }
     }
 
      Y_UNIT_TEST(LeftJoinPushdownPredicate_NestedJoin) {
@@ -634,9 +661,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
-                
+
                 FROM `/Root/Join1_1` AS t1
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
@@ -657,6 +685,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 
@@ -664,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 CROSS JOIN `/Root/Join1_3` AS t3
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
-                
+
                 WHERE t2.Value > 1001;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -692,6 +721,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 DECLARE $in AS List<Struct<v: String?>>;
                 SELECT *
                 FROM AS_TABLE($in) AS k RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_1` AS t ON k.v = t.Value
+                ORDER BY Key
             )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
@@ -699,7 +729,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])", false);
@@ -741,7 +771,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])");
@@ -789,12 +819,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("k2").OptionalString("Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(42)
                                                 .AddMember("k2").OptionalString("FortyTwo").EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
                                                 .AddMember("k2").OptionalString("One").EndStruct()       // null
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(1)
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -813,6 +843,69 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto result = ExecQuery(session, query, NoParams, R"([[[1];["One"];["2.1.One"]];[[6];["Six"];["2.6.Six"]]])");
             AssertTableReads(result, "/Root/RSJ_CompositeKey_1", 7 /* all keys */);
             AssertTableReads(result, "/Root/RSJ_CompositeKey_2", 2 /* [1, 6] */);
+        }
+    }
+
+    Y_UNIT_TEST(TwoJoinsWithQueryService) {
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings();
+
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE ta(
+                    a Int64,
+                    b Int64,
+                    c Int64,
+                    PRIMARY KEY(a)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE tb(
+                    b Int64,
+                    bval Int64,
+                    PRIMARY KEY(b)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE tc(
+                    c Int64,
+                    cval Int64,
+                    PRIMARY KEY(c)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO ta(a, b, c) VALUES (1, 1001, 2001), (2, 1002, 2002), (3, 1003, 2003);
+                UPSERT INTO tb(b, bval) VALUES (1001, 1001), (1002, 1002), (1003, 1003);
+                UPSERT INTO tc(c, cval) VALUES (2001, 2001), (2002, 2002), (2003, 2003);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval
+                ORDER BY ta.a, tb.bval, tc.cval;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1];[1001];[2001]];[[2];[1002];[2002]];[[3];[1003];[2003]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -839,7 +932,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -902,7 +995,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["2.One"];["Payload1"]];[[5];["2.Five"];["Payload2"]]])");
@@ -955,8 +1048,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42)
                                                 .AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing())
-                                                .AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt)
+                                                .AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1006,7 +1099,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(5).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1568,12 +1661,9 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_TWIN(AllowJoinsForComplexPredicates, StreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
-        //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-
-        auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings appsettings;
+        appsettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        appsettings.AppConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
 
         TKikimrRunner kikimr(appsettings);
         auto db = kikimr.GetTableClient();
@@ -1599,7 +1689,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 5);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1617,7 +1707,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[101u];["Two"];[101u];["Two"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1636,7 +1726,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[103u];["One"];[103u];["One"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1655,7 +1745,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1673,8 +1763,287 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
+    }
+
+    Y_UNIT_TEST(ComplexJoin) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {  // init tables
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE Input1
+                (
+                    k1 String,
+                    v1 String,
+                    u1 String,
+                    PRIMARY KEY (k1, v1, u1)
+                );
+
+                CREATE TABLE Input2
+                (
+                    k2 String,
+                    v2 String,
+                    u2 String,
+                    PRIMARY KEY (k2, v2, u2)
+                );
+
+                CREATE TABLE Input3
+                (
+                    k3 String,
+                    v3 String,
+                    u3 String,
+                    PRIMARY KEY (k3, v3, u3)
+                );
+
+                CREATE TABLE Input4
+                (
+                    k4 String,
+                    v4 String,
+                    u4 String,
+                    PRIMARY KEY (k4, v4, u4)
+                );
+
+                CREATE TABLE Input5
+                (
+                    k5 String,
+                    v5 String,
+                    u5 String,
+                    PRIMARY KEY (k5, v5, u5)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                REPLACE INTO Input1 (k1, v1, u1) VALUES
+                    ("01","1","01"),
+                    ("01","2","02"),
+                    ("02","1","03"),
+                    ("02","2","05"),
+                    ("02","2","06"),
+                    ("03",NULL,"07"),
+                    ("03","1","08"),
+                    ("03","2","09"),
+                    ("04","1","10"),
+                    ("04","2","11"),
+                    ("05","1","12"),
+                    ("05","2","13"),
+                    ("06","1","14"),
+                    ("06","2","15"),
+                    ("07","1","16"),
+                    ("07","2","17"),
+                    ("08","1","18"),
+                    ("08","2","19"),
+                    ("09","1","20"),
+                    ("09","2","21"),
+                    ("10","1","22"),
+                    ("10","2","23");
+
+                REPLACE INTO Input2 (k2, v2, u2) VALUES
+                    ("02","1","01"),
+                    ("02","1","02"),
+                    ("02","2","03"),
+                    ("02","2","04"),
+                    ("03","1","05"),
+                    ("03","2","06"),
+                    ("04","1","07"),
+                    ("04","2","08"),
+                    ("05","1","09"),
+                    ("05","2","10"),
+                    ("06","1","11"),
+                    ("06","2","12"),
+                    ("07","1","13"),
+                    ("07","2","14"),
+                    ("09","1","15"),
+                    ("09","2","16");
+
+                REPLACE INTO Input3 (k3, v3, u3) VALUES
+                    (NULL,"1","01"),
+                    (NULL,"2","02"),
+                    ("04","1","03"),
+                    ("04","2","04"),
+                    ("05","1","05"),
+                    ("05","2","06");
+
+                REPLACE INTO Input4 (k4, v4, u4) VALUES
+                    ("03",NULL,"01"),
+                    ("03","1","02"),
+                    ("03","2","03"),
+                    ("04","1","04"),
+                    ("04","2","05"),
+                    ("05","1","06"),
+                    ("05","2","07"),
+                    ("06","1","08"),
+                    ("06","2","09"),
+                    ("07","1","10"),
+                    ("07","2","11"),
+                    ("08","1","12"),
+                    ("08","2","13");
+
+                REPLACE INTO Input5 (k5, v5, u5) VALUES
+                    (NULL,"1","01"),
+                    (NULL,"2","02"),
+                    ("02","1","03"),
+                    ("02","1","04"),
+                    ("02","2","05"),
+                    ("02","2","06"),
+                    ("03","1","07"),
+                    ("03","2","08"),
+                    ("09","1","09"),
+                    ("09","2","10");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                    pragma ydb.OptOverrideStatistics = '{"/Root/Input1": {"n_rows":10000}, "/Root/Input2" : {"n_rows":10000}, "/Root/Input3":{"n_rows":10000}, "/Root/Input4":{"n_rows":10000}, "/Root/Input5":{"n_rows":10000}}';
+
+                    $rightSemi = select * from Input2 as b right semi join Input1 as a on a.v1 = b.v2 and a.k1 = b.k2;
+                    $leftOnly = select * from $rightSemi as rs left only join Input3 as c on rs.k1 = c.k3 and rs.v1 = c.v3;
+                    $right = select * from Input4 as d right join $leftOnly as lo on d.v4 = lo.v1 and lo.k1 = d.k4;
+                    $inner = select * from $right as r join any Input5 as e on r.k1 = e.k5 and e.v5 = r.v1;
+
+                    select * from $inner order by u1,u5;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Cout << FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(R"(
+            [[["02"];#;["02"];["03"];#;["03"];["1"];#;["1"]];[["02"];#;["02"];["05"];#;["05"];["2"];#;["2"]];[["02"];#;["02"];["06"];#;["05"];["2"];#;["2"]];[["03"];["03"];["03"];["08"];["02"];["07"];["1"];["1"];["1"]];[["03"];["03"];["03"];["09"];["03"];["08"];["2"];["2"];["2"]];[["09"];#;["09"];["20"];#;["09"];["1"];#;["1"]];[["09"];#;["09"];["21"];#;["10"];["2"];#;["2"]]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(HashJoinWithAsTable) {
+        TKikimrRunner kikimr;
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE test_table (
+                    test_column Int32,
+                    PRIMARY key (test_column)
+                ))";
+
+                const auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString joinQuery = R"(
+            PRAGMA ydb.HashJoinMode = "grace";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            $as_table = SELECT * FROM AS_TABLE([<|test_column: 42|>]);
+
+            SELECT
+                as_table.test_column
+            FROM $as_table AS as_table
+            LEFT JOIN test_table
+                ON test_table.test_column = as_table.test_column
+        )";
+
+        const auto result = client.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        const auto& resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt32(), 42);
+    }
+
+    Y_UNIT_TEST(PushdownPredicateNoFullScan) {
+        NKikimrConfig::TAppConfig appCfg;
+        TKikimrRunner kikimr(appCfg);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto res1 = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TableRight` (
+                    id Uint64,
+                    value Utf8,
+                    PRIMARY KEY (id)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(res1.IsSuccess(), res1.GetIssues().ToString());
+
+            auto res2 = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TableLeft` (
+                    hash_key Uint64,
+                    ref_id Uint64,
+                    data Utf8,
+                    PRIMARY KEY (hash_key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(res2.IsSuccess(), res2.GetIssues().ToString());
+        }
+
+        // Digest::MurMurHash(Utf8("target")) = 9488119898155926451
+        const ui64 hashValue = 9488119898155926451ULL;
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/TableRight` (id, value) VALUES
+                    (1, "one"), (2, "two"), (3, "three");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            auto result2 = session.ExecuteDataQuery(Sprintf(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/TableLeft` (hash_key, ref_id, data) VALUES
+                    (%llu, 2, "match"),
+                    (%llu, 1, "no_match_1"),
+                    (%llu, 3, "no_match_2");
+            )", hashValue, hashValue + 1, hashValue + 2), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result2.IsSuccess());
+        }
+
+        const TString query = R"(
+            SELECT r.value FROM `/Root/TableLeft` AS l
+            INNER JOIN `/Root/TableRight` AS r ON l.ref_id = r.id
+            WHERE l.hash_key = Digest::MurMurHash(Utf8("target"));
+        )";
+
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << stats.DebugString() << Endl;
+
+        bool leftTableChecked = false;
+        bool rightTableChecked = false;
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/TableLeft") {
+                    UNIT_ASSERT_VALUES_EQUAL(access.reads().rows(), 1);
+                    leftTableChecked = true;
+                }
+                if (access.name() == "/Root/TableRight") {
+                     UNIT_ASSERT_VALUES_EQUAL(access.reads().rows(), 1);
+                    rightTableChecked = true;
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(leftTableChecked, "No reads found for /Root/TableLeft");
+        UNIT_ASSERT_C(rightTableChecked, "No reads found for /Root/TableRight");
     }
 }
 

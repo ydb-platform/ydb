@@ -2,6 +2,7 @@
 
 #include "flat_row_eggs.h"
 #include "flat_row_scheme.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -46,7 +47,7 @@ namespace NTable {
 
             for (TPos on = 0; on < tags.size(); on++) {
                 const auto *info = scheme.ColInfo(tags[on]);
-                Y_ABORT_UNLESS(info, "Column %" PRIu32 " does not exist", tags[on]);
+                Y_ENSURE(info, "Column " << tags[on] << " does not exist");
                 Types_[on] = info->TypeInfo;
 
                 CellDefaults_.emplace_back((*scheme.RowCellDefaults)[info->Pos]);
@@ -54,8 +55,9 @@ namespace NTable {
                 if (info->IsKey())
                     KeyPins_.push_back({ on, info->Key });
 
-                if (!Tag2Pos.insert(std::make_pair(tags[on], on)).second)
-                    Y_ABORT("Duplicated tag found in remap, isn't allowed");
+                if (!Tag2Pos.insert(std::make_pair(tags[on], on)).second) {
+                    Y_TABLET_ERROR("Duplicated tag found in remap, isn't allowed");
+                }
             }
         }
 

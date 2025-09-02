@@ -25,6 +25,7 @@ namespace NKikimr {
 
         ::NMonitoring::TDynamicCounterPtr Counters;
         NMonGroup::TScrubGroup MonGroup;
+        NMonGroup::TDeepScrubbingSubgroups DeepScrubbingSubgroups;
 
         TRopeArena Arena;
 
@@ -112,6 +113,7 @@ namespace NKikimr {
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> GetBarriersEssence();
 
         class THugeBlobMerger;
+        class THugeBlobAndIndexMerger;
         class TSstBlobMerger;
         class TBlobLocationExtractorMerger;
 
@@ -148,6 +150,12 @@ namespace NKikimr {
         void ReadOutAndResilverIndex(TLevelSegmentPtr sst);
         std::vector<TBlobOnDisk> MakeBlobList(TLevelSegmentPtr sst);
         void ReadOutSelectedBlobs(std::vector<TBlobOnDisk>&& blobsOnDisk);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // DEEP SCRUBBING
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        void CheckIntegrity(const TLogoBlobID& blobId, bool isHuge);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DEBUG

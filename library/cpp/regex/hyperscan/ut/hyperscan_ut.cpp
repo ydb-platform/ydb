@@ -27,6 +27,22 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT_EQUAL(foundId, 0);
     }
 
+    Y_UNIT_TEST(CompileLiteralAndScan) {
+        TDatabase db = CompileLiteral("a.c?[)", HS_FLAG_SINGLEMATCH);
+        TScratch scratch = MakeScratch(db);
+
+        unsigned int foundId = 42;
+        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) {
+            foundId = id;
+        };
+        NHyperscan::Scan(
+            db,
+            scratch,
+            "a.c?[)",
+            callback);
+        UNIT_ASSERT_EQUAL(foundId, 0);
+    }
+
     Y_UNIT_TEST(Matches) {
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "a.c",
@@ -65,6 +81,49 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             db,
             scratch,
             "fooBaR",
+            callback);
+        UNIT_ASSERT_EQUAL(foundIds.size(), 2);
+        UNIT_ASSERT(foundIds.contains(42));
+        UNIT_ASSERT(foundIds.contains(241));
+    }
+
+    Y_UNIT_TEST(MultiLiteral) {
+        static const TVector<TString> LITERALS = {
+             "foo.",
+             "bar.",
+        };
+        NHyperscan::TDatabase db = NHyperscan::CompileMultiLiteral(
+            {
+                LITERALS[0].c_str(),
+                LITERALS[1].c_str(),
+            },
+            {
+                HS_FLAG_SINGLEMATCH,
+                HS_FLAG_SINGLEMATCH | HS_FLAG_CASELESS,
+            },
+            {
+                42,
+                241,
+            },
+            {
+                LITERALS[0].size(),
+                LITERALS[1].size(),
+            });
+        NHyperscan::TScratch scratch = NHyperscan::MakeScratch(db);
+
+        UNIT_ASSERT(NHyperscan::Matches(db, scratch, "foo."));
+        UNIT_ASSERT(NHyperscan::Matches(db, scratch, "bar."));
+        UNIT_ASSERT(NHyperscan::Matches(db, scratch, "BAR."));
+        UNIT_ASSERT(!NHyperscan::Matches(db, scratch, "FOO."));
+
+        TSet<unsigned int> foundIds;
+        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) {
+            foundIds.insert(id);
+        };
+        NHyperscan::Scan(
+            db,
+            scratch,
+            "foo.BaR.",
             callback);
         UNIT_ASSERT_EQUAL(foundIds.size(), 2);
         UNIT_ASSERT(foundIds.contains(42));
@@ -210,7 +269,6 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             ERuntime::Core2,
             ERuntime::Corei7,
             ERuntime::AVX2,
-            ERuntime::AVX512
         };
 
         // Unfortunately, we cannot emulate runtimes with more capabilities than current machine.

@@ -1,7 +1,12 @@
 LIBRARY()
 
 SRCS(
+    block_events.cpp
+    block_events.h
     test_runtime.cpp
+    test_runtime.h
+    wait_events.cpp
+    wait_events.h
 )
 
 PEERDIR(
@@ -13,6 +18,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/scheme
     ydb/core/tablet
+    ydb/core/testlib/audit_helpers
 )
 
 IF (GCC)

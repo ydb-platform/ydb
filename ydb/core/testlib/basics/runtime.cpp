@@ -17,6 +17,7 @@ namespace NActors {
     void TTestBasicRuntime::Initialize(TEgg egg)
     {
         AddICStuff();
+        AddAuditLogStuff();
 
         TTestActorRuntime::Initialize(std::move(egg));
     }

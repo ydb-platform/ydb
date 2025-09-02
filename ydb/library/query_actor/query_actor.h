@@ -13,14 +13,14 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 
 namespace NKikimr {
@@ -115,11 +115,19 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {});
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false);
 
     void Bootstrap();
 
     static TString GetDefaultDatabase();
+
+    struct TLogInfo {
+        ui64 LogComponent;
+        TString OperationName;
+        TString TraceId;
+    };
+
+    TLogInfo GetLogInfo() const;
 
 protected:
     // Methods for using in derived classes.
@@ -137,15 +145,17 @@ protected:
     TDuration GetAverageTime() const;
 
     template <class THandlerFunc>
-    void SetQueryResultHandler(THandlerFunc handler, const TString& stateDescrption = "") {
+    void SetQueryResultHandler(THandlerFunc handler, const TString& stateDescription = "") {
         QueryResultHandler = static_cast<TQueryResultHandler>(handler);
-        StateDescription = stateDescrption;
+        StateDescription = stateDescription;
     }
 
     template <class THandlerFunc>
     void SetStreamResultHandler(THandlerFunc handler) {
         StreamResultHandler = static_cast<TStreamResultHandler>(handler);
     }
+
+    TString LogPrefix() const;
 
 private:
     // Methods for implementing in derived classes.
@@ -193,12 +203,11 @@ private:
     void FinishStreamRequest();
     void CallOnStreamResult(NYdb::TResultSet&& resultSet);
 
-    TString LogPrefix() const;
-
 protected:
     const ui64 LogComponent;
     TString Database;
     TString SessionId;
+    bool IsSystemUser = false;
     TString TxId;
     bool DeleteSession = false;
     bool RunningQuery = false;
@@ -226,9 +235,29 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FinishError;
 };
 
-template<typename TQueryActor, typename TResponse, typename ...TArgs>
-class TQueryRetryActor : public NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>> {
+class TQueryRetryActorBase {
 public:
+    static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode status);
+
+protected:
+    void UpdateLogInfo(const TQueryBase::TLogInfo& logInfo, const TActorId& ownerId, const TActorId& selfId);
+
+    TString LogPrefix() const;
+
+protected:
+    ui64 LogComponent;
+    TString OperationName;
+    TString TraceId;
+    TActorId OwnerId;
+    TActorId SelfId;
+};
+
+template<typename TQueryActor, typename TResponse, typename ...TArgs>
+class TQueryRetryActor : public NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>, public TQueryRetryActorBase {
+public:
+    static_assert(std::is_base_of<TQueryBase, TQueryActor>::value, "Query actor must inherit from TQueryBase");
+    static_assert(std::is_base_of<IEventBase, TResponse>::value, "Invalid response type");
+
     using TBase = NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>;
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
 
@@ -240,7 +269,7 @@ public:
             std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
         ))
         , CreateQueryActor([=]() {
-            return new TQueryActor(args...);
+            return std::make_unique<TQueryActor>(args...);
         })
     {}
 
@@ -248,13 +277,18 @@ public:
         : ReplyActorId(replyActorId)
         , RetryPolicy(retryPolicy)
         , CreateQueryActor([=]() {
-            return new TQueryActor(args...);
+            return std::make_unique<TQueryActor>(args...);
         })
         , RetryState(RetryPolicy->CreateRetryState())
     {}
 
-    void StartQueryActor() const {
-        TBase::Register(CreateQueryActor());
+    void StartQueryActor() {
+        auto queryActor = CreateQueryActor();
+        UpdateLogInfo(queryActor->GetLogInfo(), ReplyActorId, TBase::SelfId());
+
+        RetryAttempts++;
+        const auto& queryActorId = TBase::Register(queryActor.release());
+        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << "Starting query actor #" << RetryAttempts << " " << queryActorId);
     }
 
     void Bootstrap() {
@@ -273,6 +307,8 @@ public:
 
     void Handle(const typename TResponse::TPtr& ev) {
         const Ydb::StatusIds::StatusCode status = ev->Get()->Status;
+        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << "Got response " << ev->Sender << " " << status);
+
         if (Retryable(status) == ERetryErrorClass::NoRetry) {
             Reply(ev);
             return;
@@ -283,6 +319,7 @@ public:
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(status)) {
+            LOG_NOTICE_S(*TlsActivationContext, LogComponent, LogPrefix() << "Retry status " << status << " after " << *delay);
             TBase::Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
             Reply(ev);
@@ -294,33 +331,12 @@ public:
         TBase::PassAway();
     }
 
-    static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode status) {
-        if (status == Ydb::StatusIds::SUCCESS) {
-            return ERetryErrorClass::NoRetry;
-        }
-
-        if (status == Ydb::StatusIds::INTERNAL_ERROR
-            || status == Ydb::StatusIds::UNAVAILABLE
-            || status == Ydb::StatusIds::BAD_SESSION
-            || status == Ydb::StatusIds::SESSION_EXPIRED
-            || status == Ydb::StatusIds::SESSION_BUSY
-            || status == Ydb::StatusIds::ABORTED) {
-            return ERetryErrorClass::ShortRetry;
-        }
-
-        if (status == Ydb::StatusIds::OVERLOADED
-            || status == Ydb::StatusIds::UNDETERMINED) {
-            return ERetryErrorClass::LongRetry;
-        }
-
-        return ERetryErrorClass::NoRetry;
-    }
-
 private:
     const NActors::TActorId ReplyActorId;
     const IRetryPolicy::TPtr RetryPolicy;
-    const std::function<TQueryActor*()> CreateQueryActor;
+    const std::function<std::unique_ptr<TQueryActor>()> CreateQueryActor;
     IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
+    ui64 RetryAttempts = 0;
 };
 
 } // namespace NKikimr

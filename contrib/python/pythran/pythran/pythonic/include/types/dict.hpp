@@ -28,35 +28,56 @@ namespace types
   struct empty_dict;
 
   template <class I>
-  struct item_iterator_adaptator : public I {
+  struct item_iterator_adaptator {
+    I base;
+    using difference_type = typename std::iterator_traits<I>::difference_type;
     using value_type = make_tuple_t<
-        typename std::remove_cv<typename I::value_type::first_type>::type,
-        typename I::value_type::second_type>;
+        typename std::remove_cv<typename std::iterator_traits<I>::value_type::first_type>::type,
+        typename std::iterator_traits<I>::value_type::second_type>;
     using pointer = value_type *;
     using reference = value_type &;
+    using iterator_category = typename std::iterator_traits<I>::iterator_category;
     item_iterator_adaptator() = default;
     item_iterator_adaptator(I const &i);
     value_type operator*() const;
+    bool operator==(item_iterator_adaptator const& other) const { return base == other.base;}
+    bool operator!=(item_iterator_adaptator const& other) const { return base != other.base;}
+    item_iterator_adaptator& operator++() { ++base; return *this;}
+    auto operator->() ->decltype( &*base) { return &*base;}
   };
 
   template <class I>
-  struct key_iterator_adaptator : public I {
-    using value_type = typename I::value_type::first_type;
-    using pointer = typename I::value_type::first_type *;
-    using reference = typename I::value_type::first_type &;
-    key_iterator_adaptator();
+  struct key_iterator_adaptator {
+    I base;
+    using difference_type = typename std::iterator_traits<I>::difference_type;
+    using value_type = typename std::iterator_traits<I>::value_type::first_type;
+    using pointer = typename std::iterator_traits<I>::value_type::first_type *;
+    using reference = typename std::iterator_traits<I>::value_type::first_type &;
+    using iterator_category = typename std::iterator_traits<I>::iterator_category;
+    key_iterator_adaptator() = default;
     key_iterator_adaptator(I const &i);
     value_type operator*() const;
+    bool operator==(key_iterator_adaptator const& other) const { return base == other.base;}
+    bool operator!=(key_iterator_adaptator const& other) const { return base != other.base;}
+    key_iterator_adaptator& operator++() { ++base; return *this;}
+    auto operator->() ->decltype( &*base) { return &*base;}
   };
 
   template <class I>
-  struct value_iterator_adaptator : public I {
-    using value_type = typename I::value_type::second_type;
-    using pointer = typename I::value_type::second_type *;
-    using reference = typename I::value_type::second_type &;
-    value_iterator_adaptator();
+  struct value_iterator_adaptator {
+    I base;
+    using difference_type = typename std::iterator_traits<I>::difference_type;
+    using value_type = typename std::iterator_traits<I>::value_type::second_type;
+    using pointer = typename std::iterator_traits<I>::value_type::second_type *;
+    using reference = typename std::iterator_traits<I>::value_type::second_type &;
+    using iterator_category = typename std::iterator_traits<I>::iterator_category;
+    value_iterator_adaptator() = default;
     value_iterator_adaptator(I const &i);
     value_type operator*() const;
+    bool operator==(value_iterator_adaptator const& other) const { return base == other.base;}
+    bool operator!=(value_iterator_adaptator const& other) const { return base != other.base;}
+    value_iterator_adaptator& operator++() { ++base; return *this;}
+    auto operator->() ->decltype( &*base) { return &*base;}
   };
 
   template <class D>
@@ -95,6 +116,55 @@ namespace types
     long size() const;
   };
 
+  // specialization of a map whose key are none_type
+  template <class V>
+  struct none_type_map {
+    using key_type = none_type;
+    using mapped_type = V;
+    using value_type = std::pair<const key_type, mapped_type>;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = value_type &;
+    using const_reference = const value_type &;
+    using pointer = value_type *;
+    using const_pointer = const value_type *;
+    using iterator = value_type *;
+    using const_iterator = const value_type *;
+
+    value_type data_[1];
+    bool empty_;
+
+    none_type_map(size_type) : data_(), empty_(true) {}
+    template <class B, class E>
+    none_type_map(B begin, E end) : data_{begin == end ? value_type() : *begin}, empty_(begin == end) {
+    }
+
+    mapped_type& operator[](none_type) {
+      empty_ = false;
+      return data_[0].second;
+    }
+
+    iterator find(none_type) {
+      return data_ + empty_;
+    }
+
+    const_iterator find(none_type) const {
+      return data_ + empty_;
+    }
+
+    iterator begin() { return data_ + empty_; }
+    const_iterator begin() const { return data_ + empty_; }
+    iterator end() { return data_ + 1; }
+    const_iterator end() const { return data_ + 1; }
+
+    bool empty() const { return empty_;}
+    void clear() { empty_ = true; data_[0].second = {}; }
+    const_iterator erase(const_iterator pos) {  clear(); return end();}
+    bool erase(none_type) { bool res = empty_; clear(); return !res;}
+
+    size_t size() const { return empty_?0:1;}
+  };
+
   template <class K, class V>
   class dict
   {
@@ -104,9 +174,11 @@ namespace types
         typename std::remove_cv<typename std::remove_reference<K>::type>::type;
     using _value_type =
         typename std::remove_cv<typename std::remove_reference<V>::type>::type;
-    using container_type = std::unordered_map<
+    using container_type = typename std::conditional<std::is_same<K, none_type>::value,
+          none_type_map<_value_type>,
+          std::unordered_map<
         _key_type, _value_type, std::hash<_key_type>, std::equal_to<_key_type>,
-        utils::allocator<std::pair<const _key_type, _value_type>>>;
+        utils::allocator<std::pair<const _key_type, _value_type>>>>::type;
 
     utils::shared_ref<container_type> data;
     template <class Kp, class Vp>
@@ -135,7 +207,6 @@ namespace types
     using size_type = typename container_type::size_type;
     using difference_type = typename container_type::difference_type;
     using value_type = typename container_type::value_type;
-    using allocator_type = typename container_type::allocator_type;
     using pointer = typename container_type::pointer;
     using const_pointer = typename container_type::const_pointer;
 
@@ -168,7 +239,7 @@ namespace types
     value_const_iterator value_end() const;
 
     // dict interface
-    operator bool();
+    operator bool() const;
     V &operator[](K const &key) &;
 
     template <class OtherKey>

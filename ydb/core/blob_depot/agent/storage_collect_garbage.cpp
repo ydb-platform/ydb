@@ -1,12 +1,11 @@
 #include "agent_impl.h"
-#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCollectGarbage>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvCollectGarbage>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TCollectGarbageQuery : public TBlobStorageQuery<TEvBlobStorage::TEvCollectGarbage> {
-            ui32 BlockChecksRemain = 3;
             ui32 KeepIndex = 0;
             ui32 NumKeep;
             ui32 DoNotKeepIndex = 0;
@@ -21,13 +20,9 @@ namespace NKikimr::NBlobDepot {
                 NumKeep = Request.Keep ? Request.Keep->size() : 0;
                 NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Request.RecordGeneration, this, nullptr);
-                if (status == NKikimrProto::OK) {
+                if (Request.IgnoreBlock || CheckBlockForTablet(Request.TabletId,
+                        Request.RecordGeneration) == NKikimrProto::OK) {
                     IssueCollectGarbage();
-                } else if (status != NKikimrProto::UNKNOWN) {
-                    EndWithError(status, "block race detected");
-                } else if (!--BlockChecksRemain) {
-                    EndWithError(NKikimrProto::ERROR, "failed to acquire blocks");
                 }
             }
 
@@ -58,6 +53,9 @@ namespace NKikimr::NBlobDepot {
                     record.SetHard(Request.Hard);
                     record.SetCollectGeneration(Request.CollectGeneration);
                     record.SetCollectStep(Request.CollectStep);
+                    if (Request.IgnoreBlock) {
+                        record.SetIgnoreBlock(true);
+                    }
 
                     BDEV_QUERY(BDEV04, "TEvCollectGarbage_barrier", (U.TabletId, Request.TabletId),
                         (U.Generation, Request.RecordGeneration), (U.PerGenerationCounter, Request.PerGenerationCounter),
@@ -117,7 +115,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TCollectGarbageQuery(*this, std::move(ev));
+        return new TCollectGarbageQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

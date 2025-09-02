@@ -52,6 +52,11 @@ const IAttributeDictionary& TFormat::Attributes() const
     return *Attributes_;
 }
 
+bool TFormat::operator==(const TFormat& other) const
+{
+    return GetType() == other.GetType() && Attributes() == other.Attributes();
+}
+
 void Serialize(const TFormat& value, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)

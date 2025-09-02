@@ -40,6 +40,7 @@ RECURSE(
     mind
     mon
     mon_alloc
+    memory_controller
     node_whiteboard
     persqueue
     pgproxy
@@ -55,6 +56,7 @@ RECURSE(
     tablet
     tablet_flat
     test_tablet
+    transfer
     tracing
     tx
     util
@@ -63,6 +65,7 @@ RECURSE(
     ydb_convert
     ymq
     yql_testlib
+    yt
 )
 
 RECURSE_FOR_TESTS(

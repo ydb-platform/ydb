@@ -8,6 +8,7 @@ PY_SRCS(
     docker_compose.py
     generate.py
     log.py
+    one_time_waiter.py
     schema.py
     settings.py
     sql.py
@@ -18,14 +19,9 @@ IF (AUTOCHECK)
     NO_LINT()
 ENDIF()
 
-IF (OPENSOURCE) 
-    # YQ-3351: enabling python style checks only for opensource
-    STYLE_PYTHON()
-ENDIF()
-
 PEERDIR(
     contrib/python/PyYAML
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
     yt/python/yt/yson

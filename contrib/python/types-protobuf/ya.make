@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(5.26.0.20240422)
+VERSION(6.30.2.20250809)
 
 LICENSE(Apache-2.0)
 
@@ -10,9 +10,11 @@ NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
+    google-stubs/_upb/_message.pyi
     google-stubs/protobuf/__init__.pyi
     google-stubs/protobuf/compiler/__init__.pyi
     google-stubs/protobuf/descriptor.pyi
+    google-stubs/protobuf/descriptor_database.pyi
     google-stubs/protobuf/descriptor_pool.pyi
     google-stubs/protobuf/internal/__init__.pyi
     google-stubs/protobuf/internal/api_implementation.pyi
@@ -31,7 +33,7 @@ PY_SRCS(
     google-stubs/protobuf/message.pyi
     google-stubs/protobuf/message_factory.pyi
     google-stubs/protobuf/reflection.pyi
-    google-stubs/protobuf/service.pyi
+    google-stubs/protobuf/runtime_version.pyi
     google-stubs/protobuf/symbol_database.pyi
     google-stubs/protobuf/text_format.pyi
     google-stubs/protobuf/util/__init__.pyi

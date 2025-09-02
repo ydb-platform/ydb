@@ -19,6 +19,13 @@
 #include "arch/linux/proc.h"
 #include "arch/linux/users.h"
 
+// May happen on old RedHat versions, see:
+// https://github.com/giampaolo/psutil/issues/607
+#ifndef DUPLEX_UNKNOWN
+    #define DUPLEX_UNKNOWN 0xff
+#endif
+
+#define INITERR return NULL
 
 static PyMethodDef mod_methods[] = {
     // --- per-process functions
@@ -41,42 +48,30 @@ static PyMethodDef mod_methods[] = {
     {"set_debug", psutil_set_debug, METH_VARARGS},
     {NULL, NULL, 0, NULL}
 };
-// May happen on old RedHat versions, see:
-// https://github.com/giampaolo/psutil/issues/607
-#ifndef DUPLEX_UNKNOWN
-    #define DUPLEX_UNKNOWN 0xff
-#endif
 
 
-#if PY_MAJOR_VERSION >= 3
-    #define INITERR return NULL
+static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,
+    "_psutil_linux",
+    NULL,
+    -1,
+    mod_methods,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
 
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT,
-        "_psutil_linux",
-        NULL,
-        -1,
-        mod_methods,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-    };
 
-    PyObject *PyInit__psutil_linux(void)
-#else  /* PY_MAJOR_VERSION */
-    #define INITERR return
-
-    void init_psutil_linux(void)
-#endif  /* PY_MAJOR_VERSION */
-{
-#if PY_MAJOR_VERSION >= 3
+PyObject *
+PyInit__psutil_linux(void) {
     PyObject *mod = PyModule_Create(&moduledef);
-#else
-    PyObject *mod = Py_InitModule("_psutil_linux", mod_methods);
-#endif
     if (mod == NULL)
         INITERR;
+
+#ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(mod, Py_MOD_GIL_NOT_USED);
+#endif
 
     if (PyModule_AddIntConstant(mod, "version", PSUTIL_VERSION)) INITERR;
     if (PyModule_AddIntConstant(mod, "DUPLEX_HALF", DUPLEX_HALF)) INITERR;
@@ -87,7 +82,5 @@ static PyMethodDef mod_methods[] = {
 
     if (mod == NULL)
         INITERR;
-#if PY_MAJOR_VERSION >= 3
     return mod;
-#endif
 }

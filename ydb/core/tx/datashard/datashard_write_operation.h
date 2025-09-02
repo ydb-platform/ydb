@@ -10,7 +10,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -26,6 +26,7 @@ private:
     YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
+    YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
 };
 
@@ -131,6 +132,7 @@ private:
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
+    YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
 
     YDB_READONLY_DEF(ui64, TxSize);
 
@@ -207,7 +209,7 @@ public:
     ui64 GetMemoryConsumption() const;
 
     ui64 GetRequiredMemory() const {
-        Y_ABORT_UNLESS(!GetTxCacheUsage() || !IsTxDataReleased());
+        Y_ENSURE(!GetTxCacheUsage() || !IsTxDataReleased());
         ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize();
         if (!requiredMem)
             requiredMem = GetMemoryConsumption();
@@ -226,7 +228,7 @@ public:
 
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
         if (WriteTx) {
-            Y_ABORT_UNLESS(WriteTx->TxInfo().Loaded);
+            Y_ENSURE(WriteTx->TxInfo().Loaded);
             return WriteTx->TxInfo();
         }
         // For scheme tx global reader and writer flags should

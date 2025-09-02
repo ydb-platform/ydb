@@ -8,9 +8,9 @@
 #include <aws/common/clock.h>
 #include <aws/common/encoding.h>
 #include <aws/common/string.h>
+#include <aws/common/uuid.h>
 #include <aws/io/channel_bootstrap.h>
 #include <aws/io/event_loop.h>
-#include <aws/io/stream.h>
 #include <aws/mqtt/private/v5/mqtt5_client_impl.h>
 #include <aws/mqtt/private/v5/mqtt5_utils.h>
 #include <aws/mqtt/v5/mqtt5_client.h>
@@ -78,19 +78,6 @@ void aws_mqtt5_user_property_set_clean_up(struct aws_mqtt5_user_property_set *pr
 
 size_t aws_mqtt5_user_property_set_size(const struct aws_mqtt5_user_property_set *property_set) {
     return aws_array_list_length(&property_set->properties);
-}
-
-int aws_mqtt5_user_property_set_get_property(
-    const struct aws_mqtt5_user_property_set *property_set,
-    size_t index,
-    struct aws_mqtt5_user_property *property_out) {
-    return aws_array_list_get_at(&property_set->properties, property_out, index);
-}
-
-int aws_mqtt5_user_property_set_add_stored_property(
-    struct aws_mqtt5_user_property_set *property_set,
-    struct aws_mqtt5_user_property *property) {
-    return aws_array_list_push_back(&property_set->properties, property);
 }
 
 static void s_aws_mqtt5_user_property_set_log(
@@ -185,7 +172,7 @@ static int s_aws_mqtt5_user_property_set_validate(
             return aws_raise_error(AWS_ERROR_MQTT5_USER_PROPERTY_VALIDATION);
         }
 
-        if (aws_mqtt5_validate_utf8_text(property->name)) {
+        if (aws_mqtt_validate_utf8_text(property->name)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL, "id=%p: %s - user property #%zu name not valid UTF8", log_context, log_prefix, i);
             return aws_raise_error(AWS_ERROR_MQTT5_USER_PROPERTY_VALIDATION);
@@ -200,7 +187,7 @@ static int s_aws_mqtt5_user_property_set_validate(
                 property->value.len);
             return aws_raise_error(AWS_ERROR_MQTT5_USER_PROPERTY_VALIDATION);
         }
-        if (aws_mqtt5_validate_utf8_text(property->value)) {
+        if (aws_mqtt_validate_utf8_text(property->value)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: %s - user property #%zu value not valid UTF8",
@@ -322,11 +309,20 @@ int aws_mqtt5_operation_validate_vs_connection_settings(
     return AWS_OP_SUCCESS;
 }
 
+uint32_t aws_mqtt5_operation_get_ack_timeout_override(const struct aws_mqtt5_operation *operation) {
+    if (operation->vtable->aws_mqtt5_operation_get_ack_timeout_override_fn != NULL) {
+        return (*operation->vtable->aws_mqtt5_operation_get_ack_timeout_override_fn)(operation);
+    }
+
+    return 0;
+}
+
 static struct aws_mqtt5_operation_vtable s_empty_operation_vtable = {
     .aws_mqtt5_operation_completion_fn = NULL,
     .aws_mqtt5_operation_set_packet_id_fn = NULL,
     .aws_mqtt5_operation_get_packet_id_address_fn = NULL,
     .aws_mqtt5_operation_validate_vs_connection_settings_fn = NULL,
+    .aws_mqtt5_operation_get_ack_timeout_override_fn = NULL,
 };
 
 /*********************************************************************************************************************
@@ -345,7 +341,7 @@ int aws_mqtt5_packet_connect_view_validate(const struct aws_mqtt5_packet_connect
         return aws_raise_error(AWS_ERROR_MQTT5_CONNECT_OPTIONS_VALIDATION);
     }
 
-    if (aws_mqtt5_validate_utf8_text(connect_options->client_id)) {
+    if (aws_mqtt_validate_utf8_text(connect_options->client_id)) {
         AWS_LOGF_ERROR(
             AWS_LS_MQTT5_GENERAL,
             "id=%p: aws_mqtt5_packet_connect_view - client id not valid UTF-8",
@@ -362,7 +358,7 @@ int aws_mqtt5_packet_connect_view_validate(const struct aws_mqtt5_packet_connect
             return aws_raise_error(AWS_ERROR_MQTT5_CONNECT_OPTIONS_VALIDATION);
         }
 
-        if (aws_mqtt5_validate_utf8_text(*connect_options->username)) {
+        if (aws_mqtt_validate_utf8_text(*connect_options->username)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: aws_mqtt5_packet_connect_view - username not valid UTF-8",
@@ -833,6 +829,7 @@ struct aws_mqtt5_operation_connect *aws_mqtt5_operation_connect_new(
     connect_op->base.vtable = &s_empty_operation_vtable;
     connect_op->base.packet_type = AWS_MQTT5_PT_CONNECT;
     aws_ref_count_init(&connect_op->base.ref_count, connect_op, s_destroy_operation_connect);
+    aws_priority_queue_node_init(&connect_op->base.priority_queue_node);
     connect_op->base.impl = connect_op;
 
     if (aws_mqtt5_packet_connect_storage_init(&connect_op->options_storage, allocator, connect_options)) {
@@ -1272,7 +1269,7 @@ int aws_mqtt5_packet_disconnect_view_validate(const struct aws_mqtt5_packet_disc
             return aws_raise_error(AWS_ERROR_MQTT5_DISCONNECT_OPTIONS_VALIDATION);
         }
 
-        if (aws_mqtt5_validate_utf8_text(*disconnect_view->reason_string)) {
+        if (aws_mqtt_validate_utf8_text(*disconnect_view->reason_string)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: aws_mqtt5_packet_disconnect_view - reason string not valid UTF-8",
@@ -1313,7 +1310,7 @@ static int s_aws_mqtt5_packet_disconnect_view_validate_vs_connection_settings(
          * cannot set a non-zero value here if you sent a 0-value or no value in the CONNECT (presumably allows
          * the server to skip tracking session state, and we can't undo that now)
          */
-        const uint32_t *session_expiry_ptr = client->config->connect.storage_view.session_expiry_interval_seconds;
+        const uint32_t *session_expiry_ptr = client->config->connect->storage_view.session_expiry_interval_seconds;
         if (*disconnect_view->session_expiry_interval_seconds > 0 &&
             (session_expiry_ptr == NULL || *session_expiry_ptr == 0)) {
             AWS_LOGF_ERROR(
@@ -1515,6 +1512,7 @@ static struct aws_mqtt5_operation_vtable s_disconnect_operation_vtable = {
     .aws_mqtt5_operation_get_packet_id_address_fn = NULL,
     .aws_mqtt5_operation_validate_vs_connection_settings_fn =
         s_aws_mqtt5_packet_disconnect_view_validate_vs_connection_settings,
+    .aws_mqtt5_operation_get_ack_timeout_override_fn = NULL,
 };
 
 struct aws_mqtt5_operation_disconnect *aws_mqtt5_operation_disconnect_new(
@@ -1538,6 +1536,7 @@ struct aws_mqtt5_operation_disconnect *aws_mqtt5_operation_disconnect_new(
     disconnect_op->base.vtable = &s_disconnect_operation_vtable;
     disconnect_op->base.packet_type = AWS_MQTT5_PT_DISCONNECT;
     aws_ref_count_init(&disconnect_op->base.ref_count, disconnect_op, s_destroy_operation_disconnect);
+    aws_priority_queue_node_init(&disconnect_op->base.priority_queue_node);
     disconnect_op->base.impl = disconnect_op;
 
     if (aws_mqtt5_packet_disconnect_storage_init(&disconnect_op->options_storage, allocator, disconnect_options)) {
@@ -1604,7 +1603,7 @@ int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish
         AWS_LOGF_ERROR(
             AWS_LS_MQTT5_GENERAL, "id=%p: aws_mqtt5_packet_publish_view - missing topic", (void *)publish_view);
         return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
-    } else if (aws_mqtt5_validate_utf8_text(publish_view->topic)) {
+    } else if (aws_mqtt_validate_utf8_text(publish_view->topic)) {
         AWS_LOGF_ERROR(
             AWS_LS_MQTT5_GENERAL, "id=%p: aws_mqtt5_packet_publish_view - topic not valid UTF-8", (void *)publish_view);
         return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
@@ -1639,7 +1638,7 @@ int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish
 
         // Make sure the payload data is UTF-8 if the payload_format set to UTF8
         if (*publish_view->payload_format == AWS_MQTT5_PFI_UTF8) {
-            if (aws_mqtt5_validate_utf8_text(publish_view->payload)) {
+            if (aws_mqtt_validate_utf8_text(publish_view->payload)) {
                 AWS_LOGF_ERROR(
                     AWS_LS_MQTT5_GENERAL,
                     "id=%p: aws_mqtt5_packet_publish_view - payload value is not valid UTF-8 while payload format "
@@ -1659,7 +1658,7 @@ int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish
             return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
         }
 
-        if (aws_mqtt5_validate_utf8_text(*publish_view->response_topic)) {
+        if (aws_mqtt_validate_utf8_text(*publish_view->response_topic)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: aws_mqtt5_packet_publish_view - response topic not valid UTF-8",
@@ -1705,7 +1704,7 @@ int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish
             return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
         }
 
-        if (aws_mqtt5_validate_utf8_text(*publish_view->content_type)) {
+        if (aws_mqtt_validate_utf8_text(*publish_view->content_type)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: aws_mqtt5_packet_publish_view - content type not valid UTF-8",
@@ -1719,19 +1718,6 @@ int aws_mqtt5_packet_publish_view_validate(const struct aws_mqtt5_packet_publish
             publish_view->user_property_count,
             "aws_mqtt5_packet_publish_view",
             (void *)publish_view)) {
-        return AWS_OP_ERR;
-    }
-
-    return AWS_OP_SUCCESS;
-}
-
-int aws_mqtt5_packet_publish_view_validate_vs_iot_core(const struct aws_mqtt5_packet_publish_view *publish_view) {
-    if (!aws_mqtt_is_valid_topic_for_iot_core(publish_view->topic)) {
-        AWS_LOGF_ERROR(
-            AWS_LS_MQTT5_GENERAL,
-            "id=%p: aws_mqtt5_packet_publish_view - topic not valid for AWS Iot Core limits: \"" PRInSTR "\"",
-            (void *)publish_view,
-            AWS_BYTE_CURSOR_PRI(publish_view->topic));
         return AWS_OP_ERR;
     }
 
@@ -1755,30 +1741,6 @@ static int s_aws_mqtt5_packet_publish_view_validate_vs_connection_settings(
                 (int)publish_view->qos,
                 (int)settings->maximum_qos);
             return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
-        }
-
-        if (publish_view->topic_alias != NULL) {
-            const struct aws_mqtt5_client_options_storage *client_options = client->config;
-            if (client_options->topic_aliasing_options.outbound_topic_alias_behavior != AWS_MQTT5_COTABT_USER) {
-                AWS_LOGF_ERROR(
-                    AWS_LS_MQTT5_GENERAL,
-                    "id=%p: aws_mqtt5_packet_publish_view - topic alias set but outbound topic alias behavior has not "
-                    "been set to user controlled",
-                    (void *)publish_view);
-                return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
-            }
-
-            if (*publish_view->topic_alias > settings->topic_alias_maximum_to_server) {
-                AWS_LOGF_ERROR(
-                    AWS_LS_MQTT5_GENERAL,
-                    "id=%p: aws_mqtt5_packet_publish_view - outbound topic alias (%d) exceeds server's topic alias "
-                    "maximum "
-                    "(%d)",
-                    (void *)publish_view,
-                    (int)(*publish_view->topic_alias),
-                    (int)settings->topic_alias_maximum_to_server);
-                return aws_raise_error(AWS_ERROR_MQTT5_PUBLISH_OPTIONS_VALIDATION);
-            }
         }
 
         if (publish_view->retain && settings->retain_available == false) {
@@ -2089,13 +2051,18 @@ static aws_mqtt5_packet_id_t *s_aws_mqtt5_operation_publish_get_packet_id_addres
     return &publish_op->options_storage.storage_view.packet_id;
 }
 
+static uint32_t s_aws_mqtt5_operation_publish_get_ack_timeout_override(const struct aws_mqtt5_operation *operation) {
+    struct aws_mqtt5_operation_publish *publish_op = operation->impl;
+    return publish_op->completion_options.ack_timeout_seconds_override;
+}
+
 static struct aws_mqtt5_operation_vtable s_publish_operation_vtable = {
     .aws_mqtt5_operation_completion_fn = s_aws_mqtt5_operation_publish_complete,
     .aws_mqtt5_operation_set_packet_id_fn = s_aws_mqtt5_operation_publish_set_packet_id,
     .aws_mqtt5_operation_get_packet_id_address_fn = s_aws_mqtt5_operation_publish_get_packet_id_address,
     .aws_mqtt5_operation_validate_vs_connection_settings_fn =
         s_aws_mqtt5_packet_publish_view_validate_vs_connection_settings,
-};
+    .aws_mqtt5_operation_get_ack_timeout_override_fn = s_aws_mqtt5_operation_publish_get_ack_timeout_override};
 
 static void s_destroy_operation_publish(void *object) {
     if (object == NULL) {
@@ -2114,6 +2081,7 @@ struct aws_mqtt5_operation_publish *aws_mqtt5_operation_publish_new(
     const struct aws_mqtt5_client *client,
     const struct aws_mqtt5_packet_publish_view *publish_options,
     const struct aws_mqtt5_publish_completion_options *completion_options) {
+    (void)client;
     AWS_PRECONDITION(allocator != NULL);
     AWS_PRECONDITION(publish_options != NULL);
 
@@ -2130,12 +2098,6 @@ struct aws_mqtt5_operation_publish *aws_mqtt5_operation_publish_new(
         return NULL;
     }
 
-    if (client != NULL && client->config->extended_validation_and_flow_control_options != AWS_MQTT5_EVAFCO_NONE) {
-        if (aws_mqtt5_packet_publish_view_validate_vs_iot_core(publish_options)) {
-            return NULL;
-        }
-    }
-
     struct aws_mqtt5_operation_publish *publish_op =
         aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_operation_publish));
     if (publish_op == NULL) {
@@ -2146,6 +2108,7 @@ struct aws_mqtt5_operation_publish *aws_mqtt5_operation_publish_new(
     publish_op->base.vtable = &s_publish_operation_vtable;
     publish_op->base.packet_type = AWS_MQTT5_PT_PUBLISH;
     aws_ref_count_init(&publish_op->base.ref_count, publish_op, s_destroy_operation_publish);
+    aws_priority_queue_node_init(&publish_op->base.priority_queue_node);
     publish_op->base.impl = publish_op;
 
     if (aws_mqtt5_packet_publish_storage_init(&publish_op->options_storage, allocator, publish_options)) {
@@ -2316,6 +2279,7 @@ struct aws_mqtt5_operation_puback *aws_mqtt5_operation_puback_new(
     puback_op->base.vtable = &s_empty_operation_vtable;
     puback_op->base.packet_type = AWS_MQTT5_PT_PUBACK;
     aws_ref_count_init(&puback_op->base.ref_count, puback_op, s_destroy_operation_puback);
+    aws_priority_queue_node_init(&puback_op->base.priority_queue_node);
     puback_op->base.impl = puback_op;
 
     if (aws_mqtt5_packet_puback_storage_init(&puback_op->options_storage, allocator, puback_options)) {
@@ -2363,7 +2327,7 @@ int aws_mqtt5_packet_unsubscribe_view_validate(const struct aws_mqtt5_packet_uns
 
     for (size_t i = 0; i < unsubscribe_view->topic_filter_count; ++i) {
         const struct aws_byte_cursor *topic_filter = &unsubscribe_view->topic_filters[i];
-        if (aws_mqtt5_validate_utf8_text(*topic_filter)) {
+        if (aws_mqtt_validate_utf8_text(*topic_filter)) {
             AWS_LOGF_ERROR(
                 AWS_LS_MQTT5_GENERAL,
                 "id=%p: aws_mqtt5_packet_unsubscribe_view - topic filter not valid UTF-8: \"" PRInSTR "\"",
@@ -2387,25 +2351,6 @@ int aws_mqtt5_packet_unsubscribe_view_validate(const struct aws_mqtt5_packet_uns
             "aws_mqtt5_packet_unsubscribe_view",
             (void *)unsubscribe_view)) {
         return AWS_OP_ERR;
-    }
-
-    return AWS_OP_SUCCESS;
-}
-
-AWS_MQTT_API int aws_mqtt5_packet_unsubscribe_view_validate_vs_iot_core(
-    const struct aws_mqtt5_packet_unsubscribe_view *unsubscribe_view) {
-
-    for (size_t i = 0; i < unsubscribe_view->topic_filter_count; ++i) {
-        const struct aws_byte_cursor *topic_filter = &unsubscribe_view->topic_filters[i];
-        if (!aws_mqtt_is_valid_topic_filter_for_iot_core(*topic_filter)) {
-            AWS_LOGF_ERROR(
-                AWS_LS_MQTT5_GENERAL,
-                "id=%p: aws_mqtt5_packet_unsubscribe_view - topic filter not valid for AWS Iot Core limits: \"" PRInSTR
-                "\"",
-                (void *)unsubscribe_view,
-                AWS_BYTE_CURSOR_PRI(*topic_filter));
-            return aws_raise_error(AWS_ERROR_MQTT5_UNSUBSCRIBE_OPTIONS_VALIDATION);
-        }
     }
 
     return AWS_OP_SUCCESS;
@@ -2573,11 +2518,18 @@ static aws_mqtt5_packet_id_t *s_aws_mqtt5_operation_unsubscribe_get_packet_id_ad
     return &unsubscribe_op->options_storage.storage_view.packet_id;
 }
 
+static uint32_t s_aws_mqtt5_operation_unsubscribe_get_ack_timeout_override(
+    const struct aws_mqtt5_operation *operation) {
+    struct aws_mqtt5_operation_unsubscribe *unsubscribe_op = operation->impl;
+    return unsubscribe_op->completion_options.ack_timeout_seconds_override;
+}
+
 static struct aws_mqtt5_operation_vtable s_unsubscribe_operation_vtable = {
     .aws_mqtt5_operation_completion_fn = s_aws_mqtt5_operation_unsubscribe_complete,
     .aws_mqtt5_operation_set_packet_id_fn = s_aws_mqtt5_operation_unsubscribe_set_packet_id,
     .aws_mqtt5_operation_get_packet_id_address_fn = s_aws_mqtt5_operation_unsubscribe_get_packet_id_address,
     .aws_mqtt5_operation_validate_vs_connection_settings_fn = NULL,
+    .aws_mqtt5_operation_get_ack_timeout_override_fn = s_aws_mqtt5_operation_unsubscribe_get_ack_timeout_override,
 };
 
 static void s_destroy_operation_unsubscribe(void *object) {
@@ -2597,6 +2549,7 @@ struct aws_mqtt5_operation_unsubscribe *aws_mqtt5_operation_unsubscribe_new(
     const struct aws_mqtt5_client *client,
     const struct aws_mqtt5_packet_unsubscribe_view *unsubscribe_options,
     const struct aws_mqtt5_unsubscribe_completion_options *completion_options) {
+    (void)client;
     AWS_PRECONDITION(allocator != NULL);
     AWS_PRECONDITION(unsubscribe_options != NULL);
 
@@ -2613,12 +2566,6 @@ struct aws_mqtt5_operation_unsubscribe *aws_mqtt5_operation_unsubscribe_new(
         return NULL;
     }
 
-    if (client != NULL && client->config->extended_validation_and_flow_control_options != AWS_MQTT5_EVAFCO_NONE) {
-        if (aws_mqtt5_packet_unsubscribe_view_validate_vs_iot_core(unsubscribe_options)) {
-            return NULL;
-        }
-    }
-
     struct aws_mqtt5_operation_unsubscribe *unsubscribe_op =
         aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_operation_unsubscribe));
     if (unsubscribe_op == NULL) {
@@ -2629,6 +2576,7 @@ struct aws_mqtt5_operation_unsubscribe *aws_mqtt5_operation_unsubscribe_new(
     unsubscribe_op->base.vtable = &s_unsubscribe_operation_vtable;
     unsubscribe_op->base.packet_type = AWS_MQTT5_PT_UNSUBSCRIBE;
     aws_ref_count_init(&unsubscribe_op->base.ref_count, unsubscribe_op, s_destroy_operation_unsubscribe);
+    aws_priority_queue_node_init(&unsubscribe_op->base.priority_queue_node);
     unsubscribe_op->base.impl = unsubscribe_op;
 
     if (aws_mqtt5_packet_unsubscribe_storage_init(&unsubscribe_op->options_storage, allocator, unsubscribe_options)) {
@@ -2658,7 +2606,7 @@ static int s_aws_mqtt5_validate_subscription(
     const struct aws_mqtt5_subscription_view *subscription,
     void *log_context) {
 
-    if (aws_mqtt5_validate_utf8_text(subscription->topic_filter)) {
+    if (aws_mqtt_validate_utf8_text(subscription->topic_filter)) {
         AWS_LOGF_ERROR(
             AWS_LS_MQTT5_GENERAL,
             "id=%p: aws_mqtt5_packet_subscribe_view - topic filter \"" PRInSTR "\" not valid UTF-8 in subscription",
@@ -2769,37 +2717,6 @@ int aws_mqtt5_packet_subscribe_view_validate(const struct aws_mqtt5_packet_subsc
             "aws_mqtt5_packet_subscribe_view",
             (void *)subscribe_view)) {
         return AWS_OP_ERR;
-    }
-
-    return AWS_OP_SUCCESS;
-}
-
-AWS_MQTT_API int aws_mqtt5_packet_subscribe_view_validate_vs_iot_core(
-    const struct aws_mqtt5_packet_subscribe_view *subscribe_view) {
-
-    if (subscribe_view->subscription_count > AWS_IOT_CORE_MAXIMUM_SUSBCRIPTIONS_PER_SUBSCRIBE) {
-        AWS_LOGF_ERROR(
-            AWS_LS_MQTT5_GENERAL,
-            "id=%p: aws_mqtt5_packet_subscribe_view - number of subscriptions (%zu) exceeds default AWS IoT Core limit "
-            "(%d)",
-            (void *)subscribe_view,
-            subscribe_view->subscription_count,
-            (int)AWS_IOT_CORE_MAXIMUM_SUSBCRIPTIONS_PER_SUBSCRIBE);
-        return AWS_OP_ERR;
-    }
-
-    for (size_t i = 0; i < subscribe_view->subscription_count; ++i) {
-        const struct aws_mqtt5_subscription_view *subscription = &subscribe_view->subscriptions[i];
-        const struct aws_byte_cursor *topic_filter = &subscription->topic_filter;
-        if (!aws_mqtt_is_valid_topic_filter_for_iot_core(*topic_filter)) {
-            AWS_LOGF_ERROR(
-                AWS_LS_MQTT5_GENERAL,
-                "id=%p: aws_mqtt5_packet_subscribe_view - topic filter not valid for AWS Iot Core limits: \"" PRInSTR
-                "\"",
-                (void *)subscribe_view,
-                AWS_BYTE_CURSOR_PRI(*topic_filter));
-            return aws_raise_error(AWS_ERROR_MQTT5_UNSUBSCRIBE_OPTIONS_VALIDATION);
-        }
     }
 
     return AWS_OP_SUCCESS;
@@ -2992,11 +2909,17 @@ static aws_mqtt5_packet_id_t *s_aws_mqtt5_operation_subscribe_get_packet_id_addr
     return &subscribe_op->options_storage.storage_view.packet_id;
 }
 
+static uint32_t s_aws_mqtt5_operation_subscribe_get_ack_timeout_override(const struct aws_mqtt5_operation *operation) {
+    struct aws_mqtt5_operation_subscribe *subscribe_op = operation->impl;
+    return subscribe_op->completion_options.ack_timeout_seconds_override;
+}
+
 static struct aws_mqtt5_operation_vtable s_subscribe_operation_vtable = {
     .aws_mqtt5_operation_completion_fn = s_aws_mqtt5_operation_subscribe_complete,
     .aws_mqtt5_operation_set_packet_id_fn = s_aws_mqtt5_operation_subscribe_set_packet_id,
     .aws_mqtt5_operation_get_packet_id_address_fn = s_aws_mqtt5_operation_subscribe_get_packet_id_address,
     .aws_mqtt5_operation_validate_vs_connection_settings_fn = NULL,
+    .aws_mqtt5_operation_get_ack_timeout_override_fn = s_aws_mqtt5_operation_subscribe_get_ack_timeout_override,
 };
 
 static void s_destroy_operation_subscribe(void *object) {
@@ -3016,6 +2939,7 @@ struct aws_mqtt5_operation_subscribe *aws_mqtt5_operation_subscribe_new(
     const struct aws_mqtt5_client *client,
     const struct aws_mqtt5_packet_subscribe_view *subscribe_options,
     const struct aws_mqtt5_subscribe_completion_options *completion_options) {
+    (void)client;
     AWS_PRECONDITION(allocator != NULL);
     AWS_PRECONDITION(subscribe_options != NULL);
 
@@ -3032,12 +2956,6 @@ struct aws_mqtt5_operation_subscribe *aws_mqtt5_operation_subscribe_new(
         return NULL;
     }
 
-    if (client != NULL && client->config->extended_validation_and_flow_control_options != AWS_MQTT5_EVAFCO_NONE) {
-        if (aws_mqtt5_packet_subscribe_view_validate_vs_iot_core(subscribe_options)) {
-            return NULL;
-        }
-    }
-
     struct aws_mqtt5_operation_subscribe *subscribe_op =
         aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_operation_subscribe));
     if (subscribe_op == NULL) {
@@ -3048,6 +2966,7 @@ struct aws_mqtt5_operation_subscribe *aws_mqtt5_operation_subscribe_new(
     subscribe_op->base.vtable = &s_subscribe_operation_vtable;
     subscribe_op->base.packet_type = AWS_MQTT5_PT_SUBSCRIBE;
     aws_ref_count_init(&subscribe_op->base.ref_count, subscribe_op, s_destroy_operation_subscribe);
+    aws_priority_queue_node_init(&subscribe_op->base.priority_queue_node);
     subscribe_op->base.impl = subscribe_op;
 
     if (aws_mqtt5_packet_subscribe_storage_init(&subscribe_op->options_storage, allocator, subscribe_options)) {
@@ -3383,6 +3302,7 @@ struct aws_mqtt5_operation_pingreq *aws_mqtt5_operation_pingreq_new(struct aws_a
     pingreq_op->base.vtable = &s_empty_operation_vtable;
     pingreq_op->base.packet_type = AWS_MQTT5_PT_PINGREQ;
     aws_ref_count_init(&pingreq_op->base.ref_count, pingreq_op, s_destroy_operation_pingreq);
+    aws_priority_queue_node_init(&pingreq_op->base.priority_queue_node);
     pingreq_op->base.impl = pingreq_op;
 
     return pingreq_op;
@@ -3416,14 +3336,20 @@ int aws_mqtt5_client_options_validate(const struct aws_mqtt5_client_options *opt
         }
     }
 
+    if (aws_socket_validate_port_for_connect(
+            options->port, options->socket_options ? options->socket_options->domain : AWS_SOCKET_IPV4)) {
+        AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid port in mqtt5 client configuration");
+        return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
+    }
+
     if (options->http_proxy_options != NULL) {
         if (options->http_proxy_options->host.len == 0) {
             AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "proxy host name not set in mqtt5 client configuration");
             return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
         }
 
-        if (options->http_proxy_options->port == 0) {
-            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "proxy port not set in mqtt5 client configuration");
+        if (aws_socket_validate_port_for_connect(options->http_proxy_options->port, AWS_SOCKET_IPV4)) {
+            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid proxy port in mqtt5 client configuration");
             return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
         }
     }
@@ -3441,32 +3367,20 @@ int aws_mqtt5_client_options_validate(const struct aws_mqtt5_client_options *opt
 
     if (aws_mqtt5_packet_connect_view_validate(options->connect_options)) {
         AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid CONNECT options in mqtt5 client configuration");
+        /* connect validation failure will have already raised the appropriate error */
         return AWS_OP_ERR;
     }
 
-    /* The client will not behave properly if ping timeout is not significantly shorter than the keep alive interval */
-    if (options->connect_options->keep_alive_interval_seconds > 0) {
-        uint64_t keep_alive_ms = aws_timestamp_convert(
-            options->connect_options->keep_alive_interval_seconds, AWS_TIMESTAMP_SECS, AWS_TIMESTAMP_MILLIS, NULL);
-        uint64_t one_second_ms = aws_timestamp_convert(1, AWS_TIMESTAMP_SECS, AWS_TIMESTAMP_MILLIS, NULL);
-
-        uint64_t ping_timeout_ms = options->ping_timeout_ms;
-        if (ping_timeout_ms == 0) {
-            ping_timeout_ms = AWS_MQTT5_CLIENT_DEFAULT_PING_TIMEOUT_MS;
+    if (options->topic_aliasing_options != NULL) {
+        if (!aws_mqtt5_outbound_topic_alias_behavior_type_validate(
+                options->topic_aliasing_options->outbound_topic_alias_behavior)) {
+            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid outbound topic alias behavior type value");
+            return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
         }
 
-        if (ping_timeout_ms + one_second_ms > keep_alive_ms) {
-            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "keep alive interval is too small relative to ping timeout interval");
-            return AWS_OP_ERR;
-        }
-    }
-
-    if (options->extended_validation_and_flow_control_options != AWS_MQTT5_EVAFCO_NONE) {
-        if (options->connect_options->client_id.len > AWS_IOT_CORE_MAXIMUM_CLIENT_ID_LENGTH) {
-            AWS_LOGF_ERROR(
-                AWS_LS_MQTT5_GENERAL,
-                "AWS IoT Core limits client_id to be less than or equal to %d bytes in length",
-                (int)AWS_IOT_CORE_MAXIMUM_CLIENT_ID_LENGTH);
+        if (!aws_mqtt5_inbound_topic_alias_behavior_type_validate(
+                options->topic_aliasing_options->inbound_topic_alias_behavior)) {
+            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid inbound topic alias behavior type value");
             return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
         }
     }
@@ -3607,7 +3521,7 @@ void aws_mqtt5_client_options_storage_log(
         log_handle,
         level,
         AWS_LS_MQTT5_GENERAL,
-        "id=%p: aws_mqtt5_client_options_storage port set to %" PRIu16,
+        "id=%p: aws_mqtt5_client_options_storage port set to %" PRIu32,
         (void *)options_storage,
         options_storage->port);
 
@@ -3668,7 +3582,7 @@ void aws_mqtt5_client_options_storage_log(
             log_handle,
             level,
             AWS_LS_MQTT5_GENERAL,
-            "id=%p: aws_mqtt5_client_options_storage http proxy port set to %" PRIu16,
+            "id=%p: aws_mqtt5_client_options_storage http proxy port set to %" PRIu32,
             (void *)options_storage,
             options_storage->http_proxy_options.port);
 
@@ -3709,7 +3623,7 @@ void aws_mqtt5_client_options_storage_log(
             log_handle,
             level,
             AWS_LS_MQTT5_GENERAL,
-            "id=%p: mqtt5_client_options_storage disabling websockets",
+            "id=%p: aws_mqtt5_client_options_storage disabling websockets",
             (void *)options_storage);
     }
 
@@ -3755,7 +3669,7 @@ void aws_mqtt5_client_options_storage_log(
         log_handle,
         level,
         AWS_LS_MQTT5_GENERAL,
-        "id=%p: mqtt5_client_options_storage reconnect delay min set to %" PRIu64 " ms, max set to %" PRIu64 " ms",
+        "id=%p: aws_mqtt5_client_options_storage reconnect delay min set to %" PRIu64 " ms, max set to %" PRIu64 " ms",
         (void *)options_storage,
         options_storage->min_reconnect_delay_ms,
         options_storage->max_reconnect_delay_ms);
@@ -3791,10 +3705,18 @@ void aws_mqtt5_client_options_storage_log(
         log_handle,
         level,
         AWS_LS_MQTT5_GENERAL,
+        "id=%p: aws_mqtt5_client_options_storage QoS 1 packet ack timeout interval set to %" PRIu32 " seconds",
+        (void *)options_storage,
+        options_storage->ack_timeout_seconds);
+
+    AWS_LOGUF(
+        log_handle,
+        level,
+        AWS_LS_MQTT5_GENERAL,
         "id=%p: aws_mqtt5_client_options_storage connect options:",
         (void *)options_storage);
 
-    aws_mqtt5_packet_connect_view_log(&options_storage->connect.storage_view, level);
+    aws_mqtt5_packet_connect_view_log(&options_storage->connect->storage_view, level);
 
     AWS_LOGUF(
         log_handle,
@@ -3816,7 +3738,10 @@ void aws_mqtt5_client_options_storage_destroy(struct aws_mqtt5_client_options_st
     aws_tls_connection_options_clean_up(&options_storage->tls_options);
     aws_http_proxy_config_destroy(options_storage->http_proxy_config);
 
-    aws_mqtt5_packet_connect_storage_clean_up(&options_storage->connect);
+    if (options_storage->connect != NULL) {
+        aws_mqtt5_packet_connect_storage_clean_up(options_storage->connect);
+        aws_mem_release(options_storage->connect->allocator, options_storage->connect);
+    }
 
     aws_mem_release(options_storage->allocator, options_storage);
 }
@@ -3908,8 +3833,9 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
     }
 
     if (options->http_proxy_options != NULL) {
+        /* Ignore a specified proxy connection type and use TUNNEL unconditionally as only this proxy type works. */
         options_storage->http_proxy_config =
-            aws_http_proxy_config_new_from_proxy_options(allocator, options->http_proxy_options);
+            aws_http_proxy_config_new_tunneling_from_proxy_options(allocator, options->http_proxy_options);
         if (options_storage->http_proxy_config == NULL) {
             goto error;
         }
@@ -3944,7 +3870,70 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
         options_storage->topic_aliasing_options = *options->topic_aliasing_options;
     }
 
-    if (aws_mqtt5_packet_connect_storage_init(&options_storage->connect, allocator, options->connect_options)) {
+    struct aws_byte_buf auto_assign_id_buf;
+    AWS_ZERO_STRUCT(auto_assign_id_buf);
+
+    struct aws_mqtt5_packet_connect_view connect_options = *options->connect_options;
+    if (connect_options.client_id.len == 0) {
+        if (options->extended_validation_and_flow_control_options == AWS_MQTT5_EVAFCO_AWS_IOT_CORE_DEFAULTS) {
+            /*
+             * We're (probably) using an SDK builder to create the client and there's no client id set.  Assume this is
+             * targeting IoT Core.  Iot Core is not compliant to the MQTT311/5 spec with regard to auto-assigned client
+             * ids.
+             *
+             * In particular, IoT Core makes a client id of the pattern "$GEN/[uuid]" but it forbids a client id of that
+             * pattern to be specified by the user.  This is contrary to the spec that requires an auto-assigned client
+             * id to be able to reconnect using the same client id:
+             *
+             *   "It MUST then process the CONNECT packet as if the Client had provided that unique ClientID, and MUST
+             *     return the Assigned Client Identifier in the CONNACK packet."
+             *
+             * See (https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901059) for details.
+             *
+             * The result is that using auto assigned client ids with IoT Core leads to permanent reconnect failures
+             * because we use the client id value returned in the CONNACK for all subsequent connection attempts.  This
+             * behavioral choice varies across MQTT clients, but I am firmly convinced it is proper.
+             *
+             * To work around this issue, when we think we're connecting to IoT Core (ie the condition above) and we
+             * don't have a client id, we generate one of the form "gen[uuid]" which will be able to successfully
+             * reconnect since it does not use the reserved prefix "$GEN/"
+             */
+            aws_byte_buf_init(&auto_assign_id_buf, allocator, 64);
+            struct aws_byte_cursor auto_assign_prefix_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("gen");
+
+            aws_byte_buf_append(&auto_assign_id_buf, &auto_assign_prefix_cursor);
+
+            struct aws_uuid uuid;
+            AWS_FATAL_ASSERT(aws_uuid_init(&uuid) == AWS_OP_SUCCESS);
+
+            aws_uuid_to_str_compact(&uuid, &auto_assign_id_buf);
+
+            connect_options.client_id = aws_byte_cursor_from_buf(&auto_assign_id_buf);
+
+            AWS_LOGF_INFO(
+                AWS_LS_MQTT5_GENERAL,
+                "Inferring the server is IoT Core and no client id has been set.  IoT Core's auto-assigned client ids "
+                "cannot be reconnected with.  Avoiding this issue by locally setting the client id to \"" PRInSTR "\"",
+                AWS_BYTE_CURSOR_PRI(connect_options.client_id));
+        } else {
+            /*
+             * Log the fact that we're not manually generating the client id in case someone turns off iot core
+             * validation and then sees reconnect failures.
+             */
+            AWS_LOGF_WARN(
+                AWS_LS_MQTT5_GENERAL,
+                "Letting server assign the client id.  If reconnects fail with a connect reason code of "
+                "AWS_MQTT5_CRC_CLIENT_IDENTIFIER_NOT_VALID (133), then consider manually setting the client id to a "
+                "UUID.");
+        }
+    }
+
+    options_storage->connect = aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_packet_connect_storage));
+    int connect_storage_result =
+        aws_mqtt5_packet_connect_storage_init(options_storage->connect, allocator, &connect_options);
+
+    aws_byte_buf_clean_up(&auto_assign_id_buf);
+    if (connect_storage_result != AWS_OP_SUCCESS) {
         goto error;
     }
 
@@ -3955,6 +3944,15 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
     options_storage->client_termination_handler_user_data = options->client_termination_handler_user_data;
 
     s_apply_zero_valued_defaults_to_client_options_storage(options_storage);
+
+    /* must do this after zero-valued defaults are applied so that max reconnect is accurate */
+    if (options->host_resolution_override) {
+        options_storage->host_resolution_override = *options->host_resolution_override;
+    } else {
+        options_storage->host_resolution_override = aws_host_resolver_init_default_resolution_config();
+        options_storage->host_resolution_override.resolve_frequency_ns = aws_timestamp_convert(
+            options_storage->max_reconnect_delay_ms, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
+    }
 
     return options_storage;
 

@@ -7,6 +7,7 @@
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/column_rename_descriptor.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/versioned_io_options.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -24,10 +25,7 @@ using namespace NSecurityClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRichYPath::TRichYPath()
-{ }
-
-TRichYPath::TRichYPath(const TRichYPath& other)
+TRichYPath::TRichYPath(const TRichYPath& other) noexcept
     : Path_(other.Path_)
     , Attributes_(other.Attributes_ ? other.Attributes_->Clone() : nullptr)
 { }
@@ -38,30 +36,34 @@ TRichYPath::TRichYPath(const char* path)
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(const TYPath& path)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path)
+    : Path_(std::move(path))
 {
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(TRichYPath&& other)
-    : Path_(std::move(other.Path_))
-    , Attributes_(std::move(other.Attributes_))
-{ }
-
-TRichYPath::TRichYPath(const TYPath& path, const IAttributeDictionary& attributes)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path, const IAttributeDictionary& attributes)
+    : Path_(std::move(path))
     , Attributes_(attributes.Clone())
 { }
+
+TRichYPath& TRichYPath::operator=(const TRichYPath& other) noexcept
+{
+    if (this != &other) {
+        Path_ = other.Path_;
+        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
+    }
+    return *this;
+}
 
 const TYPath& TRichYPath::GetPath() const
 {
     return Path_;
 }
 
-void TRichYPath::SetPath(const TYPath& path)
+void TRichYPath::SetPath(TYPath path)
 {
-    Path_ = path;
+    Path_ = std::move(path);
 }
 
 const IAttributeDictionary& TRichYPath::Attributes() const
@@ -75,15 +77,6 @@ IAttributeDictionary& TRichYPath::Attributes()
         Attributes_ = CreateEphemeralAttributes();
     }
     return *Attributes_;
-}
-
-TRichYPath& TRichYPath::operator = (const TRichYPath& other)
-{
-    if (this != &other) {
-        Path_ = other.Path_;
-        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
-    }
-    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,7 +107,7 @@ void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& a
 }
 
 template <class TFunc>
-auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc accessor) -> decltype(accessor())
+auto RunAttributeAccessor(const TRichYPath& path, const std::string& key, TFunc accessor) -> decltype(accessor())
 {
     try {
         return accessor();
@@ -126,7 +119,7 @@ auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc acce
 }
 
 template <class T>
-T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue)
+T GetAttribute(const TRichYPath& path, const std::string& key, const T& defaultValue)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Get(key, defaultValue);
@@ -134,14 +127,14 @@ T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue
 }
 
 template <class T>
-typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const TString& key)
+typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Find<T>(key);
     });
 }
 
-TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
+TYsonString FindAttributeYson(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().FindYson(key);
@@ -150,7 +143,7 @@ TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
 
 } // namespace
 
-TRichYPath TRichYPath::Parse(const TString& str)
+TRichYPath TRichYPath::Parse(TStringBuf str)
 {
     return ParseRichYPathImpl(str);
 }
@@ -216,15 +209,15 @@ void TRichYPath::SetReadViaExecNode(bool value)
     Attributes().Set("read_via_exec_node", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetColumns() const
+std::optional<std::vector<std::string>> TRichYPath::GetColumns() const
 {
     if (Attributes().Contains("channel")) {
         THROW_ERROR_EXCEPTION("Deprecated attribute \"channel\" in YPath");
     }
-    return FindAttribute<std::vector<TString>>(*this, "columns");
+    return FindAttribute<std::vector<std::string>>(*this, "columns");
 }
 
-void TRichYPath::SetColumns(const std::vector<TString>& columns)
+void TRichYPath::SetColumns(const std::vector<std::string>& columns)
 {
     Attributes().Set("columns", columns);
 }
@@ -324,7 +317,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
             THROW_ERROR_EXCEPTION("Cannot use key or key bound in read limit for an unsorted object");
         }
 
-        // NB: for the sake of compatibility, we support specifying both key and key bound in read limit.
+        // NB: For the sake of compatibility, we support specifying both key and key bound in read limit.
         // In this case we consider only key bound and completely ignore key.
 
         if (keyNode && !keyBoundNode) {
@@ -335,7 +328,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
             // Perform type conversion, if required.
             if (!conversionTypeHints.empty()) {
                 TUnversionedOwningRowBuilder newOwningKey;
-                const int typedKeyCount = std::min(owningKey.GetCount(), static_cast<int>(conversionTypeHints.size()));
+                int typedKeyCount = std::min<int>(owningKey.GetCount(), std::ssize(conversionTypeHints));
                 for (int i = 0; i < typedKeyCount; ++i) {
                     newOwningKey.AddValue(TryConvertValue(owningKey[i], conversionTypeHints[i]));
                 }
@@ -375,7 +368,7 @@ NChunkClient::TReadRange RangeNodeToReadRange(
                 // than interpreting it as a key bound using interop method.
 
                 if (isExact && (owningKey.GetCount() > comparator.GetLength() || containsSentinels)) {
-                    // NB: there are two tricky cases when read limit is exact:
+                    // NB: There are two tricky cases when read limit is exact:
                     // - (1) if specified key is longer than comparator. Recall that (in old terms)
                     // there may be no keys between (foo, bar) and (foo, bar, <max>) in a table with single
                     // key column.
@@ -654,22 +647,22 @@ std::optional<TSortColumns> TRichYPath::GetChunkSortColumns() const
     return FindAttribute<TSortColumns>(*this, "chunk_sort_columns");
 }
 
-std::optional<TString> TRichYPath::GetCluster() const
+std::optional<std::string> TRichYPath::GetCluster() const
 {
-    return FindAttribute<TString>(*this, "cluster");
+    return FindAttribute<std::string>(*this, "cluster");
 }
 
-void TRichYPath::SetCluster(const TString& value)
+void TRichYPath::SetCluster(const std::string& value)
 {
     Attributes().Set("cluster", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetClusters() const
+std::optional<std::vector<std::string>> TRichYPath::GetClusters() const
 {
-    return FindAttribute<std::vector<TString>>(*this, "clusters");
+    return FindAttribute<std::vector<std::string>>(*this, "clusters");
 }
 
-void TRichYPath::SetClusters(const std::vector<TString>& value)
+void TRichYPath::SetClusters(const std::vector<std::string>& value)
 {
     Attributes().Set("clusters", value);
 }
@@ -677,6 +670,21 @@ void TRichYPath::SetClusters(const std::vector<TString>& value)
 bool TRichYPath::GetCreate() const
 {
     return GetAttribute<bool>(*this, "create", false);
+}
+
+TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
+{
+    return GetAttribute(*this, "versioned_read_options", TVersionedReadOptions());
+}
+
+TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
+{
+    return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
+}
+
+std::optional<TString> TRichYPath::GetAccessMethod() const
+{
+    return FindAttribute<TString>(*this, "access_method");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -691,7 +699,7 @@ TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
 
 void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
 {
-    // NB: we intentionally use Text format since string-representation of rich ypath should be readable.
+    // NB: We intentionally use Text format since string-representation of rich ypath should be readable.
     FormatValue(builder, ConvertToString(path, EYsonFormat::Text), spec);
 }
 
@@ -741,6 +749,16 @@ void FromProto(TRichYPath* path, const TString& protoPath)
     *path = TRichYPath::Parse(protoPath);
 }
 
+void ToProto(std::string* protoPath, const TRichYPath& path)
+{
+    *protoPath = ConvertToString(path, EYsonFormat::Binary);
+}
+
+void FromProto(TRichYPath* path, const std::string& protoPath)
+{
+    *path = TRichYPath::Parse(TString(protoPath));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 const std::vector<TString>& GetWellKnownRichYPathAttributes()
@@ -779,6 +797,8 @@ const std::vector<TString>& GetWellKnownRichYPathAttributes()
         "clusters",
         "create",
         "read_via_exec_node",
+        "versioned_read_options",
+        "versioned_write_options",
     };
     return WellKnownAttributes;
 }

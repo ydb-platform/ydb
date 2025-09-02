@@ -1,20 +1,30 @@
 from moto.core.responses import BaseResponse
-from moto.core import get_account_id
-from moto.iam import iam_backend
 from .exceptions import STSValidationError
-from .models import sts_backend
+from .models import sts_backends, STSBackend
 
 MAX_FEDERATION_TOKEN_POLICY_LENGTH = 2048
 
 
 class TokenResponse(BaseResponse):
-    def get_session_token(self):
+    def __init__(self) -> None:
+        super().__init__(service_name="sts")
+
+    @property
+    def backend(self) -> STSBackend:
+        return sts_backends[self.current_account]["global"]
+
+    def _determine_resource(self) -> str:
+        if "AssumeRole" in self.querystring.get("Action", []):
+            return self.querystring.get("RoleArn")[0]  # type: ignore[index]
+        return "*"
+
+    def get_session_token(self) -> str:
         duration = int(self.querystring.get("DurationSeconds", [43200])[0])
-        token = sts_backend.get_session_token(duration=duration)
+        token = self.backend.get_session_token(duration=duration)
         template = self.response_template(GET_SESSION_TOKEN_RESPONSE)
         return template.render(token=token)
 
-    def get_federation_token(self):
+    def get_federation_token(self) -> str:
         duration = int(self.querystring.get("DurationSeconds", [43200])[0])
         policy = self.querystring.get("Policy", [None])[0]
 
@@ -23,23 +33,23 @@ class TokenResponse(BaseResponse):
                 "1 validation error detected: Value "
                 '\'{"Version": "2012-10-17", "Statement": [...]}\' '
                 "at 'policy' failed to satisfy constraint: Member must have length less than or "
-                " equal to %s" % MAX_FEDERATION_TOKEN_POLICY_LENGTH
+                f" equal to {MAX_FEDERATION_TOKEN_POLICY_LENGTH}"
             )
 
-        name = self.querystring.get("Name")[0]
-        token = sts_backend.get_federation_token(duration=duration, name=name)
+        name = self.querystring.get("Name")[0]  # type: ignore
+        token = self.backend.get_federation_token(duration=duration, name=name)
         template = self.response_template(GET_FEDERATION_TOKEN_RESPONSE)
-        return template.render(token=token, account_id=get_account_id())
+        return template.render(token=token, account_id=self.current_account)
 
-    def assume_role(self):
-        role_session_name = self.querystring.get("RoleSessionName")[0]
-        role_arn = self.querystring.get("RoleArn")[0]
+    def assume_role(self) -> str:
+        role_session_name = self.querystring.get("RoleSessionName")[0]  # type: ignore
+        role_arn = self.querystring.get("RoleArn")[0]  # type: ignore
 
         policy = self.querystring.get("Policy", [None])[0]
         duration = int(self.querystring.get("DurationSeconds", [3600])[0])
         external_id = self.querystring.get("ExternalId", [None])[0]
 
-        role = sts_backend.assume_role(
+        role = self.backend.assume_role(
             role_session_name=role_session_name,
             role_arn=role_arn,
             policy=policy,
@@ -49,15 +59,15 @@ class TokenResponse(BaseResponse):
         template = self.response_template(ASSUME_ROLE_RESPONSE)
         return template.render(role=role)
 
-    def assume_role_with_web_identity(self):
-        role_session_name = self.querystring.get("RoleSessionName")[0]
-        role_arn = self.querystring.get("RoleArn")[0]
+    def assume_role_with_web_identity(self) -> str:
+        role_session_name = self.querystring.get("RoleSessionName")[0]  # type: ignore
+        role_arn = self.querystring.get("RoleArn")[0]  # type: ignore
 
         policy = self.querystring.get("Policy", [None])[0]
         duration = int(self.querystring.get("DurationSeconds", [3600])[0])
         external_id = self.querystring.get("ExternalId", [None])[0]
 
-        role = sts_backend.assume_role_with_web_identity(
+        role = self.backend.assume_role_with_web_identity(
             role_session_name=role_session_name,
             role_arn=role_arn,
             policy=policy,
@@ -67,12 +77,12 @@ class TokenResponse(BaseResponse):
         template = self.response_template(ASSUME_ROLE_WITH_WEB_IDENTITY_RESPONSE)
         return template.render(role=role)
 
-    def assume_role_with_saml(self):
-        role_arn = self.querystring.get("RoleArn")[0]
-        principal_arn = self.querystring.get("PrincipalArn")[0]
-        saml_assertion = self.querystring.get("SAMLAssertion")[0]
+    def assume_role_with_saml(self) -> str:
+        role_arn = self.querystring.get("RoleArn")[0]  # type: ignore
+        principal_arn = self.querystring.get("PrincipalArn")[0]  # type: ignore
+        saml_assertion = self.querystring.get("SAMLAssertion")[0]  # type: ignore
 
-        role = sts_backend.assume_role_with_saml(
+        role = self.backend.assume_role_with_saml(
             role_arn=role_arn,
             principal_arn=principal_arn,
             saml_assertion=saml_assertion,
@@ -80,25 +90,13 @@ class TokenResponse(BaseResponse):
         template = self.response_template(ASSUME_ROLE_WITH_SAML_RESPONSE)
         return template.render(role=role)
 
-    def get_caller_identity(self):
+    def get_caller_identity(self) -> str:
         template = self.response_template(GET_CALLER_IDENTITY_RESPONSE)
 
-        # Default values in case the request does not use valid credentials generated by moto
-        user_id = "AKIAIOSFODNN7EXAMPLE"
-        arn = "arn:aws:sts::{account_id}:user/moto".format(account_id=get_account_id())
+        access_key_id = self.get_access_key()
+        user_id, arn, account_id = self.backend.get_caller_identity(access_key_id)
 
-        access_key_id = self.get_current_user()
-        assumed_role = sts_backend.get_assumed_role_from_access_key(access_key_id)
-        if assumed_role:
-            user_id = assumed_role.user_id
-            arn = assumed_role.arn
-
-        user = iam_backend.get_user_from_access_key_id(access_key_id)
-        if user:
-            user_id = user.id
-            arn = user.arn
-
-        return template.render(account_id=get_account_id(), user_id=user_id, arn=arn)
+        return template.render(account_id=account_id, user_id=user_id, arn=arn)
 
 
 GET_SESSION_TOKEN_RESPONSE = """<GetSessionTokenResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">

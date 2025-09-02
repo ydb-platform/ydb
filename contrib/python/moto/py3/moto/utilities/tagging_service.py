@@ -1,25 +1,28 @@
 """Tag functionality contained in class TaggingService."""
 import re
+from typing import Dict, List, Optional
 
 
 class TaggingService:
     """Functionality related to tags, i.e., adding, deleting, testing."""
 
-    def __init__(self, tag_name="Tags", key_name="Key", value_name="Value"):
+    def __init__(
+        self, tag_name: str = "Tags", key_name: str = "Key", value_name: str = "Value"
+    ):
         self.tag_name = tag_name
         self.key_name = key_name
         self.value_name = value_name
-        self.tags = {}
+        self.tags: Dict[str, Dict[str, Optional[str]]] = {}
 
-    def get_tag_dict_for_resource(self, arn):
+    def get_tag_dict_for_resource(self, arn: str) -> Dict[str, str]:
         """Return dict of key/value pairs vs. list of key/values dicts."""
         result = {}
         if self.has_tags(arn):
             for key, val in self.tags[arn].items():
                 result[key] = val
-        return result
+        return result  # type: ignore
 
-    def list_tags_for_resource(self, arn):
+    def list_tags_for_resource(self, arn: str) -> Dict[str, List[Dict[str, str]]]:
         """Return list of tags inside dict with key of "tag_name".
 
         Useful for describe functions; this return value can be added to
@@ -29,18 +32,18 @@ class TaggingService:
         if self.has_tags(arn):
             for key, val in self.tags[arn].items():
                 result.append({self.key_name: key, self.value_name: val})
-        return {self.tag_name: result}
+        return {self.tag_name: result}  # type: ignore
 
-    def delete_all_tags_for_resource(self, arn):
+    def delete_all_tags_for_resource(self, arn: str) -> None:
         """Delete all tags associated with given ARN."""
         if self.has_tags(arn):
             del self.tags[arn]
 
-    def has_tags(self, arn):
+    def has_tags(self, arn: str) -> bool:
         """Return True if the ARN has any associated tags, False otherwise."""
         return arn in self.tags
 
-    def tag_resource(self, arn, tags):
+    def tag_resource(self, arn: str, tags: Optional[List[Dict[str, str]]]) -> None:
         """Store associated list of dicts with ARN.
 
         Note: the storage is internal to this class instance.
@@ -55,7 +58,7 @@ class TaggingService:
             else:
                 self.tags[arn][tag[self.key_name]] = None
 
-    def copy_tags(self, from_arn, to_arn):
+    def copy_tags(self, from_arn: str, to_arn: str) -> None:
         """Copy stored list of tags associated with one ARN to another ARN.
 
         Note: the storage is internal to this class instance.
@@ -65,13 +68,13 @@ class TaggingService:
                 to_arn, self.list_tags_for_resource(from_arn)[self.tag_name]
             )
 
-    def untag_resource_using_names(self, arn, tag_names):
+    def untag_resource_using_names(self, arn: str, tag_names: List[str]) -> None:
         """Remove tags associated with ARN using key names in 'tag_names'."""
         for name in tag_names:
             if name in self.tags.get(arn, {}):
                 del self.tags[arn][name]
 
-    def untag_resource_using_tags(self, arn, tags):
+    def untag_resource_using_tags(self, arn: str, tags: List[Dict[str, str]]) -> None:
         """Remove tags associated with ARN using key/value pairs in 'tags'."""
         current_tags = self.tags.get(arn, {})
         for tag in tags:
@@ -83,9 +86,9 @@ class TaggingService:
                     # If both key and value are provided, match both before deletion
                     del current_tags[tag[self.key_name]]
 
-    def extract_tag_names(self, tags):
+    def extract_tag_names(self, tags: List[Dict[str, str]]) -> List[str]:
         """Return list of key names in list of 'tags' key/value dicts."""
-        results = []
+        results: List[str] = []
         if len(tags) == 0:
             return results
         for tag in tags:
@@ -93,9 +96,9 @@ class TaggingService:
                 results.append(tag[self.key_name])
         return results
 
-    def flatten_tag_list(self, tags):
+    def flatten_tag_list(self, tags: List[Dict[str, str]]) -> Dict[str, Optional[str]]:
         """Return dict of key/value pairs with 'tag_name', 'value_name'."""
-        result = {}
+        result: Dict[str, Optional[str]] = {}
         for tag in tags:
             if self.value_name in tag:
                 result[tag[self.key_name]] = tag[self.value_name]
@@ -103,7 +106,7 @@ class TaggingService:
                 result[tag[self.key_name]] = None
         return result
 
-    def validate_tags(self, tags, limit=0):
+    def validate_tags(self, tags: List[Dict[str, str]], limit: int = 0) -> str:
         """Returns error message if tags in 'tags' list of dicts are invalid.
 
         The validation does not include a check for duplicate keys.
@@ -168,7 +171,9 @@ class TaggingService:
         )
 
     @staticmethod
-    def convert_dict_to_tags_input(tags):
+    def convert_dict_to_tags_input(
+        tags: Optional[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
         """Given a dictionary, return generic boto params for tags"""
         if not tags:
             return []

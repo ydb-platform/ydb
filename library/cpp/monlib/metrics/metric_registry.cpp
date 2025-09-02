@@ -11,16 +11,17 @@ namespace NMonitoring {
         }
 
         template <typename TLabelsConsumer>
-        void ConsumeMetric(TInstant time, IMetricConsumer* consumer, IMetric* metric, TLabelsConsumer&& labelsConsumer) {
+        void ConsumeMetric(TInstant time, IMetricConsumer* consumer, IMetric* metric, TLabelsConsumer&& labelsConsumer, TMetricOpts opts = {}) {
             consumer->OnMetricBegin(metric->Type());
 
             // (1) add labels
             consumer->OnLabelsBegin();
             labelsConsumer();
             consumer->OnLabelsEnd();
-
             // (2) add time and value
             metric->Accept(time, consumer);
+            // (3) add flag
+            consumer->OnMemOnly(opts.MemOnly);
             consumer->OnMetricEnd();
         }
     }
@@ -55,162 +56,183 @@ namespace NMonitoring {
     }
 
     TGauge* TMetricRegistry::Gauge(TLabels labels) {
-        return Metric<TGauge, EMetricType::GAUGE>(std::move(labels));
+        return GaugeWithOpts(std::move(labels));
+    }
+    TGauge* TMetricRegistry::GaugeWithOpts(TLabels labels, TMetricOpts opts) {
+        return Metric<TGauge, EMetricType::GAUGE>(std::move(labels), std::move(opts));
     }
 
     TGauge* TMetricRegistry::Gauge(ILabelsPtr labels) {
-        return Metric<TGauge, EMetricType::GAUGE>(std::move(labels));
+        return GaugeWithOpts(std::move(labels));
+    }
+    TGauge* TMetricRegistry::GaugeWithOpts(ILabelsPtr labels, TMetricOpts opts) {
+        return Metric<TGauge, EMetricType::GAUGE>(std::move(labels), std::move(opts));
     }
 
     TLazyGauge* TMetricRegistry::LazyGauge(TLabels labels, std::function<double()> supplier) {
-        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
+        return LazyGaugeWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyGauge* TMetricRegistry::LazyGaugeWithOpts(TLabels labels, std::function<double()> supplier, TMetricOpts opts) {
+        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels),std::move(opts), std::move(supplier));
     }
 
     TLazyGauge* TMetricRegistry::LazyGauge(ILabelsPtr labels, std::function<double()> supplier) {
-        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
+        return LazyGaugeWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyGauge* TMetricRegistry::LazyGaugeWithOpts(ILabelsPtr labels, std::function<double()> supplier, TMetricOpts opts) {
+        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TIntGauge* TMetricRegistry::IntGauge(TLabels labels) {
-        return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels));
+        return IntGaugeWithOpts(std::move(labels));
+    }
+    TIntGauge* TMetricRegistry::IntGaugeWithOpts(TLabels labels, TMetricOpts opts) {
+        return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(opts));
     }
 
     TIntGauge* TMetricRegistry::IntGauge(ILabelsPtr labels) {
-        return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels));
+        return IntGaugeWithOpts(std::move(labels));
+    }
+    TIntGauge* TMetricRegistry::IntGaugeWithOpts(ILabelsPtr labels, TMetricOpts opts) {
+        return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(opts));
     }
 
     TLazyIntGauge* TMetricRegistry::LazyIntGauge(TLabels labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(supplier));
+        return LazyIntGaugeWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyIntGauge* TMetricRegistry::LazyIntGaugeWithOpts(TLabels labels, std::function<i64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TLazyIntGauge* TMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(supplier));
+        return LazyIntGaugeWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyIntGauge* TMetricRegistry::LazyIntGaugeWithOpts(ILabelsPtr labels, std::function<i64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TCounter* TMetricRegistry::Counter(TLabels labels) {
-        return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
+        return CounterWithOpts(std::move(labels));
+    }
+    TCounter* TMetricRegistry::CounterWithOpts(TLabels labels, TMetricOpts opts) {
+        return Metric<TCounter, EMetricType::COUNTER>(std::move(labels), std::move(opts));
     }
 
     TCounter* TMetricRegistry::Counter(ILabelsPtr labels) {
-        return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
+        return CounterWithOpts(std::move(labels));
+    }
+    TCounter* TMetricRegistry::CounterWithOpts(ILabelsPtr labels, TMetricOpts opts) {
+        return Metric<TCounter, EMetricType::COUNTER>(std::move(labels), std::move(opts));
     }
 
     TLazyCounter* TMetricRegistry::LazyCounter(TLabels labels, std::function<ui64()> supplier) {
-        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier));
+        return LazyCounterWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyCounter* TMetricRegistry::LazyCounterWithOpts(TLabels labels, std::function<ui64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TLazyCounter* TMetricRegistry::LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) {
-        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier));
+        return LazyCounterWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyCounter* TMetricRegistry::LazyCounterWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TRate* TMetricRegistry::Rate(TLabels labels) {
-        return Metric<TRate, EMetricType::RATE>(std::move(labels));
+        return RateWithOpts(std::move(labels));
+    }
+    TRate* TMetricRegistry::RateWithOpts(TLabels labels, TMetricOpts opts) {
+        return Metric<TRate, EMetricType::RATE>(std::move(labels), std::move(opts));
     }
 
     TRate* TMetricRegistry::Rate(ILabelsPtr labels) {
-        return Metric<TRate, EMetricType::RATE>(std::move(labels));
+        return RateWithOpts(std::move(labels));
+    }
+    TRate* TMetricRegistry::RateWithOpts(ILabelsPtr labels, TMetricOpts opts) {
+        return Metric<TRate, EMetricType::RATE>(std::move(labels), std::move(opts));
     }
 
     TLazyRate* TMetricRegistry::LazyRate(TLabels labels, std::function<ui64()> supplier) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier));
+        return LazyRateWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyRate* TMetricRegistry::LazyRateWithOpts(TLabels labels, std::function<ui64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     TLazyRate* TMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier));
+        return LazyRateWithOpts(std::move(labels), std::move(supplier));
+    }
+    TLazyRate* TMetricRegistry::LazyRateWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts) {
+        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(opts), std::move(supplier));
     }
 
     THistogram* TMetricRegistry::HistogramCounter(TLabels labels, IHistogramCollectorPtr collector) {
-        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(collector), false);
+        return HistogramCounterWithOpts(std::move(labels), std::move(collector));
+    }
+    THistogram* TMetricRegistry::HistogramCounterWithOpts(TLabels labels, IHistogramCollectorPtr collector, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(opts), std::move(collector), false);
     }
 
     THistogram* TMetricRegistry::HistogramCounter(ILabelsPtr labels, IHistogramCollectorPtr collector) {
-        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(collector), false);
+        return HistogramCounterWithOpts(std::move(labels), std::move(collector));
+    }
+    THistogram* TMetricRegistry::HistogramCounterWithOpts(ILabelsPtr labels, IHistogramCollectorPtr collector, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(opts), std::move(collector), false);
     }
 
     THistogram* TMetricRegistry::HistogramCounter(TLabels labels, std::function<IHistogramCollectorPtr()> supplier) {
-        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(supplier), false);
+        return HistogramCounterWithOpts(std::move(labels), std::move(supplier));
+    }
+    THistogram* TMetricRegistry::HistogramCounterWithOpts(TLabels labels, std::function<IHistogramCollectorPtr()> supplier, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(opts), std::move(supplier), false);
     }
 
     THistogram* TMetricRegistry::HistogramCounter(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier) {
-        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(supplier), false);
+        return HistogramCounterWithOpts(std::move(labels), std::move(supplier));
+    }
+    THistogram* TMetricRegistry::HistogramCounterWithOpts(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(opts), std::move(supplier), false);
     }
 
     THistogram* TMetricRegistry::HistogramRate(TLabels labels, IHistogramCollectorPtr collector) {
-        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
+        return HistogramRateWithOpts(std::move(labels), std::move(collector));
+    }
+    THistogram* TMetricRegistry::HistogramRateWithOpts(TLabels labels, IHistogramCollectorPtr collector, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(opts), std::move(collector), true);
     }
 
     THistogram* TMetricRegistry::HistogramRate(ILabelsPtr labels, IHistogramCollectorPtr collector) {
-        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
+        return HistogramRateWithOpts(std::move(labels), std::move(collector));
+    }
+    THistogram* TMetricRegistry::HistogramRateWithOpts(ILabelsPtr labels, IHistogramCollectorPtr collector, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(opts), std::move(collector), true);
     }
 
     THistogram* TMetricRegistry::HistogramRate(TLabels labels, std::function<IHistogramCollectorPtr()> supplier) {
-        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(supplier), true);
+        return HistogramRateWithOpts(std::move(labels), std::move(supplier));
+    }
+    THistogram* TMetricRegistry::HistogramRateWithOpts(TLabels labels, std::function<IHistogramCollectorPtr()> supplier, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(opts), std::move(supplier), true);
     }
 
     THistogram* TMetricRegistry::HistogramRate(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier) {
-        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(supplier), true);
+        return HistogramRateWithOpts(std::move(labels), std::move(supplier));
+    }
+    THistogram* TMetricRegistry::HistogramRateWithOpts(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier, TMetricOpts opts) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(opts), std::move(supplier), true);
     }
 
     void TMetricRegistry::Reset() {
         TWriteGuard g{*Lock_};
-        for (auto& [label, metric] : Metrics_) {
-            switch (metric->Type()) {
-            case EMetricType::GAUGE:
-                static_cast<TGauge*>(metric.Get())->Set(.0);
-                break;
-            case EMetricType::IGAUGE:
-                static_cast<TIntGauge*>(metric.Get())->Set(0);
-                break;
-            case EMetricType::COUNTER:
-                static_cast<TCounter*>(metric.Get())->Reset();
-                break;
-            case EMetricType::RATE:
-                static_cast<TRate*>(metric.Get())->Reset();
-                break;
-            case EMetricType::HIST:
-            case EMetricType::HIST_RATE:
-                static_cast<THistogram*>(metric.Get())->Reset();
-                break;
-            case EMetricType::UNKNOWN:
-            case EMetricType::DSUMMARY:
-            case EMetricType::LOGHIST:
-                break;
-            }
+        for (auto& [label, metricValue] : Metrics_) {
+            metricValue.Metric->Reset();
         }
     }
 
     void TMetricRegistry::Clear() {
         TWriteGuard g{*Lock_};
         Metrics_.clear();
-    }
-
-    template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
-    TMetric* TMetricRegistry::Metric(TLabelsType&& labels, Args&&... args) {
-        {
-            TReadGuard g{*Lock_};
-
-            auto it = Metrics_.find(labels);
-            if (it != Metrics_.end()) {
-                Y_ENSURE(it->second->Type() == type, "cannot create metric " << labels
-                        << " with type " << MetricTypeToStr(type)
-                        << ", because registry already has same metric with type " << MetricTypeToStr(it->second->Type()));
-                return static_cast<TMetric*>(it->second.Get());
-            }
-        }
-
-        {
-            IMetricPtr metric = MakeIntrusive<TMetric>(std::forward<Args>(args)...);
-
-            TWriteGuard g{*Lock_};
-            // decltype(Metrics_)::iterator breaks build on windows
-            THashMap<ILabelsPtr, IMetricPtr>::iterator it;
-            if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) {
-                it = Metrics_.emplace(new TLabels{std::forward<TLabelsType>(labels)}, std::move(metric)).first;
-            } else {
-                it = Metrics_.emplace(std::forward<TLabelsType>(labels), std::move(metric)).first;
-            }
-
-            return static_cast<TMetric*>(it->second.Get());
-        }
     }
 
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
@@ -227,7 +249,7 @@ namespace NMonitoring {
             consumer->OnLabelsEnd();
         }
 
-        TVector<std::pair<ILabelsPtr, IMetricPtr>> tmpMetrics;
+        TVector<std::pair<ILabelsPtr, TMetricValue>> tmpMetrics;
 
         {
             TReadGuard g{*Lock_};
@@ -239,10 +261,17 @@ namespace NMonitoring {
 
         for (const auto& it: tmpMetrics) {
             ILabels* labels = it.first.Get();
-            IMetric* metric = it.second.Get();
-            ConsumeMetric(time, consumer, metric, [&]() {
-                ConsumeLabels(consumer, *labels);
-            });
+            IMetric* metric = it.second.Metric.Get();
+            TMetricOpts opts = it.second.Opts;
+            ConsumeMetric(
+                time,
+                consumer,
+                metric,
+                [&]() {
+                    ConsumeLabels(consumer, *labels);
+                },
+                opts
+            );
         }
 
         consumer->OnStreamEnd();
@@ -253,11 +282,41 @@ namespace NMonitoring {
 
         for (const auto& it: Metrics_) {
             ILabels* labels = it.first.Get();
-            IMetric* metric = it.second.Get();
-            ConsumeMetric(time, consumer, metric, [&]() {
-                ConsumeLabels(consumer, CommonLabels_);
-                ConsumeLabels(consumer, *labels);
-            });
+            IMetric* metric = it.second.Metric.Get();
+            TMetricOpts opts = it.second.Opts;
+            ConsumeMetric(
+                time,
+                consumer,
+                metric,
+                [&]() {
+                    ConsumeLabels(consumer, CommonLabels_);
+                    ConsumeLabels(consumer, *labels);
+                },
+                opts
+            );
         }
+    }
+
+    void TMetricRegistry::Took(TInstant time, IMetricConsumer* consumer) const {
+        consumer->OnStreamBegin();
+        TReadGuard g{*Lock_};
+
+        for (const auto& it: Metrics_) {
+            ILabels* labels = it.first.Get();
+            IMetric* metric = it.second.Metric.Get();
+            TMetricOpts opts = it.second.Opts;
+            ConsumeMetric(
+                time,
+                consumer,
+                metric,
+                [&]() {
+                    ConsumeLabels(consumer, CommonLabels_);
+                    ConsumeLabels(consumer, *labels);
+                },
+                opts
+            );
+            metric->Reset();
+        }
+        consumer->OnStreamEnd();
     }
 }

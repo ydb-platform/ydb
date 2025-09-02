@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/chunk_client/config.h>
 
+#include <yt/yt/client/tablet_client/table_mount_cache.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NDriver {
@@ -218,6 +220,44 @@ void TUnreferenceLeaseCommand::DoExecute(ICommandContextPtr context)
         .ThrowOnError();
 
     ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TForsakeChaosCoordinator::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
+}
+
+void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->ForsakeChaosCoordinator(ChaosCellId_, CoordinatorCellId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetOrderedTabletSafeTrimRowCount::Register(TRegistrar registrar)
+{
+    registrar.Parameter("requests", &TThis::Requests_);
+}
+
+void TGetOrderedTabletSafeTrimRowCount::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    std::vector<TGetOrderedTabletSafeTrimRowCountRequest> requests;
+    requests.reserve(Requests_.size());
+    for (const auto& request : Requests_) {
+        requests.push_back(*request);
+    }
+
+    auto responses = WaitFor(internalClient->GetOrderedTabletSafeTrimRowCount(requests, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .Value(responses));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -452,7 +452,7 @@ class ABSL_ATTRIBUTE_TRIVIAL_ABI Status final {
 
   // The moved-from state is valid but unspecified.
   Status(Status&&) noexcept;
-  Status& operator=(Status&&);
+  Status& operator=(Status&&) noexcept;
 
   ~Status();
 
@@ -539,7 +539,7 @@ class ABSL_ATTRIBUTE_TRIVIAL_ABI Status final {
   // swap()
   //
   // Swap the contents of one status with another.
-  friend void swap(Status& a, Status& b);
+  friend void swap(Status& a, Status& b) noexcept;
 
   //----------------------------------------------------------------------------
   // Payload Management APIs
@@ -623,15 +623,15 @@ class ABSL_ATTRIBUTE_TRIVIAL_ABI Status final {
 
   // REQUIRES: !ok()
   // Ensures rep is not inlined or shared with any other Status.
-  static absl::Nonnull<status_internal::StatusRep*> PrepareToModify(
+  static status_internal::StatusRep* absl_nonnull PrepareToModify(
       uintptr_t rep);
 
   // MSVC 14.0 limitation requires the const.
   static constexpr const char kMovedFromString[] =
       "Status accessed after move.";
 
-  static absl::Nonnull<const std::string*> EmptyString();
-  static absl::Nonnull<const std::string*> MovedFromString();
+  static const std::string* absl_nonnull EmptyString();
+  static const std::string* absl_nonnull MovedFromString();
 
   // Returns whether rep contains an inlined representation.
   // See rep_ for details.
@@ -649,8 +649,8 @@ class ABSL_ATTRIBUTE_TRIVIAL_ABI Status final {
 
   // Converts between StatusRep* and the external uintptr_t representation used
   // by rep_. See rep_ for details.
-  static uintptr_t PointerToRep(status_internal::StatusRep* r);
-  static absl::Nonnull<const status_internal::StatusRep*> RepToPointer(
+  static uintptr_t PointerToRep(status_internal::StatusRep* absl_nonnull r);
+  static const status_internal::StatusRep* absl_nonnull RepToPointer(
       uintptr_t r);
 
   static std::string ToStringSlow(uintptr_t rep, StatusToStringMode mode);
@@ -789,7 +789,7 @@ inline Status::Status(Status&& x) noexcept : Status(x.rep_) {
   x.rep_ = MovedFromRep();
 }
 
-inline Status& Status::operator=(Status&& x) {
+inline Status& Status::operator=(Status&& x) noexcept {
   uintptr_t old_rep = rep_;
   if (x.rep_ != old_rep) {
     rep_ = x.rep_;
@@ -852,7 +852,7 @@ inline void Status::IgnoreError() const {
   // no-op
 }
 
-inline void swap(absl::Status& a, absl::Status& b) {
+inline void swap(absl::Status& a, absl::Status& b) noexcept {
   using std::swap;
   swap(a.rep_, b.rep_);
 }
@@ -902,14 +902,14 @@ constexpr uintptr_t Status::MovedFromRep() {
   return CodeToInlinedRep(absl::StatusCode::kInternal) | 2;
 }
 
-inline absl::Nonnull<const status_internal::StatusRep*> Status::RepToPointer(
+inline const status_internal::StatusRep* absl_nonnull Status::RepToPointer(
     uintptr_t rep) {
   assert(!IsInlined(rep));
   return reinterpret_cast<const status_internal::StatusRep*>(rep);
 }
 
 inline uintptr_t Status::PointerToRep(
-    absl::Nonnull<status_internal::StatusRep*> rep) {
+    status_internal::StatusRep* absl_nonnull rep) {
   return reinterpret_cast<uintptr_t>(rep);
 }
 
@@ -934,7 +934,7 @@ inline Status CancelledError() { return Status(absl::StatusCode::kCancelled); }
 // If the status's message is empty, the empty string is returned.
 //
 // StatusMessageAsCStr exists for C support. Use `status.message()` in C++.
-absl::Nonnull<const char*> StatusMessageAsCStr(
+const char* absl_nonnull StatusMessageAsCStr(
     const Status& status ABSL_ATTRIBUTE_LIFETIME_BOUND);
 
 ABSL_NAMESPACE_END

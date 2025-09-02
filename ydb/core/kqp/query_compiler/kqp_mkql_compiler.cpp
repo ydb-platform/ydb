@@ -3,9 +3,11 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+
+#include <cstdlib>
 
 namespace NKikimr {
 namespace NKqp {
@@ -25,15 +27,13 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         ui32 columnId = 0;
         ui32 columnType = 0;
         bool notNull = false;
-        void* columnTypeDesc = nullptr;
+        NScheme::TTypeInfo columnTypeInfo;
 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {
             columnId = columnData->Id;
             columnType = columnData->TypeInfo.GetTypeId();
-            if (columnType == NScheme::NTypeIds::Pg) {
-                columnTypeDesc = columnData->TypeInfo.GetTypeDesc();
-            }
+            columnTypeInfo = columnData->TypeInfo;
             notNull = columnData->NotNull;
         } else if (allowSystemColumns) {
             auto systemColumn = GetSystemColumns().find(name);
@@ -43,7 +43,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << name);
-        pgmColumns.emplace_back(columnId, name, columnType, notNull, columnTypeDesc);
+        pgmColumns.emplace_back(columnId, name, columnType, notNull, columnTypeInfo);
     }
 
     return pgmColumns;
@@ -74,11 +74,14 @@ TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKi
 
 NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, const TKqlCompileContext& ctx) {
     auto typeId = typeInfo.GetTypeId();
-    if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        return ctx.PgmBuilder().NewDecimalType(22, 9);
-    } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
-    } else {
+    switch (typeId) {
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        const NScheme::TDecimalType& decimal = typeInfo.GetDecimalType();
+        return ctx.PgmBuilder().NewDecimalType(decimal.GetPrecision(), decimal.GetScale());
+    }
+    case NKikimr::NScheme::NTypeIds::Pg:
+        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
+    default:
         return ctx.PgmBuilder().NewDataType(typeId);
     }
 }
@@ -86,14 +89,19 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
 void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TTypeId columnTypeId) {
     YQL_ENSURE(type);
     bool isOptional;
-    if (columnTypeId == NKikimr::NScheme::NTypeIds::Pg) {
+    switch (columnTypeId) {
+    case NKikimr::NScheme::NTypeIds::Pg: {
         const TPgExprType* pgType = nullptr;
         YQL_ENSURE(IsPg(type, pgType));
-    } else {
+        break;
+    }
+    default: {
         const TDataExprType* dataType = nullptr;
         YQL_ENSURE(IsDataOrOptionalOfData(type, isOptional, dataType));
         auto schemeType = NUdf::GetDataTypeInfo(dataType->GetSlot()).TypeId;
         YQL_ENSURE(schemeType == columnTypeId);
+        break;
+    }
     }
 }
 
@@ -191,7 +199,7 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
     if (settings.ItemsLimit) {
         keyRange.ItemsLimit = MkqlBuildExpr(*settings.ItemsLimit, buildCtx);
     }
-    keyRange.Reverse = settings.Reverse;
+    keyRange.Reverse = settings.IsReverse();
 
     return keyRange;
 }
@@ -204,7 +212,7 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     TKqpKeyRanges ranges = {
         .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx),
         .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(),
-        .Reverse = settings.Reverse,
+        .Reverse = settings.IsReverse(),
     };
 
     return ranges;
@@ -327,23 +335,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpLookupTable::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpLookupTable lookupTable(&node);
-            const auto& tableMeta = ctx.GetTableMeta(lookupTable.Table());
-            auto lookupKeys = MkqlBuildExpr(lookupTable.LookupKeys().Ref(), buildCtx);
-
-            auto keysType = lookupTable.LookupKeys().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(keysType, tableMeta);
-
-            TVector<TStringBuf> keyColumns(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            auto result = ctx.PgmBuilder().KqpLookupTable(MakeTableId(lookupTable.Table()), lookupKeys,
-                GetKqpColumns(tableMeta, keyColumns, false),
-                GetKqpColumns(tableMeta, lookupTable.Columns(), true));
-
-            return result;
-        });
-
     compiler->AddCallable(TKqpUpsertRows::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpUpsertRows upsertRows(&node);
@@ -431,6 +422,82 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
+
+    compiler->AddCallable("BlockHashJoinCore",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 5, "BlockHashJoinCore should have 5 arguments");
+
+            // Compile input streams
+            auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
+            auto rightInput = MkqlBuildExpr(*node.Child(1), buildCtx);
+
+            // Get join kind from atom
+            auto joinKindNode = node.Child(2);
+            YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
+            auto joinKindStr = joinKindNode->Content();
+
+            EJoinKind joinKind;
+            if (joinKindStr == "Inner") {
+                joinKind = EJoinKind::Inner;
+            } else if (joinKindStr == "Left") {
+                joinKind = EJoinKind::Left;
+            } else if (joinKindStr == "LeftSemi") {
+                joinKind = EJoinKind::LeftSemi;
+            } else if (joinKindStr == "LeftOnly") {
+                joinKind = EJoinKind::LeftOnly;
+            } else if (joinKindStr == "Cross") {
+                joinKind = EJoinKind::Cross;
+            } else {
+                YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
+            }
+
+            // Extract key column indices from tuple literals
+            auto extractColumnIndices = [](const TExprNode* tupleNode) -> TVector<ui32> {
+                YQL_ENSURE(tupleNode->IsList(), "Expected tuple of atoms");
+                TVector<ui32> indices;
+                for (const auto& child : tupleNode->Children()) {
+                    YQL_ENSURE(child->IsAtom(), "Expected atom in key columns");
+                    indices.push_back(FromString<ui32>(child->Content()));
+                }
+                return indices;
+            };
+            auto leftKeyColumns = extractColumnIndices(node.Child(3));
+            auto rightKeyColumns = extractColumnIndices(node.Child(4));
+
+            // Get return type from node annotation
+            TStringStream errorStream;
+            auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
+            YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
+
+            // Use the specialized DqBlockHashJoin method
+            return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
+                leftKeyColumns, rightKeyColumns, returnType);
+        });
+
+    compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+        TDqPhyHashCombine hc(&node);
+        const auto flow = MkqlBuildExpr(*node.Child(0U), buildCtx);
+        i64 memLimit = 0LL;
+        TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+        memLimit = std::abs(memLimit);
+        const auto keyExtractor = [&](TRuntimeNode::TList items) {
+            return MkqlBuildWideLambda(*node.Child(2U), buildCtx, items);
+        };
+        const auto init = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            return MkqlBuildWideLambda(*node.Child(3U), buildCtx, keys);
+        };
+        const auto update = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(4U), buildCtx, keys);
+        };
+        const auto finish = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
+        };
+        return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+    });
 
     return compiler;
 }

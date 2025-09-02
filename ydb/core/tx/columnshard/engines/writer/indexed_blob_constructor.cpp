@@ -1,16 +1,16 @@
 #include "indexed_blob_constructor.h"
 
-#include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-
+#include <ydb/core/tx/columnshard/defs.h>
 
 namespace NKikimr::NOlap {
 
-TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
+TIndexedWriteController::TIndexedWriteController(
+    const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
     : Buffer(action, std::move(aggregations))
-    , DstActor(dstActor)
-{
+    , DstActor(dstActor) {
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {
         auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.ExtractBlobData(), action));
@@ -33,22 +33,22 @@ void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
     Range.BlobId = id;
 }
 
-void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
-    }
+void TWritingBuffer::InitReadyInstant(const TMonotonic /*instant*/) {
+//     for (auto&& aggr : Aggregations) {
+//        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
+//     }
 }
 
-void TWritingBuffer::InitStartSending(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
-    }
+void TWritingBuffer::InitStartSending(const TMonotonic /*instant*/) {
+//     for (auto&& aggr : Aggregations) {
+//         aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
+//     }
 }
 
-void TWritingBuffer::InitReplyReceived(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
-    }
+void TWritingBuffer::InitReplyReceived(const TMonotonic /*instant*/) {
+//    for (auto&& aggr : Aggregations) {
+//        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
+//    }
 }
 
 std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
@@ -89,4 +89,4 @@ TString TWritingBlob::ExtractBlobData() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap

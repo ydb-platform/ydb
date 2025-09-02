@@ -6,7 +6,6 @@ from collections import namedtuple
 import six
 from hamcrest import has_properties
 
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
 import ydb.core.protos.msgbus_pb2 as msgbus
 
 
@@ -45,70 +44,6 @@ def to_bytes(v):
         except Exception as e:
             raise ValueError(str(e), type(v))
     return v
-
-
-class KVRequest(AbstractProtobufBuilder):
-
-    def __init__(self):
-        super(KVRequest, self).__init__(msgbus_kv.TKeyValueRequest())
-
-    def write(self, key, value):
-        write_cmd = self.protobuf.CmdWrite.add()
-        write_cmd.Key = to_bytes(key)
-        write_cmd.Value = to_bytes(value)
-        return self
-
-    def read(self, key, offset=0, size=0):
-        read_cmd = self.protobuf.CmdRead.add()
-        read_cmd.Key = to_bytes(key)
-        if offset:
-            read_cmd.Offset = offset
-        if size:
-            read_cmd.Size = size
-        return self
-
-    def read_range(self, key_range, include_data=True, limit_bytes=None):
-        read_range = self.protobuf.CmdReadRange.add()
-        read_range.Range.From = to_bytes(key_range.from_key)
-        read_range.Range.IncludeFrom = key_range.include_from
-        read_range.Range.To = to_bytes(key_range.to_key)
-        read_range.Range.IncludeTo = key_range.include_to
-        read_range.IncludeData = include_data
-        if limit_bytes is not None:
-            read_range.LimitBytes = limit_bytes
-        return self
-
-    def copy_range(self, prefix_to_add, key_range=None, prefix_to_remove=None):
-        clone_range = self.protobuf.CmdCopyRange.add()
-        clone_range.PrefixToAdd = to_bytes(prefix_to_add)
-        if key_range is not None:
-            clone_range.Range.From = to_bytes(key_range.from_key)
-            clone_range.Range.IncludeFrom = key_range.include_from
-            clone_range.Range.To = to_bytes(key_range.to_key)
-            clone_range.Range.IncludeTo = key_range.include_to
-        if prefix_to_remove is not None:
-            clone_range.PrefixToRemove = to_bytes(prefix_to_remove)
-        return self
-
-    def concat(self, output_key, input_keys=None, keep_input=None):
-        concat_cmd = self.protobuf.CmdConcat.add()
-        concat_cmd.OutputKey = to_bytes(output_key)
-        if input_keys is not None:
-            concat_cmd.InputKeys.extend(list(map(to_bytes, input_keys)))
-        if keep_input is not None:
-            concat_cmd.KeepInputs = keep_input
-
-        return self
-
-    def inc_generation(self):
-        self.protobuf.CmdIncrementGeneration.CopyFrom(self.protobuf.TCmdIncrementGeneration())
-        return self
-
-    def add_storage_channel_status(self, storage_channel_type=msgbus_kv.TKeyValueRequest.MAIN):
-        self.protobuf.CmdGetStatus.add(
-            StorageChannel=storage_channel_type
-        )
-        return self
 
 
 class THiveCreateTablet(AbstractProtobufBuilder):

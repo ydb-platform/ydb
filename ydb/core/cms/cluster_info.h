@@ -7,6 +7,7 @@
 #include "services.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -36,13 +37,6 @@ using TClusterInfoPtr = TIntrusivePtr<TClusterInfo>;
 
 struct TCmsState;
 using TCmsStatePtr = TIntrusivePtr<TCmsState>;
-
-struct TErrorInfo {
-    NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::ALLOW;
-    TString Reason;
-    TInstant Deadline;
-    ui64 RollbackPoint = 0;
-};
 
 /**
  * Structure to hold info about issued permission. A set of
@@ -351,6 +345,7 @@ public:
     TString PreviousTenant;
     TServices Services;
     TInstant StartTime;
+    TMaybeFail<ui32> PileId;
 
     TVector<TSimpleSharedPtr<INodesChecker>> NodeGroups;
 };
@@ -660,13 +655,15 @@ public:
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
+    using TPileId = ui32;
 
-    using TenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TTenantNodesCheckers = THashMap<TString, TSimpleSharedPtr<TNodesLimitsCounterBase>>;
+    using TClusterPilesNodesCheckers = THashMap<TPileId, TSimpleSharedPtr<TClusterLimitsCounter>>;
 
     friend TOperationLogManager;
 
-    TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+    THashMap<TPileId, TTenantNodesCheckers> TenantNodesChecker;
+    TClusterPilesNodesCheckers ClusterNodes;
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
@@ -685,6 +682,7 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
         return StateStorageReplicas.contains(nodeId);
@@ -905,6 +903,8 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
+    
+    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
     void ResetHostMarkers(const TString &hostName);
@@ -985,6 +985,10 @@ private:
         return PDiskRef(id);
     }
 
+    TPDiskInfo &PDiskRef(const TString &hostName, const TString &path) {
+        return PDiskRef(HostNamePathToPDiskId(hostName, path));
+    }
+
     TVDiskInfo &VDiskRef(const TVDiskID &vdId) {
         Y_ABORT_UNLESS(HasVDisk(vdId));
         return *VDisks.find(vdId)->second;
@@ -1016,8 +1020,6 @@ private:
         return TPDiskID();
     }
 
-    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
-
     TNodes Nodes;
     TTablets Tablets;
     TPDisks PDisks;
@@ -1037,14 +1039,18 @@ private:
     THashMap<ui32, ui32> StateStorageNodeToRingId;
 
 public:
+    using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
 
-    THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>> SysNodesCheckers;
+    THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
-    TVector<TStateStorageRingInfoPtr> StateStorageRings;
+    TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;
+
+    THashMap<ui32, ui32> NodeIdToPileId;
+    bool IsBridgeMode = false;
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type) {

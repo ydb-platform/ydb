@@ -27,6 +27,7 @@ private:
 
     struct TReadClientSubjectResult {
         std::vector<std::pair<TString, TString>> SubjectDn;
+        std::vector<TString> SubjectDns; // Subject alternative names, DNS
         TEvTicketParser::TError Error;
     };
 
@@ -47,7 +48,7 @@ private:
     TEvTicketParser::TError CheckIssuers(const TPemCertificates& pemCertificates) const;
     TReadClientSubjectResult ReadSubjectFromClientCertificate(const TPemCertificates& pemCertificates) const;
     TString CreateUserSidFromSubjectDn(const std::vector<std::pair<TString, TString>>& subjectDn) const;
-    TEvTicketParser::TError CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn, const TCertificateAuthorizationParams& authParams) const;
+    TEvTicketParser::TError CheckClientSubject(const TReadClientSubjectResult& subjectInfo, const TCertificateAuthorizationParams& authParams) const;
     TCertificateCheckResult DefaultCheckClientCertificate(const TPemCertificates& pemCertificates) const;
     TCertificateCheckResult CheckClientCertificate(const TPemCertificates& pemCertificates) const;
     TString GetDefaultGroup() const;

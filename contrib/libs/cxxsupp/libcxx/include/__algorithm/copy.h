@@ -14,8 +14,10 @@
 #include <__algorithm/iterator_operations.h>
 #include <__algorithm/min.h>
 #include <__config>
+#include <__iterator/iterator_traits.h>
 #include <__iterator/segmented_iterator.h>
 #include <__type_traits/common_type.h>
+#include <__type_traits/enable_if.h>
 #include <__utility/move.h>
 #include <__utility/pair.h>
 
@@ -32,7 +34,7 @@ template <class, class _InIter, class _Sent, class _OutIter>
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 pair<_InIter, _OutIter> __copy(_InIter, _Sent, _OutIter);
 
 template <class _AlgPolicy>
-struct __copy_loop {
+struct __copy_impl {
   template <class _InIter, class _Sent, class _OutIter>
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 pair<_InIter, _OutIter>
   operator()(_InIter __first, _Sent __last, _OutIter __result) const {
@@ -51,9 +53,10 @@ struct __copy_loop {
 
     _OutIter& __result_;
 
-    _LIBCPP_HIDE_FROM_ABI _CopySegment(_OutIter& __result) : __result_(__result) {}
+    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 explicit _CopySegment(_OutIter& __result)
+        : __result_(__result) {}
 
-    _LIBCPP_HIDE_FROM_ABI void
+    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void
     operator()(typename _Traits::__local_iterator __lfirst, typename _Traits::__local_iterator __llast) {
       __result_ = std::__copy<_AlgPolicy>(__lfirst, __llast, std::move(__result_)).second;
     }
@@ -93,9 +96,7 @@ struct __copy_loop {
       __local_first = _Traits::__begin(++__segment_iterator);
     }
   }
-};
 
-struct __copy_trivial {
   // At this point, the iterators have been unwrapped so any `contiguous_iterator` has been unwrapped to a pointer.
   template <class _In, class _Out, __enable_if_t<__can_lower_copy_assignment_to_memmove<_In, _Out>::value, int> = 0>
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 pair<_In*, _Out*>
@@ -107,12 +108,12 @@ struct __copy_trivial {
 template <class _AlgPolicy, class _InIter, class _Sent, class _OutIter>
 pair<_InIter, _OutIter> inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14
 __copy(_InIter __first, _Sent __last, _OutIter __result) {
-  return std::__dispatch_copy_or_move<_AlgPolicy, __copy_loop<_AlgPolicy>, __copy_trivial>(
+  return std::__copy_move_unwrap_iters<__copy_impl<_AlgPolicy> >(
       std::move(__first), std::move(__last), std::move(__result));
 }
 
 template <class _InputIterator, class _OutputIterator>
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_SINCE_CXX20 _OutputIterator
+inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 _OutputIterator
 copy(_InputIterator __first, _InputIterator __last, _OutputIterator __result) {
   return std::__copy<_ClassicAlgPolicy>(__first, __last, __result).second;
 }

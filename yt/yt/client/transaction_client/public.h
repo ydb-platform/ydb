@@ -31,6 +31,10 @@ DEFINE_ENUM(ECommitOrdering,
     ((Strong)          (1)) // Rows are appended to tablet in order of timestamps
 );
 
+DEFINE_ENUM(ETimestampProviderFeature,
+    ((AlienClocks)     (0))
+);
+
 YT_DEFINE_ERROR_ENUM(
     ((NoSuchTransaction)                (11000))
     ((NestedExternalTransactionExists)  (11001))
@@ -48,6 +52,8 @@ YT_DEFINE_ERROR_ENUM(
     ((TransactionSuccessorHasLeases)    (11013))
     ((UnknownClockClusterTag)           (11014))
     ((ClockClusterTagMismatch)          (11015))
+    ((ChaosCoordinatorsAreNotAvailable) (11016))
+    ((NeedLockDynamicTablesBeforeCommit)(11017))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +104,7 @@ constexpr TTimestamp NotPreparedTimestamp         = 0x3fffffffffffffffULL;
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(ITimestampProvider)
-DECLARE_REFCOUNTED_CLASS(TRemoteTimestampProviderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

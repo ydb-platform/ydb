@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <util/datetime/base.h>
 
@@ -30,12 +31,12 @@ public:
         : Path({coordinationNode, resourcePath, databaseName, token}) {
     }
 
-    operator bool() const { return !Path.ResourcePath.Empty() && !Path.CoordinationNode.Empty(); };
+    operator bool() const { return !Path.ResourcePath.empty() && !Path.CoordinationNode.empty(); };
     const NRpcService::TRlFullPath GetPath() const { return Path; }
 
 private:
-    NRpcService::TRlFullPath Path;    
-};    
+    NRpcService::TRlFullPath Path;
+};
 
 class TRlHelpers: public NMetering::TStreamRequestUnitsCalculator {
 public:
@@ -58,11 +59,11 @@ protected:
     bool IsQuotaRequired() const;
     bool IsQuotaInflight() const;
 
-    void RequestInitQuota(ui64 amount, const TActorContext& ctx);
-    void RequestDataQuota(ui64 amount, const TActorContext& ctx);
+    void RequestInitQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId = {});
+    void RequestDataQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId = {});
 
-    bool MaybeRequestQuota(ui64 amount, EWakeupTag tag, const TActorContext& ctx);
-    void RequestQuota(ui64 amount, EWakeupTag success, EWakeupTag timeout, const TActorContext& ctx);
+    bool MaybeRequestQuota(ui64 amount, EWakeupTag tag, const TActorContext& ctx, NWilson::TTraceId traceId = {});
+    void RequestQuota(ui64 amount, EWakeupTag success, EWakeupTag timeout, const TActorContext& ctx, NWilson::TTraceId traceId = {});
 
     void OnWakeup(EWakeupTag tag);
 

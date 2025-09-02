@@ -40,24 +40,24 @@ namespace orc {
   SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgument,
                              uint64_t rowIndexStride, WriterVersion writerVersion,
                              ReaderMetrics* metrics, const SchemaEvolution* schemaEvolution)
-      : mType(type),
-        mSearchArgument(searchArgument),
-        mSchemaEvolution(schemaEvolution),
-        mRowIndexStride(rowIndexStride),
-        mWriterVersion(writerVersion),
-        mHasEvaluatedFileStats(false),
-        mFileStatsEvalResult(true),
-        mMetrics(metrics) {
-    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
+      : type_(type),
+        searchArgument_(searchArgument),
+        schemaEvolution_(schemaEvolution),
+        rowIndexStride_(rowIndexStride),
+        writerVersion_(writerVersion),
+        hasEvaluatedFileStats_(false),
+        fileStatsEvalResult_(true),
+        metrics_(metrics) {
+    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(searchArgument_);
 
     // find the mapping from predicate leaves to columns
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
-    mFilterColumns.resize(leaves.size(), INVALID_COLUMN_ID);
-    for (size_t i = 0; i != mFilterColumns.size(); ++i) {
+    filterColumns_.resize(leaves.size(), INVALID_COLUMN_ID);
+    for (size_t i = 0; i != filterColumns_.size(); ++i) {
       if (leaves[i].hasColumnName()) {
-        mFilterColumns[i] = findColumn(type, leaves[i].getColumnName());
+        filterColumns_[i] = findColumn(type, leaves[i].getColumnName());
       } else {
-        mFilterColumns[i] = leaves[i].getColumnId();
+        filterColumns_[i] = leaves[i].getColumnId();
       }
     }
   }
@@ -66,30 +66,30 @@ namespace orc {
                                    const std::unordered_map<uint64_t, proto::RowIndex>& rowIndexes,
                                    const std::map<uint32_t, BloomFilterIndex>& bloomFilters) {
     // init state of each row group
-    uint64_t groupsInStripe = (rowsInStripe + mRowIndexStride - 1) / mRowIndexStride;
-    mNextSkippedRows.resize(groupsInStripe);
-    mTotalRowsInStripe = rowsInStripe;
+    uint64_t groupsInStripe = (rowsInStripe + rowIndexStride_ - 1) / rowIndexStride_;
+    nextSkippedRows_.resize(groupsInStripe);
+    totalRowsInStripe_ = rowsInStripe;
 
     // row indexes do not exist, simply read all rows
     if (rowIndexes.empty()) {
       return true;
     }
 
-    const auto& leaves = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument)->getLeaves();
+    const auto& leaves = dynamic_cast<const SearchArgumentImpl*>(searchArgument_)->getLeaves();
     std::vector<TruthValue> leafValues(leaves.size(), TruthValue::YES_NO_NULL);
-    mHasSelected = false;
-    mHasSkipped = false;
+    hasSelected_ = false;
+    hasSkipped_ = false;
     uint64_t nextSkippedRowGroup = groupsInStripe;
     size_t rowGroup = groupsInStripe;
     do {
       --rowGroup;
       for (size_t pred = 0; pred != leaves.size(); ++pred) {
-        uint64_t columnIdx = mFilterColumns[pred];
+        uint64_t columnIdx = filterColumns_[pred];
         auto rowIndexIter = rowIndexes.find(columnIdx);
         if (columnIdx == INVALID_COLUMN_ID || rowIndexIter == rowIndexes.cend()) {
           // this column does not exist in current file
           leafValues[pred] = TruthValue::YES_NO_NULL;
-        } else if (mSchemaEvolution && !mSchemaEvolution->isSafePPDConversion(columnIdx)) {
+        } else if (schemaEvolution_ && !schemaEvolution_->isSafePPDConversion(columnIdx)) {
           // cannot evaluate predicate when ppd is not safe
           leafValues[pred] = TruthValue::YES_NO_NULL;
         } else {
@@ -104,37 +104,37 @@ namespace orc {
             bloomFilter = iter->second.entries.at(rowGroup);
           }
 
-          leafValues[pred] = leaves[pred].evaluate(mWriterVersion, statistics, bloomFilter.get());
+          leafValues[pred] = leaves[pred].evaluate(writerVersion_, statistics, bloomFilter.get());
         }
       }
 
-      bool needed = isNeeded(mSearchArgument->evaluate(leafValues));
+      bool needed = isNeeded(searchArgument_->evaluate(leafValues));
       if (!needed) {
-        mNextSkippedRows[rowGroup] = 0;
+        nextSkippedRows_[rowGroup] = 0;
         nextSkippedRowGroup = rowGroup;
       } else {
-        mNextSkippedRows[rowGroup] = (nextSkippedRowGroup == groupsInStripe)
+        nextSkippedRows_[rowGroup] = (nextSkippedRowGroup == groupsInStripe)
                                          ? rowsInStripe
-                                         : (nextSkippedRowGroup * mRowIndexStride);
+                                         : (nextSkippedRowGroup * rowIndexStride_);
       }
-      mHasSelected |= needed;
-      mHasSkipped |= !needed;
+      hasSelected_ |= needed;
+      hasSkipped_ |= !needed;
     } while (rowGroup != 0);
 
     // update stats
     uint64_t selectedRGs = std::accumulate(
-        mNextSkippedRows.cbegin(), mNextSkippedRows.cend(), 0UL,
+        nextSkippedRows_.cbegin(), nextSkippedRows_.cend(), 0UL,
         [](uint64_t initVal, uint64_t rg) { return rg > 0 ? initVal + 1 : initVal; });
-    if (mMetrics != nullptr) {
-      mMetrics->SelectedRowGroupCount.fetch_add(selectedRGs);
-      mMetrics->EvaluatedRowGroupCount.fetch_add(groupsInStripe);
+    if (metrics_ != nullptr) {
+      metrics_->SelectedRowGroupCount.fetch_add(selectedRGs);
+      metrics_->EvaluatedRowGroupCount.fetch_add(groupsInStripe);
     }
 
-    return mHasSelected;
+    return hasSelected_;
   }
 
   bool SargsApplier::evaluateColumnStatistics(const PbColumnStatistics& colStats) const {
-    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
+    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(searchArgument_);
     if (sargs == nullptr) {
       throw InvalidArgument("Failed to cast to SearchArgumentImpl");
     }
@@ -143,14 +143,14 @@ namespace orc {
     std::vector<TruthValue> leafValues(leaves.size(), TruthValue::YES_NO_NULL);
 
     for (size_t pred = 0; pred != leaves.size(); ++pred) {
-      uint64_t columnId = mFilterColumns[pred];
+      uint64_t columnId = filterColumns_[pred];
       if (columnId != INVALID_COLUMN_ID && colStats.size() > static_cast<int>(columnId)) {
-        leafValues[pred] = leaves[pred].evaluate(mWriterVersion,
+        leafValues[pred] = leaves[pred].evaluate(writerVersion_,
                                                  colStats.Get(static_cast<int>(columnId)), nullptr);
       }
     }
 
-    return isNeeded(mSearchArgument->evaluate(leafValues));
+    return isNeeded(searchArgument_->evaluate(leafValues));
   }
 
   bool SargsApplier::evaluateStripeStatistics(const proto::StripeStatistics& stripeStats,
@@ -160,29 +160,29 @@ namespace orc {
     }
 
     bool ret = evaluateColumnStatistics(stripeStats.col_stats());
-    if (mMetrics != nullptr) {
-      mMetrics->EvaluatedRowGroupCount.fetch_add(stripeRowGroupCount);
+    if (metrics_ != nullptr) {
+      metrics_->EvaluatedRowGroupCount.fetch_add(stripeRowGroupCount);
     }
     if (!ret) {
       // reset mNextSkippedRows when the current stripe does not satisfy the PPD
-      mNextSkippedRows.clear();
+      nextSkippedRows_.clear();
     }
     return ret;
   }
 
   bool SargsApplier::evaluateFileStatistics(const proto::Footer& footer,
                                             uint64_t numRowGroupsInStripeRange) {
-    if (!mHasEvaluatedFileStats) {
+    if (!hasEvaluatedFileStats_) {
       if (footer.statistics_size() == 0) {
-        mFileStatsEvalResult = true;
+        fileStatsEvalResult_ = true;
       } else {
-        mFileStatsEvalResult = evaluateColumnStatistics(footer.statistics());
-        if (mMetrics != nullptr) {
-          mMetrics->EvaluatedRowGroupCount.fetch_add(numRowGroupsInStripeRange);
+        fileStatsEvalResult_ = evaluateColumnStatistics(footer.statistics());
+        if (metrics_ != nullptr) {
+          metrics_->EvaluatedRowGroupCount.fetch_add(numRowGroupsInStripeRange);
         }
       }
-      mHasEvaluatedFileStats = true;
+      hasEvaluatedFileStats_ = true;
     }
-    return mFileStatsEvalResult;
+    return fileStatsEvalResult_;
   }
 }  // namespace orc

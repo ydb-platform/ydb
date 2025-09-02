@@ -1,6 +1,5 @@
 #pragma once
 
-#include "process_response.h"
 #include "query.h"
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -9,7 +8,7 @@
 #include <ydb/core/kqp/common/shutdown/events.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -20,8 +19,6 @@ namespace NKikimr::NKqp {
 
 struct TEvKqp {
     using TEvQueryRequestRemote = NPrivateEvents::TEvQueryRequestRemote;
-
-    using TEvProcessResponse = NPrivateEvents::TEvProcessResponse;
 
     using TEvQueryRequest = NPrivateEvents::TEvQueryRequest;
 
@@ -52,10 +49,19 @@ struct TEvKqp {
 
     struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
 
-    template <typename TProto>
-    using TProtoArenaHolder = NPrivateEvents::TProtoArenaHolder<TProto>;
-
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
+
+    struct TEvListQueryCacheQueriesRequest: public TEventPB<
+        TEvListQueryCacheQueriesRequest,
+        NKikimrKqp::TEvListCompileCacheQueriesRequest,
+        TKqpEvents::EvListCompileCacheQueriesRequest>
+    {};
+
+    struct TEvListQueryCacheQueriesResponse: public TEventPB<
+        TEvListQueryCacheQueriesResponse,
+        NKikimrKqp::TEvListCompileCacheQueriesResponse,
+        TKqpEvents::EvListCompileCacheQueriesResponse>
+    {};
 
     struct TEvListSessionsRequest: public TEventPB<TEvListSessionsRequest, NKikimrKqp::TEvListSessionsRequest,
         TKqpEvents::EvListSessionsRequest>
@@ -111,9 +117,25 @@ struct TEvKqp {
     struct TEvScriptRequest : public TEventLocal<TEvScriptRequest, TKqpEvents::EvScriptRequest> {
         TEvScriptRequest() = default;
 
+        const TString& GetDatabase() const {
+            return Record.GetRequest().GetDatabase();
+        }
+
+        const TString& GetDatabaseId() const {
+            return Record.GetRequest().GetDatabaseId();
+        }
+
+        void SetDatabaseId(const TString& databaseId) {
+            Record.MutableRequest()->SetDatabaseId(databaseId);
+        }
+
         mutable NKikimrKqp::TEvQueryRequest Record;
         TDuration ForgetAfter;
         TDuration ResultsTtl;
+        TDuration ProgressStatsPeriod;
+        std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
+        bool SaveQueryPhysicalGraph = false;
+        std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {
@@ -163,6 +185,46 @@ struct TEvKqp {
             issues.AddIssue(message);
             return issues;
         }
+    };
+
+    struct TEvUpdateDatabaseInfo : public TEventLocal<TEvUpdateDatabaseInfo, TKqpEvents::EvUpdateDatabaseInfo> {
+        TEvUpdateDatabaseInfo(const TString& database, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Database(database)
+            , Issues(std::move(issues))
+        {}
+
+        TEvUpdateDatabaseInfo(const TString& database, const TString& databaseId, bool serverless)
+            : Status(Ydb::StatusIds::SUCCESS)
+            , Database(database)
+            , DatabaseId(databaseId)
+            , Serverless(serverless)
+            , Issues({})
+        {}
+
+        Ydb::StatusIds::StatusCode Status;
+        TString Database;
+        TString DatabaseId;
+        bool Serverless = false;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvDelayedRequestError : public TEventLocal<TEvDelayedRequestError, TKqpEvents::EvDelayedRequestError> {
+        TEvDelayedRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : RequestEvent(std::move(requestEvent))
+            , Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        THolder<IEventHandle> RequestEvent;
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvProxyPingRequest : public TEventLocal<TEvProxyPingRequest, TKqpEvents::EvProxyPingRequest> {
+    };
+
+    struct TEvProxyPingResponse : public TEventLocal<TEvProxyPingResponse, TKqpEvents::EvProxyPingResponse> {
     };
 };
 

@@ -49,6 +49,7 @@ TRunActorParams::TRunActorParams(
     const TString& tenantName,
     uint64_t resultBytesLimit,
     TDuration executionTtl,
+    TInstant requestSubmittedAt,
     TInstant requestStartedAt,
     ui32 restartCount,
     const TString& jobId,
@@ -58,7 +59,11 @@ TRunActorParams::TRunActorParams(
     const NFq::NConfig::TYdbStorageConfig& computeConnection,
     TDuration resultTtl,
     std::map<TString, Ydb::TypedValue>&& queryParameters,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const std::vector<ui64>& nodeIds
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -103,6 +108,7 @@ TRunActorParams::TRunActorParams(
     , TenantName(tenantName)
     , ResultBytesLimit(resultBytesLimit)
     , ExecutionTtl(executionTtl)
+    , RequestSubmittedAt(requestSubmittedAt)
     , RequestStartedAt(requestStartedAt)
     , RestartCount(restartCount)
     , JobId(jobId)
@@ -113,12 +119,25 @@ TRunActorParams::TRunActorParams(
     , ResultTtl(resultTtl)
     , QueryParameters(std::move(queryParameters))
     , S3ActorsFactory(std::move(s3ActorsFactory))
+    , WorkloadManager(workloadManager)
+    , PqGatewayFactory(std::move(pqGatewayFactory))
+    , TaskSensorLabels(taskSensorLabels)
+    , NodeIds(nodeIds)
     {
     }
 
 IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
     return out  << "Run actors params: { QueryId: " << params.QueryId
                 << " CloudId: " << params.CloudId
+                << " Scope: " << params.Scope.ToString()
+                << " Automatic: " << params.Automatic
+                << " TenantName: " << params.TenantName
+                << " ResultBytesLimit: " << params.ResultBytesLimit
+                << " ExecutionTtl: " << params.ExecutionTtl
+                << " RequestSubmittedAt: " << params.RequestSubmittedAt
+                << " RequestStartedAt: " << params.RequestStartedAt
+                << " RestartCount: " << params.RestartCount
+                << " JobId: " << params.JobId
                 << " UserId: " << params.UserId
                 << " Owner: " << params.Owner
                 << " PreviousQueryRevision: " << params.PreviousQueryRevision
@@ -126,19 +145,23 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " Bindings: " << params.Bindings.size()
                 << " AccountIdSignatures: " << params.AccountIdSignatures.size()
                 << " QueryType: " << FederatedQuery::QueryContent::QueryType_Name(params.QueryType)
+                << " QuerySyntax: " << FederatedQuery::QueryContent::QuerySyntax_Name(params.QuerySyntax)
                 << " ExecuteMode: " << FederatedQuery::ExecuteMode_Name(params.ExecuteMode)
                 << " ResultId: " << params.ResultId
                 << " StateLoadMode: " << FederatedQuery::StateLoadMode_Name(params.StateLoadMode)
-                << " StreamingDisposition: " << params.StreamingDisposition
+                << " StreamingDisposition: " << params.StreamingDisposition.ShortDebugString()
                 << " Status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(params.Status)
                 << " DqGraphs: " << params.DqGraphs.size()
                 << " DqGraphIndex: " << params.DqGraphIndex
                 << " Resource.TopicConsumers: " << params.Resources.topic_consumers().size()
                 << " ExecutionId: " << params.ExecutionId
-                << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
+                << " OperationId: " << (params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED ? params.OperationId.ToString() : "<empty>")
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
                 << " ResultTtl: " << params.ResultTtl
                 << " QueryParameters: " << params.QueryParameters.size()
+                << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
+                << " NextUniqueId: " << params.NextUniqueId
+                << " NodeIds: " << params.NodeIds.size()
                 << "}";
 }
 

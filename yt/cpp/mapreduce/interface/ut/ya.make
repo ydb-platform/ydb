@@ -17,7 +17,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
     library/cpp/testing/gtest
     yt/yt_proto/yt/formats
     yt/cpp/mapreduce/interface

@@ -6,13 +6,13 @@ using namespace NYT::NBus;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStaticChannelFactoryPtr TStaticChannelFactory::Add(const TString& address, IChannelPtr channel)
+TStaticChannelFactoryPtr TStaticChannelFactory::Add(const std::string& address, IChannelPtr channel)
 {
     YT_VERIFY(ChannelMap.emplace(address, channel).second);
     return this;
 }
 
-IChannelPtr TStaticChannelFactory::CreateChannel(const TString& address)
+IChannelPtr TStaticChannelFactory::CreateChannel(const std::string& address)
 {
     auto it = ChannelMap.find(address);
     if (it == ChannelMap.end()) {

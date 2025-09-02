@@ -1,0 +1,336 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-unknown-license-reference 0432342f1219b9f45896d0a51fc3f86d
+BELONGS ya.make
+    License text:
+        // which are distributed under the following terms:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        source/dragonbox_to_chars.cpp [7:7]
+
+KEEP     Apache-2.0 WITH LLVM-exception       058caf649a75342f1f37077d4171fe67
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE-Apache2-LLVM [204:218]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 0d48e0b09865a98a90db20ea37b36bb8
+BELONGS ya.make
+    License text:
+        All code, except for those belong to third-party libraries (code in [`subproject/3rdparty`](subproject/3rdparty)), is licensed under either of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [281:281]
+        README.md [286:286]
+
+KEEP     Apache-2.0           1d11316a363a29fbee8a8b9855651248
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 ([LICENSE-Apache2](fp_to_chars/LICENSE-Apache2) or http://www.apache.org/licenses/LICENSE-2.0) or
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [288:288]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        source/LICENSE-Apache2 [1:201]
+
+KEEP     Apache-2.0           2c3bc3726a0ef68dea2a008702f96131
+BELONGS ya.make
+    License text:
+        //    (See accompanying file LICENSE-Apache or copy at
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/dragonbox/dragonbox.h [6:6]
+        include/dragonbox/dragonbox_to_chars.h [6:6]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE-Boost [1:23]
+        source/LICENSE-Boost [1:23]
+
+KEEP     Apache-2.0           3cc6415fc70717aa068e4184f4248def
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 with LLVM Exceptions ([LICENSE-Apache2-LLVM](LICENSE-Apache2-LLVM) or https://llvm.org/foundation/relicensing/LICENSE.txt) or
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [283:283]
+
+KEEP     BSL-1.0 OR Apache-2.0 3d2829ea88115134c31fd7dfb3ce70dd
+BELONGS ya.make
+FILE_INCLUDE LICENSE-Boost found in files: source/dragonbox_to_chars.cpp at line 19
+FILE_INCLUDE source/LICENSE-Boost found in files: source/dragonbox_to_chars.cpp at line 19
+    # License was detected incorrectly and fixed by hand
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-1.1
+        Score           : 34.74
+        Match type      : NOTICE
+        Links           : http://www.mozilla.com/MPL/1.1/index.html, http://www.mozilla.org/MPL/MPL-1.1.html, https://spdx.org/licenses/MPL-1.1
+    Files with this license:
+        source/dragonbox_to_chars.cpp [17:24]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 34.74
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        source/dragonbox_to_chars.cpp [17:24]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 34.74
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        source/dragonbox_to_chars.cpp [17:24]
+
+KEEP     BSL-1.0              50e2a0087163df2f2c3b04a66aece833
+BELONGS ya.make
+    License text:
+         * Boost Software License Version 1.0 ([LICENSE-Boost](LICENSE-Boost) or https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [284:284]
+        README.md [289:289]
+
+KEEP     BSL-1.0              67d785c23d7b32d9a77d1123e74d8da2
+BELONGS ya.make
+FILE_INCLUDE LICENSE-Boost found in files: include/dragonbox/dragonbox.h at line 11, include/dragonbox/dragonbox_to_chars.h at line 11, source/dragonbox_to_chars.cpp at line 19
+FILE_INCLUDE source/LICENSE-Boost found in files: include/dragonbox/dragonbox.h at line 11, include/dragonbox/dragonbox_to_chars.h at line 11, source/dragonbox_to_chars.cpp at line 19
+    License text:
+        // the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE-Boost or copy at
+        //     https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 72.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/dragonbox/dragonbox.h [10:12]
+        include/dragonbox/dragonbox_to_chars.h [10:12]
+        source/dragonbox_to_chars.cpp [18:20]
+
+KEEP     BSL-1.0              6f214ad5175428024bf6301184470668
+BELONGS ya.make
+    License text:
+         * Boost Software License Version 1.0 ([LICENSE-Boost](LICENSE-Boost) or https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [284:284]
+        README.md [289:289]
+
+KEEP     Apache-2.0           764a173eeeb853ac037bc179a0dcef1e
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 ([LICENSE-Apache2](fp_to_chars/LICENSE-Apache2) or http://www.apache.org/licenses/LICENSE-2.0) or
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [288:288]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 7dc9ca1a97640eeb4068f2530c132db9
+BELONGS ya.make
+    License text:
+        // Unless required by applicable law or agreed to in writing, this software
+        // is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        // KIND, either express or implied.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 57.45
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        include/dragonbox/dragonbox.h [14:16]
+        include/dragonbox/dragonbox_to_chars.h [14:16]
+        source/dragonbox_to_chars.cpp [22:24]
+
+KEEP     BSL-1.0              8d1a316e985f5001c2db542ac9f487a3
+BELONGS ya.make
+    License text:
+         * Boost Software License Version 1.0 ([LICENSE-Boost](LICENSE-Boost) or https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [284:284]
+        README.md [289:289]
+
+KEEP     Apache-2.0           904bd2627ab2024efa261034c468d69a
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 with LLVM Exceptions ([LICENSE-Apache2-LLVM](LICENSE-Apache2-LLVM) or https://llvm.org/foundation/relicensing/LICENSE.txt) or
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [283:283]
+
+SKIP     NCSA                 97a1bac8fc57b3791a75fc7862e0e3eb
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 with LLVM Exceptions ([LICENSE-Apache2-LLVM](LICENSE-Apache2-LLVM) or https://llvm.org/foundation/relicensing/LICENSE.txt) or
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        README.md [283:283]
+
+KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE-Apache2-LLVM [1:201]
+
+KEEP     Apache-2.0           abf5eafb0ee92297e46157620f7672e0
+BELONGS ya.make
+    License text:
+         * Apache License Version 2.0 ([LICENSE-Apache2](fp_to_chars/LICENSE-Apache2) or http://www.apache.org/licenses/LICENSE-2.0) or
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [288:288]
+
+KEEP     Apache-2.0 WITH LLVM-exception c6d514740e772226c6397fc13f9c7395
+BELONGS ya.make
+    License text:
+        // the Apache License v2.0 with LLVM Exceptions.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/dragonbox/dragonbox.h [4:4]
+        include/dragonbox/dragonbox_to_chars.h [4:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        include/dragonbox/dragonbox.h [4:4]
+        include/dragonbox/dragonbox_to_chars.h [4:4]
+
+KEEP     Apache-2.0 AND MIT   ced97964d87d02604e955cae9c7ef3f1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 27.78
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [288:289]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 27.78
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [288:289]
+
+KEEP     Apache-2.0           db6eb89a8b6a3431633f0800fa377869
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 21.54
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        source/dragonbox_to_chars.cpp [11:15]

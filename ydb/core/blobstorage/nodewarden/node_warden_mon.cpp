@@ -2,6 +2,10 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+
+#include <ydb/core/util/format.h>
+
 #include <ydb/library/pdisk_io/file_params.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -105,23 +109,24 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
 
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
+            out << "<pre>";
+            OutputPrettyMessage(out, *StorageConfig);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Static service set"; }
         DIV() {
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(StaticServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            OutputPrettyMessage(out, StaticServices);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Dynamic service set"; }
         DIV() {
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(DynamicServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            OutputPrettyMessage(out, DynamicServices);
+            out << "</pre>";
         }
 
         RenderLocalDrives(out);
@@ -134,17 +139,46 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Path"; }
                     TABLEH() { out << "Guid"; }
                     TABLEH() { out << "Category"; }
+                    TABLEH() { out << "Temporary"; }
+                    TABLEH() { out << "Pending"; }
                 }
             }
             TABLEBODY() {
                 for (auto& [key, value] : LocalPDisks) {
+                    TString pending;
+                    if (const auto it = PDiskByPath.find(value.Record.GetPath()); it != PDiskByPath.end()) {
+                        if (it->second.Pending) {
+                            pending = TStringBuilder() << "PDiskId# " << it->second.Pending->GetPDiskID();
+                        } else {
+                            pending = "<none>";
+                        }
+                    } else {
+                        pending = "<path not found>"; // this is strange
+                    }
+
                     TABLER() {
-                        TABLED() { out << "(" << key.NodeId << "," << key.PDiskId << ")"; }
+                        TABLED() { out << "[" << key.NodeId << ":" << key.PDiskId << "]"; }
                         TABLED() { out << value.Record.GetPath(); }
                         TABLED() { out << value.Record.GetPDiskGuid(); }
                         TABLED() { out << value.Record.GetPDiskCategory(); }
+                        TABLED() { out << value.Temporary; }
+                        TABLED() { out << pending; }
                     }
                 }
+            }
+        }
+        if (!PDiskRestartInFlight.empty()) {
+            DIV() {
+                out << "PDiskRestartInFlight# [";
+                for (const auto& item : PDiskRestartInFlight) {
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                }
+                out << "]";
+            }
+        }
+        if (!PDisksWaitingToStart.empty()) {
+            DIV() {
+                out << "PDisksWaitingToStart# " << FormatList(PDisksWaitingToStart);
             }
         }
 
@@ -152,7 +186,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         TABLE_CLASS("table oddgray") {
             TABLEHEAD() {
                 TABLER() {
-                    TABLEH() { out << "Location (NodeId, PDiskId, VSlotId)"; }
+                    TABLEH() { out << "Location"; }
                     TABLEH() { out << "VDiskId"; }
                     TABLEH() { out << "Running"; }
                     TABLEH() { out << "StoragePoolName"; }
@@ -164,7 +198,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             TABLEBODY() {
                 for (auto& [key, value] : LocalVDisks) {
                     TABLER() {
-                        TABLED() { out << "(" << key.NodeId << "," << key.PDiskId << "," << key.VDiskSlotId << ")"; }
+                        TABLED() { out << "[" << key.NodeId << ":" << key.PDiskId << ":" << key.VDiskSlotId << "]"; }
                         TABLED() { out << value.GetVDiskId(); }
                         TABLED() { out << (value.RuntimeData ? "true" : "false"); }
                         TABLED() { out << value.Config.GetStoragePoolName(); }
@@ -180,6 +214,77 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        TAG(TH3) { out << "Bridge syncers"; }
+        TABLE_CLASS("table oddgray") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() { out << "Group"; }
+                    TABLEH() { out << "Finished"; }
+                    TABLEH() { out << "ErrorReason"; }
+                    TABLEH() { out << "Start/Stop/OK/Error"; }
+                    TABLEH() { out << "LastErrorReason"; }
+                    TABLEH() { out << "Percent"; }
+                    TABLEH() { out << "Bytes"; }
+                    TABLEH() { out << "Blobs"; }
+                }
+            }
+            TABLEBODY() {
+                for (const auto& syncer : WorkingSyncers) {
+                    out << "<a name='syncer-" << syncer.TargetGroupId << "'>";
+                    TABLER() {
+                        TABLED() {
+                            out << "proxy: " << syncer.BridgeProxyGroupId << ':' << syncer.BridgeProxyGroupGeneration << "<br/>";
+                            out << "from: " << syncer.SourceGroupId << "<br/>";
+                            out << "to: " << syncer.TargetGroupId;
+                        }
+                        TABLED() { out << syncer.Finished; }
+                        TABLED() { out << syncer.ErrorReason; }
+                        TABLED() {
+                            out << syncer.NumStart << '/' << syncer.NumStop << '/' << syncer.NumFinishOK << '/'
+                                << syncer.NumFinishError;
+                        }
+                        TABLED() { out << syncer.LastErrorReason; }
+
+                        auto& stats = *syncer.SyncerDataStats;
+                        const ui64 bytesTotal = stats.BytesTotal;
+                        const ui64 bytesDone = stats.BytesDone;
+                        const ui64 bytesError = stats.BytesError;
+                        const ui64 blobsTotal = stats.BlobsTotal;
+                        const ui64 blobsDone = stats.BlobsDone;
+                        const ui64 blobsError = stats.BlobsError;
+
+                        TABLED() {
+                            if (bytesTotal) {
+                                const int percent = bytesDone * 10'000 / bytesTotal;
+                                out << Sprintf("%d.%02d%%", percent / 100, percent % 100);
+                            } else {
+                                out << "?";
+                            }
+                        }
+                        TABLED() {
+                            static const char *bytesSuffixes[] = {"B", "KiB", "MiB", "GiB", nullptr};
+                            FormatHumanReadable(out, bytesDone, 1024, 1, bytesSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, bytesTotal, 1024, 1, bytesSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, bytesError, 1024, 1, bytesSuffixes);
+                            out << ')';
+                        }
+                        TABLED() {
+                            static const char *blobsSuffixes[] = {"", "K", "M", nullptr};
+                            FormatHumanReadable(out, blobsDone, 1000, 1, blobsSuffixes);
+                            out << '/';
+                            FormatHumanReadable(out, blobsTotal, 1000, 1, blobsSuffixes);
+                            out << '(';
+                            FormatHumanReadable(out, blobsError, 1000, 1, blobsSuffixes);
+                            out << ')';
+                        }
+                    }
+                    out << "</a>";
                 }
             }
         }
@@ -317,12 +422,13 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
                         TABLED() { out << (initialData ? "true" : "<b style='color: red'>false</b>"); }
                         TABLED() { out << (onlineData ? "true" : "<b style='color: red'>false</b>"); }
                         NPDisk::TDriveData *data = initialData ? initialData : onlineData ? onlineData : nullptr;
-                        Y_ABORT_UNLESS(data);
-                        TABLED() { out << data->Path; }
-                        TABLED() { out << data->SerialNumber.Quote(); }
-                        TABLED() {
-                            out << NPDisk::DeviceTypeStr(data->DeviceType, true);
-                            out << (data->IsMock ? "(mock)" : "");
+                        if (data) {
+                            TABLED() { out << data->Path; }
+                            TABLED() { out << data->SerialNumber.Quote(); }
+                            TABLED() {
+                                out << NPDisk::DeviceTypeStr(data->DeviceType, true);
+                                out << (data->IsMock ? "(mock)" : "");
+                            }
                         }
                     }
                     out << "\n";
@@ -330,4 +436,70 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
             }
         }
     }
+}
+
+void NKikimr::NStorage::EscapeHtmlString(IOutputStream& out, const TString& s) {
+    size_t begin = 0;
+    auto dump = [&](size_t end) {
+        out << TStringBuf(s.data() + begin, end - begin);
+        begin = end + 1;
+    };
+    for (size_t i = 0, len = s.size(); i < len; ++i) {
+        char ch = s[i];
+        switch (ch) {
+            case '&':
+                dump(i);
+                out << "&amp;";
+                break;
+
+            case '<':
+                dump(i);
+                out << "&lt;";
+                break;
+
+            case '>':
+                dump(i);
+                out << "&gt;";
+                break;
+
+            case '\'':
+                dump(i);
+                out << "&#39;";
+                break;
+
+            case '"':
+                dump(i);
+                out << "&quot;";
+                break;
+        }
+    }
+    dump(s.size());
+}
+
+void NKikimr::NStorage::OutputPrettyMessage(IOutputStream& out, const NProtoBuf::Message& message) {
+    class TFieldPrinter : public NProtoBuf::TextFormat::FastFieldValuePrinter {
+    public:
+        void PrintBytes(const TProtoStringType& value, NProtoBuf::TextFormat::BaseTextGenerator *generator) const override {
+            TStringStream newValue;
+            constexpr size_t maxPrintedLen = 32;
+            for (size_t i = 0; i < Min<size_t>(value.size(), maxPrintedLen); ++i) {
+                if (i) {
+                    newValue << ' ';
+                }
+                newValue << Sprintf("%02x", static_cast<std::byte>(value[i]));
+            }
+            if (value.size() > maxPrintedLen) {
+                newValue << " ... (total " << value.size() << " bytes)";
+            }
+            TString& s = newValue.Str();
+            generator->Print(s.data(), s.size());
+        }
+    };
+
+    NProtoBuf::TextFormat::Printer p;
+    p.SetDefaultFieldValuePrinter(new TFieldPrinter);
+
+    TString s;
+    p.PrintToString(message, &s);
+    EscapeHtmlString(out, s);
 }

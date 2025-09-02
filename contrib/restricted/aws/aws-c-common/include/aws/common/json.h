@@ -9,6 +9,8 @@
 #include <aws/common/byte_buf.h>
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_json_value;
 
 AWS_EXTERN_C_BEGIN
@@ -21,12 +23,25 @@ AWS_EXTERN_C_BEGIN
  *
  * Note: You will need to free the memory for the aws_json_value using aws_json_destroy on the aws_json_value or
  * on the object/array containing the aws_json_value.
- * @param string A byte pointer to the string you want to store in the aws_json_value
+ * Note: might be slower than c_str version due to internal copy
+ * @param string A byte cursor you want to store in the aws_json_value
  * @param allocator The allocator to use when creating the value
  * @return A new string aws_json_value
  */
 AWS_COMMON_API
 struct aws_json_value *aws_json_value_new_string(struct aws_allocator *allocator, struct aws_byte_cursor string);
+
+/**
+ * Creates a new string aws_json_value with the given string and returns a pointer to it.
+ *
+ * Note: You will need to free the memory for the aws_json_value using aws_json_destroy on the aws_json_value or
+ * on the object/array containing the aws_json_value.
+ * @param string c string pointer you want to store in the aws_json_value
+ * @param allocator The allocator to use when creating the value
+ * @return A new string aws_json_value
+ */
+AWS_COMMON_API
+struct aws_json_value *aws_json_value_new_string_from_c_str(struct aws_allocator *allocator, const char *string);
 
 /**
  * Creates a new number aws_json_value with the given number and returns a pointer to it.
@@ -127,6 +142,7 @@ int aws_json_value_get_boolean(const struct aws_json_value *value, bool *output)
  *
  * Note that the aws_json_value will be destroyed when the aws_json_value object is destroyed
  * by calling "aws_json_destroy()"
+ * Note: might be slower than c_str version due to internal copy
  * @param object The object aws_json_value you want to add a value to.
  * @param key The key to add the aws_json_value at.
  * @param value The aws_json_value you want to add.
@@ -141,7 +157,23 @@ int aws_json_value_add_to_object(
     struct aws_json_value *value);
 
 /**
+ * Adds a aws_json_value to a object aws_json_value.
+ *
+ * Note that the aws_json_value will be destroyed when the aws_json_value object is destroyed
+ * by calling "aws_json_destroy()"
+ * @param object The object aws_json_value you want to add a value to.
+ * @param key The key to add the aws_json_value at.
+ * @param value The aws_json_value you want to add.
+ * @return AWS_OP_SUCCESS if adding was successful.
+ *          Will return AWS_OP_ERROR if the object passed is invalid or if the passed key
+ *          is already in use in the object.
+ */
+AWS_COMMON_API
+int aws_json_value_add_to_object_c_str(struct aws_json_value *object, const char *key, struct aws_json_value *value);
+
+/**
  * Returns the aws_json_value at the given key.
+ * Note: might be slower than c_str version due to internal copy
  * @param object The object aws_json_value you want to get the value from.
  * @param key The key that the aws_json_value is at. Is case sensitive.
  * @return The aws_json_value at the given key, otherwise NULL.
@@ -150,7 +182,19 @@ AWS_COMMON_API
 struct aws_json_value *aws_json_value_get_from_object(const struct aws_json_value *object, struct aws_byte_cursor key);
 
 /**
+ * Returns the aws_json_value at the given key.
+ * Note: same as aws_json_value_get_from_object but with key as const char *.
+ * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * @param object The object aws_json_value you want to get the value from.
+ * @param key The key that the aws_json_value is at. Is case sensitive.
+ * @return The aws_json_value at the given key, otherwise NULL.
+ */
+AWS_COMMON_API
+struct aws_json_value *aws_json_value_get_from_object_c_str(const struct aws_json_value *object, const char *key);
+
+/**
  * Checks if there is a aws_json_value at the given key.
+ * Note: might be slower than c_str version due to internal copy
  * @param object The value aws_json_value you want to check a key in.
  * @param key The key that you want to check. Is case sensitive.
  * @return True if a aws_json_value is found.
@@ -159,7 +203,19 @@ AWS_COMMON_API
 bool aws_json_value_has_key(const struct aws_json_value *object, struct aws_byte_cursor key);
 
 /**
+ * Checks if there is a aws_json_value at the given key.
+ * Note: same as aws_json_value_has_key but with key as const char *.
+ * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * @param object The value aws_json_value you want to check a key in.
+ * @param key The key that you want to check. Is case sensitive.
+ * @return True if a aws_json_value is found.
+ */
+AWS_COMMON_API
+bool aws_json_value_has_key_c_str(const struct aws_json_value *object, const char *key);
+
+/**
  * Removes the aws_json_value at the given key.
+ * Note: might be slower than c_str version due to internal copy
  * @param object The object aws_json_value you want to remove a aws_json_value in.
  * @param key The key that the aws_json_value is at. Is case sensitive.
  * @return AWS_OP_SUCCESS if the aws_json_value was removed.
@@ -168,6 +224,19 @@ bool aws_json_value_has_key(const struct aws_json_value *object, struct aws_byte
  */
 AWS_COMMON_API
 int aws_json_value_remove_from_object(struct aws_json_value *object, struct aws_byte_cursor key);
+
+/**
+ * Removes the aws_json_value at the given key.
+ * Note: same as aws_json_value_remove_from_object but with key as const char *.
+ * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * @param object The object aws_json_value you want to remove a aws_json_value in.
+ * @param key The key that the aws_json_value is at. Is case sensitive.
+ * @return AWS_OP_SUCCESS if the aws_json_value was removed.
+ *          Will return AWS_OP_ERR if the object passed is invalid or if the value
+ *          at the key cannot be found.
+ */
+AWS_COMMON_API
+int aws_json_value_remove_from_object_c_str(struct aws_json_value *object, const char *key);
 
 /**
  * @brief callback for iterating members of an object
@@ -398,7 +467,7 @@ int aws_byte_buf_append_json_string(const struct aws_json_value *value, struct a
  * @param value The aws_json_value to format.
  * @param output The destination for the JSON string
  * @return AWS_OP_SUCCESS if the JSON string was allocated to output without any errors
- *      Will return AWS_ERROR_INVALID_ARGUMENT if the value passed is not an aws_json_value or if there
+ *      Will return AWS_OP_ERR if the value passed is not an aws_json_value or if there
  *      aws an error appending the JSON into the byte buffer.
  */
 AWS_COMMON_API
@@ -415,5 +484,6 @@ struct aws_json_value *aws_json_value_new_from_string(struct aws_allocator *allo
 // ====================
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif // AWS_COMMON_JSON_H

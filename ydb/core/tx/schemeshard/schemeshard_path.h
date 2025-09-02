@@ -1,9 +1,18 @@
 #pragma once
 
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/util/source_location.h>
+
+#include <util/generic/maybe.h>
+
+namespace NACLib {
+
+class TUserToken;
+
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,18 +26,18 @@ class TPath {
 public:
     class TChecker {
         using EStatus = NKikimrScheme::EStatus;
-
         const TPath& Path;
         mutable bool Failed;
         mutable EStatus Status;
         mutable TString Error;
+        NCompat::TSourceLocation Location;
 
     private:
         TString BasicPathInfo(TPathElement::TPtr element) const;
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        explicit TChecker(const TPath& path);
+        explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -56,6 +65,7 @@ public:
         const TChecker& IsColumnTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsReplication(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsTransfer(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
@@ -74,12 +84,14 @@ public:
         const TChecker& IsCdcStream(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsSysViewDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
         const TChecker& FailOnWrongType(TPathElement::EPathType expectedType) const;
         const TChecker& FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const;
         const TChecker& FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const;
-        const TChecker& IsValidLeafName(EStatus status = EStatus::StatusSchemeError) const;
+        const TChecker& IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& DepthLimit(ui64 delta = 0, EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& PathsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& DirChildrenLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
@@ -99,9 +111,13 @@ public:
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
+    struct TSplitChildTag {};
     explicit TPath(TSchemeShard* ss);
     TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss);
 
@@ -120,8 +136,7 @@ public:
     static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
-
-    TChecker Check() const;
+    TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;
 
@@ -140,6 +155,7 @@ public:
     bool IsDomain() const;
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;
+    TPath Child(const TString& name, TSplitChildTag) const;
     TPathElement::TPtr Base() const;
     TPathElement* operator->() const;
     bool IsDeleted() const;
@@ -153,24 +169,29 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
+    bool IsUnderOutgoingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
-    bool IsInsideTableIndexPath() const;
+    bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex() const;
+    bool IsTableIndex(
+        const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
+        bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;
-    bool IsValidLeafName(TString& explain) const;
+    bool IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const;
     TString GetEffectiveACL() const;
     ui64 GetEffectiveACLVersion() const;
+    bool IsLocked() const;
     TTxId LockedBy() const;
 
     bool IsActive() const;

@@ -1,0 +1,42 @@
+--- contrib/python/typeguard/tests/test_importhook.py	(index)
++++ contrib/python/typeguard/tests/test_importhook.py	(working tree)
+@@ -8,7 +8,9 @@ import pytest
+ 
+ from typeguard.importhook import TypeguardFinder, install_import_hook
+ 
+-this_dir = Path(__file__).parent
++import yatest.common as yc
++
++this_dir = Path(yc.test_source_path())
+ dummy_module_path = this_dir / 'dummymodule.py'
+ cached_module_path = Path(cache_from_source(str(dummy_module_path), optimization='typeguard'))
+ 
+@@ -29,6 +31,7 @@ def dummymodule():
+         sys.path.remove(str(this_dir))
+ 
+ 
++@pytest.mark.skip
+ def test_cached_module(dummymodule):
+     assert cached_module_path.is_file()
+ 
+--- contrib/python/typeguard/tests/test_typeguard.py	(index)
++++ contrib/python/typeguard/tests/test_typeguard.py	(working tree)
+@@ -84,1 +84,1 @@ def mock_class(request):
+-    (Child(), 'test_typeguard.Child'),
++    (Child(), '__tests__.test_typeguard.Child'),
+@@ -467,1 +467,1 @@ class TestCheckArgumentTypes:
+-                  r'(test_typeguard\.)?Employee; got tuple instead')
++                  r'(__tests__\.test_typeguard\.)?Employee; got tuple instead')
+@@ -547,2 +547,2 @@ class TestCheckArgumentTypes:
+-        assert str(exc.value) == ('type of argument "a" must be test_typeguard.Child or one of '
+-                                  'its subclasses; got test_typeguard.Parent instead')
++        assert str(exc.value) == ('type of argument "a" must be __tests__.test_typeguard.Child or one of '
++                                  'its subclasses; got __tests__.test_typeguard.Parent instead')
+@@ -556,1 +556,1 @@ class TestCheckArgumentTypes:
+-            '"a" must be a subclass of test_typeguard.Child; got test_typeguard.Parent instead')
++            '"a" must be a subclass of __tests__.test_typeguard.Child; got __tests__.test_typeguard.Parent instead')
+@@ -585,2 +585,2 @@ class TestCheckArgumentTypes:
+-        assert str(exc.value) == ('type of argument "a" must be test_typeguard.Child; '
+-                                  'got test_typeguard.Parent instead')
++        assert str(exc.value) == ('type of argument "a" must be __tests__.test_typeguard.Child; '
++                                  'got __tests__.test_typeguard.Parent instead')

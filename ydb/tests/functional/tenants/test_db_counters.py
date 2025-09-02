@@ -12,10 +12,10 @@ from hamcrest import assert_that, equal_to, greater_than, not_none
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_db_counters(mon_port, service):
-    counters_url = f"http://localhost:{mon_port}/counters/counters%3D{service}/json"
+    counters_url = f"http://localhost:{mon_port}/counters/counters={service}/json"
     reply = requests.get(counters_url)
     if reply.status_code == 204:
         return None
@@ -38,7 +38,7 @@ def get_db_counters(mon_port, service):
 class BaseDbCounters(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 additional_log_configs={
                     'SYSTEM_VIEWS': LogLevels.DEBUG
@@ -134,6 +134,29 @@ class TestKqpCounters(BaseDbCounters):
         self.check_db_counters(sensors_to_check, 'kqp')
 
 
+def get_default_feature_flag_value(feature_flag_camel_case) -> bool:
+    return getattr(config_pb2.TAppConfig().FeatureFlags, feature_flag_camel_case)
+
+
+@pytest.fixture(
+    scope="module",
+    params=[True, False],
+    ids=["enable_separate_quotas", "disable_separate_quotas"],
+)
+def ydb_cluster_configuration(request):
+    extra_feature_flags = ['enable_db_counters']
+    if request.param:
+        extra_feature_flags.append("enable_separate_disk_space_quotas")
+    else:
+        # Note: in case the assert is failing remove the parametrization by this feature flag completely.
+        # Unfortunately, it is not possible to disable a feature flag using the extra_feature_flags parameter.
+        # So we must make sure that the default value for the particular feature flag is false, or
+        # the test would not exhibit the behavior we would like it to.
+        assert not get_default_feature_flag_value("EnableSeparateDiskSpaceQuotas")
+
+    return dict(extra_feature_flags=extra_feature_flags)
+
+
 @pytest.fixture(scope="function")
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
     database = os.path.join(ydb_root, ydb_safe_test_name)
@@ -223,7 +246,7 @@ def describe(client, path):
     return client.describe(path, token="")
 
 
-def check_disk_quota_exceedance(client, database, retries, sleep_duration):
+def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
     for attempt in range(retries):
         path_description = describe(client, database)
         domain_description = path_description.PathDescription.DomainDescription
@@ -241,22 +264,48 @@ def check_disk_quota_exceedance(client, database, retries, sleep_duration):
     assert False, "database did not move into DiskQuotaExceeded state"
 
 
-def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
+def wait_for_stats(client, table, retries=10, sleep_duration=5):
+    for attempt in range(retries):
+        usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+        if len(usage) > 0:
+            return usage
+        time.sleep(sleep_duration)
+
+    assert False, "haven't received non-null table stats in the alloted time"
+
+
+# Note: the default total sleep time is 300 seconds, because 200 seconds can sometimes be not enough
+def check_counters(mon_port, sensors_to_check, service="ydb", retries=60, sleep_duration=5):
+    sensor_count = 0
+    for _, expected_value in sensors_to_check.items():
+        if isinstance(expected_value, list):
+            sensor_count += len(expected_value)
+        else:
+            sensor_count += 1
+
     for attempt in range(retries + 1):
-        counters = get_db_counters(mon_port, "ydb")
+        counters = get_db_counters(mon_port, service)
         correct_sensors = 0
         if counters:
             for sensor in counters["sensors"]:
+                labels = sensor["labels"]
                 for target_name, expected_value in sensors_to_check.items():
-                    if sensor["labels"]["name"] == target_name:
-                        logger.debug(
-                            f"sensor {target_name}: expected {expected_value}, "
-                            f'got {sensor["value"]} in {sleep_duration * attempt} seconds'
-                        )
-                        if sensor["value"] == expected_value:
-                            correct_sensors += 1
-                            if correct_sensors == len(sensors_to_check):
-                                return
+                    if isinstance(expected_value, list):
+                        if labels.get("api_service", "") != target_name:
+                            continue
+                        for x in expected_value:
+                            if len(x) == [labels.get(k, "") == v if k != "value" else sensor[k] == v for k, v in x.items()].count(True):
+                                correct_sensors += 1
+                    else:
+                        if labels["name"] == target_name:
+                            logger.debug(
+                                f"sensor {target_name}: expected {expected_value}, "
+                                f'got {sensor["value"]} in {sleep_duration * attempt} seconds'
+                            )
+                            if sensor["value"] == expected_value:
+                                correct_sensors += 1
+                    if correct_sensors == sensor_count:
+                        return
 
         logger.debug(
             f"got {correct_sensors} out of {len(sensors_to_check)} correct sensors "
@@ -271,7 +320,7 @@ def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
 
 
 class TestStorageCounters:
-    def test_storage_counters(self, ydb_cluster, ydb_database, ydb_client_session):
+    def test_storage_counters(self, ydb_cluster_configuration, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         node = ydb_cluster.nodes[1]
 
@@ -309,8 +358,7 @@ class TestStorageCounters:
         slot_mon_port = ydb_cluster.slots[1].mon_port
         # Note 1: limit_bytes is equal to the database's SOFT quota
         # Note 2: .hdd counter aggregates quotas across all storage pool kinds with prefix "hdd", i.e. "hdd" and "hdd1"
-        # Note 3: 200 seconds can sometimes be not enough
-        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11}, retries=60, sleep_duration=5)
+        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11})
 
         pool = ydb_client_session(database_path)
         with pool.checkout() as session:
@@ -326,16 +374,11 @@ class TestStorageCounters:
             assert_that(new_partition_config.CompactionPolicy.InMemForceSizeToSnapshot, equal_to(1))
 
             insert_data(session, table)
-            check_disk_quota_exceedance(client, database_path, retries=10, sleep_duration=5)
+            if "enable_separate_disk_space_quotas" in ydb_cluster_configuration["extra_feature_flags"]:
+                check_disk_quota_exceedance(client, database_path)
 
-            set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
-            default_feature_flags = config_pb2.TAppConfig().FeatureFlags
-            btree_index_feature_flag = (
-                set_feature_flags["enable_local_dbbtree_index"]
-                if "enable_local_dbbtree_index" in set_feature_flags
-                else default_feature_flags.EnableLocalDBBtreeIndex
-            )
-            usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+            btree_index_feature_flag = get_default_feature_flag_value("EnableLocalDBBtreeIndex")
+            usage = wait_for_stats(client, table)
             assert len(usage) == 2
             assert json_format.MessageToDict(usage[0], preserving_proto_field_name=True) == {
                 "PoolKind": "hdd",
@@ -360,8 +403,6 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": used_bytes_by_tables,
                 },
-                retries=60,
-                sleep_duration=5,
             )
 
             drop_table(session, table)
@@ -376,6 +417,86 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": 0,
                 },
-                retries=60,
-                sleep_duration=5,
             )
+
+
+def test_serverless_counters(ydb_cluster, ydb_endpoint, ydb_root, ydb_safe_test_name):
+    hostel_db = os.path.join(ydb_root, "hostel_db", ydb_safe_test_name)
+    ydb_cluster.create_hostel_database(
+        hostel_db,
+        storage_pool_units_count={
+            'hdd': 1,
+        },
+    )
+
+    ydb_cluster.register_and_start_slots(hostel_db, count=1)
+    ydb_cluster.wait_tenant_up(hostel_db)
+
+    serverless_db = os.path.join(ydb_root, "serverless", ydb_safe_test_name)
+    ydb_cluster.create_serverless_database(
+        serverless_db,
+        hostel_db=hostel_db,
+        attributes={
+            "cloud_id": "CLOUD_ID_VAL",
+            "folder_id": "FOLDER_ID_VAL",
+            "database_id": "DATABASE_ID_VAL",
+        },
+    )
+
+    driver_config = ydb.DriverConfig(ydb_endpoint, serverless_db, auth_token='root@builtin')
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    session = driver.table_client.session().create()
+
+    session.create_table(
+        os.path.join(serverless_db, "table") ,
+        ydb.TableDescription()
+        .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
+        .with_primary_key("id")
+    )
+
+    try:
+        session.create_table(
+            os.path.join(serverless_db, "invalid_table") ,
+            ydb.TableDescription()
+            .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Float)))
+            .with_primary_key("id")
+        )
+    except ydb.issues.SchemeError:
+        pass
+
+    slot_mon_port = ydb_cluster.slots[1].mon_port
+    expected_counters = {
+        "table": [
+            {
+                "method": "CreateSession",
+                "name": "api.grpc.request.count",
+                "value": 1,
+            },
+            {
+                "method": "CreateSession",
+                "name": "api.grpc.response.count",
+                "status": "SUCCESS",
+                "value": 1,
+            },
+            {
+                "method": "CreateTable",
+                "name": "api.grpc.request.count",
+                "value": 2,
+            },
+            {
+                "method": "CreateTable",
+                "name": "api.grpc.response.count",
+                "status": "SUCCESS",
+                "value": 1,
+            },
+            {
+                "method": "CreateTable",
+                "name": "api.grpc.response.count",
+                "status": "SCHEME_ERROR",
+                "value": 1,
+            },
+        ],
+    }
+    check_counters(slot_mon_port, expected_counters, "ydb_serverless")

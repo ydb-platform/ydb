@@ -10,6 +10,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(2.6.10)
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
@@ -17,6 +19,12 @@ NO_RUNTIME()
 CFLAGS(
     -DLDAPI_SOCK=\"/run/openldap/ldapi\"
 )
+
+IF (DEFINED LMDB_IDL_LOGN)
+    CFLAGS(
+        -DMDB_IDL_LOGN=${LMDB_IDL_LOGN}
+    )
+ENDIF()
 
 IF (OS_ANDROID)
     CFLAGS(

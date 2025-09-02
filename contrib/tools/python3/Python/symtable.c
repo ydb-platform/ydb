@@ -675,22 +675,19 @@ inline_comprehension(PySTEntryObject *ste, PySTEntryObject *comp,
         if (existing == NULL && PyErr_Occurred()) {
             return 0;
         }
+        // __class__ is never allowed to be free through a class scope (see
+        // drop_class_free)
+        if (scope == FREE && ste->ste_type == ClassBlock &&
+                _PyUnicode_EqualToASCIIString(k, "__class__")) {
+            scope = GLOBAL_IMPLICIT;
+            if (PySet_Discard(comp_free, k) < 0) {
+                return 0;
+            }
+            remove_dunder_class = 1;
+        }
         if (!existing) {
             // name does not exist in scope, copy from comprehension
             assert(scope != FREE || PySet_Contains(comp_free, k) == 1);
-            if (scope == FREE && ste->ste_type == ClassBlock &&
-                _PyUnicode_EqualToASCIIString(k, "__class__")) {
-                // if __class__ is unbound in the enclosing class scope and free
-                // in the comprehension scope, it needs special handling; just
-                // letting it be marked as free in class scope will break due to
-                // drop_class_free
-                scope = GLOBAL_IMPLICIT;
-                only_flags &= ~DEF_FREE;
-                if (PySet_Discard(comp_free, k) < 0) {
-                    return 0;
-                }
-                remove_dunder_class = 1;
-            }
             PyObject *v_flags = PyLong_FromLong(only_flags);
             if (v_flags == NULL) {
                 return 0;
@@ -2195,6 +2192,24 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
 }
 
 static int
+symtable_visit_type_param_check_reserved_name(struct symtable *st, type_param_ty tp, identifier name)
+{
+    if (_PyUnicode_Equal(name, &_Py_ID(__classdict__))) {
+        PyObject *error_msg = PyUnicode_FromFormat("reserved name '%U' cannot be "
+                                                   "used for type parameter", name);
+        PyErr_SetObject(PyExc_SyntaxError, error_msg);
+        Py_DECREF(error_msg);
+        PyErr_RangedSyntaxLocationObject(st->st_filename,
+                                         tp->lineno,
+                                         tp->col_offset + 1,
+                                         tp->end_lineno,
+                                         tp->end_col_offset + 1);
+        return 0;
+    }
+    return 1;
+}
+
+static int
 symtable_visit_type_param(struct symtable *st, type_param_ty tp)
 {
     if (++st->recursion_depth > st->recursion_limit) {
@@ -2204,6 +2219,8 @@ symtable_visit_type_param(struct symtable *st, type_param_ty tp)
     }
     switch(tp->kind) {
     case TypeVar_kind:
+        if (!symtable_visit_type_param_check_reserved_name(st, tp, tp->v.TypeVar.name))
+            VISIT_QUIT(st, 0);
         if (!symtable_add_def(st, tp->v.TypeVar.name, DEF_TYPE_PARAM | DEF_LOCAL, LOCATION(tp)))
             VISIT_QUIT(st, 0);
         if (tp->v.TypeVar.bound) {
@@ -2222,10 +2239,14 @@ symtable_visit_type_param(struct symtable *st, type_param_ty tp)
         }
         break;
     case TypeVarTuple_kind:
+        if (!symtable_visit_type_param_check_reserved_name(st, tp, tp->v.TypeVarTuple.name))
+            VISIT_QUIT(st, 0);
         if (!symtable_add_def(st, tp->v.TypeVarTuple.name, DEF_TYPE_PARAM | DEF_LOCAL, LOCATION(tp)))
             VISIT_QUIT(st, 0);
         break;
     case ParamSpec_kind:
+        if (!symtable_visit_type_param_check_reserved_name(st, tp, tp->v.ParamSpec.name))
+            VISIT_QUIT(st, 0);
         if (!symtable_add_def(st, tp->v.ParamSpec.name, DEF_TYPE_PARAM | DEF_LOCAL, LOCATION(tp)))
             VISIT_QUIT(st, 0);
         break;

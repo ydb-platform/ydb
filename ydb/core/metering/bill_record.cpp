@@ -22,7 +22,7 @@ TString TBillRecord::TUsage::ToString() const {
 }
 
 NJson::TJsonMap TBillRecord::ToJson() const {
-    return NJson::TJsonMap{
+    auto json = NJson::TJsonMap{
         {"version", Version_},
         {"id", Id_},
         {"schema", Schema_},
@@ -34,6 +34,12 @@ NJson::TJsonMap TBillRecord::ToJson() const {
         {"tags", Tags_},
         {"usage", Usage_.ToJson()},
     };
+
+    if (Labels_.IsMap() && Labels_.GetMap()) {
+        json["labels"] = Labels_;
+    }
+
+    return json;
 }
 
 TString TBillRecord::ToString() const {

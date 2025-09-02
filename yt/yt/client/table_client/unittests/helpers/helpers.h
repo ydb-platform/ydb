@@ -5,6 +5,7 @@
 
 #include <yt/yt/client/table_client/columnar.h>
 #include <yt/yt/client/table_client/config.h>
+#include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/row_batch.h>
 
@@ -69,7 +70,7 @@ void CheckSchemalessResult(
         ASSERT_LE(std::ssize(actual), options.MaxRowsPerRead);
 
         CheckSchemalessResult(
-            MakeRange(expected).Slice(offset, std::min(expected.size(), offset + actual.size())),
+            TRange(expected).Slice(offset, std::min(expected.size(), offset + actual.size())),
             actual,
             keyColumnCount);
         offset += actual.size();
@@ -91,7 +92,7 @@ void AppendVector(std::vector<T>* data, const std::vector<T> toAppend)
 template <class T>
 TRange<T> GetTypedData(const NTableClient::IUnversionedColumnarRowBatch::TValueBuffer& buffer)
 {
-    return MakeRange(
+    return TRange(
         reinterpret_cast<const T*>(buffer.Data.Begin()),
         reinterpret_cast<const T*>(buffer.Data.End()));
 }
@@ -101,25 +102,9 @@ inline bool GetBit(const NTableClient::IUnversionedColumnarRowBatch::TValueBuffe
     return (buffer.Data[index / 8] & (1 << (index % 8))) != 0;
 }
 
-inline bool GetBit(TRef data, int index)
-{
-    return (data[index / 8] & (1 << (index % 8))) != 0;
-}
-
 inline bool GetBit(const NTableClient::IUnversionedColumnarRowBatch::TBitmap& bitmap, int index)
 {
     return GetBit(bitmap.Data, index);
-}
-
-inline void SetBit(TMutableRef data, int index, bool value)
-{
-    auto& byte = data[index / 8];
-    auto mask = 1ULL << (index % 8);
-    if (value) {
-        byte |= mask;
-    } else {
-        byte &= ~mask;
-    }
 }
 
 inline void ResolveRleEncoding(

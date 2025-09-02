@@ -4,6 +4,7 @@
 #include "profiling_helpers.h"
 #include "system_invokers.h"
 
+#include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
@@ -19,6 +20,7 @@ namespace NYT::NConcurrency {
 using namespace NProfiling;
 using namespace NYPath;
 using namespace NYTree;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,10 +29,11 @@ class TFairShareActionQueue
 {
 public:
     TFairShareActionQueue(
-        const TString& threadName,
+        std::string threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
-        NProfiling::IRegistryImplPtr registry)
+        TThreadOptions threadOptions,
+        NProfiling::IRegistryPtr registry)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -94,8 +97,17 @@ public:
             YT_VERIFY(QueueIndexToBucketQueueIndex_[queueIndex] != -1);
         }
 
-        Queue_ = New<TFairShareInvokerQueue>(CallbackEventCount_, std::move(bucketDescriptions), std::move(registry));
-        Thread_ = New<TFairShareQueueSchedulerThread>(Queue_, CallbackEventCount_, threadName, threadName);
+        Queue_ = New<TFairShareInvokerQueue>(
+            CallbackEventCount_,
+            std::move(bucketDescriptions),
+            std::move(registry));
+
+        Thread_ = New<TFairShareQueueSchedulerThread>(
+            Queue_,
+            CallbackEventCount_,
+            threadName,
+            threadName,
+            threadOptions);
     }
 
     ~TFairShareActionQueue()
@@ -141,7 +153,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
 
     const TShutdownCookie ShutdownCookie_;
     const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
@@ -168,12 +180,18 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const std::vector<TString>& queueNames,
     const THashMap<TString, std::vector<TString>>& bucketToQueues,
-    NProfiling::IRegistryImplPtr registry)
+    TThreadOptions threadOptions,
+    NProfiling::IRegistryPtr registry)
 {
-    return New<TFairShareActionQueue>(threadName, queueNames, bucketToQueues, std::move(registry));
+    return New<TFairShareActionQueue>(
+        threadName,
+        queueNames,
+        bucketToQueues,
+        threadOptions,
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

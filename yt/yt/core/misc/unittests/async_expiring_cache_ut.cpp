@@ -48,7 +48,7 @@ private:
     std::random_device RandomDevice_;
     std::mt19937 Generator_;
     std::bernoulli_distribution Bernoulli_;
-    std::atomic<int> Count_ = {0};
+    std::atomic<int> Count_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,7 +83,7 @@ protected:
 
 private:
     TDuration Delay_;
-    std::atomic<int> Count_ = {0};
+    std::atomic<int> Count_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -304,6 +304,30 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache2)
     EXPECT_EQ(1, cache->GetCount());
 }
 
+TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->ExpireAfterAccessTime = TDuration::Zero();
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::Minutes(1);
+    config->ExpireAfterFailedUpdateTime = TDuration::Zero();
+    config->RefreshTime = TDuration::Minutes(1);
+
+    auto cache = New<TDelayedExpiringCache>(config, TDuration::MilliSeconds(100));
+    {
+        auto result = cache->Get(0).Get();
+        EXPECT_TRUE(result.IsOK());
+        EXPECT_EQ(1, result.Value());
+    }
+
+    cache->Set(0, 2);
+    EXPECT_EQ(1, cache->GetCount());
+    {
+        auto result = cache->Get(0).Get();
+        EXPECT_TRUE(result.IsOK());
+        EXPECT_EQ(2, result.Value());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRevisionCache
@@ -314,9 +338,9 @@ public:
         : TAsyncExpiringCache<int, int>(config)
     { }
 
-    std::atomic<int> InitialFetchCount = {0};
-    std::atomic<int> PeriodicUpdateCount = {0};
-    std::atomic<int> ForcedUpdateCount = {0};
+    std::atomic<int> InitialFetchCount = 0;
+    std::atomic<int> PeriodicUpdateCount = 0;
+    std::atomic<int> ForcedUpdateCount = 0;
 
 private:
     virtual TFuture<int> DoGet(

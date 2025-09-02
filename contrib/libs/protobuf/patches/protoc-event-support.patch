@@ -1,0 +1,22 @@
+--- a/src/google/protobuf/compiler/python/helpers.cc	(62b83ba8ff1149a180456030d46ca0881711b0e5)
++++ b/src/google/protobuf/compiler/python/helpers.cc	(94b865765aa38dc5e4ac99e0051d228ebc9d2a80)
+@@ -50,9 +50,18 @@ namespace protobuf {
+ namespace compiler {
+ namespace python {
+ 
++TProtoStringType FixEv(TProtoStringType filename) {
++    constexpr auto kSuffixLen = 3;
++    if (filename.EndsWith(".ev")) {
++        return filename.substr(0, filename.length() - kSuffixLen) + "_ev.proto";
++    }
++    return filename;
++}
++
+ // Returns the Python module name expected for a given .proto filename.
+ TProtoStringType ModuleName(absl::string_view filename) {
+-  TProtoStringType basename = StripProto(filename);
++  TProtoStringType str(std::string{filename});
++  TProtoStringType basename = StripProto(FixEv(str));
+   absl::StrReplaceAll({{"-", "_"}, {"/", "."}}, &basename);
+   return absl::StrCat(basename, "_pb2");
+ }

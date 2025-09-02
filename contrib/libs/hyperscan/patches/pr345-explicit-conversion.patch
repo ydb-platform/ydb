@@ -1,0 +1,31 @@
+--- a/src/rose/rose_graph.h
++++ b/src/rose/rose_graph.h
+@@ -112,7 +112,7 @@ struct LeftEngInfo {
+     }
+     size_t hash() const;
+     void reset(void);
+-    operator bool() const;
++    explicit operator bool() const;
+     bool tracksSom() const { return !!haig; }
+ };
+ 
+@@ -133,7 +133,7 @@ struct RoseSuffixInfo {
+     bool operator<(const RoseSuffixInfo &b) const;
+     size_t hash() const;
+     void reset(void);
+-    operator bool() const { return graph || castle || haig || rdfa || tamarama; }
++    explicit operator bool() const { return graph || castle || haig || rdfa || tamarama; }
+ };
+ 
+ /** \brief Properties attached to each Rose graph vertex. */
+--- a/src/util/ue2_graph.h
++++ b/src/util/ue2_graph.h
+@@ -176,7 +176,7 @@ public:
+     vertex_descriptor() : p(nullptr), serial(0) {}
+     explicit vertex_descriptor(vertex_node *pp) : p(pp), serial(pp->serial) {}
+ 
+-    operator bool() const { return p; }
++    explicit operator bool() const { return p; }
+     bool operator<(const vertex_descriptor b) const {
+         if (p && b.p) {
+             /* no vertices in the same graph can have the same serial */

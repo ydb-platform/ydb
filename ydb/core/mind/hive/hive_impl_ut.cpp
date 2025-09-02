@@ -3,6 +3,7 @@
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
+#include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
 
@@ -12,18 +13,27 @@
 #define Ctest Cerr
 #endif
 
-#ifdef address_sanitizer_enabled
-#define SANITIZER_TYPE address
-#endif
-#ifdef memory_sanitizer_enabled
-#define SANITIZER_TYPE memory
-#endif
-#ifdef thread_sanitizer_enabled
-#define SANITIZER_TYPE thread
-#endif
-
 using namespace NKikimr;
 using namespace NHive;
+
+namespace {
+
+class TTestHive : public THive {
+public:
+    TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
+
+    template<typename F>
+    void UpdateConfig(F func) {
+        func(ClusterConfig);
+        BuildCurrentConfig();
+    }
+
+    TBootQueue& GetBootQueue() {
+        return BootQueue;
+    }
+};
+
+} // namespace
 
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
@@ -52,12 +62,12 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
             tablet.Weight = RandomNumber<double>();
-            bootQueue.EmplaceToBootQueue(tablet);
+            bootQueue.AddToBootQueue(tablet, 0UL);
         }
 
         double passed = timer.Get().SecondsFloat();
         Ctest << "Create = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 3 * BASE_PERF);
 #else
@@ -67,20 +77,35 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         timer.Reset();
 
         double maxP = 100;
+        std::vector<TBootQueue::TBootQueueRecord> records;
+        records.reserve(NUM_TABLETS);
+        unsigned i = 0;
 
-        while (!bootQueue.BootQueue.empty()) {
+        while (!bootQueue.Empty()) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId);
-            if (itTablet != tablets.end()) {
-                bootQueue.AddToWaitQueue(itTablet->second);
+            UNIT_ASSERT(tablets.contains(record.TabletId));
+            records.push_back(record);
+            if (++i == NUM_TABLETS / 2) {
+                // to test both modes
+                bootQueue.IncludeWaitQueue();
+            }
+        }
+        bootQueue.ExcludeWaitQueue();
+
+        i = 0;
+        for (auto& record : records) {
+            if (++i % 3 == 0) {
+                bootQueue.AddToBootQueue(record);
+            } else {
+                bootQueue.AddToWaitQueue(record);
             }
         }
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Process = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 10 * BASE_PERF);
 #else
@@ -90,11 +115,15 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         timer.Reset();
 
-        bootQueue.MoveFromWaitQueueToBootQueue();
+        bootQueue.IncludeWaitQueue();
+        while (!bootQueue.Empty()) {
+            bootQueue.PopFromBootQueue();
+        }
+        bootQueue.ExcludeWaitQueue();
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 2 * BASE_PERF);
 #else
@@ -109,7 +138,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         auto CheckSpeedAndDistribution = [](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
-            std::function<void(std::vector<TTabletInfo*>&, EResourceToBalance)> func,
+            std::function<void(std::vector<TTabletInfo*>::iterator, std::vector<TTabletInfo*>::iterator, EResourceToBalance)> func,
             EResourceToBalance resource) -> void {
 
             std::vector<TTabletInfo*> tablets;
@@ -119,12 +148,12 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
             TProfileTimer timer;
 
-            func(tablets, resource);
+            func(tablets.begin(), tablets.end(), resource);
 
             double passed = timer.Get().SecondsFloat();
 
             Ctest << "Time=" << passed << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifndef NDEBUG
             UNIT_ASSERT(passed < 1 * BASE_PERF);
 #else
@@ -216,5 +245,170 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         UNIT_ASSERT_DOUBLES_EQUAL(expectedStDev, stDev1, 1e-6);
         UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
+    }
+
+    Y_UNIT_TEST(BootQueueConfigurePriorities) {
+        auto hiveStorage = MakeIntrusive<TTabletStorageInfo>();
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+
+        // Emulate initial BuildCurrentConfig call
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&){});
+
+        TFollowerGroup followerGroup(hive);
+
+        // Part 1: Test default priorities with empty configuration
+        {
+            TLeaderTabletInfo ssTablet(1UL, hive);
+            ssTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTablet);
+
+            TLeaderTabletInfo dummyTablet(2UL, hive);
+            dummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTablet);
+
+            TFollowerTabletInfo dummyFollowerTablet(dummyTablet, 3UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should follow defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 2: Configure custom priorities for known and unknown types
+        {
+            constexpr double SS_BOOT_PRIORITY = 2.5;
+            constexpr double DUMMY_BOOT_PRIORITY = 0.5;
+
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                auto* ssItem = config.AddTabletTypeToBootPriority();
+                ssItem->SetTabletType(TTabletTypes::SchemeShard);
+                ssItem->SetPriority(SS_BOOT_PRIORITY);
+
+                auto* dummyItem = config.AddTabletTypeToBootPriority();
+                dummyItem->SetTabletType(TTabletTypes::Dummy);
+                dummyItem->SetPriority(DUMMY_BOOT_PRIORITY);
+            });
+
+            TLeaderTabletInfo configuredSsTablet(4UL, hive);
+            configuredSsTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&configuredSsTablet);
+
+            TLeaderTabletInfo configuredDummyTablet(5UL, hive);
+            configuredDummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&configuredDummyTablet);
+
+            TFollowerTabletInfo configuredDummyFollowerTablet(configuredDummyTablet, 6UL, followerGroup);
+            hive.AddToBootQueue(&configuredDummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should use configured values
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, SS_BOOT_PRIORITY); // Configured SchemeShard
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, DUMMY_BOOT_PRIORITY); // Configured Dummy
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default (should not change)
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 3: Clear configuration and verify defaults again
+        {
+            hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+                config.ClearTabletTypeToBootPriority();
+            });
+
+            TLeaderTabletInfo ssTabletAfterClear(7UL, hive);
+            ssTabletAfterClear.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTabletAfterClear);
+
+            TLeaderTabletInfo dummyTabletAfterClear(8UL, hive);
+            dummyTabletAfterClear.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTabletAfterClear);
+
+            TFollowerTabletInfo dummyFollowerTabletAfterClear(dummyTabletAfterClear, 9UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTabletAfterClear);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should revert to defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
+
+    Y_UNIT_TEST(BasicTest) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("GraphShard");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+    }
+
+    Y_UNIT_TEST(EmptyAllowList) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("");
+            config.SetCutHistoryDenyList("GraphShard");
+        });
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+    }
+
+    Y_UNIT_TEST(EmptyDenyList) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::GraphShard));
+    }
+
+    Y_UNIT_TEST(SameTabletInBothLists) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("DataShard,Coordinator");
+            config.SetCutHistoryDenyList("SchemeShard,DataShard");
+        });
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::SchemeShard));
+        UNIT_ASSERT(!hive.IsCutHistoryAllowed(TTabletTypes::Hive));
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::Coordinator));
+    }
+
+    Y_UNIT_TEST(BothListsEmpty) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetCutHistoryAllowList("");
+            config.SetCutHistoryDenyList("");
+        });
+        UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
     }
 }

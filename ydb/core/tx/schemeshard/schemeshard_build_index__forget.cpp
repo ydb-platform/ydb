@@ -1,7 +1,7 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -10,7 +10,7 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxForget: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvForgetRequest, TEvIndexBuilder::TEvForgetResponse> {
 public:
     explicit TTxForget(TSelf* self, TEvIndexBuilder::TEvForgetRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_FORGET_INDEX_BUILD)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetIndexBuildId()), ev, TXTYPE_FORGET_INDEX_BUILD)
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
@@ -27,27 +27,25 @@ public:
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
 
-        TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
-
-        if (!Self->IndexBuilds.contains(indexBuildId)) {
+        const auto* indexBuildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        if (!indexBuildInfoPtr) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found"
+            );
+        }
+        const auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        if (indexBuildInfo.DomainPathId != domainPathId) {
+            return Reply(
+                Ydb::StatusIds::NOT_FOUND,
+                TStringBuilder() << "Index build process with id <" << BuildId << "> not found in database <" << record.GetDatabaseName() << ">"
             );
         }
 
-        TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainPathId) {
-            return Reply(
-                Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
-            );
-        }
-
-        if (!indexBuildInfo->IsFinished()) {
+        if (!indexBuildInfo.IsFinished()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> hasn't been finished yet"
+                TStringBuilder() << "Index build process with id <" << BuildId << "> hasn't been finished yet"
             );
         }
 

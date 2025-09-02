@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.1)
+VERSION(25.2)
 
 LICENSE(MIT)
 
@@ -10,6 +10,8 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     pip.__pip-runner__
+    pip._internal.cli.progress_bars
+    pip._internal.locations._distutils
     pip._vendor.*
 )
 
@@ -48,6 +50,7 @@ PY_SRCS(
     pip/_internal/commands/inspect.py
     pip/_internal/commands/install.py
     pip/_internal/commands/list.py
+    pip/_internal/commands/lock.py
     pip/_internal/commands/search.py
     pip/_internal/commands/show.py
     pip/_internal/commands/uninstall.py
@@ -83,6 +86,7 @@ PY_SRCS(
     pip/_internal/models/index.py
     pip/_internal/models/installation_report.py
     pip/_internal/models/link.py
+    pip/_internal/models/pylock.py
     pip/_internal/models/scheme.py
     pip/_internal/models/search_scope.py
     pip/_internal/models/selection_prefs.py
@@ -114,6 +118,7 @@ PY_SRCS(
     pip/_internal/pyproject.py
     pip/_internal/req/__init__.py
     pip/_internal/req/constructors.py
+    pip/_internal/req/req_dependency_group.py
     pip/_internal/req/req_file.py
     pip/_internal/req/req_install.py
     pip/_internal/req/req_set.py
@@ -142,7 +147,6 @@ PY_SRCS(
     pip/_internal/utils/deprecation.py
     pip/_internal/utils/direct_url_helpers.py
     pip/_internal/utils/egg_link.py
-    pip/_internal/utils/encoding.py
     pip/_internal/utils/entrypoints.py
     pip/_internal/utils/filesystem.py
     pip/_internal/utils/filetypes.py
@@ -151,6 +155,7 @@ PY_SRCS(
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
+    pip/_internal/utils/retry.py
     pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
@@ -181,19 +186,17 @@ PY_SRCS(
     pip/_vendor/certifi/__init__.py
     pip/_vendor/certifi/__main__.py
     pip/_vendor/certifi/core.py
+    pip/_vendor/dependency_groups/__init__.py
+    pip/_vendor/dependency_groups/__main__.py
+    pip/_vendor/dependency_groups/_implementation.py
+    pip/_vendor/dependency_groups/_lint_dependency_groups.py
+    pip/_vendor/dependency_groups/_pip_wrapper.py
+    pip/_vendor/dependency_groups/_toml_compat.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
-    pip/_vendor/distlib/database.py
-    pip/_vendor/distlib/index.py
-    pip/_vendor/distlib/locators.py
-    pip/_vendor/distlib/manifest.py
-    pip/_vendor/distlib/markers.py
-    pip/_vendor/distlib/metadata.py
     pip/_vendor/distlib/resources.py
     pip/_vendor/distlib/scripts.py
     pip/_vendor/distlib/util.py
-    pip/_vendor/distlib/version.py
-    pip/_vendor/distlib/wheel.py
     pip/_vendor/distro/__init__.py
     pip/_vendor/distro/__main__.py
     pip/_vendor/distro/distro.py
@@ -216,6 +219,8 @@ PY_SRCS(
     pip/_vendor/packaging/_parser.py
     pip/_vendor/packaging/_structures.py
     pip/_vendor/packaging/_tokenizer.py
+    pip/_vendor/packaging/licenses/__init__.py
+    pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
     pip/_vendor/packaging/metadata.py
     pip/_vendor/packaging/requirements.py
@@ -234,25 +239,12 @@ PY_SRCS(
     pip/_vendor/platformdirs/windows.py
     pip/_vendor/pygments/__init__.py
     pip/_vendor/pygments/__main__.py
-    pip/_vendor/pygments/cmdline.py
     pip/_vendor/pygments/console.py
     pip/_vendor/pygments/filter.py
     pip/_vendor/pygments/filters/__init__.py
     pip/_vendor/pygments/formatter.py
     pip/_vendor/pygments/formatters/__init__.py
     pip/_vendor/pygments/formatters/_mapping.py
-    pip/_vendor/pygments/formatters/bbcode.py
-    pip/_vendor/pygments/formatters/groff.py
-    pip/_vendor/pygments/formatters/html.py
-    pip/_vendor/pygments/formatters/img.py
-    pip/_vendor/pygments/formatters/irc.py
-    pip/_vendor/pygments/formatters/latex.py
-    pip/_vendor/pygments/formatters/other.py
-    pip/_vendor/pygments/formatters/pangomarkup.py
-    pip/_vendor/pygments/formatters/rtf.py
-    pip/_vendor/pygments/formatters/svg.py
-    pip/_vendor/pygments/formatters/terminal.py
-    pip/_vendor/pygments/formatters/terminal256.py
     pip/_vendor/pygments/lexer.py
     pip/_vendor/pygments/lexers/__init__.py
     pip/_vendor/pygments/lexers/_mapping.py
@@ -269,7 +261,6 @@ PY_SRCS(
     pip/_vendor/pygments/unistring.py
     pip/_vendor/pygments/util.py
     pip/_vendor/pyproject_hooks/__init__.py
-    pip/_vendor/pyproject_hooks/_compat.py
     pip/_vendor/pyproject_hooks/_impl.py
     pip/_vendor/pyproject_hooks/_in_process/__init__.py
     pip/_vendor/pyproject_hooks/_in_process/_in_process.py
@@ -292,11 +283,13 @@ PY_SRCS(
     pip/_vendor/requests/structures.py
     pip/_vendor/requests/utils.py
     pip/_vendor/resolvelib/__init__.py
-    pip/_vendor/resolvelib/compat/__init__.py
-    pip/_vendor/resolvelib/compat/collections_abc.py
     pip/_vendor/resolvelib/providers.py
     pip/_vendor/resolvelib/reporters.py
-    pip/_vendor/resolvelib/resolvers.py
+    pip/_vendor/resolvelib/resolvers/__init__.py
+    pip/_vendor/resolvelib/resolvers/abstract.py
+    pip/_vendor/resolvelib/resolvers/criterion.py
+    pip/_vendor/resolvelib/resolvers/exceptions.py
+    pip/_vendor/resolvelib/resolvers/resolution.py
     pip/_vendor/resolvelib/structs.py
     pip/_vendor/rich/__init__.py
     pip/_vendor/rich/__main__.py
@@ -375,28 +368,18 @@ PY_SRCS(
     pip/_vendor/rich/themes.py
     pip/_vendor/rich/traceback.py
     pip/_vendor/rich/tree.py
-    pip/_vendor/tenacity/__init__.py
-    pip/_vendor/tenacity/_asyncio.py
-    pip/_vendor/tenacity/_utils.py
-    pip/_vendor/tenacity/after.py
-    pip/_vendor/tenacity/before.py
-    pip/_vendor/tenacity/before_sleep.py
-    pip/_vendor/tenacity/nap.py
-    pip/_vendor/tenacity/retry.py
-    pip/_vendor/tenacity/stop.py
-    pip/_vendor/tenacity/tornadoweb.py
-    pip/_vendor/tenacity/wait.py
     pip/_vendor/tomli/__init__.py
     pip/_vendor/tomli/_parser.py
     pip/_vendor/tomli/_re.py
     pip/_vendor/tomli/_types.py
+    pip/_vendor/tomli_w/__init__.py
+    pip/_vendor/tomli_w/_writer.py
     pip/_vendor/truststore/__init__.py
     pip/_vendor/truststore/_api.py
     pip/_vendor/truststore/_macos.py
     pip/_vendor/truststore/_openssl.py
     pip/_vendor/truststore/_ssl_constants.py
     pip/_vendor/truststore/_windows.py
-    pip/_vendor/typing_extensions.py
     pip/_vendor/urllib3/__init__.py
     pip/_vendor/urllib3/_collections.py
     pip/_vendor/urllib3/_version.py
@@ -446,14 +429,16 @@ RESOURCE_FILES(
     pip/_vendor/cachecontrol/py.typed
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
+    pip/_vendor/dependency_groups/py.typed
     pip/_vendor/distro/py.typed
     pip/_vendor/idna/py.typed
     pip/_vendor/packaging/py.typed
     pip/_vendor/platformdirs/py.typed
+    pip/_vendor/pyproject_hooks/py.typed
     pip/_vendor/resolvelib/py.typed
     pip/_vendor/rich/py.typed
-    pip/_vendor/tenacity/py.typed
     pip/_vendor/tomli/py.typed
+    pip/_vendor/tomli_w/py.typed
     pip/_vendor/truststore/py.typed
     pip/_vendor/vendor.txt
     pip/py.typed

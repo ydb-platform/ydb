@@ -1,0 +1,24 @@
+From: Александр Сомов <somov@yandex-team.ru>
+Date: Fri, 28 Apr 2017 13:18:37 +0000
+Subject: [PATCH] Fix Clang 3.9 build #35 Clang 3.9 uses the strict memcmp mode
+ in the address sanitizer by default. Do not use memcmp to compare strings.
+
+DEVTOOLS-2459
+REVIEW: 269899
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/pcre@2895347 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+
+This is compatible only with the 8-bit pcre build.
+
+This was fixed in pcre2 in a different way:
+https://vcs.pcre.org/pcre2/code/trunk/src/pcre2_compile.c?annotate=185&pathrev=185#l7344
+
+--- a/pcre_compile.c
++++ b/pcre_compile.c
+@@ -8978,5 +8978,5 @@ pcre_uchar *slot = cd->name_table;
+ for (i = 0; i < cd->names_found; i++)
+   {
+-  int crc = memcmp(name, slot+IMM2_SIZE, IN_UCHARS(length));
++  int crc = strncmp(name, slot+IMM2_SIZE, IN_UCHARS(length));
+   if (crc == 0 && slot[IMM2_SIZE+length] != 0)
+     crc = -1; /* Current name is a substring */

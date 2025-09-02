@@ -10,13 +10,15 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_pb.h>
@@ -30,6 +32,7 @@
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/types.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 namespace NYql {
 
@@ -53,6 +56,7 @@ public:
         const TString& traceId,
         const NActors::TActorId& executerId,
         const NActors::TActorId& resultId,
+        const NActors::TActorId& checkpointCoordinatorId,
         const TDqConfiguration::TPtr& settings,
         const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
@@ -62,6 +66,7 @@ public:
         : NActors::TActor<TDerived>(func)
         , ExecuterId(executerId)
         , ResultId(resultId)
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
         , TraceId(traceId)
         , Settings(settings)
         , ServiceCounters(serviceCounters, "task_controller")
@@ -124,10 +129,6 @@ public:
         TIssues issues = ev->Get()->GetIssues();
         YQL_CLOG(DEBUG, ProviderDq) << "AbortExecution from " << ev->Sender << ":" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << issues.ToOneLineString();
         OnError(statusCode, issues);
-    }
-
-    void OnInternalError(const TString& message, const TIssues& subIssues = {}) {
-        OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, subIssues);
     }
 
 private:
@@ -273,7 +274,7 @@ private:
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
-                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total"; 
+                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total";
                 *group->GetCounter(name) = v.Sum;
                 if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
@@ -295,6 +296,16 @@ private:
                     } else if (name == "EgressRows" && taskLevelCounter) {
                         publicCounterName = "query.sink_output_records";
                         isDeriv = true;
+                    } else if (name == "IngressFilteredBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_filtered_bytes";
+                        isDeriv = true;
+                    } else if (name == "IngressFilteredRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_filtered_records";
+                        isDeriv = true;
+                    } else if (name == "IngressQueuedBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_queued_bytes";
+                    } else if (name == "IngressQueuedRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_queued_records";
                     } else if (name == "Tasks") {
                         publicCounterName = "query.running_tasks";
                         isDeriv = false;
@@ -351,9 +362,12 @@ private:
         ui64 taskId = s.GetTaskId();
         ui64 stageId = Stages.Value(taskId, s.GetStageId());
 
+#define SET_COUNTER(name) \
+        TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
+            SET_COUNTER(name); \
         }
 
         std::map<TString, TString> commonLabels = {
@@ -380,10 +394,22 @@ private:
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
 
+        ADD_COUNTER(IngressFilteredBytes)
+        ADD_COUNTER(IngressFilteredRows)
+        SET_COUNTER(IngressQueuedBytes)
+        SET_COUNTER(IngressQueuedRows)
+
         ADD_COUNTER(StartTimeMs)
         ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
+
+        ADD_COUNTER(SpillingComputeWriteBytes)
+        ADD_COUNTER(SpillingChannelWriteBytes)
+        ADD_COUNTER(SpillingComputeReadTimeUs)
+        ADD_COUNTER(SpillingComputeWriteTimeUs)
+        ADD_COUNTER(SpillingChannelReadTimeUs)
+        ADD_COUNTER(SpillingChannelWriteTimeUs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
@@ -491,7 +517,7 @@ public:
         }
 
         for (const auto& [taskId, stageId] : Stages) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", 
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner",
                 {{"Task", ToString(taskId)}, {"Stage", ToString(stageId)}}, "CpuTimeUs"), 0);
         }
 
@@ -507,14 +533,23 @@ public:
         if (AggrPeriod) {
             Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
         }
-    }
+        if (CheckpointCoordinatorId) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Forward: " << SelfId() << " to " << CheckpointCoordinatorId;
 
-    const NDq::TDqTaskSettings GetTask(size_t idx) const {
-        return Tasks.at(idx).first;
-    }
-
-    int GetTasksSize() const {
-        return Tasks.size();
+            auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+            for (const auto& [settings, actorId] : Tasks) {
+                auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                    settings.GetId(),
+                    NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                    NYql::NDq::IsIngress(settings),
+                    NYql::NDq::IsEgress(settings),
+                    NYql::NDq::HasState(settings),
+                    actorId
+                };
+                event->Tasks.emplace_back(std::move(task));
+            }
+            Send(CheckpointCoordinatorId, event.release());
+        }
     }
 
 private:
@@ -539,7 +574,7 @@ private:
                 }
             }
 
-            YQL_CLOG(DEBUG, ProviderDq) << task.GetId() << " " << ev->Record.ShortDebugString();
+            YQL_CLOG(TRACE, ProviderDq) << task.GetId() << " " << ev->Record.ShortDebugString();
 
             Send(actorId, ev.Release());
         }
@@ -556,16 +591,6 @@ public:
             Send(ExecuterId, ev->Release().Release());
             Finished = true;
         }
-    }
-
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const TIssues& subIssues) {
-        TIssue issue(message);
-        for (const TIssue& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(i));
-        }
-        TIssues issues;
-        issues.AddIssue(std::move(issue));
-        OnError(statusCode, issues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
@@ -600,7 +625,7 @@ private:
 
 public:
     void OnQueryResult(TEvQueryResponse::TPtr& ev) {
-        YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+        YQL_ENSURE(!ev->Get()->Record.SampleSize());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
             IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());
@@ -630,6 +655,7 @@ private:
     THashMap<ui64, ui64> Stages;
     const NActors::TActorId ExecuterId;
     const NActors::TActorId ResultId;
+    const NActors::TActorId CheckpointCoordinatorId;
     const TString TraceId;
     TDqConfiguration::TPtr Settings;
     bool Finished = false;

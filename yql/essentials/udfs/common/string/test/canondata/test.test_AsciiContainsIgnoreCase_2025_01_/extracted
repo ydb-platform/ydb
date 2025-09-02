@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf
+            	    String::AsciiContainsIgnoreCase(value, "AS") AS iccontains,
+	            ^
+                <tmp_path>/program.sql:<main>:6:13: Error: UDF 'String.AsciiContainsIgnoreCase' is not available before version 2025.02
+                	    String::AsciiContainsIgnoreCase(value, "AS") AS iccontains,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:8:13: Error: At function: Apply, At function: Udf
+            	    String::AsciiContainsIgnoreCase(value, "") AS icempty,
+	            ^
+                <tmp_path>/program.sql:<main>:8:13: Error: UDF 'String.AsciiContainsIgnoreCase' is not available before version 2025.02
+                	    String::AsciiContainsIgnoreCase(value, "") AS icempty,
+	            ^
+        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:10:13: Error: At function: Apply, At function: Udf
+            	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
+	            ^
+                <tmp_path>/program.sql:<main>:10:13: Error: UDF 'String.AsciiEqualsIgnoreCase' is not available before version 2025.02
+                	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
+	            ^

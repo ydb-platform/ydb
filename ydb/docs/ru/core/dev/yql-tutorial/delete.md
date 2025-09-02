@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 DELETE
 FROM episodes
 WHERE
@@ -12,8 +12,6 @@ WHERE
     AND season_id = 5
     AND episode_id = 12
 ;
-
-COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
@@ -35,10 +33,6 @@ SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
 DELETE FROM episodes ON
 SELECT * FROM $to_delete;
 
-COMMIT;
-
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
-
-COMMIT;
 ```

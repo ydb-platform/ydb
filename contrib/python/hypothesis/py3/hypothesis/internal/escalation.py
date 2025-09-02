@@ -13,74 +13,55 @@ import os
 import sys
 import textwrap
 import traceback
+from functools import partial
 from inspect import getframeinfo
 from pathlib import Path
-from typing import Dict, NamedTuple, Optional, Type
+from types import ModuleType, TracebackType
+from typing import Callable, NamedTuple, Optional
 
 import hypothesis
-from hypothesis.errors import (
-    DeadlineExceeded,
-    HypothesisException,
-    StopTest,
-    UnsatisfiedAssumption,
-    _Trimmable,
-)
+from hypothesis.errors import _Trimmable
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.utils.dynamicvariables import DynamicVariable
 
+FILE_CACHE: dict[ModuleType, dict[str, bool]] = {}
 
-def belongs_to(package):
-    if not hasattr(package, "__file__"):  # pragma: no cover
+
+def belongs_to(package: ModuleType) -> Callable[[str], bool]:
+    if getattr(package, "__file__", None) is None:  # pragma: no cover
         return lambda filepath: False
 
+    assert package.__file__ is not None
+    FILE_CACHE.setdefault(package, {})
+    cache = FILE_CACHE[package]
     root = Path(package.__file__).resolve().parent
-    cache = {str: {}, bytes: {}}
 
-    def accept(filepath):
-        ftype = type(filepath)
+    def accept(filepath: str) -> bool:
         try:
-            return cache[ftype][filepath]
+            return cache[filepath]
         except KeyError:
             pass
         try:
-            Path(filepath).resolve().relative_to(root)
+            if not filepath.startswith("<frozen "):
+                Path(filepath).resolve().relative_to(root)
+            else:
+                raise ValueError
             result = True
         except Exception:
             result = False
-        cache[ftype][filepath] = result
+        cache[filepath] = result
         return result
 
     accept.__name__ = f"is_{package.__name__}_file"
     return accept
 
 
-PREVENT_ESCALATION = os.getenv("HYPOTHESIS_DO_NOT_ESCALATE") == "true"
-
-FILE_CACHE: Dict[bytes, bool] = {}
-
-
 is_hypothesis_file = belongs_to(hypothesis)
 
-HYPOTHESIS_CONTROL_EXCEPTIONS = (DeadlineExceeded, StopTest, UnsatisfiedAssumption)
 
-
-def escalate_hypothesis_internal_error():
-    if PREVENT_ESCALATION:
-        return
-
-    _, e, tb = sys.exc_info()
-
-    if getattr(e, "hypothesis_internal_never_escalate", False):
-        return
-
-    filepath = None if tb is None else traceback.extract_tb(tb)[-1][0]
-    if is_hypothesis_file(filepath) and not isinstance(
-        e, (HypothesisException, *HYPOTHESIS_CONTROL_EXCEPTIONS)
-    ):
-        raise
-
-
-def get_trimmed_traceback(exception=None):
+def get_trimmed_traceback(
+    exception: Optional[BaseException] = None,
+) -> Optional[TracebackType]:
     """Return the current traceback, minus any frames added by Hypothesis."""
     if exception is None:
         _, exception, tb = sys.exc_info()
@@ -90,12 +71,15 @@ def get_trimmed_traceback(exception=None):
     # was raised inside Hypothesis. Additionally, the environment variable
     # HYPOTHESIS_NO_TRACEBACK_TRIM is respected if nonempty, because verbose
     # mode is prohibitively slow when debugging strategy recursion errors.
+    assert hypothesis.settings.default is not None
     if (
         tb is None
-        or os.environ.get("HYPOTHESIS_NO_TRACEBACK_TRIM", None)
+        or os.environ.get("HYPOTHESIS_NO_TRACEBACK_TRIM")
         or hypothesis.settings.default.verbosity >= hypothesis.Verbosity.debug
-        or is_hypothesis_file(traceback.extract_tb(tb)[-1][0])
-        and not isinstance(exception, _Trimmable)
+        or (
+            is_hypothesis_file(traceback.extract_tb(tb)[-1][0])
+            and not isinstance(exception, _Trimmable)
+        )
     ):
         return tb
     while tb.tb_next is not None and (
@@ -116,7 +100,7 @@ class InterestingOrigin(NamedTuple):
     # location, but have extracted this logic in order to see through `except ...:`
     # blocks and understand the __cause__ (`raise x from y`) or __context__ that
     # first raised an exception as well as PEP-654 exception groups.
-    exc_type: Type[BaseException]
+    exc_type: type[BaseException]
     filename: Optional[str]
     lineno: Optional[int]
     context: "InterestingOrigin | tuple[()]"
@@ -133,20 +117,27 @@ class InterestingOrigin(NamedTuple):
         return f"{self.exc_type.__name__} at {self.filename}:{self.lineno}{ctx}{group}"
 
     @classmethod
-    def from_exception(cls, exception: BaseException, /) -> "InterestingOrigin":
+    def from_exception(
+        cls, exception: BaseException, /, seen: tuple[BaseException, ...] = ()
+    ) -> "InterestingOrigin":
         filename, lineno = None, None
         if tb := get_trimmed_traceback(exception):
             filename, lineno, *_ = traceback.extract_tb(tb)[-1]
+        seen = (*seen, exception)
+        make = partial(cls.from_exception, seen=seen)
+        context: "InterestingOrigin | tuple[()]" = ()
+        if exception.__context__ is not None and exception.__context__ not in seen:
+            context = make(exception.__context__)
         return cls(
             type(exception),
             filename,
             lineno,
             # Note that if __cause__ is set it is always equal to __context__, explicitly
             # to support introspection when debugging, so we can use that unconditionally.
-            cls.from_exception(exception.__context__) if exception.__context__ else (),
+            context,
             # We distinguish exception groups by the inner exceptions, as for __context__
             (
-                tuple(map(cls.from_exception, exception.exceptions))
+                tuple(make(exc) for exc in exception.exceptions if exc not in seen)
                 if isinstance(exception, BaseExceptionGroup)
                 else ()
             ),

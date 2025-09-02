@@ -15,7 +15,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString BundleName_;
+std::string BundleName_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -29,7 +29,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString BundleName_;
+    std::string BundleName_;
     NBundleControllerClient::TBundleTargetConfigPtr BundleConfig_;
 
     void DoExecute(ICommandContextPtr context) override;

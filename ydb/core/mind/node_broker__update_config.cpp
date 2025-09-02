@@ -1,6 +1,8 @@
 #include "node_broker_impl.h"
 #include "node_broker__scheme.h"
 
+#include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -24,6 +26,8 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG; }
+
     bool ProcessNotification(const TActorContext &ctx)
     {
         auto &rec = Notification->Get()->Record;
@@ -31,7 +35,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
@@ -48,7 +52,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
@@ -68,8 +72,10 @@ public:
         if (Request && !ProcessRequest(ctx))
             return true;
 
-        if (Modify)
-            Self->DbUpdateConfig(Config, txc);
+        if (Modify) {
+            Self->Dirty.DbUpdateConfig(Config, txc);
+            Self->Dirty.LoadConfigFromProto(Config);
+        }
 
         return true;
     }
@@ -79,7 +85,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfig Complete");
 
         if (Modify)
-            Self->LoadConfigFromProto(Config);
+            Self->Committed.LoadConfigFromProto(Config);
 
         if (Response) {
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
@@ -87,7 +93,7 @@ public:
             ctx.Send(Response);
         }
 
-        Self->TxCompleted(this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

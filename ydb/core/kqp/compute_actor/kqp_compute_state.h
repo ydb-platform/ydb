@@ -34,18 +34,26 @@ struct TShardState: public TCommonRetriesState {
     const ui64 TabletId;
     TSmallVec<TSerializedTableRange> Ranges;
     EShardState State = EShardState::Initial;
-    ui32 Generation = 0;
+    ui32 Generation = 1;
     bool SubscribedOnTablet = false;
     TActorId ActorId;
     TOwnedCellVec LastKey;
+    std::optional<NKikimrKqp::TEvKqpScanCursor> LastCursorProto;
     std::optional<ui32> AvailablePacks;
 
+    TString CursorDebugString() const {
+        TString strCursor = LastCursorProto ? LastCursorProto->DebugString() : TString("START");
+        while (strCursor.find("\n") != std::string::npos) {
+            strCursor.replace(strCursor.find("\n"), 1, " ");
+        }
+        return strCursor;
+    }
     TString PrintLastKey(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
 
     TShardState(const ui64 tabletId);
 
     TString ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
-    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
+    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool allRanges = false) const;
     TString GetAddress() const;
 };
 }

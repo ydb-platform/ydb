@@ -7,31 +7,35 @@
 #include <aws/cal/cal.h>
 #include <aws/common/byte_buf.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_AES_256_CIPHER_BLOCK_SIZE 16
 #define AWS_AES_256_KEY_BIT_LEN 256
 #define AWS_AES_256_KEY_BYTE_LEN (AWS_AES_256_KEY_BIT_LEN / 8)
 
 struct aws_symmetric_cipher;
 
-typedef struct aws_symmetric_cipher *(aws_aes_cbc_256_new_fn)(
-    struct aws_allocator *allocator,
-    const struct aws_byte_cursor *key,
-    const struct aws_byte_cursor *iv);
+typedef struct aws_symmetric_cipher *(aws_aes_cbc_256_new_fn)(struct aws_allocator *allocator,
+                                                              const struct aws_byte_cursor *key,
+                                                              const struct aws_byte_cursor *iv);
 
-typedef struct aws_symmetric_cipher *(aws_aes_ctr_256_new_fn)(
-    struct aws_allocator *allocator,
-    const struct aws_byte_cursor *key,
-    const struct aws_byte_cursor *iv);
+typedef struct aws_symmetric_cipher *(aws_aes_ctr_256_new_fn)(struct aws_allocator *allocator,
+                                                              const struct aws_byte_cursor *key,
+                                                              const struct aws_byte_cursor *iv);
 
-typedef struct aws_symmetric_cipher *(aws_aes_gcm_256_new_fn)(
-    struct aws_allocator *allocator,
-    const struct aws_byte_cursor *key,
-    const struct aws_byte_cursor *iv,
-    const struct aws_byte_cursor *aad,
-    const struct aws_byte_cursor *decryption_tag);
+typedef struct aws_symmetric_cipher *(aws_aes_gcm_256_new_fn)(struct aws_allocator *allocator,
+                                                              const struct aws_byte_cursor *key,
+                                                              const struct aws_byte_cursor *iv,
+                                                              const struct aws_byte_cursor *aad);
 
-typedef struct aws_symmetric_cipher *(
-    aws_aes_keywrap_256_new_fn)(struct aws_allocator *allocator, const struct aws_byte_cursor *key);
+typedef struct aws_symmetric_cipher *(aws_aes_keywrap_256_new_fn)(struct aws_allocator *allocator,
+                                                                  const struct aws_byte_cursor *key);
+
+enum aws_symmetric_cipher_state {
+    AWS_SYMMETRIC_CIPHER_READY,
+    AWS_SYMMETRIC_CIPHER_FINALIZED,
+    AWS_SYMMETRIC_CIPHER_ERROR,
+};
 
 AWS_EXTERN_C_BEGIN
 
@@ -83,15 +87,15 @@ AWS_CAL_API struct aws_symmetric_cipher *aws_aes_ctr_256_new(
  *
  * respectively.
  *
+ * If aad is set it will be copied and applied to the cipher.
+ *
  * If they are set, that key and iv will be copied internally and used by the cipher.
  *
- * If tag and aad are set they will be copied internally and used by the cipher.
- * decryption_tag would most likely be used for a decrypt operation to detect tampering or corruption.
- * The Tag for the most recent encrypt operation will be available in:
- *
- * aws_symmetric_cipher_get_tag()
- *
- * If aad is set it will be copied and applied to the cipher.
+ * For decryption purposes tag can be provided via aws_symmetric_cipher_set_tag method.
+ * Note: for decrypt operations, tag must be provided before first decrypt is called.
+ * (this is a windows bcrypt limitations, but for consistency sake same limitation is extended to other platforms)
+ * Tag generated during encryption can be retrieved using aws_symmetric_cipher_get_tag method
+ * after finalize is called.
  *
  * Returns NULL on failure. You can check aws_last_error() to get the error code indicating the failure cause.
  */
@@ -99,8 +103,7 @@ AWS_CAL_API struct aws_symmetric_cipher *aws_aes_gcm_256_new(
     struct aws_allocator *allocator,
     const struct aws_byte_cursor *key,
     const struct aws_byte_cursor *iv,
-    const struct aws_byte_cursor *aad,
-    const struct aws_byte_cursor *decryption_tag);
+    const struct aws_byte_cursor *aad);
 
 /**
  * Creates an instance of AES Keywrap with 256-bit key.
@@ -186,6 +189,12 @@ AWS_CAL_API int aws_symmetric_cipher_finalize_decryption(struct aws_symmetric_ci
  * Resets the cipher state for starting a new encrypt or decrypt operation. Note encrypt/decrypt cannot be mixed on the
  * same cipher without a call to reset in between them. However, this leaves the key, iv etc... materials setup for
  * immediate reuse.
+ * Note: GCM tag is not preserved between operations. If you intend to do encrypt followed directly by decrypt, make
+ * sure to make a copy of tag before reseting the cipher and pass that copy for decryption.
+ *
+ * Warning: In most cases it's a really bad idea to reset a cipher and perform another operation using that cipher.
+ * Key and IV should not be reused for different operations. Instead of reseting the cipher, destroy the cipher
+ * and create new one with a new key/iv pair. Use reset at your own risk, and only after careful consideration.
  *
  * returns AWS_OP_SUCCESS on success. Call aws_last_error() to determine the failure cause if it returns
  * AWS_OP_ERR;
@@ -204,7 +213,12 @@ AWS_CAL_API int aws_symmetric_cipher_reset(struct aws_symmetric_cipher *cipher);
 AWS_CAL_API struct aws_byte_cursor aws_symmetric_cipher_get_tag(const struct aws_symmetric_cipher *cipher);
 
 /**
- * Gets the original intialization vector as a cursor.
+ * Sets the GMAC tag on the cipher. Does nothing for ciphers that do not support tag.
+ */
+AWS_CAL_API void aws_symmetric_cipher_set_tag(struct aws_symmetric_cipher *cipher, struct aws_byte_cursor tag);
+
+/**
+ * Gets the original initialization vector as a cursor.
  * The memory in this cursor is unsafe as it refers to the internal buffer.
  * This was done because the use case doesn't require fetching these during an
  * encryption or decryption operation and it dramatically simplifies the API.
@@ -234,5 +248,12 @@ AWS_CAL_API struct aws_byte_cursor aws_symmetric_cipher_get_key(const struct aws
  */
 AWS_CAL_API bool aws_symmetric_cipher_is_good(const struct aws_symmetric_cipher *cipher);
 
+/**
+ * Retuns the current state of the cipher. Ther state of the cipher can be ready for use, finalized, or has encountered
+ * an error. if the cipher is in a finished or error state, it must be reset before further use.
+ */
+AWS_CAL_API enum aws_symmetric_cipher_state aws_symmetric_cipher_get_state(const struct aws_symmetric_cipher *cipher);
+
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 #endif /* AWS_CAL_SYMMETRIC_CIPHER_H */

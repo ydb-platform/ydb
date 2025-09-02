@@ -3,9 +3,10 @@
 import functools
 import os.path
 
-from ._functools import splat
+from jaraco.functools import splat
+
+from .compat.py39 import zip_strict
 from .errors import DistutilsFileError
-from .py39compat import zip_strict
 
 
 def _newer(source, target):
@@ -24,7 +25,7 @@ def newer(source, target):
     Raises DistutilsFileError if 'source' does not exist.
     """
     if not os.path.exists(source):
-        raise DistutilsFileError("file '%s' does not exist" % os.path.abspath(source))
+        raise DistutilsFileError(f"file '{os.path.abspath(source)}' does not exist")
 
     return _newer(source, target)
 
@@ -63,7 +64,7 @@ def newer_group(sources, target, missing='error'):
         return missing == 'newer' and not os.path.exists(source)
 
     ignored = os.path.exists if missing == 'ignore' else None
-    return any(
+    return not os.path.exists(target) or any(
         missing_as_newer(source) or _newer(source, target)
         for source in filter(ignored, sources)
     )

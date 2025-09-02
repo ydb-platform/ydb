@@ -98,7 +98,7 @@ class Tag(object):
         elif idx == 2:
             return self.__tagId
         else:
-            raise IndexError()
+            raise IndexError
 
     def __iter__(self):
         yield self.__tagClass

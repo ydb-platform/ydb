@@ -9,6 +9,8 @@ namespace NKikimrSchemeOp {
     class TColumnDescription;
     class TTableDescription;
     class TTableReplicationConfig;
+    class TColumnTableDescription;
+    class TOlapColumnDescription;
 }
 
 namespace NKikimr::NReplication::NTestHelpers {
@@ -19,6 +21,7 @@ struct TTestTableDescription {
         TString Type;
 
         void SerializeTo(NKikimrSchemeOp::TColumnDescription& proto) const;
+        void SerializeTo(NKikimrSchemeOp::TOlapColumnDescription& proto) const;
     };
 
     struct TReplicationConfig {
@@ -27,14 +30,14 @@ struct TTestTableDescription {
             MODE_READ_ONLY = 1,
         };
 
-        enum EConsistency {
-            CONSISTENCY_UNKNOWN = 0,
-            CONSISTENCY_STRONG = 1,
-            CONSISTENCY_WEAK = 2,
+        enum EConsistencyLevel {
+            CONSISTENCY_LEVEL_UNKNOWN = 0,
+            CONSISTENCY_LEVEL_GLOBAL = 1,
+            CONSISTENCY_LEVEL_ROW = 2,
         };
 
         EMode Mode;
-        EConsistency Consistency;
+        EConsistencyLevel ConsistencyLevel;
 
         void SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const;
         static TReplicationConfig Default();
@@ -47,8 +50,10 @@ struct TTestTableDescription {
     TMaybe<ui32> UniformPartitions = Nothing();
 
     void SerializeTo(NKikimrSchemeOp::TTableDescription& proto) const;
+    void SerializeTo(NKikimrSchemeOp::TColumnTableDescription& proto) const;
 };
 
 THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc);
+THolder<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc);
 
 }

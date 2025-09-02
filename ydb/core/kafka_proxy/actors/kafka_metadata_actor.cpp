@@ -1,104 +1,190 @@
 #include "kafka_metadata_actor.h"
 
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/grpc_services/grpc_endpoint.h>
+#include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/core/persqueue/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
+using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
+
+TActorId MakeKafkaDiscoveryCacheID() {
+    static const char x[12] = "kafka_dsc_c";
+    return TActorId(0, TStringBuf(x, 12));
+}
 
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
-                                          const TMessagePtr<TMetadataRequestData>& message) {
-    return new TKafkaMetadataActor(context, correlationId, message);
+                                          const TMessagePtr<TMetadataRequestData>& message,
+                                          const TActorId& discoveryCacheActor) {
+    return new TKafkaMetadataActor(context, correlationId, message, discoveryCacheActor);
 }
 
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
     Response->ClusterId = "ydb-cluster";
-    Response->ControllerId = 1;
-
+    Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
 
     if (WithProxy) {
         AddProxyNodeToBrokers();
-    }
+    } else {
+        SendDiscoveryRequest();
 
-    if (Message->Topics.size() == 0 && !WithProxy) {
-        AddCurrentNodeToBrokers();
+        if (Message->Topics.size() == 0) {
+            ctx.Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+                    SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
+
+            PendingResponses++;
+            NeedAllNodes = true;
+        }
     }
 
     if (Message->Topics.size() != 0) {
-        ProcessTopics();
+        ProcessTopicsFromRequest();
     }
-    
+
     Become(&TKafkaMetadataActor::StateWork);
     RespondIfRequired(ctx);
 }
 
-void TKafkaMetadataActor::AddCurrentNodeToBrokers() {
+void TKafkaMetadataActor::SendDiscoveryRequest() {
+    Y_VERIFY_DEBUG(DiscoveryCacheActor);
     PendingResponses++;
-    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
+    Register(CreateDiscoverer(&MakeEndpointsBoardPath, Context->DatabasePath, SelfId(), DiscoveryCacheActor));
 }
 
-void TKafkaMetadataActor::AddProxyNodeToBrokers() {
-    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-    broker.NodeId = ProxyNodeId;
-    broker.Host = Context->Config.GetProxy().GetHostname();
-    broker.Port = Context->Config.GetProxy().GetPort();
-    Response->Brokers.emplace_back(std::move(broker));
+
+void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev) {
+    PendingResponses--;
+    HaveError = true;
+    KAFKA_LOG_ERROR("Port discovery failed for database '" << Context->DatabasePath << "' with error '" << ev->Get()->Error
+                    << ", request " << CorrelationId);
+
+    RespondIfRequired(ActorContext());
 }
 
-void TKafkaMetadataActor::ProcessTopics() {
-    THashMap<TString, TActorId> partitionActors;
-    for (size_t i = 0; i < Message->Topics.size(); ++i) {
-        Response->Topics[i] = TMetadataResponseData::TMetadataResponseTopic{};
-        auto& reqTopic = Message->Topics[i];
-        Response->Topics[i].Name = reqTopic.Name.value_or("");
+void TKafkaMetadataActor::HandleDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
+    PendingResponses--;
+    ProcessDiscoveryData(ev);
+    RespondIfRequired(ActorContext());
+}
 
-        if (!reqTopic.Name.value_or("")) {
-            AddTopicError(Response->Topics[i], EKafkaErrors::INVALID_TOPIC_EXCEPTION);
-            continue;
-        }
-        const auto& topicName = reqTopic.Name.value();
-        TActorId child;
-        auto namesIter = partitionActors.find(topicName);
-        if (namesIter.IsEnd()) {
-            child = SendTopicRequest(reqTopic);
-            partitionActors[topicName] = child;
-        } else {
-            child = namesIter->second;
-        }
-        TopicIndexes[child].push_back(i);
+void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
+    bool expectSsl = Context->Config.HasSslCertificate();
+
+    Ydb::Discovery::ListEndpointsResponse leResponse;
+    Ydb::Discovery::ListEndpointsResult leResult;
+    TString const* cachedMessage;
+    if (expectSsl) {
+        cachedMessage = &ev->Get()->CachedMessageData->CachedMessageSsl;
+    } else {
+        cachedMessage = &ev->Get()->CachedMessageData->CachedMessage;
+    }
+    auto ok = leResponse.ParseFromString(*cachedMessage);
+    if (ok) {
+        ok = leResponse.operation().result().UnpackTo(&leResult);
+    }
+    if (!ok) {
+        KAFKA_LOG_ERROR("Port discovery failed, unable to parse discovery respose for request " << CorrelationId);
+        HaveError = true;
+        return;
+    }
+
+    for (auto& endpoint : leResult.endpoints()) {
+        Nodes.insert({endpoint.node_id(), {endpoint.address(), endpoint.port()}});
     }
 }
 
-void TKafkaMetadataActor::HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    auto iter = ev->Get()->NodeIdsMapping->find(ctx.SelfID.NodeId());
-    Y_ABORT_UNLESS(!iter.IsEnd());
-	auto host = (*ev->Get()->Nodes)[iter->second].Host;
-    KAFKA_LOG_D("Incoming TEvGetAllNodesInfoResponse. Host#: " << host);
+void TKafkaMetadataActor::RequestICNodeCache() {
+    Y_ABORT_UNLESS(!FallbackToIcDiscovery);
+    FallbackToIcDiscovery = true;
+    PendingResponses++;
+    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
+}
 
-    auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-    broker.NodeId = ctx.SelfID.NodeId();
-    broker.Host = host;
-    broker.Port = Context->Config.GetListeningPort();
-    Response->Brokers.emplace_back(std::move(broker));
-
+void TKafkaMetadataActor::HandleNodesResponse(
+        NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
+        const NActors::TActorContext& ctx
+) {
+    Y_ABORT_UNLESS(FallbackToIcDiscovery);
+    for (const auto& [nodeId, index] : *ev->Get()->NodeIdsMapping) {
+        Nodes[nodeId] = {(*ev->Get()->Nodes)[index].Host, (ui32)Context->Config.GetListeningPort()};
+    }
     --PendingResponses;
     RespondIfRequired(ctx);
 }
 
-TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
+void TKafkaMetadataActor::ProcessTopicsFromRequest() {
+    TVector<TString> topicsToRequest;
+    for (size_t i = 0; i < Message->Topics.size(); ++i) {
+        auto& reqTopic = Message->Topics[i];
+        if (!reqTopic.Name.value_or("")) {
+            AddTopicError(Response->Topics[i], EKafkaErrors::INVALID_TOPIC_EXCEPTION);
+            continue;
+        }
+        AddTopic(reqTopic.Name.value_or(""), i);
+    }
+}
+
+void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
+    Y_ABORT_UNLESS(PendingResponses > 0);
+    PendingResponses--;
+    auto topics = std::move(ev->Get()->Topics);
+    Response->Topics.resize(topics.size());
+    for (size_t i = 0; i < topics.size(); ++i) {
+        AddTopic(topics[i], i);
+    }
+    RespondIfRequired(ActorContext());
+}
+
+void TKafkaMetadataActor::AddProxyNodeToBrokers() {
+    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
+}
+
+
+void TKafkaMetadataActor::AddTopic(const TString& topic, ui64 index) {
+    Response->Topics[index] = TMetadataResponseData::TMetadataResponseTopic{};
+    Response->Topics[index].Name = topic;
+
+    TActorId child;
+    auto namesIter = PartitionActors.find(topic);
+    if (namesIter.IsEnd()) {
+        child = SendTopicRequest(topic);
+        PartitionActors[topic] = child;
+    } else {
+        child = namesIter->second;
+    }
+    TopicIndexes[child].push_back(index);
+}
+
+TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
+    KAFKA_LOG_D("Describe partitions locations for topic '" << topic << "' for user '" << GetUsernameOrAnonymous(Context) << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
-    locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
-    locationRequest.Token = Context->UserToken->GetSerializedToken();
+    locationRequest.Topic = NormalizePath(Context->DatabasePath, topic);
+    locationRequest.Token = GetUserSerializedToken(Context);
     locationRequest.Database = Context->DatabasePath;
 
     PendingResponses++;
 
     return Register(new TPartitionsLocationActor(locationRequest, SelfId()));
-} 
+}
+
+TVector<TKafkaMetadataActor::TNodeInfo*> TKafkaMetadataActor::CheckTopicNodes(TEvLocationResponse* response) {
+    TVector<TNodeInfo*> partitionNodes;
+    for (const auto& part : response->Partitions) {
+        auto iter = Nodes.find(part.NodeId);
+        if (iter == Nodes.end()) {
+            return {};
+        }
+        partitionNodes.push_back(&iter->second);
+    }
+    return partitionNodes;
+}
 
 void TKafkaMetadataActor::AddTopicError(
     TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode
@@ -107,10 +193,15 @@ void TKafkaMetadataActor::AddTopicError(
     ErrorCode = errorCode;
 }
 
-void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response) {
+void TKafkaMetadataActor::AddTopicResponse(
+        TMetadataResponseData::TMetadataResponseTopic& topic,
+        TEvLocationResponse* response,
+        const TVector<TKafkaMetadataActor::TNodeInfo*>& partitionNodes
+) {
     topic.ErrorCode = NONE_ERROR;
 
     topic.Partitions.reserve(response->Partitions.size());
+    auto nodeIter = partitionNodes.begin();
     for (const auto& part : response->Partitions) {
         auto nodeId = WithProxy ? ProxyNodeId : part.NodeId;
 
@@ -119,36 +210,47 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
         responsePartition.ErrorCode = NONE_ERROR;
         responsePartition.LeaderId = nodeId;
         responsePartition.LeaderEpoch = part.Generation;
-        responsePartition.ReplicaNodes.push_back(nodeId);
-        responsePartition.IsrNodes.push_back(nodeId);
 
-        topic.Partitions.emplace_back(std::move(responsePartition));
-
-        if (!WithProxy) {
-            auto ins = AllClusterNodes.insert(part.NodeId);
-            if (ins.second) {
-                auto hostname = part.Hostname;
-                if (hostname.StartsWith(UnderlayPrefix)) {
-                    hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
-                }
-
-                auto broker = TMetadataResponseData::TMetadataResponseBroker{};
-                broker.NodeId = part.NodeId;
-                broker.Host = hostname;
-                broker.Port = Context->Config.GetListeningPort();
-                Response->Brokers.emplace_back(std::move(broker));
-            }
+        // adding replica nodes in a roundrobin manner based on sorted NodeId
+        std::vector<ui64> nodesToAdd = {nodeId};
+        if (!WithProxy && !NeedAllNodes) {
+            AddBroker(nodeId, (*nodeIter)->Host, (*nodeIter)->Port);
         }
+        if (!WithProxy) {
+            auto nodeToAddIter = Nodes.find(part.NodeId);
+            nodeToAddIter++;
+            for (size_t i = 0; i < 2; ++i) {
+                if (nodeToAddIter == Nodes.end()) {
+                    nodeToAddIter = Nodes.begin();
+                }
+                if (nodeToAddIter->first == nodeId) {
+                    break;
+                }
+                nodesToAdd.push_back(nodeToAddIter->first);
+                if (!NeedAllNodes) {
+                    AddBroker(nodeToAddIter->first, nodeToAddIter->second.Host, nodeToAddIter->second.Port);
+                }
+                nodeToAddIter++;
+            }
+            std::sort(nodesToAdd.begin(), nodesToAdd.end());
+        }
+
+        for (size_t i = 0; i < nodesToAdd.size(); i++) {
+            responsePartition.ReplicaNodes.push_back(nodesToAdd[i]);
+            responsePartition.IsrNodes.push_back(nodesToAdd[i]);
+        }
+        topic.Partitions.emplace_back(std::move(responsePartition));
+        ++nodeIter;
     }
 }
 
-void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TActorContext& ctx) {
+void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, const TActorContext& ctx) {
     --PendingResponses;
 
-    auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
+    TSimpleSharedPtr<TEvLocationResponse> locationResponse{ev->Release()};
 
-    Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd()); 
+    Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd());
     Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
 
     if (actorIter.IsEnd()) {
@@ -158,29 +260,129 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 
     if (actorIter->second.empty()) {
         KAFKA_LOG_CRIT("Corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply");
-
         return RespondIfRequired(ctx);
     }
-    
+
     for (auto index : actorIter->second) {
         auto& topic = Response->Topics[index];
-        if (r->Status == Ydb::StatusIds::SUCCESS) {
+        Ydb::StatusIds::StatusCode status = locationResponse->Status;
+        if (status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
-            AddTopicResponse(topic, r);
-        } else {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << r->Status << ", Issues=" << r->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(r->Status));
+            PendingTopicResponses.emplace(index, locationResponse);
+        } else if (!Message->AllowAutoTopicCreation || !Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
+                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
+        } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
+            TopicСreationAttempts.insert(*topic.Name);
+            PendingResponses++;
+            SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
     }
+    if (InflyCreateTopics == 0) {
+        RespondIfRequired(ctx);
+    }
+}
 
-    RespondIfRequired(ActorContext());
+void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    // can be recieved only from TCreateTopicActor
+    TActorId& creatorActorId = ev->Sender;
+    const TTopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
+    const TString& topicName = topicNameToIndex.TopicName;
+    const ui32& topicIndex = topicNameToIndex.TopicIndex;
+    InflyCreateTopics--;
+    PendingResponses--;
+    EKafkaErrors errorCode = ev->Get()->ErrorCode;
+    if (errorCode == EKafkaErrors::NONE_ERROR) {
+        TActorId child = SendTopicRequest(topicName);
+        TopicIndexes[child].push_back(topicIndex);
+    } else {
+        Response->Topics[topicIndex].ErrorCode = errorCode;
+        if (InflyCreateTopics == 0) {
+            RespondIfRequired(ctx);
+        }
+    }
+}
+
+void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx) {
+    InflyCreateTopics++;
+    auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
+    TCreateTopicsRequestData::TCreatableTopic topicToCreate;
+    topicToCreate.Name = topicName;
+    topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
+    message->Topics.push_back(topicToCreate);
+    TContext::TPtr ContextForTopicCreation;
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation->ConnectionId = ctx.SelfID;
+    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
+        1,
+        TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)
+    ));
+    CreateTopicRequests[actorId] = TTopicNameToIndex{topicName, index};
+}
+
+void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {
+    auto ins = AddedNodes.insert(nodeId);
+    if (ins.second) {
+        auto hostname = host;
+        if (hostname.StartsWith(UnderlayPrefix)) {
+            hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
+        };
+        auto broker = TMetadataResponseData::TMetadataResponseBroker{};
+        broker.NodeId = nodeId;
+        broker.Host = hostname;
+        broker.Port = port;
+        Response->Brokers.emplace_back(std::move(broker));
+    }
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
-    if (PendingResponses == 0) {
+    auto Respond = [&] {
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
+    };
+
+    if (HaveError) {
+        ErrorCode = EKafkaErrors::LISTENER_NOT_FOUND;
+        for (auto& topic : Response->Topics) {
+            AddTopicError(topic, ErrorCode);
+        }
+        Respond();
+        return;
     }
+    if (PendingResponses != 0) {
+        return;
+    }
+
+    while (!PendingTopicResponses.empty()) {
+        auto& [index, ev] = *PendingTopicResponses.begin();
+        auto& topic = Response->Topics[index];
+        auto topicNodes = CheckTopicNodes(ev.Get());
+        if (topicNodes.empty()) {
+            if (!FallbackToIcDiscovery) {
+                // Node info wasn't found via discovery, fallback to interconnect
+                RequestICNodeCache();
+                return;
+            } else {
+                // Already tried both YDB discovery and interconnect, still couldn't find the node for partition. Throw error
+                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
+                AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
+            }
+        } else {
+            AddTopicResponse(topic, ev.Get(), topicNodes);
+        }
+        PendingTopicResponses.erase(PendingTopicResponses.begin());
+    }
+
+    if (NeedAllNodes) {
+        for (const auto& [id, nodeInfo] : Nodes)
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
+    }
+
+    Respond();
 }
 
 TString TKafkaMetadataActor::LogPrefix() const {

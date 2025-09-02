@@ -1,0 +1,8 @@
+--- contrib/python/jsonschema/py3/jsonschema/tests/test_validators.py	(8114480972e2ddb6aa7203d22024fbc36b1b6fec)
++++ contrib/python/jsonschema/py3/jsonschema/tests/test_validators.py	(462a1dacdcd6f4eb462650be556c7378a1dc9e4a)
+@@ -1528 +1528 @@ class TestValidate(SynchronousTestCase):
+-        self.assertRegexpMatches(
++        self.assertRegex(
+@@ -1536 +1536 @@ class TestValidate(SynchronousTestCase):
+-        self.assertRegexpMatches(
++        self.assertRegex(

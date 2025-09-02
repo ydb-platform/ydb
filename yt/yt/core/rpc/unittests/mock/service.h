@@ -123,13 +123,13 @@ public:
         (const, override));
 
     MOCK_METHOD(
-        std::string,
+        const std::string&,
         GetService,
         (),
         (const, override));
 
     MOCK_METHOD(
-        std::string,
+        const std::string&,
         GetMethod,
         (),
         (const, override));
@@ -281,13 +281,13 @@ public:
     MOCK_METHOD(
         void,
         SetRawRequestInfo,
-        (TString info, bool incremental),
+        (std::string info, bool incremental),
         (override));
 
     MOCK_METHOD(
         void,
         SetRawResponseInfo,
-        (TString info, bool incremental),
+        (std::string info, bool incremental),
         (override));
 
     MOCK_METHOD(

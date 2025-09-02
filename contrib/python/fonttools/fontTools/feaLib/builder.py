@@ -29,6 +29,7 @@ from fontTools.otlLib.builder import (
     PairPosBuilder,
     SinglePosBuilder,
     ChainContextualRule,
+    AnySubstBuilder,
 )
 from fontTools.otlLib.error import OpenTypeLibError
 from fontTools.varLib.varStore import OnlineVarStoreBuilder
@@ -126,6 +127,7 @@ class Builder(object):
         self.script_ = None
         self.lookupflag_ = 0
         self.lookupflag_markFilterSet_ = None
+        self.use_extension_ = False
         self.language_systems = set()
         self.seen_non_DFLT_script_ = False
         self.named_lookups_ = {}
@@ -141,6 +143,7 @@ class Builder(object):
         self.aalt_features_ = []  # [(location, featureName)*], for 'aalt'
         self.aalt_location_ = None
         self.aalt_alternates_ = {}
+        self.aalt_use_extension_ = False
         # for 'featureNames'
         self.featureNames_ = set()
         self.featureNames_ids_ = {}
@@ -247,6 +250,7 @@ class Builder(object):
         result = builder_class(self.font, location)
         result.lookupflag = self.lookupflag_
         result.markFilterSet = self.lookupflag_markFilterSet_
+        result.extension = self.use_extension_
         self.lookups_.append(result)
         return result
 
@@ -255,12 +259,13 @@ class Builder(object):
             key = (script, lang, feature_name)
             self.features_.setdefault(key, []).append(lookup)
 
-    def get_lookup_(self, location, builder_class):
+    def get_lookup_(self, location, builder_class, mapping=None):
         if (
             self.cur_lookup_
             and type(self.cur_lookup_) == builder_class
             and self.cur_lookup_.lookupflag == self.lookupflag_
             and self.cur_lookup_.markFilterSet == self.lookupflag_markFilterSet_
+            and self.cur_lookup_.can_add_mapping(mapping)
         ):
             return self.cur_lookup_
         if self.cur_lookup_name_ and self.cur_lookup_:
@@ -272,6 +277,7 @@ class Builder(object):
         self.cur_lookup_ = builder_class(self.font, location)
         self.cur_lookup_.lookupflag = self.lookupflag_
         self.cur_lookup_.markFilterSet = self.lookupflag_markFilterSet_
+        self.cur_lookup_.extension = self.use_extension_
         self.lookups_.append(self.cur_lookup_)
         if self.cur_lookup_name_:
             # We are starting a lookup rule inside a named lookup block.
@@ -323,7 +329,7 @@ class Builder(object):
         }
         old_lookups = self.lookups_
         self.lookups_ = []
-        self.start_feature(self.aalt_location_, "aalt")
+        self.start_feature(self.aalt_location_, "aalt", self.aalt_use_extension_)
         if single:
             single_lookup = self.get_lookup_(location, SingleSubstBuilder)
             single_lookup.mapping = single
@@ -341,6 +347,7 @@ class Builder(object):
             table = self.font["head"] = newTable("head")
             table.decompile(b"\0" * 54, self.font)
             table.tableVersion = 1.0
+            table.magicNumber = 0x5F0F3CF5
             table.created = table.modified = 3406620153  # 2011-12-13 11:22:33
         table.fontRevision = self.fontRevision_
 
@@ -727,10 +734,16 @@ class Builder(object):
         result.table = base
         return result
 
+    def buildBASECoord(self, c):
+        coord = otTables.BaseCoord()
+        coord.Format = 1
+        coord.Coordinate = c
+        return coord
+
     def buildBASEAxis(self, axis):
         if not axis:
             return
-        bases, scripts = axis
+        bases, scripts, minmax = axis
         axis = otTables.Axis()
         axis.BaseTagList = otTables.BaseTagList()
         axis.BaseTagList.BaselineTag = bases
@@ -739,19 +752,35 @@ class Builder(object):
         axis.BaseScriptList.BaseScriptRecord = []
         axis.BaseScriptList.BaseScriptCount = len(scripts)
         for script in sorted(scripts):
+            minmax_for_script = [
+                record[1:] for record in minmax if record[0] == script[0]
+            ]
             record = otTables.BaseScriptRecord()
             record.BaseScriptTag = script[0]
             record.BaseScript = otTables.BaseScript()
-            record.BaseScript.BaseLangSysCount = 0
             record.BaseScript.BaseValues = otTables.BaseValues()
             record.BaseScript.BaseValues.DefaultIndex = bases.index(script[1])
             record.BaseScript.BaseValues.BaseCoord = []
             record.BaseScript.BaseValues.BaseCoordCount = len(script[2])
+            record.BaseScript.BaseLangSysRecord = []
+
             for c in script[2]:
-                coord = otTables.BaseCoord()
-                coord.Format = 1
-                coord.Coordinate = c
-                record.BaseScript.BaseValues.BaseCoord.append(coord)
+                record.BaseScript.BaseValues.BaseCoord.append(self.buildBASECoord(c))
+            for language, min_coord, max_coord in minmax_for_script:
+                minmax_record = otTables.MinMax()
+                minmax_record.MinCoord = self.buildBASECoord(min_coord)
+                minmax_record.MaxCoord = self.buildBASECoord(max_coord)
+                minmax_record.FeatMinMaxCount = 0
+                if language == "dflt":
+                    record.BaseScript.DefaultMinMax = minmax_record
+                else:
+                    lang_record = otTables.BaseLangSysRecord()
+                    lang_record.BaseLangSysTag = language
+                    lang_record.MinMax = minmax_record
+                    record.BaseScript.BaseLangSysRecord.append(lang_record)
+            record.BaseScript.BaseLangSysCount = len(
+                record.BaseScript.BaseLangSysRecord
+            )
             axis.BaseScriptList.BaseScriptRecord.append(record)
         return axis
 
@@ -839,13 +868,22 @@ class Builder(object):
         for lookup in self.lookups_:
             if lookup.table != tag:
                 continue
-            lookup.lookup_index = len(lookups)
-            self.lookup_locations[tag][str(lookup.lookup_index)] = LookupDebugInfo(
-                location=str(lookup.location),
-                name=self.get_lookup_name_(lookup),
-                feature=None,
-            )
-            lookups.append(lookup)
+            name = self.get_lookup_name_(lookup)
+            resolved = lookup.promote_lookup_type(is_named_lookup=name is not None)
+            if resolved is None:
+                raise FeatureLibError(
+                    "Within a named lookup block, all rules must be of "
+                    "the same lookup type and flag",
+                    lookup.location,
+                )
+            for l in resolved:
+                lookup.lookup_index = len(lookups)
+                self.lookup_locations[tag][str(lookup.lookup_index)] = LookupDebugInfo(
+                    location=str(lookup.location),
+                    name=name,
+                    feature=None,
+                )
+                lookups.append(l)
         otLookups = []
         for l in lookups:
             try:
@@ -888,6 +926,11 @@ class Builder(object):
                     l.lookup_index for l in lookups if l.lookup_index is not None
                 )
             )
+            # order doesn't matter, but lookup_indices preserves it.
+            # We want to combine identical sets of lookups (order doesn't matter)
+            # but also respect the order provided by the user (although there's
+            # a reasonable argument to just sort and dedupe, which fontc does)
+            lookup_key = frozenset(lookup_indices)
 
             size_feature = tag == "GPOS" and feature_tag == "size"
             force_feature = self.any_feature_variations(feature_tag, tag)
@@ -905,7 +948,7 @@ class Builder(object):
                         "stash debug information. See fonttools#2065."
                     )
 
-            feature_key = (feature_tag, lookup_indices)
+            feature_key = (feature_tag, lookup_key)
             feature_index = feature_indices.get(feature_key)
             if feature_index is None:
                 feature_index = len(table.FeatureList.FeatureRecord)
@@ -1031,15 +1074,22 @@ class Builder(object):
         else:
             return frozenset({("DFLT", "dflt")})
 
-    def start_feature(self, location, name):
+    def start_feature(self, location, name, use_extension=False):
+        if use_extension and name != "aalt":
+            raise FeatureLibError(
+                "'useExtension' keyword for feature blocks is allowed only for 'aalt' feature",
+                location,
+            )
         self.language_systems = self.get_default_language_systems_()
         self.script_ = "DFLT"
         self.cur_lookup_ = None
         self.cur_feature_name_ = name
         self.lookupflag_ = 0
         self.lookupflag_markFilterSet_ = None
+        self.use_extension_ = use_extension
         if name == "aalt":
             self.aalt_location_ = location
+            self.aalt_use_extension_ = use_extension
 
     def end_feature(self):
         assert self.cur_feature_name_ is not None
@@ -1048,8 +1098,9 @@ class Builder(object):
         self.cur_lookup_ = None
         self.lookupflag_ = 0
         self.lookupflag_markFilterSet_ = None
+        self.use_extension_ = False
 
-    def start_lookup_block(self, location, name):
+    def start_lookup_block(self, location, name, use_extension=False):
         if name in self.named_lookups_:
             raise FeatureLibError(
                 'Lookup "%s" has already been defined' % name, location
@@ -1063,6 +1114,7 @@ class Builder(object):
         self.cur_lookup_name_ = name
         self.named_lookups_[name] = None
         self.cur_lookup_ = None
+        self.use_extension_ = use_extension
         if self.cur_feature_name_ is None:
             self.lookupflag_ = 0
             self.lookupflag_markFilterSet_ = None
@@ -1071,6 +1123,7 @@ class Builder(object):
         assert self.cur_lookup_name_ is not None
         self.cur_lookup_name_ = None
         self.cur_lookup_ = None
+        self.use_extension_ = False
         if self.cur_feature_name_ is None:
             self.lookupflag_ = 0
             self.lookupflag_markFilterSet_ = None
@@ -1106,7 +1159,13 @@ class Builder(object):
         if (language == "dflt" or include_default) and lookups:
             self.features_[key] = lookups[:]
         else:
-            self.features_[key] = []
+            # if we aren't including default we need to manually remove the
+            # default lookups, which were added to all declared langsystems
+            # as they were encountered (we don't remove all lookups because
+            # we want to allow duplicate script/lang statements;
+            # see https://github.com/fonttools/fonttools/issues/3748
+            cur_lookups = self.features_.get(key, [])
+            self.features_[key] = [x for x in cur_lookups if x not in lookups]
         self.language_systems = frozenset([(self.script_, language)])
 
         if required:
@@ -1153,10 +1212,10 @@ class Builder(object):
 
     def set_lookup_flag(self, location, value, markAttach, markFilter):
         value = value & 0xFF
-        if markAttach:
+        if markAttach is not None:
             markAttachClass = self.getMarkAttachClass_(location, markAttach)
             value = value | (markAttachClass << 8)
-        if markFilter:
+        if markFilter is not None:
             markFilterSet = self.getMarkFilterSet_(location, markFilter)
             value = value | 0x10
             self.lookupflag_markFilterSet_ = markFilterSet
@@ -1229,11 +1288,11 @@ class Builder(object):
     def add_cv_character(self, character, tag):
         self.cv_characters_[tag].append(character)
 
-    def set_base_axis(self, bases, scripts, vertical):
+    def set_base_axis(self, bases, scripts, vertical, minmax=[]):
         if vertical:
-            self.base_vert_axis_ = (bases, scripts)
+            self.base_vert_axis_ = (bases, scripts, minmax)
         else:
-            self.base_horiz_axis_ = (bases, scripts)
+            self.base_horiz_axis_ = (bases, scripts, minmax)
 
     def set_size_parameters(
         self, location, DesignSize, SubfamilyID, RangeStart, RangeEnd
@@ -1251,6 +1310,24 @@ class Builder(object):
 
     # GSUB rules
 
+    def add_any_subst_(self, location, mapping):
+        lookup = self.get_lookup_(location, AnySubstBuilder, mapping=mapping)
+        for key, value in mapping.items():
+            if key in lookup.mapping:
+                if value == lookup.mapping[key]:
+                    log.info(
+                        'Removing duplicate substitution from "%s" to "%s" at %s',
+                        ", ".join(key),
+                        ", ".join(value),
+                        location,
+                    )
+                else:
+                    raise FeatureLibError(
+                        'Already defined substitution for "%s"' % ", ".join(key),
+                        location,
+                    )
+            lookup.mapping[key] = value
+
     # GSUB 1
     def add_single_subst(self, location, prefix, suffix, mapping, forceChain):
         if self.cur_feature_name_ == "aalt":
@@ -1262,50 +1339,23 @@ class Builder(object):
         if prefix or suffix or forceChain:
             self.add_single_subst_chained_(location, prefix, suffix, mapping)
             return
-        lookup = self.get_lookup_(location, SingleSubstBuilder)
-        for from_glyph, to_glyph in mapping.items():
-            if from_glyph in lookup.mapping:
-                if to_glyph == lookup.mapping[from_glyph]:
-                    log.info(
-                        "Removing duplicate single substitution from glyph"
-                        ' "%s" to "%s" at %s',
-                        from_glyph,
-                        to_glyph,
-                        location,
-                    )
-                else:
-                    raise FeatureLibError(
-                        'Already defined rule for replacing glyph "%s" by "%s"'
-                        % (from_glyph, lookup.mapping[from_glyph]),
-                        location,
-                    )
-            lookup.mapping[from_glyph] = to_glyph
+
+        self.add_any_subst_(
+            location,
+            {(key,): (value,) for key, value in mapping.items()},
+        )
 
     # GSUB 2
     def add_multiple_subst(
         self, location, prefix, glyph, suffix, replacements, forceChain=False
     ):
         if prefix or suffix or forceChain:
-            chain = self.get_lookup_(location, ChainContextSubstBuilder)
-            sub = self.get_chained_lookup_(location, MultipleSubstBuilder)
-            sub.mapping[glyph] = replacements
-            chain.rules.append(ChainContextualRule(prefix, [{glyph}], suffix, [sub]))
+            self.add_multi_subst_chained_(location, prefix, glyph, suffix, replacements)
             return
-        lookup = self.get_lookup_(location, MultipleSubstBuilder)
-        if glyph in lookup.mapping:
-            if replacements == lookup.mapping[glyph]:
-                log.info(
-                    "Removing duplicate multiple substitution from glyph"
-                    ' "%s" to %s%s',
-                    glyph,
-                    replacements,
-                    f" at {location}" if location else "",
-                )
-            else:
-                raise FeatureLibError(
-                    'Already defined substitution for glyph "%s"' % glyph, location
-                )
-        lookup.mapping[glyph] = replacements
+        self.add_any_subst_(
+            location,
+            {(glyph,): tuple(replacements)},
+        )
 
     # GSUB 3
     def add_alternate_subst(self, location, prefix, glyph, suffix, replacement):
@@ -1331,12 +1381,10 @@ class Builder(object):
         self, location, prefix, glyphs, suffix, replacement, forceChain
     ):
         if prefix or suffix or forceChain:
-            chain = self.get_lookup_(location, ChainContextSubstBuilder)
-            lookup = self.get_chained_lookup_(location, LigatureSubstBuilder)
-            chain.rules.append(ChainContextualRule(prefix, glyphs, suffix, [lookup]))
-        else:
-            lookup = self.get_lookup_(location, LigatureSubstBuilder)
-
+            self.add_ligature_subst_chained_(
+                location, prefix, glyphs, suffix, replacement
+            )
+            return
         if not all(glyphs):
             raise FeatureLibError("Empty glyph class in substitution", location)
 
@@ -1345,8 +1393,10 @@ class Builder(object):
         # substitutions to be specified on target sequences that contain
         # glyph classes, the implementation software will enumerate
         # all specific glyph sequences if glyph classes are detected"
-        for g in itertools.product(*glyphs):
-            lookup.ligatures[g] = replacement
+        self.add_any_subst_(
+            location,
+            {g: (replacement,) for g in itertools.product(*glyphs)},
+        )
 
     # GSUB 5/6
     def add_chain_context_subst(self, location, prefix, glyphs, suffix, lookups):
@@ -1369,13 +1419,51 @@ class Builder(object):
         # https://github.com/fonttools/fonttools/issues/512
         # https://github.com/fonttools/fonttools/issues/2150
         chain = self.get_lookup_(location, ChainContextSubstBuilder)
-        sub = chain.find_chainable_single_subst(mapping)
+        sub = chain.find_chainable_subst(mapping, SingleSubstBuilder)
         if sub is None:
             sub = self.get_chained_lookup_(location, SingleSubstBuilder)
         sub.mapping.update(mapping)
         chain.rules.append(
             ChainContextualRule(prefix, [list(mapping.keys())], suffix, [sub])
         )
+
+    def add_multi_subst_chained_(self, location, prefix, glyph, suffix, replacements):
+        if not all(prefix) or not all(suffix):
+            raise FeatureLibError(
+                "Empty glyph class in contextual substitution", location
+            )
+        # https://github.com/fonttools/fonttools/issues/3551
+        chain = self.get_lookup_(location, ChainContextSubstBuilder)
+        sub = chain.find_chainable_subst({glyph: replacements}, MultipleSubstBuilder)
+        if sub is None:
+            sub = self.get_chained_lookup_(location, MultipleSubstBuilder)
+        sub.mapping[glyph] = replacements
+        chain.rules.append(ChainContextualRule(prefix, [{glyph}], suffix, [sub]))
+
+    def add_ligature_subst_chained_(
+        self, location, prefix, glyphs, suffix, replacement
+    ):
+        # https://github.com/fonttools/fonttools/issues/3701
+        if not all(prefix) or not all(suffix):
+            raise FeatureLibError(
+                "Empty glyph class in contextual substitution", location
+            )
+        chain = self.get_lookup_(location, ChainContextSubstBuilder)
+        sub = chain.find_chainable_ligature_subst(glyphs, replacement)
+        if sub is None:
+            sub = self.get_chained_lookup_(location, LigatureSubstBuilder)
+
+        for g in itertools.product(*glyphs):
+            existing = sub.ligatures.get(g, replacement)
+            if existing != replacement:
+                raise FeatureLibError(
+                    f"Conflicting ligature sub rules: '{g}' maps to '{existing}' and '{replacement}'",
+                    location,
+                )
+
+            sub.ligatures[g] = replacement
+
+        chain.rules.append(ChainContextualRule(prefix, glyphs, suffix, [sub]))
 
     # GSUB 8
     def add_reverse_chain_single_subst(self, location, old_prefix, old_suffix, mapping):
@@ -1413,7 +1501,9 @@ class Builder(object):
         lookup = self.get_lookup_(location, PairPosBuilder)
         v1 = self.makeOpenTypeValueRecord(location, value1, pairPosContext=True)
         v2 = self.makeOpenTypeValueRecord(location, value2, pairPosContext=True)
-        lookup.addClassPair(location, glyphclass1, v1, glyphclass2, v2)
+        cls1 = tuple(sorted(set(glyphclass1)))
+        cls2 = tuple(sorted(set(glyphclass2)))
+        lookup.addClassPair(location, cls1, v1, cls2, v2)
 
     def add_specific_pair_pos(self, location, glyph1, value1, glyph2, value2):
         if not glyph1 or not glyph2:
@@ -1648,38 +1738,31 @@ class Builder(object):
 
         return default, device
 
+    def makeAnchorPos(self, varscalar, deviceTable, location):
+        device = None
+        if not isinstance(varscalar, VariableScalar):
+            if deviceTable is not None:
+                device = otl.buildDevice(dict(deviceTable))
+            return varscalar, device
+        default, device = self.makeVariablePos(location, varscalar)
+        if device is not None and deviceTable is not None:
+            raise FeatureLibError(
+                "Can't define a device coordinate and variable scalar", location
+            )
+        return default, device
+
     def makeOpenTypeAnchor(self, location, anchor):
         """ast.Anchor --> otTables.Anchor"""
         if anchor is None:
             return None
-        variable = False
         deviceX, deviceY = None, None
         if anchor.xDeviceTable is not None:
             deviceX = otl.buildDevice(dict(anchor.xDeviceTable))
         if anchor.yDeviceTable is not None:
             deviceY = otl.buildDevice(dict(anchor.yDeviceTable))
-        for dim in ("x", "y"):
-            varscalar = getattr(anchor, dim)
-            if not isinstance(varscalar, VariableScalar):
-                continue
-            if getattr(anchor, dim + "DeviceTable") is not None:
-                raise FeatureLibError(
-                    "Can't define a device coordinate and variable scalar", location
-                )
-            default, device = self.makeVariablePos(location, varscalar)
-            setattr(anchor, dim, default)
-            if device is not None:
-                if dim == "x":
-                    deviceX = device
-                else:
-                    deviceY = device
-                variable = True
-
-        otlanchor = otl.buildAnchor(
-            anchor.x, anchor.y, anchor.contourpoint, deviceX, deviceY
-        )
-        if variable:
-            otlanchor.Format = 3
+        x, deviceX = self.makeAnchorPos(anchor.x, anchor.xDeviceTable, location)
+        y, deviceY = self.makeAnchorPos(anchor.y, anchor.yDeviceTable, location)
+        otlanchor = otl.buildAnchor(x, y, anchor.contourpoint, deviceX, deviceY)
         return otlanchor
 
     _VALUEREC_ATTRS = {

@@ -19,7 +19,7 @@ namespace NTL {
     struct TGetImpl<0u, TL> {
         using type = typename TL::THead;
     };
-}
+} // namespace NTL
 
 template <>
 struct TTypeList<> {
@@ -55,7 +55,7 @@ struct TTypeList<H, R...> {
     };
 };
 
-//FIXME: temporary to check overall build
+// FIXME: temporary to check overall build
 template <class T>
 struct TTypeList<T, TNone>: public TTypeList<T> {
 };
@@ -73,6 +73,29 @@ namespace NTL {
     template <class... R1, class... R2>
     struct TConcat<TTypeList<R1...>, TTypeList<R2...>> {
         using type = TTypeList<R1..., R2...>;
+    };
+
+    template <class TResult, class T, class... Ts>
+    struct TUniqueImpl;
+
+    template <class TResult, class T>
+    struct TUniqueImpl<TResult, T> {
+        using type = std::conditional_t<TResult::template THave<T>::value, TResult, typename NTL::TConcat<TResult, TTypeList<T>>::type>;
+    };
+
+    template <class TResult, class T, class... Ts>
+    struct TUniqueImpl {
+        using type = std::conditional_t<TResult::template THave<T>::value,
+                                        typename TUniqueImpl<TResult, Ts...>::type,
+                                        typename TUniqueImpl<typename NTL::TConcat<TResult, TTypeList<T>>::type, Ts...>::type>;
+    };
+
+    template <class... Ts>
+    struct TUnique;
+
+    template <class... Ts>
+    struct TUnique<TTypeList<Ts...>> {
+        using type = typename TUniqueImpl<TTypeList<>, Ts...>::type;
     };
 
     template <bool isSigned, class T, class TS, class TU>
@@ -93,7 +116,10 @@ namespace NTL {
 
     using T1 = TTypeSelector<char, TCommonSignedInts, TCommonUnsignedInts>;
     using T2 = TTypeSelector<wchar_t, T1::TSignedInts, T1::TUnsignedInts>;
-}
+} // namespace NTL
+
+template <class... Ts>
+using TUniqueTypeList = typename NTL::TUniqueImpl<TTypeList<>, Ts...>::type;
 
 using TSignedInts = NTL::T2::TSignedInts;
 using TUnsignedInts = NTL::T2::TUnsignedInts;

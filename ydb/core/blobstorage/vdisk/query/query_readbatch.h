@@ -307,10 +307,8 @@ namespace NKikimr {
 
         // We have data on disk
         void operator () (const TDiskPart &data, NMatrix::TVectorType parts);
-        void ProcessFoundDiskItem(const TDiskPart &data, NMatrix::TVectorType parts);
         // We have diskBlob in memory
         void operator () (const TDiskBlob &diskBlob);
-        void ProcessFoundInMemItem(const TDiskBlob &diskBlob);
         // Finish data traverse for a single key
         void FinishTraverse(const TIngress &ingress);
         // Abort traverse without giving out results
@@ -348,9 +346,6 @@ namespace NKikimr {
         // final result
         std::shared_ptr<TReadBatcherResult> Result;
         ui64 PDiskReadBytes = 0;
-
-        TStackVec<std::tuple<TDiskPart, NMatrix::TVectorType>, MaxTotalPartCount> FoundDiskItems;
-        TStackVec<TDiskBlob, MaxTotalPartCount> FoundInMemItems;
 
         NReadBatcher::TGlueRead *AddGlueRead(NReadBatcher::TDataItem *item);
         void PrepareReadPlan();

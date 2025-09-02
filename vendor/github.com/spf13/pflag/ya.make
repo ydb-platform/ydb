@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.0.6)
+
 SRCS(
     bool.go
     bool_slice.go

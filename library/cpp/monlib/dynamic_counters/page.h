@@ -2,6 +2,7 @@
 
 #include "counters.h"
 
+#include <library/cpp/monlib/encode/format.h>
 #include <library/cpp/monlib/service/pages/pre_mon_page.h>
 
 #include <util/generic/ptr.h>
@@ -46,5 +47,8 @@ namespace NMonitoring {
         /// If set to Error, responds with 404 if the requested subgroup is not found. This is the default.
         /// If set to Ignore, responds with 204 if the requested subgroup is not found
         void SetUnknownGroupPolicy(EUnknownGroupPolicy value);
+
+    protected:
+        virtual THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format, TStringBuf nameLabel, TCountableBase::EVisibility visibility) const;
     };
 }

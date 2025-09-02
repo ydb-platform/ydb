@@ -31,7 +31,7 @@ inline void TReaderWriterSpinLock::AcquireReaderForkFriendly() noexcept
 inline void TReaderWriterSpinLock::ReleaseReader() noexcept
 {
     auto prevValue = Value_.fetch_sub(ReaderDelta, std::memory_order::release);
-    Y_ASSERT((prevValue & ~WriterMask) != 0);
+    Y_ASSERT((prevValue & ~(WriterMask | WriterReadyMask)) != 0);
     NDetail::RecordSpinLockReleased();
 }
 
@@ -45,14 +45,14 @@ inline void TReaderWriterSpinLock::AcquireWriter() noexcept
 
 inline void TReaderWriterSpinLock::ReleaseWriter() noexcept
 {
-    auto prevValue = Value_.fetch_and(~WriterMask, std::memory_order::release);
+    auto prevValue = Value_.fetch_and(~(WriterMask | WriterReadyMask), std::memory_order::release);
     Y_ASSERT(prevValue & WriterMask);
     NDetail::RecordSpinLockReleased();
 }
 
 inline bool TReaderWriterSpinLock::IsLocked() const noexcept
 {
-    return Value_.load() != UnlockedValue;
+    return (Value_.load() & ~WriterReadyMask) != 0;
 }
 
 inline bool TReaderWriterSpinLock::IsLockedByReader() const noexcept
@@ -68,7 +68,7 @@ inline bool TReaderWriterSpinLock::IsLockedByWriter() const noexcept
 inline bool TReaderWriterSpinLock::TryAcquireReader() noexcept
 {
     auto oldValue = Value_.fetch_add(ReaderDelta, std::memory_order::acquire);
-    if ((oldValue & WriterMask) != 0) {
+    if ((oldValue & (WriterMask | WriterReadyMask)) != 0) {
         Value_.fetch_sub(ReaderDelta, std::memory_order::relaxed);
         return false;
     }
@@ -79,7 +79,7 @@ inline bool TReaderWriterSpinLock::TryAcquireReader() noexcept
 inline bool TReaderWriterSpinLock::TryAndTryAcquireReader() noexcept
 {
     auto oldValue = Value_.load(std::memory_order::relaxed);
-    if ((oldValue & WriterMask) != 0) {
+    if ((oldValue & (WriterMask | WriterReadyMask)) != 0) {
         return false;
     }
     return TryAcquireReader();
@@ -88,32 +88,45 @@ inline bool TReaderWriterSpinLock::TryAndTryAcquireReader() noexcept
 inline bool TReaderWriterSpinLock::TryAcquireReaderForkFriendly() noexcept
 {
     auto oldValue = Value_.load(std::memory_order::relaxed);
-    if ((oldValue & WriterMask) != 0) {
+    if ((oldValue & (WriterMask | WriterReadyMask)) != 0) {
         return false;
     }
     auto newValue = oldValue + ReaderDelta;
 
     bool acquired = Value_.compare_exchange_weak(oldValue, newValue, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
+    return acquired;
+}
+
+inline bool TReaderWriterSpinLock::TryAcquireWriterWithExpectedValue(TValue expected) noexcept
+{
+    bool acquired = Value_.compare_exchange_weak(expected, WriterMask, std::memory_order::acquire);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 
 inline bool TReaderWriterSpinLock::TryAcquireWriter() noexcept
 {
-    auto expected = UnlockedValue;
-
-    bool acquired =  Value_.compare_exchange_weak(expected, WriterMask, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
-    return acquired;
+    // NB(pavook): we cannot expect writer ready to be set, as this method
+    // might be called without indicating writer readiness and we cannot
+    // indicate readiness on the hot path. This means that code calling
+    // TryAcquireWriter will spin against code calling AcquireWriter.
+    return TryAcquireWriterWithExpectedValue(UnlockedValue);
 }
 
 inline bool TReaderWriterSpinLock::TryAndTryAcquireWriter() noexcept
 {
     auto oldValue = Value_.load(std::memory_order::relaxed);
-    if (oldValue != UnlockedValue) {
+
+    if ((oldValue & WriterReadyMask) == 0) {
+        oldValue = Value_.fetch_or(WriterReadyMask, std::memory_order::relaxed);
+    }
+
+    if ((oldValue & (~WriterReadyMask)) != 0) {
         return false;
     }
-    return TryAcquireWriter();
+
+    return TryAcquireWriterWithExpectedValue(WriterReadyMask);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,154 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Apache-2.0           43f57e875cdc02e8385ff667f85d702e
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla 4c121fbba45df428a6eec824e562d4f8
+BELONGS ya.make
+    License text:
+        Contributor License Agreement (CLA)](
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]
+
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [8:10]
+
+KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/aws/auth/auth.h [6:6]
+        include/aws/auth/aws_imds_client.h [6:6]
+        include/aws/auth/credentials.h [6:6]
+        include/aws/auth/exports.h [6:6]
+        include/aws/auth/private/aws_profile.h [6:6]
+        include/aws/auth/private/aws_signing.h [6:6]
+        include/aws/auth/private/credentials_utils.h [6:6]
+        include/aws/auth/private/key_derivation.h [6:6]
+        include/aws/auth/private/sigv4_http_request.h [6:6]
+        include/aws/auth/private/sso_token_providers.h [6:6]
+        include/aws/auth/private/sso_token_utils.h [6:6]
+        include/aws/auth/signing.h [6:6]
+        include/aws/auth/signing_config.h [6:6]
+        include/aws/auth/signing_result.h [6:6]
+        source/auth.c [3:3]
+        source/aws_imds_client.c [3:3]
+        source/aws_profile.c [3:3]
+        source/aws_signing.c [3:3]
+        source/credentials.c [3:3]
+        source/credentials_provider_anonymous.c [3:3]
+        source/credentials_provider_cached.c [3:3]
+        source/credentials_provider_chain.c [3:3]
+        source/credentials_provider_cognito.c [3:3]
+        source/credentials_provider_default_chain.c [3:3]
+        source/credentials_provider_delegate.c [3:3]
+        source/credentials_provider_ecs.c [3:3]
+        source/credentials_provider_environment.c [3:3]
+        source/credentials_provider_imds.c [3:3]
+        source/credentials_provider_process.c [3:3]
+        source/credentials_provider_profile.c [3:3]
+        source/credentials_provider_sso.c [3:3]
+        source/credentials_provider_static.c [3:3]
+        source/credentials_provider_sts.c [3:3]
+        source/credentials_provider_sts_web_identity.c [3:3]
+        source/credentials_provider_x509.c [3:3]
+        source/credentials_utils.c [3:3]
+        source/key_derivation.c [3:3]
+        source/signable.c [3:3]
+        source/signable_chunk.c [3:3]
+        source/signable_http_request.c [3:3]
+        source/signable_trailer.c [3:3]
+        source/signing.c [3:3]
+        source/signing_config.c [3:3]
+        source/signing_result.c [3:3]
+        source/sigv4_http_request.c [3:3]
+        source/sso_token_utils.c [3:3]
+        source/token_provider_sso_profile.c [3:3]
+        source/token_provider_sso_session.c [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
+BELONGS ya.make
+    License text:
+        Contributor_License_Agreement)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]

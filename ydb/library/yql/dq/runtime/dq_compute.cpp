@@ -1,11 +1,11 @@
 #include "dq_compute.h"
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include "ydb/library/yql/utils/yql_panic.h"
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/parser/pg_wrapper/interface/pack.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include "yql/essentials/utils/yql_panic.h"
 
 namespace NYql::NDq {
 

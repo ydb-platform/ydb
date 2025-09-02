@@ -10,7 +10,7 @@ from pythran.utils import attr_to_path, path_to_attr
 import gast as ast
 
 
-class ComprehensionPatterns(Transformation):
+class ComprehensionPatterns(Transformation[OptimizableComprehension]):
     '''
     Transforms list comprehension into intrinsics.
     >>> import gast as ast
@@ -27,9 +27,6 @@ class ComprehensionPatterns(Transformation):
     def foo(y):
         return ([0] * builtins.len(builtins.range(y)))
     '''
-
-    def __init__(self):
-        Transformation.__init__(self, OptimizableComprehension)
 
     def visit_Module(self, node):
         self.use_itertools = False

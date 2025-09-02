@@ -26,7 +26,7 @@ public:
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
         if (Self->Find(pathId)) {
             CLOG_W(ctx, "Replication already exists"
                 << ": pathId# " << pathId);
@@ -45,9 +45,10 @@ public:
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::Replications::PathLocalId>(pathId.LocalPathId),
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
+            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::Database>(record.GetDatabase())
         );
-        Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()));
+        Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()), std::move(record.GetDatabase()));
 
         Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::SUCCESS);
         return true;

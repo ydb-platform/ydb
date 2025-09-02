@@ -6,8 +6,8 @@ aiosignal
    :target: https://github.com/aio-libs/aiosignal/actions?query=workflow%3ACI
    :alt: GitHub status for master branch
 
-.. image:: https://codecov.io/gh/aio-libs/aiosignal/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/aiosignal
+.. image:: https://codecov.io/gh/aio-libs/aiosignal/branch/master/graph/badge.svg?flag=pytest
+   :target: https://codecov.io/gh/aio-libs/aiosignal?flags[0]=pytest
    :alt: codecov.io status for master branch
 
 .. image:: https://badge.fury.io/py/aiosignal.svg
@@ -57,24 +57,11 @@ Installation
 
    $ pip install aiosignal
 
-The library requires Python 3.6 or newer.
-
 
 Documentation
 =============
 
 https://aiosignal.readthedocs.io/
-
-Communication channels
-======================
-
-*gitter chat* https://gitter.im/aio-libs/Lobby
-
-Requirements
-============
-
-- Python >= 3.6
-- frozenlist >= 1.0.0
 
 License
 =======

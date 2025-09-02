@@ -1,6 +1,6 @@
 #include "kqp.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
 
@@ -10,8 +10,8 @@ TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId) {
     return TStringBuilder() << "[" << actorId.NodeId() << ":" << actorId.LocalId() << ":" << actorId.Hint() << ":" << actorId.PoolID() << "]";
 }
 
-bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId) {
-    if (executionId.Size() < 5 || executionId[0] != '[' || executionId[executionId.Size() - 1] != ']')
+bool ScriptExecutionRunnerActorIdFromString(const std::string& executionId, TActorId& actorId) {
+    if (executionId.size() < 5 || executionId[0] != '[' || executionId[executionId.size() - 1] != ']')
         return false;
 
     size_t semicolons[3];
@@ -32,7 +32,7 @@ bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId
     bool success = TryFromString(executionId.c_str() + 1, semicolons[0] - 1, nodeId)
         && TryFromString(executionId.c_str() + semicolons[0] + 1, semicolons[1] - semicolons[0] - 1, localId)
         && TryFromString(executionId.c_str() + semicolons[1] + 1, semicolons[2] - semicolons[1] - 1, hint)
-        && TryFromString(executionId.c_str() + semicolons[2] + 1, executionId.Size() - semicolons[2] - 2, poolId);
+        && TryFromString(executionId.c_str() + semicolons[2] + 1, executionId.size() - semicolons[2] - 2, poolId);
 
     if (!success) {
         return false;

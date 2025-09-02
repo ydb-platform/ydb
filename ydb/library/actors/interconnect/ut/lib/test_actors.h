@@ -20,7 +20,7 @@ namespace NActors {
 
         virtual void Bootstrap(const TActorContext& ctx) {
             Become(&TSenderBaseActor::StateFunc);
-            ctx.Send(ctx.ExecutorThread.ActorSystem->InterconnectProxy(RecipientActorId.NodeId()), new TEvInterconnect::TEvConnectNode);
+            ctx.Send(ctx.ActorSystem()->InterconnectProxy(RecipientActorId.NodeId()), new TEvInterconnect::TEvConnectNode);
         }
 
         virtual void SendMessagesIfPossible(const TActorContext& ctx) {

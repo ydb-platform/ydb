@@ -1,67 +1,60 @@
-import json
-from werkzeug.exceptions import BadRequest
 from moto.core.exceptions import JsonRESTError
+from typing import Optional
 
 
-class ResourceNotFoundError(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "ResourceNotFoundException"}
+class AliasExistsException(JsonRESTError):
+    def __init__(self) -> None:
+        super().__init__(
+            "AliasExistsException", "An account with the given email already exists."
         )
 
 
-class UserNotFoundError(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "UserNotFoundException"}
-        )
+class ResourceNotFoundError(JsonRESTError):
+    def __init__(self, message: Optional[str]):
+        super().__init__(error_type="ResourceNotFoundException", message=message or "")
 
 
-class UsernameExistsException(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "UsernameExistsException"}
-        )
+class UserNotFoundError(JsonRESTError):
+    def __init__(self, message: str):
+        super().__init__(error_type="UserNotFoundException", message=message)
 
 
-class GroupExistsException(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "GroupExistsException"}
-        )
+class UsernameExistsException(JsonRESTError):
+    def __init__(self, message: str):
+        super().__init__(error_type="UsernameExistsException", message=message)
 
 
-class NotAuthorizedError(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "NotAuthorizedException"}
-        )
+class GroupExistsException(JsonRESTError):
+    def __init__(self, message: str):
+        super().__init__(error_type="GroupExistsException", message=message)
 
 
-class UserNotConfirmedException(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "UserNotConfirmedException"}
-        )
+class NotAuthorizedError(JsonRESTError):
+    def __init__(self, message: Optional[str]):
+        super().__init__(error_type="NotAuthorizedException", message=message or "")
 
 
-class ExpiredCodeException(BadRequest):
-    def __init__(self, message):
-        super().__init__()
-        self.description = json.dumps(
-            {"message": message, "__type": "ExpiredCodeException"}
-        )
+class UserNotConfirmedException(JsonRESTError):
+    def __init__(self, message: str):
+        super().__init__(error_type="UserNotConfirmedException", message=message)
+
+
+class ExpiredCodeException(JsonRESTError):
+    def __init__(self, message: str):
+        super().__init__(error_type="ExpiredCodeException", message=message)
 
 
 class InvalidParameterException(JsonRESTError):
-    def __init__(self, msg=None):
+    def __init__(self, msg: Optional[str] = None):
         self.code = 400
         super().__init__(
             "InvalidParameterException", msg or "A parameter is specified incorrectly."
+        )
+
+
+class InvalidPasswordException(JsonRESTError):
+    def __init__(self) -> None:
+        super().__init__(
+            error_type="InvalidPasswordException",
+            message="The provided password does not confirm to the configured password policy",
         )

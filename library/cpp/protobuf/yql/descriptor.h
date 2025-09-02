@@ -27,6 +27,10 @@ enum class ERecursionTraits {
     Ignore = 1,
     //! Возвращать поля с рекурсивным типом в виде сериализованной строки
     Bytes = 2,
+    //! Возвращать поля с рекурсивным типом в виде сериализованной строки.
+    //! В этом режиме пофиксен баг, в котором
+    //! |optional RecursiveMessage field = 1| превращалось в байтовую строку, а не в опциональную байтовую строку.
+    BytesV2 = 3,
 };
 
 struct TProtoTypeConfig {
@@ -50,6 +54,8 @@ struct TProtoTypeConfig {
     bool OptionalLists = false;
     //! Заполнять ли пустые Optional типы дефолтным значением (только для proto3).
     bool SyntaxAware = false;
+    //! Использовать ли детерминированную сериализацию
+    bool Deterministic = false;
 };
 
 struct TProtoTypeConfigOptions {
@@ -69,6 +75,8 @@ struct TProtoTypeConfigOptions {
     bool OptionalLists = false;
     //! Заполнять ли пустые Optional типы дефолтным значением (только для proto3).
     bool SyntaxAware = false;
+    //! Использовать ли детерминированную сериализацию
+    bool Deterministic = false;
 
     TProtoTypeConfigOptions& SetProtoFormat(EProtoFormat value) {
         ProtoFormat = value;
@@ -158,4 +166,5 @@ private:
     ui32 SkipBytes_;
     bool OptionalLists_;
     bool SyntaxAware_;
+    bool Deterministic_;
 };

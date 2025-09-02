@@ -43,22 +43,22 @@ struct aws_idle_connection {
  * System vtable to use under normal circumstances
  */
 static struct aws_http_connection_manager_system_vtable s_default_system_vtable = {
-    .create_connection = aws_http_client_connect,
-    .release_connection = aws_http_connection_release,
-    .close_connection = aws_http_connection_close,
-    .is_connection_available = aws_http_connection_new_requests_allowed,
-    .get_monotonic_time = aws_high_res_clock_get_ticks,
-    .is_callers_thread = aws_channel_thread_is_callers_thread,
-    .connection_get_channel = aws_http_connection_get_channel,
-    .connection_get_version = aws_http_connection_get_version,
+    .aws_http_client_connect = aws_http_client_connect,
+    .aws_http_connection_release = aws_http_connection_release,
+    .aws_http_connection_close = aws_http_connection_close,
+    .aws_http_connection_new_requests_allowed = aws_http_connection_new_requests_allowed,
+    .aws_high_res_clock_get_ticks = aws_high_res_clock_get_ticks,
+    .aws_channel_thread_is_callers_thread = aws_channel_thread_is_callers_thread,
+    .aws_http_connection_get_channel = aws_http_connection_get_channel,
+    .aws_http_connection_get_version = aws_http_connection_get_version,
 };
 
 const struct aws_http_connection_manager_system_vtable *g_aws_http_connection_manager_default_system_vtable_ptr =
     &s_default_system_vtable;
 
 bool aws_http_connection_manager_system_vtable_is_valid(const struct aws_http_connection_manager_system_vtable *table) {
-    return table->create_connection && table->close_connection && table->release_connection &&
-           table->is_connection_available;
+    return table->aws_http_client_connect && table->aws_http_connection_close && table->aws_http_connection_release &&
+           table->aws_http_connection_new_requests_allowed;
 }
 
 enum aws_http_connection_manager_state_type { AWS_HCMST_UNINITIALIZED, AWS_HCMST_READY, AWS_HCMST_SHUTTING_DOWN };
@@ -236,7 +236,7 @@ struct aws_http_connection_manager {
     struct aws_string *host;
     struct proxy_env_var_settings proxy_ev_settings;
     struct aws_tls_connection_options *proxy_ev_tls_options;
-    uint16_t port;
+    uint32_t port;
     /*
      * HTTP/2 specific.
      */
@@ -433,13 +433,13 @@ static void s_aws_http_connection_manager_complete_acquisitions(
 
         if (pending_acquisition->error_code == AWS_OP_SUCCESS) {
 
-            struct aws_channel *channel =
-                pending_acquisition->manager->system_vtable->connection_get_channel(pending_acquisition->connection);
+            struct aws_channel *channel = pending_acquisition->manager->system_vtable->aws_http_connection_get_channel(
+                pending_acquisition->connection);
             AWS_PRECONDITION(channel);
 
             /* For some workloads, going ahead and moving the connection callback to the connection's thread is a
              * substantial performance improvement so let's do that */
-            if (!pending_acquisition->manager->system_vtable->is_callers_thread(channel)) {
+            if (!pending_acquisition->manager->system_vtable->aws_channel_thread_is_callers_thread(channel)) {
                 aws_channel_task_init(
                     &pending_acquisition->acquisition_task,
                     s_connection_acquisition_task,
@@ -776,7 +776,7 @@ static void s_schedule_connection_culling(struct aws_http_connection_manager *ma
          * culling interval from now.
          */
         uint64_t now = 0;
-        manager->system_vtable->get_monotonic_time(&now);
+        manager->system_vtable->aws_high_res_clock_get_ticks(&now);
         cull_task_time =
             now + aws_timestamp_convert(
                       manager->max_connection_idle_in_milliseconds, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
@@ -1024,7 +1024,7 @@ static int s_aws_http_connection_manager_new_connection(struct aws_http_connecti
         options.proxy_options = &proxy_options;
     }
 
-    if (manager->system_vtable->create_connection(&options)) {
+    if (manager->system_vtable->aws_http_client_connect(&options)) {
         AWS_LOGF_ERROR(
             AWS_LS_HTTP_CONNECTION_MANAGER,
             "id=%p: http connection creation failed with error code %d(%s)",
@@ -1061,7 +1061,7 @@ static void s_aws_http_connection_manager_execute_transaction(struct aws_connect
             "id=%p: Releasing connection (id=%p)",
             (void *)manager,
             (void *)idle_connection->connection);
-        manager->system_vtable->release_connection(idle_connection->connection);
+        manager->system_vtable->aws_http_connection_release(idle_connection->connection);
         aws_mem_release(idle_connection->allocator, idle_connection);
     }
 
@@ -1071,7 +1071,7 @@ static void s_aws_http_connection_manager_execute_transaction(struct aws_connect
             "id=%p: Releasing connection (id=%p)",
             (void *)manager,
             (void *)work->connection_to_release);
-        manager->system_vtable->release_connection(work->connection_to_release);
+        manager->system_vtable->aws_http_connection_release(work->connection_to_release);
     }
 
     /*
@@ -1194,7 +1194,7 @@ static int s_idle_connection(struct aws_http_connection_manager *manager, struct
     idle_connection->connection = connection;
 
     uint64_t idle_start_timestamp = 0;
-    if (manager->system_vtable->get_monotonic_time(&idle_start_timestamp)) {
+    if (manager->system_vtable->aws_high_res_clock_get_ticks(&idle_start_timestamp)) {
         goto on_error;
     }
 
@@ -1223,7 +1223,7 @@ int aws_http_connection_manager_release_connection(
     s_aws_connection_management_transaction_init(&work, manager);
 
     int result = AWS_OP_ERR;
-    bool should_release_connection = !manager->system_vtable->is_connection_available(connection);
+    bool should_release_connection = !manager->system_vtable->aws_http_connection_new_requests_allowed(connection);
 
     AWS_LOGF_DEBUG(
         AWS_LS_HTTP_CONNECTION_MANAGER,
@@ -1413,7 +1413,8 @@ static void s_aws_http_connection_manager_on_connection_setup(
         s_connection_manager_internal_ref_increase(manager, AWS_HCMCT_OPEN_CONNECTION, 1);
     }
 
-    if (connection != NULL && manager->system_vtable->connection_get_version(connection) == AWS_HTTP_VERSION_2) {
+    if (connection != NULL &&
+        manager->system_vtable->aws_http_connection_get_version(connection) == AWS_HTTP_VERSION_2) {
         /* If the manager is shutting down, we will still wait for the settings, since we don't have map for connections
          */
         ++manager->pending_settings_count;
@@ -1492,7 +1493,7 @@ static void s_cull_idle_connections(struct aws_http_connection_manager *manager)
     }
 
     uint64_t now = 0;
-    if (manager->system_vtable->get_monotonic_time(&now)) {
+    if (manager->system_vtable->aws_high_res_clock_get_ticks(&now)) {
         return;
     }
 

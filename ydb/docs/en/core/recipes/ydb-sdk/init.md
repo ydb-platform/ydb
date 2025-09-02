@@ -1,11 +1,4 @@
----
-title: "Instructions for initializing the driver in {{ ydb-short-name }}"
-description: "The article describes the examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs."
----
-
 # Initialize the driver
-
-{% include [work in progress message](_includes/addition.md) %}
 
 To connect to {{ ydb-short-name }}, you need to specify the required and additional parameters that define the driver's behavior (learn more in [Connecting to the {{ ydb-short-name }} server](../../concepts/connect.md)).
 
@@ -82,33 +75,53 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% cut "Using a connection string" %}
 
-    The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
-    ```golang
-    package main
+  The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
 
-    import (
-      "database/sql"
+  ```golang
+  package main
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+  import (
+    "database/sql"
 
-    func main() {
-      db, err := sql.Open("ydb", "grpc://localhost:2136/local")
-      if err != nil {
-        panic(err)
-      }
-      defer db.Close()
+    _ "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
 
-      // ...
+  func main() {
+    db, err := sql.Open("ydb", "grpc://localhost:2136/local")
+    if err != nil {
+      panic(err)
     }
-    ```
+    defer db.Close()
+
+    // ...
+  }
+  ```
 
   {% endcut %}
 
 - Java
 
+  ```java
+  public void work() {
+      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+              .build());
+      // Do work with the transport
+      doWork(transport);
+      transport.close();
+  }
+  ```
 
-  {% include [work in progress message](_includes/addition.md) %}
+- JDBC Driver
+
+  ```java
+  public void work() {
+      // JDBC Driver must be in the classpath for automatic detection
+      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+      // Do work with the connection
+      doWork(connection);
+      connection.close();
+  }
+  ```
 
 - C# (.NET)
 
@@ -144,11 +157,19 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 
   $ydb = new Ydb($config);
+  ```
+
+- Rust
+
+  ```rust
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+        .with_credentials(AccessTokenCredentials::from("..."))
+        .client()?
   ```
 
 {% endlist %}

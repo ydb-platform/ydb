@@ -1,0 +1,25 @@
+items:
+- name: Configuration overview
+  href: config-overview.md
+- name: Static configuration
+  href: static-config.md
+- name: Dynamic configuration
+  href: dynamic-config.md
+- name: Volatile configuration
+  href: dynamic-config-volatile-config.md
+- name: Cluster configuration DSL
+  href: dynamic-config-selectors.md
+- name: Changing configurations via CMS
+  href: cms.md
+- name: Changing actor system configuration
+  href: change_actorsystem_configs.md
+- name: Cluster expansion
+  href: cluster-expansion.md
+- name: State Storage move
+  href: state-storage-move.md
+- name: Static group move
+  href: static-group-move.md
+- name: Replacing node FQDN
+  href: replacing-nodes.md
+- name: Database node authentication and authorization
+  href: node-authorization.md

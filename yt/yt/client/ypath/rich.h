@@ -2,6 +2,15 @@
 
 #include "public.h"
 
+#include <yt/yt/client/chunk_client/read_limit.h>
+
+#include <yt/yt/client/security_client/public.h>
+
+#include <yt/yt/client/table_client/column_sort_schema.h>
+#include <yt/yt/client/table_client/schema.h>
+
+#include <yt/yt/client/transaction_client/public.h>
+
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/attributes.h>
@@ -9,15 +18,6 @@
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/library/erasure/public.h>
-
-#include <yt/yt/client/table_client/column_sort_schema.h>
-#include <yt/yt/client/table_client/schema.h>
-
-#include <yt/yt/client/chunk_client/read_limit.h>
-
-#include <yt/yt/client/transaction_client/public.h>
-
-#include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NYPath {
 
@@ -27,19 +27,23 @@ namespace NYT::NYPath {
 class TRichYPath
 {
 public:
-    TRichYPath();
-    TRichYPath(const TRichYPath& other);
-    TRichYPath(TRichYPath&& other);
-    TRichYPath(const char* path);
-    TRichYPath(const TYPath& path);
-    TRichYPath(const TYPath& path, const NYTree::IAttributeDictionary& attributes);
-    TRichYPath& operator = (const TRichYPath& other);
+    TRichYPath() noexcept = default;
 
-    static TRichYPath Parse(const TString& str);
+    TRichYPath(const TRichYPath& other) noexcept;
+    TRichYPath& operator=(const TRichYPath& other) noexcept;
+
+    TRichYPath(TRichYPath&& other) noexcept = default;
+    TRichYPath& operator=(TRichYPath&& other) noexcept = default;
+
+    TRichYPath(const char* path);
+    TRichYPath(TYPath path);
+    TRichYPath(TYPath path, const NYTree::IAttributeDictionary& attributes);
+
+    static TRichYPath Parse(TStringBuf str);
     TRichYPath Normalize() const;
 
     const TYPath& GetPath() const;
-    void SetPath(const TYPath& path);
+    void SetPath(TYPath path);
 
     const NYTree::IAttributeDictionary& Attributes() const;
     NYTree::IAttributeDictionary& Attributes();
@@ -67,8 +71,8 @@ public:
     void SetReadViaExecNode(bool value);
 
     // "columns"
-    std::optional<std::vector<TString>> GetColumns() const;
-    void SetColumns(const std::vector<TString>& columns);
+    std::optional<std::vector<std::string>> GetColumns() const;
+    void SetColumns(const std::vector<std::string>& columns);
 
     // "rename_columns"
     std::optional<NTableClient::TColumnRenameDescriptors> GetColumnRenameDescriptors() const;
@@ -157,22 +161,31 @@ public:
     std::optional<NTableClient::TSortColumns> GetChunkSortColumns() const;
 
     // "cluster"
-    std::optional<TString> GetCluster() const;
-    void SetCluster(const TString& value);
+    std::optional<std::string> GetCluster() const;
+    void SetCluster(const std::string& value);
 
     // "clusters"
-    std::optional<std::vector<TString>> GetClusters() const;
-    void SetClusters(const std::vector<TString>& value);
+    std::optional<std::vector<std::string>> GetClusters() const;
+    void SetClusters(const std::vector<std::string>& value);
 
     // "create"
     bool GetCreate() const;
+
+    // "versioned_read_options"
+    NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;
+
+    // "versioned_write_options"
+    NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
+
+    // "access_method"
+    std::optional<TString> GetAccessMethod() const;
 
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;
 };
 
-bool operator== (const TRichYPath& lhs, const TRichYPath& rhs);
+bool operator==(const TRichYPath& lhs, const TRichYPath& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -186,6 +199,9 @@ void Deserialize(TRichYPath& richPath, NYson::TYsonPullParserCursor* cursor);
 
 void ToProto(TString* protoPath, const TRichYPath& path);
 void FromProto(TRichYPath* path, const TString& protoPath);
+
+void ToProto(std::string* protoPath, const TRichYPath& path);
+void FromProto(TRichYPath* path, const std::string& protoPath);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -12,6 +12,15 @@ log = logging.getLogger(__name__)
 
 
 class table__h_m_t_x(DefaultTable.DefaultTable):
+    """Horizontal Metrics table
+
+    The ``hmtx`` table contains per-glyph metrics for the glyphs in a
+    ``glyf``, ``CFF ``, or ``CFF2`` table, as needed for horizontal text
+    layout.
+
+    See also https://learn.microsoft.com/en-us/typography/opentype/spec/hmtx
+    """
+
     headerTag = "hhea"
     advanceName = "width"
     sideBearingName = "lsb"
@@ -31,15 +40,19 @@ class table__h_m_t_x(DefaultTable.DefaultTable):
                 % (self.headerTag, self.numberOfMetricsName)
             )
             numberOfMetrics = numGlyphs
-        if len(data) < 4 * numberOfMetrics:
-            raise ttLib.TTLibError("not enough '%s' table data" % self.tableTag)
+        numberOfSideBearings = numGlyphs - numberOfMetrics
+        tableSize = 4 * numberOfMetrics + 2 * numberOfSideBearings
+        if len(data) < tableSize:
+            raise ttLib.TTLibError(
+                f"not enough '{self.tableTag}' table data: "
+                f"expected {tableSize} bytes, got {len(data)}"
+            )
         # Note: advanceWidth is unsigned, but some font editors might
         # read/write as signed. We can't be sure whether it was a mistake
         # or not, so we read as unsigned but also issue a warning...
         metricsFmt = ">" + self.longMetricFormat * numberOfMetrics
         metrics = struct.unpack(metricsFmt, data[: 4 * numberOfMetrics])
         data = data[4 * numberOfMetrics :]
-        numberOfSideBearings = numGlyphs - numberOfMetrics
         sideBearings = array.array("h", data[: 2 * numberOfSideBearings])
         data = data[2 * numberOfSideBearings :]
 

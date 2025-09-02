@@ -2,7 +2,7 @@ from ._base_response import EC2BaseResponse
 
 
 class RouteTables(EC2BaseResponse):
-    def associate_route_table(self):
+    def associate_route_table(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         gateway_id = self._get_param("GatewayId")
         subnet_id = self._get_param("SubnetId")
@@ -12,7 +12,7 @@ class RouteTables(EC2BaseResponse):
         template = self.response_template(ASSOCIATE_ROUTE_TABLE_RESPONSE)
         return template.render(association_id=association_id)
 
-    def create_route(self):
+    def create_route(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         destination_cidr_block = self._get_param("DestinationCidrBlock")
         destination_ipv6_cidr_block = self._get_param("DestinationIpv6CidrBlock")
@@ -25,6 +25,7 @@ class RouteTables(EC2BaseResponse):
         interface_id = self._get_param("NetworkInterfaceId")
         pcx_id = self._get_param("VpcPeeringConnectionId")
         carrier_gateway_id = self._get_param("CarrierGatewayId")
+        vpc_endpoint_id = self._get_param("VpcEndpointId")
 
         self.ec2_backend.create_route(
             route_table_id,
@@ -39,12 +40,13 @@ class RouteTables(EC2BaseResponse):
             interface_id=interface_id,
             vpc_peering_connection_id=pcx_id,
             carrier_gateway_id=carrier_gateway_id,
+            vpc_endpoint_id=vpc_endpoint_id,
         )
 
         template = self.response_template(CREATE_ROUTE_RESPONSE)
         return template.render()
 
-    def create_route_table(self):
+    def create_route_table(self) -> str:
         vpc_id = self._get_param("VpcId")
         tags = self._get_multi_param("TagSpecification", skip_result_conversion=True)
         if tags:
@@ -53,7 +55,7 @@ class RouteTables(EC2BaseResponse):
         template = self.response_template(CREATE_ROUTE_TABLE_RESPONSE)
         return template.render(route_table=route_table)
 
-    def delete_route(self):
+    def delete_route(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         destination_cidr_block = self._get_param("DestinationCidrBlock")
         destination_ipv6_cidr_block = self._get_param("DestinationIpv6CidrBlock")
@@ -67,26 +69,26 @@ class RouteTables(EC2BaseResponse):
         template = self.response_template(DELETE_ROUTE_RESPONSE)
         return template.render()
 
-    def delete_route_table(self):
+    def delete_route_table(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         self.ec2_backend.delete_route_table(route_table_id)
         template = self.response_template(DELETE_ROUTE_TABLE_RESPONSE)
         return template.render()
 
-    def describe_route_tables(self):
+    def describe_route_tables(self) -> str:
         route_table_ids = self._get_multi_param("RouteTableId")
         filters = self._filters_from_querystring()
         route_tables = self.ec2_backend.describe_route_tables(route_table_ids, filters)
         template = self.response_template(DESCRIBE_ROUTE_TABLES_RESPONSE)
         return template.render(route_tables=route_tables)
 
-    def disassociate_route_table(self):
+    def disassociate_route_table(self) -> str:
         association_id = self._get_param("AssociationId")
         self.ec2_backend.disassociate_route_table(association_id)
         template = self.response_template(DISASSOCIATE_ROUTE_TABLE_RESPONSE)
         return template.render()
 
-    def replace_route(self):
+    def replace_route(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         destination_cidr_block = self._get_param("DestinationCidrBlock")
         destination_ipv6_cidr_block = self._get_param("DestinationIpv6CidrBlock")
@@ -116,7 +118,7 @@ class RouteTables(EC2BaseResponse):
         template = self.response_template(REPLACE_ROUTE_RESPONSE)
         return template.render()
 
-    def replace_route_table_association(self):
+    def replace_route_table_association(self) -> str:
         route_table_id = self._get_param("RouteTableId")
         association_id = self._get_param("AssociationId")
         new_association_id = self.ec2_backend.replace_route_table_association(
@@ -212,6 +214,11 @@ DESCRIBE_ROUTE_TABLES_RESPONSE = """
                   <origin>CreateRoute</origin>
                   <state>active</state>
                 {% endif %}
+                {% if route.vpc_endpoint_id %}
+                  <gatewayId>{{ route.vpc_endpoint_id }}</gatewayId>
+                  <origin>CreateRoute</origin>
+                  <state>active</state>
+                {% endif %}
                 {% if route.instance %}
                   <instanceId>{{ route.instance.id }}</instanceId>
                   <origin>CreateRoute</origin>
@@ -251,14 +258,16 @@ DESCRIBE_ROUTE_TABLES_RESPONSE = """
             {% endfor %}
           </routeSet>
           <associationSet>
+            {% if route_table.main_association_id is not none %}
               <item>
-                <routeTableAssociationId>{{ route_table.main_association }}</routeTableAssociationId>
+                <routeTableAssociationId>{{ route_table.main_association_id }}</routeTableAssociationId>
                 <routeTableId>{{ route_table.id }}</routeTableId>
                 <main>true</main>
                 <associationState>
                   <state>associated</state>
                 </associationState>
               </item>
+            {% endif %}
             {% for association_id,subnet_id in route_table.associations.items() %}
               <item>
                 <routeTableAssociationId>{{ association_id }}</routeTableAssociationId>
@@ -324,5 +333,8 @@ REPLACE_ROUTE_TABLE_ASSOCIATION_RESPONSE = """
 <ReplaceRouteTableAssociationResponse xmlns="http://ec2.amazonaws.com/doc/2013-10-15/">
    <requestId>59dbff89-35bd-4eac-99ed-be587EXAMPLE</requestId>
    <newAssociationId>{{ association_id }}</newAssociationId>
+   <associationState>
+     <state>associated</state>
+   </associationState>
 </ReplaceRouteTableAssociationResponse>
 """

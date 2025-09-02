@@ -13,7 +13,7 @@ from hamcrest import (
     not_none,
 )
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -24,7 +24,7 @@ class TestTTL(object):
 
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
             additional_log_configs={
                 'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
                 'TX_DATASHARD': LogLevels.DEBUG,
@@ -142,7 +142,7 @@ class TestTTLValueSinceUnixEpoch(TestTTL):
 class TestTTLAlterSettings(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator())
+        cls.cluster = KiKiMR(KikimrConfigGenerator())
         cls.cluster.start()
         cls.endpoint = "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
         cls.database = '/Root'

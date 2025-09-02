@@ -34,7 +34,7 @@ ICodec* GetCodec(ECodec id);
 
 //! Deprecated codecs information.
 const THashSet<ECodec>& GetForbiddenCodecs();
-const THashMap<TString, TString>& GetForbiddenCodecNameToAlias();
+const THashMap<std::string, std::string>& GetForbiddenCodecNameToAlias();
 const std::vector<ECodec>& GetSupportedCodecs();
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -32,7 +32,7 @@ public:
 
 void TManager::DoPrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
     NModifications::IAlterPreparationController<TObject>::TPtr controller,
-    const TInternalModificationContext& /*context*/) const {
+    const TInternalModificationContext& /*context*/, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     if (patchedObjects.size() != 1) {
         controller->OnPreparationProblem("modification possible for one object only");
         return;

@@ -1,11 +1,14 @@
 from moto.core.responses import BaseResponse
-from .models import ec2instanceconnect_backends
+from .models import ec2instanceconnect_backends, Ec2InstanceConnectBackend
 
 
 class Ec2InstanceConnectResponse(BaseResponse):
-    @property
-    def ec2instanceconnect_backend(self):
-        return ec2instanceconnect_backends[self.region]
+    def __init__(self) -> None:
+        super().__init__(service_name="ec2-instanceconnect")
 
-    def send_ssh_public_key(self):
+    @property
+    def ec2instanceconnect_backend(self) -> Ec2InstanceConnectBackend:
+        return ec2instanceconnect_backends[self.current_account][self.region]
+
+    def send_ssh_public_key(self) -> str:
         return self.ec2instanceconnect_backend.send_ssh_public_key()

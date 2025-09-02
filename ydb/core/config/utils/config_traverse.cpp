@@ -1,7 +1,5 @@
 #include "config_traverse.h"
 
-#include <ydb/core/protos/config.pb.h>
-
 #include <contrib/libs/protobuf/src/google/protobuf/descriptor.h>
 
 #include <util/generic/deque.h>
@@ -45,10 +43,7 @@ void Traverse(const Descriptor* d, TDeque<const Descriptor*>& typePath, TDeque<c
     typePath.pop_back();
 }
 
-void Traverse(TOnEntryFn onEntry) {
-    auto& inst = NKikimrConfig::TAppConfig::default_instance();
-    const Descriptor* descriptor = inst.GetDescriptor();
-
+void Traverse(TOnEntryFn onEntry, const Descriptor* descriptor) {
     TDeque<const Descriptor*> typePath;
     TDeque<const FieldDescriptor*> fieldPath;
     fieldPath.push_back(nullptr);

@@ -12,6 +12,8 @@ ELSE()
         abstract.cpp
         fake_storage.cpp
         fake_storage_config.cpp
+        retry_policy.cpp
+        unavailable_storage.cpp
     )
     PEERDIR(
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3

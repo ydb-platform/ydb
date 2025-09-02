@@ -2,11 +2,15 @@ PY3TEST()
 
 FORK_SUBTESTS()
 FORK_TEST_FILES()
-TIMEOUT(600)
+# It is necessary to run all tests
+# in separate chunks because our
+# audit log capture method is unreliable
+# and therefore some tests may affect neighbouring ones
+SPLIT_FACTOR(100)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -14,15 +18,17 @@ TEST_SRCS(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python
 )
 
-REQUIREMENTS(ram:10)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10 cpu:1)
+ENDIF()
 
 END()

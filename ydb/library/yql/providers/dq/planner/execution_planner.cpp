@@ -1,6 +1,6 @@
 #include "execution_planner.h"
 
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
@@ -8,24 +8,24 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -39,6 +39,15 @@ using namespace NYql::NNodes;
 using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
+
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
 
 namespace NYql::NDqs {
     namespace {
@@ -140,7 +149,7 @@ namespace NYql::NDqs {
         auto value = expr.Maybe<TDqPhyPrecompute>();
         const auto maxTasksPerOperation = Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
-        YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
+        YQL_CLOG(TRACE, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
 
         auto stages = GetStages(DqExprRoot);
         YQL_ENSURE(!stages.empty());
@@ -257,122 +266,11 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
 
-    bool TDqsExecutionPlanner::IsEgressTask(const TDqsTasksGraph::TTaskType& task) const {
-        for (const auto& output : task.Outputs) {
-            for (ui64 channelId : output.Channels) {
-                if (TasksGraph.GetChannel(channelId).DstTask) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
-    }
-
-    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
-        std::stack<TDqsTasksGraph::TTaskType*> tasksStack;
-        std::vector<bool> processedTasks(TasksGraph.GetTasks().size());
-        for (TDqsTasksGraph::TTaskType& task : TasksGraph.GetTasks()) {
-            if (IsEgressTask(task)) {
-                tasksStack.push(&task);
-            }
-        }
-
-        while (!tasksStack.empty()) {
-            TDqsTasksGraph::TTaskType& task = *tasksStack.top();
-            Y_ABORT_UNLESS(task.Id && task.Id <= processedTasks.size());
-            if (processedTasks[task.Id - 1]) {
-                tasksStack.pop();
-                continue;
-            }
-
-            // Make sure that all input tasks are processed
-            bool allInputsAreReady = true;
-            for (const auto& input : task.Inputs) {
-                for (ui64 channelId : input.Channels) {
-                    const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
-                    Y_ABORT_UNLESS(channel.SrcTask && channel.SrcTask <= processedTasks.size());
-                    if (!processedTasks[channel.SrcTask - 1]) {
-                        allInputsAreReady = false;
-                        tasksStack.push(&TasksGraph.GetTask(channel.SrcTask));
-                    }
-                }
-            }
-            if (!allInputsAreReady) {
-                continue;
-            }
-
-            // Current task has all inputs processed, so determine its checkpointing and watermarks mode now.
-            NDqProto::ECheckpointingMode checkpointingMode = NDqProto::CHECKPOINTING_MODE_DISABLED;
-            if (enableCheckpoints) {
-                for (const auto& input : task.Inputs) {
-                    if (input.SourceType) {
-                        if (IsInfiniteSourceType(input.SourceType)) {
-                            checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-                            break;
-                        }
-                    } else {
-                        for (ui64 channelId : input.Channels) {
-                            const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
-                            if (channel.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                                checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-                                break;
-                            }
-                        }
-                        if (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DEFAULT) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
-            if (enableWatermarks) {
-                for (auto& input : task.Inputs) {
-                    if (input.SourceType) {
-                        if (IsInfiniteSourceType(input.SourceType)) {
-                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            break;
-                        }
-                    } else {
-                        for (ui64 channelId : input.Channels) {
-                            const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
-                            if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
-                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                                break;
-                            }
-                        }
-                        if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Apply mode to task and its outputs.
-            task.CheckpointingMode = checkpointingMode;
-            task.WatermarksMode = watermarksMode;
-            for (const auto& output : task.Outputs) {
-                for (ui64 channelId : output.Channels) {
-                    auto& channel = TasksGraph.GetChannel(channelId);
-                    channel.CheckpointingMode = checkpointingMode;
-                    channel.WatermarksMode = watermarksMode;
-                }
-            }
-
-            processedTasks[task.Id - 1] = true;
-            tasksStack.pop();
-        }
-    }
 
     // TODO: Split Build and Get stages
     TVector<TDqTask>& TDqsExecutionPlanner::GetTasks() {
@@ -445,10 +343,12 @@ namespace NYql::NDqs {
             ui64 stageId, publicId;
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
+            program.SetLangVer(TypeContext->LangVer);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
             taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
+            taskDesc.SetValuePackerVersion(Settings->GetValuePackerVersion());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -535,12 +435,18 @@ namespace NYql::NDqs {
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
-            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*Settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
+            IDqIntegration::TPartitionSettings settings {
+                .DataSizePerJob = Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
+                .MaxPartitions = maxPartitions,
+                .EnableComputeActor = Settings->EnableComputeActor.Get(),
+                .CanFallback = canFallback
+            };
+            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -576,7 +482,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(dataSource);
         auto dqIntegration = (*dataSource)->GetDqIntegration();
         YQL_ENSURE(dqIntegration);
-        
+
         google::protobuf::Any providerSpecificLookupSourceSettings;
         TString sourceType;
         dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
@@ -593,10 +499,10 @@ namespace NYql::NDqs {
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = k.StringValue();
+            *settings.AddLeftJoinKeyNames() = streamLookup.LeftLabel().StringValue().empty() ? k.StringValue() : RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
-            *settings.AddRightJoinKeyNames() = k.StringValue();
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
@@ -604,6 +510,12 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
+        settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
+        settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
+        settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
+        if (auto maybeMultiget = streamLookup.IsMultiget()) {
+            settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
+        }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
@@ -805,11 +717,13 @@ namespace NYql::NDqs {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const TTypeAnnotationNode* typeAnn)
+        const TTypeAnnotationNode* typeAnn,
+        TLangVersion langver)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
         , TypeAnn(typeAnn)
+        , LangVer(langver)
     { }
 
     TVector<TDqTask>& TDqsSingleExecutionPlanner::GetTasks()
@@ -837,6 +751,7 @@ namespace NYql::NDqs {
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
+        program.SetLangVer(LangVer);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

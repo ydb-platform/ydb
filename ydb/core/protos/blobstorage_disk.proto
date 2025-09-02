@@ -2,6 +2,8 @@ package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/whiteboard_disk_states.proto";
+import "ydb/core/protos/whiteboard_flags.proto";
 
 message TPDiskState {
     enum E {
@@ -19,9 +21,10 @@ message TPDiskState {
         OpenFileError = 11;
         ChunkQuotaError = 12;
         DeviceIoError = 13;
-        Reserved14 = 14;
+        Stopped = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        Reserved17 = 17;
 
         Missing = 252;
         Timeout = 253;
@@ -61,6 +64,11 @@ message TVDiskMetrics {
     optional TVSlotId VSlotId = 8;
     optional double Occupancy = 9;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 10;
+    optional NKikimrWhiteboard.EVDiskState State = 11;
+    optional bool Replicated = 12;
+    optional NKikimrWhiteboard.EFlag DiskSpace = 13;
+    optional bool IsThrottling = 14;
+    optional uint32 ThrottlingRate = 15;
 }
 
 message TPDiskMetrics {
@@ -72,7 +80,7 @@ message TPDiskMetrics {
     optional uint64 NonRealTimeMs = 6; // ms per second of non-realtime, [0..1000]
     optional uint64 SlowDeviceMs = 7; // ms per second of slow device, [0..1000]
     optional uint32 MaxIOPS = 8; // number of IOPS this device can carry out
-    
+
     // maximum expected slot size; if set, then it is guaranteed that EnforcedDynamicSlotSize bytes of space are
     // available for every slot over this PDisk; if not set, then no space enforcement assumed
     optional uint64 EnforcedDynamicSlotSize = 9;
@@ -80,4 +88,6 @@ message TPDiskMetrics {
     optional TPDiskState.E State = 10;
 
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
+    optional uint64 SlotCount = 12;
+    optional uint32 SlotSizeInUnits = 13;
 }

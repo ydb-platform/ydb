@@ -1,15 +1,15 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -104,7 +104,6 @@ public:
         TTopicKeyParser key;
         YQL_ENSURE(key.Parse(*node->Child(2), nullptr, ctx), "Failed to extract topic name.");
         const auto settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
-        YQL_ENSURE(settings.Mode.Cast() == "append", "Only append write mode is supported for writing into topic");
 
         const auto cluster = TString(maybePqWrite.Cast().DataSink().Cluster().Value());
         const auto* found = State_->FindTopicMeta(cluster, key.GetTopicPath());

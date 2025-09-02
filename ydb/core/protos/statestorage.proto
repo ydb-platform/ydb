@@ -9,6 +9,8 @@ option java_package = "ru.yandex.kikimr.proto";
 message TEvLookup {
     optional fixed64 TabletID = 1;
     optional uint64 Cookie = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 };
 
 message TEvInfo {
@@ -26,6 +28,8 @@ message TEvInfo {
     repeated NActorsProto.TActorId FollowerTablet = 12;
     repeated NActorsProto.TActorId FollowerCandidates = 13;
     optional fixed32 ConfigContentHash = 14;
+    optional uint64 ClusterStateGeneration = 15;
+    optional fixed64 ClusterStateGuid = 16;
 };
 
 message TEvReplicaShutdown {
@@ -47,15 +51,21 @@ message TEvUpdate {
     optional uint32 ProposedStep = 6;
     optional uint64 Signature = 7;
     optional bool IsGuardian = 8;
+    optional uint64 ClusterStateGeneration = 9;
+    optional fixed64 ClusterStateGuid = 10;
 };
 
 message TEvDelete {
     optional fixed64 TabletID = 1;
+    optional uint64 ClusterStateGeneration = 2;
+    optional fixed64 ClusterStateGuid = 3;
 };
 
 message TEvCleanup {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId ProposedLeader = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 }
 
 message TEvRegisterFollower {
@@ -63,11 +73,15 @@ message TEvRegisterFollower {
     optional NActorsProto.TActorId Follower = 2;
     optional NActorsProto.TActorId FollowerTablet = 3;
     optional bool Candidate = 4;
+    optional uint64 ClusterStateGeneration = 5;
+    optional fixed64 ClusterStateGuid = 6;
 }
 
 message TEvUnregisterFollower {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId Follower = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 }
 
 message TEvLock {
@@ -76,6 +90,8 @@ message TEvLock {
     optional NActorsProto.TActorId ProposedLeader = 3;
     optional uint32 ProposedGeneration = 4;
     optional uint64 Signature = 5;
+    optional uint64 ClusterStateGeneration = 6;
+    optional fixed64 ClusterStateGuid = 7;
 };
 
 message TEvReplicaLeaderDemoted {
@@ -89,6 +105,8 @@ message TEvReplicaBoardPublish {
     optional uint64 TtlMs = 3;
     optional bool Register = 4;
     optional NActorsProto.TActorId Owner = 5;
+    optional uint64 ClusterStateGeneration = 6;
+    optional fixed64 ClusterStateGuid = 7;
 };
 
 message TEvReplicaBoardPublishAck {
@@ -98,12 +116,18 @@ message TEvReplicaBoardLookup {
     optional string Path = 1;
     reserved 2;
     optional bool Subscribe = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEvReplicaBoardCleanup {
+    optional uint64 ClusterStateGeneration = 1;
+    optional fixed64 ClusterStateGuid = 2;
 };
 
 message TEvReplicaBoardUnsubscribe {
+    optional uint64 ClusterStateGeneration = 1;
+    optional fixed64 ClusterStateGuid = 2;
 };
 
 message TBoardEntryInfo {
@@ -116,11 +140,15 @@ message TEvReplicaBoardInfo {
     optional string Path = 1;
     optional bool Dropped = 2;
     repeated TBoardEntryInfo Info = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEvReplicaBoardInfoUpdate {
     optional string Path = 1;
     optional TBoardEntryInfo Info = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEndpointBoardEntry {
@@ -137,5 +165,8 @@ message TEndpointBoardEntry {
     repeated string AddressesV4 = 8;
     repeated string AddressesV6 = 9;
     optional string TargetNameOverride = 10;
+    optional string EndpointId = 11;
+
+    optional string BridgePileName = 12;
 };
 

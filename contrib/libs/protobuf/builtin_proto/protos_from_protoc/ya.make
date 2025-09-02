@@ -2,6 +2,8 @@ PROTO_LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(Service-proxy-version)
+
 LICENSE(BSD-3-Clause)
 
 EXCLUDE_TAGS(

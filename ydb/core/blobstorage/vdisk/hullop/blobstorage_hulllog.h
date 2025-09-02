@@ -1,10 +1,16 @@
 #pragma once
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
+#include <ydb/core/blobstorage/base/vdisk_lsn.h>
 
 namespace NKikimr {
 
     class TEvHullHugeBlobLogged;
+
+    namespace NPDisk {
+        struct TEvLog;
+        struct TCommitRecord;
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // These function are used for construction of NPDisk::TEvLog messages, that

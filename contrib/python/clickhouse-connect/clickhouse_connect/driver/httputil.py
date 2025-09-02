@@ -6,7 +6,8 @@ import os
 import sys
 import socket
 import time
-from typing import Dict, Any, Optional
+from collections import deque
+from typing import Dict, Any, Optional, Tuple, Callable
 
 import certifi
 import lz4.frame
@@ -54,10 +55,10 @@ def close_managers():
 def get_pool_manager_options(keep_interval: int = DEFAULT_KEEP_INTERVAL,
                              keep_count: int = DEFAULT_KEEP_COUNT,
                              keep_idle: int = DEFAULT_KEEP_IDLE,
-                             ca_cert: str = None,
+                             ca_cert: Optional[str] = None,
                              verify: bool = True,
-                             client_cert: str = None,
-                             client_cert_key: str = None,
+                             client_cert: Optional[str] = None,
+                             client_cert_key: Optional[str] = None,
                              **options) -> Dict[str, Any]:
     socket_options = core_socket_options.copy()
     if getattr(socket, 'TCP_KEEPINTVL', None) is not None:
@@ -87,12 +88,12 @@ def get_pool_manager_options(keep_interval: int = DEFAULT_KEEP_INTERVAL,
 def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
                      keep_count: int = DEFAULT_KEEP_COUNT,
                      keep_idle: int = DEFAULT_KEEP_IDLE,
-                     ca_cert: str = None,
+                     ca_cert: Optional[str] = None,
                      verify: bool = True,
-                     client_cert: str = None,
-                     client_cert_key: str = None,
-                     http_proxy: str = None,
-                     https_proxy: str = None,
+                     client_cert: Optional[str] = None,
+                     client_cert_key: Optional[str] = None,
+                     http_proxy: Optional[str] = None,
+                     https_proxy: Optional[str] = None,
                      **options):
     options = get_pool_manager_options(keep_interval,
                                        keep_count,
@@ -192,34 +193,67 @@ class ResponseSource:
     def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024):
         self.response = response
         compression = response.headers.get('content-encoding')
+        decompress:Optional[Callable] = None
         if compression == 'zstd':
             zstd_decom = zstandard.ZstdDecompressor().decompressobj()
 
-            def decompress():
-                while True:
-                    chunk = response.read(chunk_size, decode_content=False)
-                    if not chunk:
-                        break
-                    yield zstd_decom.decompress(chunk)
+            def zstd_decompress(c: deque) -> Tuple[bytes, int]:
+                chunk = c.popleft()
+                return zstd_decom.decompress(chunk), len(chunk)
 
-            self.gen = decompress()
+            decompress = zstd_decompress
         elif compression == 'lz4':
             lz4_decom = lz4.frame.LZ4FrameDecompressor()
 
-            def decompress():
-                while lz4_decom.needs_input:
-                    data = self.response.read(chunk_size, decode_content=False)
-                    if lz4_decom.unused_data:
-                        data = lz4_decom.unused_data + data
-                    if not data:
-                        return
-                    chunk = lz4_decom.decompress(data)
-                    if chunk:
-                        yield chunk
+            def lz_decompress(c: deque) -> Tuple[Optional[bytes], int]:
+                read_amt = 0
+                data = c.popleft()
+                read_amt += len(data)
+                if lz4_decom.unused_data:
+                    read_amt += len(lz4_decom.unused_data)
+                    data = lz4_decom.unused_data + data
+                block = lz4_decom.decompress(data)
+                if lz4_decom.unused_data:
+                    read_amt -= len(lz4_decom.unused_data)
+                return block, read_amt
 
-            self.gen = decompress()
-        else:
-            self.gen = response.stream(amt=chunk_size, decode_content=True)
+            decompress = lz_decompress
+
+        buffer_size = common.get_setting('http_buffer_size')
+
+        def buffered():
+            chunks = deque()
+            done = False
+            current_size = 0
+            read_gen = response.stream(chunk_size, decompress is None)
+            while True:
+                while not done:
+                    chunk = None
+                    try:
+                        chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
+                    except Exception: # pylint: disable=broad-except
+                        # By swallowing an unexpected exception reading the stream, we will let consumers decide how to
+                        # handle the unexpected end of stream
+                        logger.warning('unexpected failure to read next chunk', exc_info=True)
+                    if not chunk:
+                        done = True
+                        break
+                    chunks.append(chunk)
+                    current_size += len(chunk)
+                    if current_size > buffer_size:
+                        break
+                if len(chunks) == 0:
+                    return
+                if decompress:
+                    chunk, used = decompress(chunks)
+                    current_size -= used
+                else:
+                    chunk = chunks.popleft()
+                    current_size -= len(chunk)
+                if chunk:
+                    yield chunk
+
+        self.gen = buffered()
 
     def close(self):
         self.response.drain_conn()

@@ -33,6 +33,9 @@ message TDataChange {
     }
 }
 
+message TSchemaChange {
+}
+
 message TCdcHeartbeat {
 }
 
@@ -47,6 +50,8 @@ message TChangeRecord {
         TDataChange AsyncIndex = 7;
         TDataChange CdcDataChange = 8;
         TCdcHeartbeat CdcHeartbeat = 9;
+        TDataChange IncrementalRestore = 10;
+        TSchemaChange CdcSchemaChange = 11;
     }
 }
 

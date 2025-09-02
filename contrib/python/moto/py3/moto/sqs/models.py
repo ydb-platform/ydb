@@ -1,26 +1,27 @@
 import base64
 import hashlib
 import json
-import random
 import re
 import string
 
 import struct
 from copy import deepcopy
-from typing import Dict
+from typing import Any, Dict, List, Optional, Tuple, Set, TYPE_CHECKING
+from threading import Condition
+from urllib.parse import ParseResult
 from xml.sax.saxutils import escape
 
 from moto.core.exceptions import RESTError
-from moto.core import BaseBackend, BaseModel, CloudFormationModel
+from moto.core import BaseBackend, BackendDict, BaseModel, CloudFormationModel
 from moto.core.utils import (
     camelcase_to_underscores,
-    get_random_message_id,
     unix_time,
     unix_time_millis,
     tags_from_cloudformation_tags_list,
-    BackendDict,
 )
+from moto.moto_api._internal import mock_random as random
 from moto.utilities.utils import md5_hash
+from .constants import MAXIMUM_VISIBILITY_TIMEOUT
 from .utils import generate_receipt_handle
 from .exceptions import (
     MessageAttributesInvalid,
@@ -38,7 +39,8 @@ from .exceptions import (
     InvalidAttributeValue,
 )
 
-from moto.core import get_account_id
+if TYPE_CHECKING:
+    from moto.awslambda.models import EventSourceMapping
 
 DEFAULT_SENDER_ID = "AIDAIT2UOQQY3AUEKVGXU"
 
@@ -46,6 +48,8 @@ MAXIMUM_MESSAGE_LENGTH = 262144  # 256 KiB
 
 MAXIMUM_MESSAGE_SIZE_ATTR_LOWER_BOUND = 1024
 MAXIMUM_MESSAGE_SIZE_ATTR_UPPER_BOUND = MAXIMUM_MESSAGE_LENGTH
+
+MAXIMUM_MESSAGE_DELAY = 900
 
 TRANSPORT_TYPE_ENCODINGS = {
     "String": b"\x01",
@@ -67,32 +71,36 @@ DEDUPLICATION_TIME_IN_SECONDS = 300
 
 
 class Message(BaseModel):
-    def __init__(self, message_id, body, system_attributes=None):
+    def __init__(
+        self,
+        message_id: str,
+        body: str,
+        system_attributes: Optional[Dict[str, Any]] = None,
+    ):
         self.id = message_id
         self._body = body
-        self.message_attributes = {}
-        self.receipt_handle = None
-        self._old_receipt_handles = []
+        self.message_attributes: Dict[str, Any] = {}
+        self.receipt_handle: Optional[str] = None
+        self._old_receipt_handles: List[str] = []
         self.sender_id = DEFAULT_SENDER_ID
         self.sent_timestamp = None
-        self.approximate_first_receive_timestamp = None
+        self.approximate_first_receive_timestamp: Optional[int] = None
         self.approximate_receive_count = 0
-        self.deduplication_id = None
-        self.group_id = None
-        self.sequence_number = None
-        self.visible_at = 0
-        self.delayed_until = 0
+        self.deduplication_id: Optional[str] = None
+        self.group_id: Optional[str] = None
+        self.sequence_number: Optional[str] = None
+        self.visible_at = 0.0
+        self.delayed_until = 0.0
         self.system_attributes = system_attributes or {}
 
     @property
-    def body_md5(self):
+    def body_md5(self) -> str:
         md5 = md5_hash()
         md5.update(self._body.encode("utf-8"))
         return md5.hexdigest()
 
     @property
-    def attribute_md5(self):
-
+    def attribute_md5(self) -> str:
         md5 = md5_hash()
 
         for attrName in sorted(self.message_attributes.keys()):
@@ -129,36 +137,40 @@ class Message(BaseModel):
         return md5.hexdigest()
 
     @staticmethod
-    def update_binary_length_and_value(md5, value):
+    def update_binary_length_and_value(md5: Any, value: bytes) -> None:  # type: ignore[misc]
         length_bytes = struct.pack("!I".encode("ascii"), len(value))
         md5.update(length_bytes)
         md5.update(value)
 
     @staticmethod
-    def validate_attribute_name(name):
+    def validate_attribute_name(name: str) -> None:
         if not ATTRIBUTE_NAME_PATTERN.match(name):
             raise MessageAttributesInvalid(
-                "The message attribute name '{0}' is invalid. "
+                f"The message attribute name '{name}' is invalid. "
                 "Attribute name can contain A-Z, a-z, 0-9, "
-                "underscore (_), hyphen (-), and period (.) characters.".format(name)
+                "underscore (_), hyphen (-), and period (.) characters."
             )
 
     @staticmethod
-    def utf8(string):
-        if isinstance(string, str):
-            return string.encode("utf-8")
-        return string
+    def utf8(value: Any) -> bytes:  # type: ignore[misc]
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        return value
 
     @property
-    def body(self):
+    def body(self) -> str:
         return escape(self._body).replace('"', "&quot;").replace("\r", "&#xD;")
 
-    def mark_sent(self, delay_seconds=None):
-        self.sent_timestamp = int(unix_time_millis())
+    @property
+    def original_body(self) -> str:
+        return self._body
+
+    def mark_sent(self, delay_seconds: Optional[int] = None) -> None:
+        self.sent_timestamp = int(unix_time_millis())  # type: ignore
         if delay_seconds:
             self.delay(delay_seconds=delay_seconds)
 
-    def mark_received(self, visibility_timeout=None):
+    def mark_received(self, visibility_timeout: Optional[int] = None) -> None:
         """
         When a message is received we will set the first receive timestamp,
         tap the ``approximate_receive_count`` and the ``visible_at`` time.
@@ -178,37 +190,37 @@ class Message(BaseModel):
         if visibility_timeout:
             self.change_visibility(visibility_timeout)
 
-        self._old_receipt_handles.append(self.receipt_handle)
+        self._old_receipt_handles.append(self.receipt_handle)  # type: ignore
         self.receipt_handle = generate_receipt_handle()
 
-    def change_visibility(self, visibility_timeout):
+    def change_visibility(self, visibility_timeout: int) -> None:
         # We're dealing with milliseconds internally
         visibility_timeout_msec = int(visibility_timeout) * 1000
         self.visible_at = unix_time_millis() + visibility_timeout_msec
 
-    def delay(self, delay_seconds):
+    def delay(self, delay_seconds: int) -> None:
         delay_msec = int(delay_seconds) * 1000
         self.delayed_until = unix_time_millis() + delay_msec
 
     @property
-    def visible(self):
+    def visible(self) -> bool:
         current_time = unix_time_millis()
         if current_time > self.visible_at:
             return True
         return False
 
     @property
-    def delayed(self):
+    def delayed(self) -> bool:
         current_time = unix_time_millis()
         if current_time < self.delayed_until:
             return True
         return False
 
     @property
-    def all_receipt_handles(self):
-        return [self.receipt_handle] + self._old_receipt_handles
+    def all_receipt_handles(self) -> List[Optional[str]]:
+        return [self.receipt_handle] + self._old_receipt_handles  # type: ignore
 
-    def had_receipt_handle(self, receipt_handle):
+    def had_receipt_handle(self, receipt_handle: str) -> bool:
         """
         Check if this message ever had this receipt_handle in the past
         """
@@ -250,24 +262,25 @@ class Queue(CloudFormationModel):
         "SendMessage",
     )
 
-    def __init__(self, name, region, **kwargs):
+    def __init__(self, name: str, region: str, account_id: str, **kwargs: Any):
         self.name = name
         self.region = region
-        self.tags = {}
-        self.permissions = {}
+        self.account_id = account_id
+        self.tags: Dict[str, str] = {}
+        self.permissions: Dict[str, Any] = {}
 
-        self._messages = []
-        self._pending_messages = set()
-        self.deleted_messages = set()
+        self._messages: List[Message] = []
+        self._pending_messages: Set[Message] = set()
+        self.deleted_messages: Set[str] = set()
+        self._messages_lock = Condition()
 
         now = unix_time()
         self.created_timestamp = now
-        self.queue_arn = "arn:aws:sqs:{0}:{1}:{2}".format(
-            self.region, get_account_id(), self.name
-        )
-        self.dead_letter_queue = None
+        self.queue_arn = f"arn:aws:sqs:{region}:{account_id}:{name}"
+        self.dead_letter_queue: Optional["Queue"] = None
+        self.fifo_queue = False
 
-        self.lambda_event_source_mappings = {}
+        self.lambda_event_source_mappings: Dict[str, "EventSourceMapping"] = {}
 
         # default settings for a non fifo queue
         defaults = {
@@ -293,24 +306,26 @@ class Queue(CloudFormationModel):
         if self.fifo_queue and not self.name.endswith(".fifo"):
             raise InvalidParameterValue("Queue name must end in .fifo for FIFO queues")
         if (
-            self.maximum_message_size < MAXIMUM_MESSAGE_SIZE_ATTR_LOWER_BOUND
-            or self.maximum_message_size > MAXIMUM_MESSAGE_SIZE_ATTR_UPPER_BOUND
+            self.maximum_message_size < MAXIMUM_MESSAGE_SIZE_ATTR_LOWER_BOUND  # type: ignore
+            or self.maximum_message_size > MAXIMUM_MESSAGE_SIZE_ATTR_UPPER_BOUND  # type: ignore
         ):
             raise InvalidAttributeValue("MaximumMessageSize")
 
     @property
-    def pending_messages(self):
+    def pending_messages(self) -> Set[Message]:
         return self._pending_messages
 
     @property
-    def pending_message_groups(self):
+    def pending_message_groups(self) -> Set[str]:
         return set(
             message.group_id
             for message in self._pending_messages
             if message.group_id is not None
         )
 
-    def _set_attributes(self, attributes, now=None):
+    def _set_attributes(
+        self, attributes: Dict[str, Any], now: Optional[float] = None
+    ) -> None:
         if not now:
             now = unix_time()
 
@@ -343,7 +358,7 @@ class Queue(CloudFormationModel):
         self.last_modified_timestamp = now
 
     @staticmethod
-    def _is_empty_redrive_policy(policy):
+    def _is_empty_redrive_policy(policy: Any) -> bool:  # type: ignore[misc]
         if isinstance(policy, str):
             if policy == "" or len(json.loads(policy)) == 0:
                 return True
@@ -352,7 +367,7 @@ class Queue(CloudFormationModel):
 
         return False
 
-    def _setup_dlq(self, policy):
+    def _setup_dlq(self, policy: Any) -> None:
         if Queue._is_empty_redrive_policy(policy):
             self.redrive_policy = None
             self.dead_letter_queue = None
@@ -389,7 +404,8 @@ class Queue(CloudFormationModel):
             self.redrive_policy["maxReceiveCount"]
         )
 
-        for queue in sqs_backends[self.region].queues.values():
+        sqs_backend = sqs_backends[self.account_id][self.region]
+        for queue in sqs_backend.queues.values():
             if queue.queue_arn == self.redrive_policy["deadLetterTargetArn"]:
                 self.dead_letter_queue = queue
 
@@ -402,24 +418,27 @@ class Queue(CloudFormationModel):
         else:
             raise RESTError(
                 "AWS.SimpleQueueService.NonExistentQueue",
-                "Could not find DLQ for {0}".format(
-                    self.redrive_policy["deadLetterTargetArn"]
-                ),
+                f"Could not find DLQ for {self.redrive_policy['deadLetterTargetArn']}",
             )
 
     @staticmethod
-    def cloudformation_name_type():
+    def cloudformation_name_type() -> str:
         return "QueueName"
 
     @staticmethod
-    def cloudformation_type():
+    def cloudformation_type() -> str:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sqs-queue.html
         return "AWS::SQS::Queue"
 
     @classmethod
-    def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
-    ):
+    def create_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+        **kwargs: Any,
+    ) -> "Queue":
         properties = deepcopy(cloudformation_json["Properties"])
         # remove Tags from properties and convert tags list to dict
         tags = properties.pop("Tags", [])
@@ -428,19 +447,24 @@ class Queue(CloudFormationModel):
         # Could be passed as an integer - just treat it as a string
         resource_name = str(resource_name)
 
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         return sqs_backend.create_queue(
             name=resource_name, tags=tags_dict, region=region_name, **properties
         )
 
     @classmethod
-    def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
-    ):
+    def update_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        original_resource: Any,
+        new_resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> "Queue":
         properties = cloudformation_json["Properties"]
         queue_name = original_resource.name
 
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         queue = sqs_backend.get_queue(queue_name)
         if "VisibilityTimeout" in properties:
             queue.visibility_timeout = int(properties["VisibilityTimeout"])
@@ -452,34 +476,38 @@ class Queue(CloudFormationModel):
         return queue
 
     @classmethod
-    def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
-    ):
+    def delete_from_cloudformation_json(  # type: ignore[misc]
+        cls,
+        resource_name: str,
+        cloudformation_json: Any,
+        account_id: str,
+        region_name: str,
+    ) -> None:
         # ResourceName will be the full queue URL - we only need the name
         # https://sqs.us-west-1.amazonaws.com/123456789012/queue_name
         queue_name = resource_name.split("/")[-1]
-        sqs_backend = sqs_backends[region_name]
+        sqs_backend = sqs_backends[account_id][region_name]
         sqs_backend.delete_queue(queue_name)
 
     @property
-    def approximate_number_of_messages_delayed(self):
+    def approximate_number_of_messages_delayed(self) -> int:
         return len([m for m in self._messages if m.delayed])
 
     @property
-    def approximate_number_of_messages_not_visible(self):
+    def approximate_number_of_messages_not_visible(self) -> int:
         return len([m for m in self._messages if not m.visible])
 
     @property
-    def approximate_number_of_messages(self):
+    def approximate_number_of_messages(self) -> int:
         return len(self.messages)
 
     @property
-    def physical_resource_id(self):
-        return f"https://sqs.{self.region}.amazonaws.com/{get_account_id()}/{self.name}"
+    def physical_resource_id(self) -> str:
+        return f"https://sqs.{self.region}.amazonaws.com/{self.account_id}/{self.name}"
 
     @property
-    def attributes(self):
-        result = {}
+    def attributes(self) -> Dict[str, Any]:  # type: ignore[misc]
+        result: Dict[str, Any] = {}
 
         for attribute in self.BASE_ATTRIBUTES:
             attr = getattr(self, camelcase_to_underscores(attribute))
@@ -490,7 +518,7 @@ class Queue(CloudFormationModel):
                 attr = getattr(self, camelcase_to_underscores(attribute))
                 result[attribute] = attr
 
-        if self.kms_master_key_id:
+        if self.kms_master_key_id:  # type: ignore
             for attribute in self.KMS_ATTRIBUTES:
                 attr = getattr(self, camelcase_to_underscores(attribute))
                 result[attribute] = attr
@@ -507,13 +535,13 @@ class Queue(CloudFormationModel):
 
         return result
 
-    def url(self, request_url):
-        return "{0}://{1}/{2}/{3}".format(
-            request_url.scheme, request_url.netloc, get_account_id(), self.name
+    def url(self, request_url: ParseResult) -> str:
+        return (
+            f"{request_url.scheme}://{request_url.netloc}/{self.account_id}/{self.name}"
         )
 
     @property
-    def messages(self):
+    def messages(self) -> List[Message]:
         # TODO: This can become very inefficient if a large number of messages are in-flight
         return [
             message
@@ -521,23 +549,29 @@ class Queue(CloudFormationModel):
             if message.visible and not message.delayed
         ]
 
-    def add_message(self, message):
-        if (
-            self.fifo_queue
-            and self.attributes.get("ContentBasedDeduplication") == "true"
-        ):
-            for m in self._messages:
-                if m.deduplication_id == message.deduplication_id:
-                    diff = message.sent_timestamp - m.sent_timestamp
-                    # if a duplicate message is received within the deduplication time then it should
-                    # not be added to the queue
-                    if diff / 1000 < DEDUPLICATION_TIME_IN_SECONDS:
-                        return
+    def add_message(self, message: Message) -> None:
+        if self.fifo_queue:
+            # the cases in which we dedupe fifo messages
+            # from https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/using-messagededuplicationid-property.html
+            # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html
+            if (
+                self.attributes.get("ContentBasedDeduplication") == "true"
+                or message.deduplication_id
+            ):
+                for m in self._messages:
+                    if m.deduplication_id == message.deduplication_id:
+                        diff = message.sent_timestamp - m.sent_timestamp  # type: ignore
+                        # if a duplicate message is received within the deduplication time then it should
+                        # not be added to the queue
+                        if diff / 1000 < DEDUPLICATION_TIME_IN_SECONDS:
+                            return
 
-        self._messages.append(message)
+        with self._messages_lock:
+            self._messages.append(message)
+            self._messages_lock.notify_all()
 
         for arn, esm in self.lambda_event_source_mappings.items():
-            backend = sqs_backends[self.region]
+            backend = sqs_backends[self.account_id][self.region]
 
             """
             Lambda polls the queue and invokes your function synchronously with an event
@@ -548,13 +582,13 @@ class Queue(CloudFormationModel):
             messages = backend.receive_message(
                 self.name,
                 esm.batch_size,
-                self.receive_message_wait_time_seconds,
-                self.visibility_timeout,
+                self.receive_message_wait_time_seconds,  # type: ignore
+                self.visibility_timeout,  # type: ignore
             )
 
             from moto.awslambda import lambda_backends
 
-            result = lambda_backends[self.region].send_sqs_batch(
+            result = lambda_backends[self.account_id][self.region].send_sqs_batch(
                 arn, messages, self.queue_arn
             )
 
@@ -569,7 +603,7 @@ class Queue(CloudFormationModel):
                     for m in messages
                 ]
 
-    def delete_message(self, receipt_handle):
+    def delete_message(self, receipt_handle: str) -> None:
         if receipt_handle in self.deleted_messages:
             # Already deleted - gracefully handle deleting it again
             return
@@ -584,16 +618,20 @@ class Queue(CloudFormationModel):
         for message in self._messages:
             if message.had_receipt_handle(receipt_handle):
                 self.pending_messages.discard(message)
-                self.deleted_messages.update(message.all_receipt_handles)
+                self.deleted_messages.update(message.all_receipt_handles)  # type: ignore
                 continue
             new_messages.append(message)
         self._messages = new_messages
 
+    def wait_for_messages(self, timeout: int) -> None:
+        with self._messages_lock:
+            self._messages_lock.wait_for(lambda: self.messages, timeout=timeout)
+
     @classmethod
-    def has_cfn_attr(cls, attr):
+    def has_cfn_attr(cls, attr: str) -> bool:
         return attr in ["Arn", "QueueName"]
 
-    def get_cfn_attribute(self, attribute_name):
+    def get_cfn_attribute(self, attribute_name: str) -> str:
         from moto.cloudformation.exceptions import UnformattedGetAttTemplateException
 
         if attribute_name == "Arn":
@@ -603,25 +641,27 @@ class Queue(CloudFormationModel):
         raise UnformattedGetAttTemplateException()
 
     @property
-    def policy(self):
+    def policy(self) -> Any:  # type: ignore[misc]
         if self._policy_json.get("Statement"):
             return json.dumps(self._policy_json)
         else:
             return None
 
     @policy.setter
-    def policy(self, policy):
+    def policy(self, policy: Any) -> None:
         if policy:
             self._policy_json = json.loads(policy)
         else:
             self._policy_json = {
                 "Version": "2012-10-17",
-                "Id": "{}/SQSDefaultPolicy".format(self.queue_arn),
+                "Id": f"{self.queue_arn}/SQSDefaultPolicy",
                 "Statement": [],
             }
 
 
-def _filter_message_attributes(message, input_message_attributes):
+def _filter_message_attributes(
+    message: Message, input_message_attributes: List[str]
+) -> None:
     filtered_message_attributes = {}
     return_all = "All" in input_message_attributes
     for key, value in message.message_attributes.items():
@@ -631,18 +671,22 @@ def _filter_message_attributes(message, input_message_attributes):
 
 
 class SQSBackend(BaseBackend):
-    def __init__(self, region_name, account_id):
+    def __init__(self, region_name: str, account_id: str):
         super().__init__(region_name, account_id)
         self.queues: Dict[str, Queue] = {}
 
     @staticmethod
-    def default_vpc_endpoint_service(service_region, zones):
+    def default_vpc_endpoint_service(
+        service_region: str, zones: List[str]
+    ) -> List[Dict[str, str]]:
         """Default VPC endpoint service."""
         return BaseBackend.default_vpc_endpoint_service_factory(
             service_region, zones, "sqs"
         )
 
-    def create_queue(self, name, tags=None, **kwargs):
+    def create_queue(
+        self, name: str, tags: Optional[Dict[str, str]] = None, **kwargs: Any
+    ) -> Queue:
         queue = self.queues.get(name)
         if queue:
             try:
@@ -650,7 +694,9 @@ class SQSBackend(BaseBackend):
             except KeyError:
                 pass
 
-            new_queue = Queue(name, region=self.region_name, **kwargs)
+            new_queue = Queue(
+                name, region=self.region_name, account_id=self.account_id, **kwargs
+            )
 
             queue_attributes = queue.attributes
             new_queue_attributes = new_queue.attributes
@@ -665,7 +711,9 @@ class SQSBackend(BaseBackend):
                 kwargs.pop("region")
             except KeyError:
                 pass
-            queue = Queue(name, region=self.region_name, **kwargs)
+            queue = Queue(
+                name, region=self.region_name, account_id=self.account_id, **kwargs
+            )
             self.queues[name] = queue
 
         if tags:
@@ -673,13 +721,13 @@ class SQSBackend(BaseBackend):
 
         return queue
 
-    def get_queue_url(self, queue_name):
+    def get_queue_url(self, queue_name: str) -> Queue:
         return self.get_queue(queue_name)
 
-    def list_queues(self, queue_name_prefix):
+    def list_queues(self, queue_name_prefix: str) -> List[Queue]:
         re_str = ".*"
         if queue_name_prefix:
-            re_str = "^{0}.*".format(queue_name_prefix)
+            re_str = f"^{queue_name_prefix}.*"
         prefix_re = re.compile(re_str)
         qs = []
         for name, q in self.queues.items():
@@ -687,18 +735,20 @@ class SQSBackend(BaseBackend):
                 qs.append(q)
         return qs[:1000]
 
-    def get_queue(self, queue_name):
+    def get_queue(self, queue_name: str) -> Queue:
         queue = self.queues.get(queue_name)
         if queue is None:
             raise QueueDoesNotExist()
         return queue
 
-    def delete_queue(self, queue_name):
+    def delete_queue(self, queue_name: str) -> None:
         self.get_queue(queue_name)
 
         del self.queues[queue_name]
 
-    def get_queue_attributes(self, queue_name, attribute_names):
+    def get_queue_attributes(
+        self, queue_name: str, attribute_names: List[str]
+    ) -> Dict[str, Any]:
         queue = self.get_queue(queue_name)
         if not attribute_names:
             return {}
@@ -727,36 +777,76 @@ class SQSBackend(BaseBackend):
 
         return attributes
 
-    def set_queue_attributes(self, queue_name, attributes):
+    def set_queue_attributes(
+        self, queue_name: str, attributes: Dict[str, Any]
+    ) -> Queue:
         queue = self.get_queue(queue_name)
         queue._set_attributes(attributes)
         return queue
 
+    def _validate_message(
+        self,
+        queue: Queue,
+        message_body: str,
+        deduplication_id: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> None:
+        if queue.fifo_queue:
+            if (
+                queue.attributes.get("ContentBasedDeduplication") == "false"
+                and not group_id
+            ):
+                msg = "MessageGroupId"
+                raise MissingParameter(msg)
+
+            if (
+                queue.attributes.get("ContentBasedDeduplication") == "false"
+                and group_id
+                and not deduplication_id
+            ):
+                msg = (
+                    "The queue should either have ContentBasedDeduplication enabled or "
+                    "MessageDeduplicationId provided explicitly"
+                )
+                raise InvalidParameterValue(msg)
+
+        if len(message_body) > queue.maximum_message_size:  # type: ignore
+            msg = f"One or more parameters are invalid. Reason: Message must be shorter than {queue.maximum_message_size} bytes."  # type: ignore
+            raise InvalidParameterValue(msg)
+
+        if group_id is None:
+            if queue.fifo_queue:
+                # MessageGroupId is a mandatory parameter for all
+                # messages in a fifo queue
+                raise MissingParameter("MessageGroupId")
+        else:
+            if not queue.fifo_queue:
+                msg = (
+                    f"Value {group_id} for parameter MessageGroupId is invalid. "
+                    "Reason: The request include parameter that is not valid for this queue type."
+                )
+                raise InvalidParameterValue(msg)
+
     def send_message(
         self,
-        queue_name,
-        message_body,
-        message_attributes=None,
-        delay_seconds=None,
-        deduplication_id=None,
-        group_id=None,
-        system_attributes=None,
-    ):
-
+        queue_name: str,
+        message_body: str,
+        message_attributes: Optional[Dict[str, Any]] = None,
+        delay_seconds: Optional[int] = None,
+        deduplication_id: Optional[str] = None,
+        group_id: Optional[str] = None,
+        system_attributes: Optional[Dict[str, Any]] = None,
+    ) -> Message:
         queue = self.get_queue(queue_name)
 
-        if len(message_body) > queue.maximum_message_size:
-            msg = "One or more parameters are invalid. Reason: Message must be shorter than {} bytes.".format(
-                queue.maximum_message_size
-            )
-            raise InvalidParameterValue(msg)
+        self._validate_message(queue, message_body, deduplication_id, group_id)
 
         if delay_seconds:
             delay_seconds = int(delay_seconds)
         else:
-            delay_seconds = queue.delay_seconds
+            delay_seconds = queue.delay_seconds  # type: ignore
 
-        message_id = get_random_message_id()
+        message_id = str(random.uuid4())
         message = Message(message_id, message_body, system_attributes)
 
         # if content based deduplication is set then set sha256 hash of the message
@@ -773,22 +863,18 @@ class SQSBackend(BaseBackend):
                 random.choice(string.digits) for _ in range(20)
             )
 
-        if group_id is None:
-            # MessageGroupId is a mandatory parameter for all
-            # messages in a fifo queue
-            if queue.fifo_queue:
-                raise MissingParameter("MessageGroupId")
-        else:
-            if not queue.fifo_queue:
-                msg = (
-                    "Value {} for parameter MessageGroupId is invalid. "
-                    "Reason: The request include parameter that is not valid for this queue type."
-                ).format(group_id)
-                raise InvalidParameterValue(msg)
+        if group_id is not None:
             message.group_id = group_id
 
         if message_attributes:
             message.message_attributes = message_attributes
+
+        if delay_seconds > MAXIMUM_MESSAGE_DELAY:  # type: ignore
+            msg = (
+                f"Value {delay_seconds} for parameter DelaySeconds is invalid. "
+                "Reason: DelaySeconds must be >= 0 and <= 900."
+            )
+            raise InvalidParameterValue(msg)
 
         message.mark_sent(delay_seconds=delay_seconds)
 
@@ -796,23 +882,18 @@ class SQSBackend(BaseBackend):
 
         return message
 
-    def send_message_batch(self, queue_name, entries):
-        self.get_queue(queue_name)
+    def send_message_batch(
+        self, queue_name: str, entries: Dict[str, Dict[str, Any]]
+    ) -> Tuple[List[Message], List[Dict[str, Any]]]:
+        queue = self.get_queue(queue_name)
 
         if any(
             not re.match(r"^[\w-]{1,80}$", entry["Id"]) for entry in entries.values()
         ):
             raise InvalidBatchEntryId()
 
-        body_length = next(
-            (
-                len(entry["MessageBody"])
-                for entry in entries.values()
-                if len(entry["MessageBody"]) > MAXIMUM_MESSAGE_LENGTH
-            ),
-            False,
-        )
-        if body_length:
+        body_length = sum(len(entry["MessageBody"]) for entry in entries.values())
+        if body_length > MAXIMUM_MESSAGE_LENGTH:
             raise BatchRequestTooLong(body_length)
 
         duplicate_id = self._get_first_duplicate_id(
@@ -825,23 +906,39 @@ class SQSBackend(BaseBackend):
             raise TooManyEntriesInBatchRequest(len(entries))
 
         messages = []
+        failedInvalidDelay = []
+
         for entry in entries.values():
-            # Loop through looking for messages
-            message = self.send_message(
-                queue_name,
+            # validate ALL messages before trying to send any
+            self._validate_message(
+                queue,
                 entry["MessageBody"],
-                message_attributes=entry["MessageAttributes"],
-                delay_seconds=entry["DelaySeconds"],
-                group_id=entry.get("MessageGroupId"),
-                deduplication_id=entry.get("MessageDeduplicationId"),
+                entry.get("MessageDeduplicationId"),
+                entry.get("MessageGroupId"),
             )
-            message.user_id = entry["Id"]
 
-            messages.append(message)
+        for entry in entries.values():
+            try:
+                # Loop through looking for messages
+                message = self.send_message(
+                    queue_name,
+                    entry["MessageBody"],
+                    message_attributes=entry["MessageAttributes"],
+                    delay_seconds=entry["DelaySeconds"],
+                    group_id=entry.get("MessageGroupId"),
+                    deduplication_id=entry.get("MessageDeduplicationId"),
+                )
+                message.user_id = entry["Id"]  # type: ignore[attr-defined]
+                messages.append(message)
+            except InvalidParameterValue as err:
+                if "DelaySeconds is invalid" in str(err):
+                    failedInvalidDelay.append(entry)
+                else:
+                    raise err
 
-        return messages
+        return messages, failedInvalidDelay
 
-    def _get_first_duplicate_id(self, ids):
+    def _get_first_duplicate_id(self, ids: List[str]) -> Optional[str]:
         unique_ids = set()
         for _id in ids:
             if _id in unique_ids:
@@ -851,12 +948,12 @@ class SQSBackend(BaseBackend):
 
     def receive_message(
         self,
-        queue_name,
-        count,
-        wait_seconds_timeout,
-        visibility_timeout,
-        message_attribute_names=None,
-    ):
+        queue_name: str,
+        count: int,
+        wait_seconds_timeout: int,
+        visibility_timeout: int,
+        message_attribute_names: Optional[List[str]] = None,
+    ) -> List[Message]:
         # Attempt to retrieve visible messages from a queue.
 
         # If a message was read by client and not deleted it is considered to be
@@ -867,7 +964,7 @@ class SQSBackend(BaseBackend):
         if message_attribute_names is None:
             message_attribute_names = []
         queue = self.get_queue(queue_name)
-        result = []
+        result: List[Message] = []
         previous_result_count = len(result)
 
         polling_end = unix_time() + wait_seconds_timeout
@@ -875,11 +972,10 @@ class SQSBackend(BaseBackend):
 
         # queue.messages only contains visible messages
         while True:
-
             if result or (wait_seconds_timeout and unix_time() > polling_end):
                 break
 
-            messages_to_dlq = []
+            messages_to_dlq: List[Message] = []
 
             for message in queue.messages:
                 if not message.visible:
@@ -920,41 +1016,58 @@ class SQSBackend(BaseBackend):
 
             for message in messages_to_dlq:
                 queue._messages.remove(message)
-                queue.dead_letter_queue.add_message(message)
+                queue.dead_letter_queue.add_message(message)  # type: ignore
 
             if previous_result_count == len(result):
                 if wait_seconds_timeout == 0:
-                    # There is timeout and we have added no additional results,
+                    # There is no timeout and no additional results,
                     # so break to avoid an infinite loop.
                     break
 
-                import time
-
-                time.sleep(0.01)
+                queue.wait_for_messages(1)
                 continue
 
             previous_result_count = len(result)
 
         return result
 
-    def delete_message(self, queue_name, receipt_handle):
+    def delete_message(self, queue_name: str, receipt_handle: str) -> None:
         queue = self.get_queue(queue_name)
 
         queue.delete_message(receipt_handle)
 
-    def change_message_visibility(self, queue_name, receipt_handle, visibility_timeout):
+    def delete_message_batch(
+        self, queue_name: str, receipts: List[Dict[str, Any]]
+    ) -> Tuple[List[str], List[Dict[str, str]]]:
+        success = []
+        errors = []
+        for receipt_and_id in receipts:
+            try:
+                self.delete_message(queue_name, receipt_and_id["receipt_handle"])
+                success.append(receipt_and_id["msg_user_id"])
+            except ReceiptHandleIsInvalid:
+                errors.append(
+                    {
+                        "Id": receipt_and_id["msg_user_id"],
+                        "SenderFault": True,
+                        "Code": "ReceiptHandleIsInvalid",
+                        "Message": f'The input receipt handle "{receipt_and_id["receipt_handle"]}" is not a valid receipt handle.',
+                    }
+                )
+        return success, errors
+
+    def change_message_visibility(
+        self, queue_name: str, receipt_handle: str, visibility_timeout: int
+    ) -> None:
         queue = self.get_queue(queue_name)
         for message in queue._messages:
             if message.had_receipt_handle(receipt_handle):
-
                 visibility_timeout_msec = int(visibility_timeout) * 1000
                 given_visibility_timeout = unix_time_millis() + visibility_timeout_msec
-                if given_visibility_timeout - message.sent_timestamp > 43200 * 1000:
+                if given_visibility_timeout - message.sent_timestamp > 43200 * 1000:  # type: ignore
                     raise InvalidParameterValue(
-                        "Value {0} for parameter VisibilityTimeout is invalid. Reason: Total "
-                        "VisibilityTimeout for the message is beyond the limit [43200 seconds]".format(
-                            visibility_timeout
-                        )
+                        f"Value {visibility_timeout} for parameter VisibilityTimeout is invalid. Reason: Total "
+                        "VisibilityTimeout for the message is beyond the limit [43200 seconds]"
                     )
 
                 message.change_visibility(visibility_timeout)
@@ -965,22 +1078,62 @@ class SQSBackend(BaseBackend):
                 return
         raise ReceiptHandleIsInvalid
 
-    def purge_queue(self, queue_name):
+    def change_message_visibility_batch(
+        self, queue_name: str, entries: List[Dict[str, Any]]
+    ) -> Tuple[List[str], List[Dict[str, str]]]:
+        success = []
+        error = []
+        for entry in entries:
+            try:
+                visibility_timeout = int(entry["visibility_timeout"])
+                assert visibility_timeout <= MAXIMUM_VISIBILITY_TIMEOUT
+            except:  # noqa: E722 Do not use bare except
+                error.append(
+                    {
+                        "Id": entry["id"],
+                        "SenderFault": "true",
+                        "Code": "InvalidParameterValue",
+                        "Message": "Visibility timeout invalid",
+                    }
+                )
+                continue
+
+            try:
+                self.change_message_visibility(
+                    queue_name=queue_name,
+                    receipt_handle=entry["receipt_handle"],
+                    visibility_timeout=visibility_timeout,
+                )
+                success.append(entry["id"])
+            except ReceiptHandleIsInvalid as e:
+                error.append(
+                    {
+                        "Id": entry["id"],
+                        "SenderFault": "true",
+                        "Code": "ReceiptHandleIsInvalid",
+                        "Message": e.description,
+                    }
+                )
+        return success, error
+
+    def purge_queue(self, queue_name: str) -> None:
         queue = self.get_queue(queue_name)
         queue._messages = []
         queue._pending_messages = set()
 
-    def list_dead_letter_source_queues(self, queue_name):
+    def list_dead_letter_source_queues(self, queue_name: str) -> List[Queue]:
         dlq = self.get_queue(queue_name)
 
-        queues = []
+        queues: List[Queue] = []
         for queue in self.queues.values():
             if queue.dead_letter_queue is dlq:
                 queues.append(queue)
 
         return queues
 
-    def add_permission(self, queue_name, actions, account_ids, label):
+    def add_permission(
+        self, queue_name: str, actions: List[str], account_ids: List[str], label: str
+    ) -> None:
         queue = self.get_queue(queue_name)
 
         if not actions:
@@ -1001,10 +1154,8 @@ class SQSBackend(BaseBackend):
         )
         if invalid_action:
             raise InvalidParameterValue(
-                "Value SQS:{} for parameter ActionName is invalid. "
-                "Reason: Only the queue owner is allowed to invoke this action.".format(
-                    invalid_action
-                )
+                f"Value SQS:{invalid_action} for parameter ActionName is invalid. "
+                "Reason: Only the queue owner is allowed to invoke this action."
             )
 
         policy = queue._policy_json
@@ -1018,14 +1169,11 @@ class SQSBackend(BaseBackend):
         )
         if statement:
             raise InvalidParameterValue(
-                "Value {} for parameter Label is invalid. "
-                "Reason: Already exists.".format(label)
+                f"Value {label} for parameter Label is invalid. Reason: Already exists."
             )
 
-        principals = [
-            "arn:aws:iam::{}:root".format(account_id) for account_id in account_ids
-        ]
-        actions = ["SQS:{}".format(action) for action in actions]
+        principals = [f"arn:aws:iam::{account_id}:root" for account_id in account_ids]
+        actions = [f"SQS:{action}" for action in actions]
 
         statement = {
             "Sid": label,
@@ -1037,7 +1185,7 @@ class SQSBackend(BaseBackend):
 
         queue._policy_json["Statement"].append(statement)
 
-    def remove_permission(self, queue_name, label):
+    def remove_permission(self, queue_name: str, label: str) -> None:
         queue = self.get_queue(queue_name)
 
         statements = queue._policy_json["Statement"]
@@ -1047,26 +1195,24 @@ class SQSBackend(BaseBackend):
 
         if len(statements) == len(statements_new):
             raise InvalidParameterValue(
-                "Value {} for parameter Label is invalid. "
-                "Reason: can't find label on existing policy.".format(label)
+                f"Value {label} for parameter Label is invalid. "
+                "Reason: can't find label on existing policy."
             )
 
         queue._policy_json["Statement"] = statements_new
 
-    def tag_queue(self, queue_name, tags):
+    def tag_queue(self, queue_name: str, tags: Dict[str, str]) -> None:
         queue = self.get_queue(queue_name)
 
         if not len(tags):
             raise MissingParameter("Tags")
 
         if len(tags) > 50:
-            raise InvalidParameterValue(
-                "Too many tags added for queue {}.".format(queue_name)
-            )
+            raise InvalidParameterValue(f"Too many tags added for queue {queue_name}.")
 
         queue.tags.update(tags)
 
-    def untag_queue(self, queue_name, tag_keys):
+    def untag_queue(self, queue_name: str, tag_keys: List[str]) -> None:
         queue = self.get_queue(queue_name)
 
         if not len(tag_keys):
@@ -1081,17 +1227,16 @@ class SQSBackend(BaseBackend):
             except KeyError:
                 pass
 
-    def list_queue_tags(self, queue_name):
+    def list_queue_tags(self, queue_name: str) -> Queue:
         return self.get_queue(queue_name)
 
-    def is_message_valid_based_on_retention_period(self, queue_name, message):
-        message_attributes = self.get_queue_attributes(
+    def is_message_valid_based_on_retention_period(
+        self, queue_name: str, message: Message
+    ) -> bool:
+        retention_period = self.get_queue_attributes(
             queue_name, ["MessageRetentionPeriod"]
-        )
-        retain_until = (
-            message_attributes.get("MessageRetentionPeriod")
-            + message.sent_timestamp / 1000
-        )
+        )["MessageRetentionPeriod"]
+        retain_until = retention_period + message.sent_timestamp / 1000  # type: ignore
         if retain_until <= unix_time():
             return False
         return True

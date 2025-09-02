@@ -72,14 +72,16 @@ struct TEvBlobCache {
         TBlobRange BlobRange;
         NKikimrProto::EReplyStatus Status;
         TString Data;
+        TString DetailedError;
         const bool FromCache = false;
         const TInstant ConstructTime = Now();
         const TString DataSourceId;
 
-        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const bool fromCache = false, const TString& dataSourceId = Default<TString>())
+        TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const TString& detailedError, const bool fromCache = false, const TString& dataSourceId = Default<TString>())
             : BlobRange(blobRange)
             , Status(status)
             , Data(data)
+            , DetailedError(detailedError)
             , FromCache(fromCache)
             , DataSourceId(dataSourceId)
         {}
@@ -115,7 +117,7 @@ NActors::TActorId MakeBlobCacheServiceId() {
     return TActorId(0, TStringBuf(x, 12));
 }
 
-NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
+NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
 
 // Explicitly add and remove data from cache. This is usefull for newly written data that is likely to be read by
 // indexing, compaction and user queries and for the data that has been compacted and will not be read again.

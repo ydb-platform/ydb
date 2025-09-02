@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/test/libs/rows/mass.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/random/mersenne.h>
 #include <array>
@@ -21,7 +22,7 @@ namespace NTest {
 
         }
 
-        TRow Make(ui64, bool hole) noexcept override
+        TRow Make(ui64, bool hole) override
         {
             const ui64 up = hole ? 0 : 1;
 
@@ -52,7 +53,7 @@ namespace NTest {
             return Seq++, *row;
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out
                 << "Std{"
@@ -76,14 +77,14 @@ namespace NTest {
                     .Key({ 0, 1 });
         }
 
-        ui64 Base(const TRow &row) const noexcept override
+        ui64 Base(const TRow &row) const override
         {
             auto *up = row.Get(NTable::TTag(2));
 
             if (up == nullptr || up->Type != NScheme::NTypeIds::Uint64) {
-                Y_ABORT("Probably got row not from the TMass instance");
+                Y_TABLET_ERROR("Probably got row not from the TMass instance");
             } else if (up->Cell.Size() != sizeof(ui64) || !up->Cell.Data()) {
-                Y_ABORT("Last saved tow reference TCell is invalid in TRow");
+                Y_TABLET_ERROR("Last saved tow reference TCell is invalid in TRow");
             } else {
                 return up->Cell.AsValue<ui64>();
             }
@@ -91,7 +92,7 @@ namespace NTest {
 
         void Check(TArrayRef<const ui64> rows) const override
         {
-            Y_ABORT_UNLESS(rows.size() == 1);
+            Y_ENSURE(rows.size() == 1);
 
             if (rows[0] != Sub[0]) {
                 throw

@@ -30,6 +30,10 @@ struct TPushQueueProducerOptions
      * what data should be written after fail of the user process.
      */
     NYTree::INodePtr UserMeta;
+
+    //! If this happens to be a push into a replicated table queue,
+    //! controls if at least one sync replica is required.
+    bool RequireSyncReplica = true;
 };
 
 struct TPushQueueProducerResult
@@ -71,7 +75,7 @@ struct IQueueTransaction
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceQueueConsumerOptions& options) = 0;
+        const TAdvanceQueueConsumerOptions& options = {}) = 0;
 
     //! Writes rows in the queue with checking their sequence number.
     /*!
@@ -87,9 +91,23 @@ struct IQueueTransaction
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
         const TPushQueueProducerOptions& options = {}) = 0;
+
+    //! Write rows in the queue with checking their sequence number.
+    /*!
+     * If row sequence number is less than sequence number saved in producer table, then this row will not be written.
+     * #sessionId - an identificator of write session, for example, `<host>-<filename>`.
+     * #epoch - a number of producer epoch. All calls with an epoch less than the current epoch will fail.
+     */
+    virtual TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        const std::vector<TSharedRef>& serializedRows,
+        const TPushQueueProducerOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

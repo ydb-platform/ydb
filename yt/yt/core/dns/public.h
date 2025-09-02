@@ -8,7 +8,7 @@ namespace NYT::NDns {
 
 struct TDnsResolveOptions;
 
-DECLARE_REFCOUNTED_CLASS(TAresDnsResolverConfig)
+DECLARE_REFCOUNTED_STRUCT(TAresDnsResolverConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IDnsResolver)
 

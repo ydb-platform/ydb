@@ -21,6 +21,14 @@ bool IsScalarType(EObjectType type)
         type == EObjectType::BooleanNode;
 }
 
+bool IsSequoiaNode(NObjectClient::EObjectType type)
+{
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::SequoiaLink ||
+        type == EObjectType::Scion;
+}
+
 bool IsVersionedType(EObjectType type)
 {
     return
@@ -39,16 +47,22 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ChunkMap ||
         type == EObjectType::LostChunkMap ||
         type == EObjectType::LostVitalChunkMap ||
+        type == EObjectType::LostVitalChunksSampleMap ||
         type == EObjectType::PrecariousChunkMap ||
         type == EObjectType::PrecariousVitalChunkMap ||
         type == EObjectType::OverreplicatedChunkMap ||
         type == EObjectType::UnderreplicatedChunkMap ||
         type == EObjectType::DataMissingChunkMap ||
+        type == EObjectType::DataMissingChunksSampleMap ||
         type == EObjectType::ParityMissingChunkMap ||
+        type == EObjectType::ParityMissingChunksSampleMap ||
         type == EObjectType::OldestPartMissingChunkMap ||
+        type == EObjectType::OldestPartMissingChunksSampleMap ||
         type == EObjectType::QuorumMissingChunkMap ||
+        type == EObjectType::QuorumMissingChunksSampleMap ||
         type == EObjectType::UnsafelyPlacedChunkMap ||
         type == EObjectType::InconsistentlyPlacedChunkMap ||
+        type == EObjectType::InconsistentlyPlacedChunksSampleMap ||
         type == EObjectType::UnexpectedOverreplicatedChunkMap ||
         type == EObjectType::ReplicaTemporarilyUnavailableChunkMap ||
         type == EObjectType::ForeignChunkMap ||
@@ -126,7 +140,8 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::SequoiaMapNode ||
         type == EObjectType::Pipeline ||
         type == EObjectType::QueueConsumer ||
-        type == EObjectType::QueueProducer;
+        type == EObjectType::QueueProducer ||
+        type == EObjectType::CypressProxyMap;
 }
 
 bool IsUserType(EObjectType type)
@@ -204,6 +219,7 @@ bool IsChunkOwnerType(EObjectType type)
 bool IsCellType(EObjectType type)
 {
     return
+        type == EObjectType::MasterCell ||
         type == EObjectType::TabletCell ||
         type == EObjectType::ChaosCell;
 }
@@ -246,6 +262,16 @@ bool IsChaosTableReplicaType(EObjectType type)
     return type == EObjectType::ChaosTableReplica;
 }
 
+bool IsReplicationCardType(EObjectType type)
+{
+    return type == EObjectType::ReplicationCard;
+}
+
+bool IsChaosLeaseType(EObjectType type)
+{
+    return type == EObjectType::ChaosLease;
+}
+
 bool IsCollocationType(EObjectType type)
 {
     return
@@ -285,9 +311,27 @@ bool IsUploadTransactionType(EObjectType type)
         type == EObjectType::UploadNestedTransaction;
 }
 
+bool IsExternalizedTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::ExternalizedTransaction ||
+        type == EObjectType::ExternalizedNestedTransaction;
+}
+
 bool IsCompositeNodeType(EObjectType type)
 {
-    return type == EObjectType::MapNode || type == EObjectType::ListNode;
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::MapNode ||
+        type == EObjectType::Scion ||
+        type == EObjectType::PortalExit ||
+        type == EObjectType::SysNode ||
+        type == EObjectType::ListNode;
+}
+
+bool IsLinkType(EObjectType type)
+{
+    return type == EObjectType::Link || type == EObjectType::SequoiaLink;
 }
 
 bool HasSchema(EObjectType type)
@@ -306,6 +350,13 @@ bool IsSchemaType(EObjectType type)
     return (static_cast<ui32>(type) & SchemaObjectTypeMask) != 0;
 }
 
+std::string FormatObjectType(EObjectType type)
+{
+    return IsSchemaType(type)
+        ? std::string(Format("schema:%v", TypeFromSchemaType(type)))
+        : FormatEnum(type);
+}
+
 bool IsGlobalCellId(TCellId cellId)
 {
     auto type = TypeFromId(cellId);
@@ -317,4 +368,3 @@ bool IsGlobalCellId(TCellId cellId)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NObjectClient
-

@@ -1,14 +1,16 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -28,6 +30,7 @@ struct TKqpWorkerSettings {
     TMaybe<TString> UserName;
     bool LongSession = false;
 
+    TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
     NKikimrConfig::TTableServiceConfig TableService;
     NKikimrConfig::TQueryServiceConfig QueryService;
 
@@ -37,12 +40,13 @@ struct TKqpWorkerSettings {
     TKqpDbCountersPtr DbCounters;
 
     explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
-            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const TIntrusivePtr<TExecuterMutableConfig> mutableExecuterConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
             const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
         , ApplicationName(applicationName)
         , UserName(userName)
+        , MutableExecuterConfig(mutableExecuterConfig)
         , TableService(tableServiceConfig)
         , QueryService(queryServiceConfig)
         , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())
@@ -56,7 +60,10 @@ struct TKqpWorkerSettings {
     }
 };
 
+class TKqpQueryCache;
+
 IActor* CreateKqpSessionActor(const TActorId& owner,
+    TIntrusivePtr<TKqpQueryCache> queryCache,
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
     const TString& sessionId,

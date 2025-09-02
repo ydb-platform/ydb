@@ -1,3 +1,5 @@
+#pragma once
+
 #include <library/cpp/object_factory/object_factory.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

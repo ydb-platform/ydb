@@ -19,6 +19,7 @@
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_service.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <util/string/vector.h>
 
@@ -307,7 +308,7 @@ TEST_F(TYPathTest, ParseRichYPath1)
 
 TEST_F(TYPathTest, ParseRichYPath2)
 {
-    auto path = NYPath::TRichYPath::Parse("<a=b>//home");
+    auto path = NYPath::TRichYPath::Parse("  <a=b>//home");
     EXPECT_EQ(path.GetPath(), "//home");
     EXPECT_TRUE(
         AreNodesEqual(
@@ -387,7 +388,7 @@ TEST_F(TYPathTest, ParseRichYPath9)
 {
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         TRichYPath::Parse("@home"),
-        std::exception,
+        TErrorException,
         "does not start with a valid root-designator");
 }
 
@@ -405,6 +406,12 @@ TEST_F(TYPathTest, ParseRichYPath11)
         TRichYPath::Parse(" \n//home"),
         std::exception,
         "does not start with a valid root-designator");
+}
+
+TEST_F(TYPathTest, ParseRichYPath12)
+{
+    auto path = TRichYPath::Parse("<>//home");
+    EXPECT_TRUE(path.Attributes().ListKeys().empty());
 }
 
 TEST_F(TYPathTest, IgnoreAmpersand1)

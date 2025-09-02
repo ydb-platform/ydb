@@ -1,7 +1,8 @@
 #pragma once
 #include "container.h"
-#include <ydb/core/tx/columnshard/engines/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,9 +16,14 @@ private:
     }
 
 public:
-
     bool IsEmpty() const {
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
+    }
+
+    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
+               PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
+               PredicateFrom.IsSchemaEqualTo(pkSchema);
     }
 
     const TPredicateContainer& GetPredicateFrom() const {
@@ -28,24 +34,24 @@ public:
         return PredicateTo;
     }
 
-    std::optional<NArrow::TReplaceKey> KeyFrom(const std::shared_ptr<arrow::Schema>& key) const {
-        return PredicateFrom.ExtractKey(key);
-    }
+    static TConclusion<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
-    std::optional<NArrow::TReplaceKey> KeyTo(const std::shared_ptr<arrow::Schema>& key) const {
-        return PredicateTo.ExtractKey(key);
-    }
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
-    static std::optional<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
+    bool IsUsed(const TPortionInfo& info) const;
+    bool CheckPoint(const NArrow::TSimpleRow& point) const;
 
-    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
+    enum class EUsageClass {
+        NoUsage,
+        PartialUsage,
+        FullUsage
+    };
 
-    bool IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const;
-    bool IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const;
+    EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;
     std::set<std::string> GetColumnNames() const;
 };
 
-}
+}   // namespace NKikimr::NOlap

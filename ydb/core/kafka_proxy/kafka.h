@@ -5,7 +5,7 @@
 #include <ostream>
 
 #include <ydb/core/raw_socket/sock_impl.h>
-#include <ydb/library/yql/public/decimal/yql_wide_int.h>
+#include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -70,7 +70,7 @@ public:
 static constexpr TKafkaVersions VersionsNever(0, -1);
 static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
 
-using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter;
+using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter<>;
 
 namespace NPrivate {
 
@@ -312,6 +312,10 @@ template<class T, typename S = std::make_signed_t<T>, typename U = std::make_uns
 U AsUnsigned(S value) {
     static constexpr ui8 Shift = (sizeof(T) << 3) - 1;
     return (value << 1) ^ (value >> Shift);
+}
+
+inline TKafkaRawBytes ToRawBytes(const TString& str) {
+    return TKafkaRawBytes(str.data(), str.size());
 }
 
 

@@ -123,7 +123,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
         if (ConfigurationApplied) {
             Self->Execute(Self->CreateTxInit(), ctx);
         } else {
-            Self->SetCounter(COUNTER_MISSING_CONFIG, Self->Config.HaveProcessingParams ? 1 : 0);
+            Self->SetCounter(COUNTER_MISSING_CONFIG, Self->Config.HaveProcessingParams ? 0 : 1);
             if (Self->Config.HaveProcessingParams) {
                 Self->SubscribeToSiblings();
             }

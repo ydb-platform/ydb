@@ -9,6 +9,7 @@
 #include <ydb/core/tablet_flat/flat_dbase_change.h>
 #include <ydb/core/tablet_flat/flat_sausage_grind.h>
 #include <ydb/core/tablet_flat/flat_util_binary.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
@@ -62,18 +63,18 @@ namespace NTest {
 
         TDbExec(TAutoPtr<TSchemeChanges> delta) : Base(Make(delta)) { }
 
-        const TRedoLog& GetLog() const noexcept { return RedoLog; }
+        const TRedoLog& GetLog() const { return RedoLog; }
 
-        const TChange& BackLog() const noexcept
+        const TChange& BackLog() const
         {
-            Y_ABORT_UNLESS(RedoLog, "Redo log is empty, cannot get last entry");
+            Y_ENSURE(RedoLog, "Redo log is empty, cannot get last entry");
 
             return *RedoLog.back();
         }
 
         TDatabase* operator->() const noexcept { return Base.Get(); }
 
-        TDbExec& Begin() noexcept
+        TDbExec& Begin()
         {
             return DoBegin(true);
         }
@@ -87,7 +88,7 @@ namespace NTest {
                 DoCommit(false, false);
             }
 
-            Y_ABORT_UNLESS(OnTx == EOnTx::None);
+            Y_ENSURE(OnTx == EOnTx::None);
             return *this;
         }
 
@@ -108,7 +109,7 @@ namespace NTest {
         }
 
         TDbExec& WriteVer(TRowVersion writeVersion) {
-            Y_ABORT_UNLESS(OnTx != EOnTx::None);
+            Y_ENSURE(OnTx != EOnTx::None);
 
             WriteVersion = writeVersion;
             WriteTxId = 0;
@@ -117,7 +118,7 @@ namespace NTest {
         }
 
         TDbExec& WriteTx(ui64 txId) {
-            Y_ABORT_UNLESS(OnTx != EOnTx::None);
+            Y_ENSURE(OnTx != EOnTx::None);
 
             WriteVersion = TRowVersion::Min();
             WriteTxId = txId;
@@ -126,7 +127,7 @@ namespace NTest {
         }
 
         TDbExec& CommitTx(ui32 table, ui64 txId) {
-            Y_ABORT_UNLESS(OnTx != EOnTx::None);
+            Y_ENSURE(OnTx != EOnTx::None);
 
             Base->CommitTx(table, txId, WriteVersion);
 
@@ -134,7 +135,7 @@ namespace NTest {
         }
 
         TDbExec& RemoveTx(ui32 table, ui64 txId) {
-            Y_ABORT_UNLESS(OnTx != EOnTx::None);
+            Y_ENSURE(OnTx != EOnTx::None);
 
             Base->RemoveTx(table, txId);
 
@@ -142,7 +143,7 @@ namespace NTest {
         }
 
         TDbExec& RollbackChanges() {
-            Y_ABORT_UNLESS(OnTx != EOnTx::None);
+            Y_ENSURE(OnTx != EOnTx::None);
 
             Base->RollbackChanges();
 
@@ -192,12 +193,12 @@ namespace NTest {
             return Base->TxSnapTable(table);
         }
 
-        NTest::TSchemedCookRow SchemedCookRow(ui32 table) noexcept
+        NTest::TSchemedCookRow SchemedCookRow(ui32 table)
         {
             return { RowSchemeFor(table) };
         }
 
-        TCheckIter Iter(ui32 table, bool erased = true) noexcept
+        TCheckIter Iter(ui32 table, bool erased = true)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -206,7 +207,7 @@ namespace NTest {
             return check.To(CurrentStep()), check;
         }
 
-        TCheckIter IterData(ui32 table) noexcept
+        TCheckIter IterData(ui32 table)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -215,7 +216,7 @@ namespace NTest {
             return check.To(CurrentStep()), check;
         }
 
-        TCheckSelect Select(ui32 table, bool erased = true) noexcept
+        TCheckSelect Select(ui32 table, bool erased = true)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -234,7 +235,7 @@ namespace NTest {
             RedoLog.back()->Redo = Base->SnapshotToLog(table, { Gen, Step });
             RedoLog.back()->Affects = { table };
 
-            Y_ABORT_UNLESS(scn == Base->Head().Serial);
+            Y_ENSURE(scn == Base->Head().Serial);
 
             return *this;
         }
@@ -246,8 +247,11 @@ namespace NTest {
             if (last /* make full subset */) {
                 subset = Base->Subset(table, TEpoch::Max(), { }, { });
             } else /* only flush memtables */ {
-                subset = Base->Subset(table, { }, TEpoch::Max());
+                subset = Base->CompactionSubset(table, TEpoch::Max(), { });
             }
+
+            // Note: we don't compact TxStatus in these tests
+            Y_ENSURE(subset->TxStatus.empty());
 
             TLogoBlobID logo(1, Gen, ++Step, 1, 0, 0);
 
@@ -273,20 +277,20 @@ namespace NTest {
                     .WithRemovedRowVersions(Base->GetRemovedRowVersions(table))
                     .Do(*subset, logo);
 
-            Y_ABORT_UNLESS(!eggs.NoResult(), "Unexpected early termination");
+            Y_ENSURE(!eggs.NoResult(), "Unexpected early termination");
 
             TVector<TPartView> partViews;
             for (auto &part : eggs.Parts)
                 partViews.push_back({ part, nullptr, part->Slices });
 
-            Base->Replace(table, std::move(partViews), *subset);
+            Base->Replace(table, *subset, std::move(partViews), { });
 
             return *this;
         }
 
         TDbExec& Replay(EPlay play)
         {
-            Y_ABORT_UNLESS(OnTx != EOnTx::Real, "Commit TX before replaying");
+            Y_ENSURE(OnTx != EOnTx::Real, "Commit TX before replaying");
 
             Cleanup();
 
@@ -305,7 +309,7 @@ namespace NTest {
                         TSchemeChanges delta;
                         bool ok = delta.ParseFromString(raw);
 
-                        Y_ABORT_UNLESS(ok, "Cannot read serialized scheme delta");
+                        Y_ENSURE(ok, "Cannot read serialized scheme delta");
 
                         TSchemeModifier(*scheme).Apply(delta);
                     }
@@ -338,7 +342,7 @@ namespace NTest {
             return *this;
         }
 
-        const TRowScheme& RowSchemeFor(ui32 table) noexcept
+        const TRowScheme& RowSchemeFor(ui32 table)
         {
             if (std::exchange(Last, table) != table) {
                 // Note: it's ok if the table has been altered, since
@@ -351,7 +355,7 @@ namespace NTest {
 
         TDbExec& Affects(ui32 back, std::initializer_list<ui32> tables)
         {
-            Y_ABORT_UNLESS(back < RedoLog.size(), "Out of redo log entries");
+            Y_ENSURE(back < RedoLog.size(), "Out of redo log entries");
 
             const auto &have = RedoLog[RedoLog.size() - (1 + back)]->Affects;
 
@@ -370,7 +374,7 @@ namespace NTest {
             return *this;
         }
 
-        void DumpChanges(IOutputStream &stream) const noexcept
+        void DumpChanges(IOutputStream &stream) const
         {
             for (auto &one: RedoLog) {
                 NUtil::NBin::TOut(stream)
@@ -391,22 +395,25 @@ namespace NTest {
             THeader header;
 
             while (auto got = in.Load(&header, sizeof(header))) {
-                Y_ABORT_UNLESS(got == sizeof(header), "Invalid changes stream");
+                Y_ENSURE(got == sizeof(header), "Invalid changes stream");
 
                 const auto abytes = sizeof(ui32) * header.Affects;
 
                 TString alter = TString::TUninitialized(header.Alter);
 
-                if (in.Load((void*)alter.data(), alter.size()) != alter.size())
-                    Y_ABORT("Cannot read alter chunk data in change page");
+                if (in.Load((void*)alter.data(), alter.size()) != alter.size()) {
+                    Y_TABLET_ERROR("Cannot read alter chunk data in change page");
+                }
 
                 TString redo = TString::TUninitialized(header.Redo);
 
-                if (in.Load((void*)redo.data(), redo.size()) != redo.size())
-                    Y_ABORT("Cannot read redo log data in change page");
+                if (in.Load((void*)redo.data(), redo.size()) != redo.size()) {
+                    Y_TABLET_ERROR("Cannot read redo log data in change page");
+                }
 
-                if (in.Skip(abytes) != abytes)
-                    Y_ABORT("Cannot read affects array in change page");
+                if (in.Skip(abytes) != abytes) {
+                    Y_TABLET_ERROR("Cannot read affects array in change page");
+                }
 
                 changes.push_back(new TChange{ header.Serial, header.Serial });
                 changes.back()->Scheme = std::move(alter);
@@ -417,15 +424,15 @@ namespace NTest {
         }
 
     private:
-        void Birth() noexcept
+        void Birth()
         {
             Annex = new TSteppedCookieAllocator(1, ui64(++Gen) << 32, { 0, 999 }, {{ 1, 7 }});
         }
 
-        TDbExec& DoBegin(bool real) noexcept
+        TDbExec& DoBegin(bool real)
         {
             if (OnTx == EOnTx::Real && real) {
-                Y_ABORT("Cannot run multiple tx at the same time");
+                Y_TABLET_ERROR("Cannot run multiple tx at the same time");
             } else if (OnTx == EOnTx::Auto && real) {
                 DoCommit(false, false);
             }
@@ -444,8 +451,9 @@ namespace NTest {
         {
             const auto was = std::exchange(OnTx, EOnTx::None);
 
-            if (was != (real ? EOnTx::Real : EOnTx::Auto))
-                Y_ABORT("There is no active dbase tx");
+            if (was != (real ? EOnTx::Real : EOnTx::Auto)) {
+                Y_TABLET_ERROR("There is no active dbase tx");
+            }
 
             auto prod = Base->Commit({ Gen, Step }, apply, Annex.Get());
             auto up = std::move(prod.Change);

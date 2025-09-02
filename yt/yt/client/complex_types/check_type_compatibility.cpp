@@ -229,6 +229,12 @@ static TCompatibilityPair CheckTypeCompatibilitySimple(
         case ESimpleLogicalValueType::Datetime64:
         case ESimpleLogicalValueType::Timestamp64:
         case ESimpleLogicalValueType::Interval64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
         case ESimpleLogicalValueType::Any: {
             const auto compatibility =
                 oldElement == newElement ? ESchemaCompatibility::FullyCompatible : ESchemaCompatibility::Incompatible;
@@ -352,10 +358,7 @@ TCompatibilityPair CheckDecimalTypeCompatibility(
     }
 }
 
-// Returns pair:
-//   1. Inner element that is neither optional nor tagged.
-//   2. How many times this element is wrapped into Optional type.
-static std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
+std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
 {
     int nesting = 0;
     auto current = descriptor;

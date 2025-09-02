@@ -10,7 +10,9 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. К служебным данным относятся данные первичного и [вторичных индексов](../../../concepts/secondary_indexes.md).
+`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`.
+`resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного, [вторичных индексов](../../../concepts/glossary.md#secondary-index) и [векторных индексов](../../../concepts/glossary.md#vector-index).
+`resources.storage.topic.used_bytes`<br/>`IGAUGE`, байты  | Размер распределенного сетевого хранилища, используемого топиками. Равен сумме значений `topic.storage_bytes` всех топиков.
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
 
 ## Метрики GRPC API общие {#grpc_api}
@@ -42,8 +44,8 @@
 `grpc.topic.stream_write.bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.uncommitted_bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.errors`<br/>`RATE`, штуки | Количество ошибок при вызове метода  `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
-`grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
-`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, ожидавших на квоте.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, штуки | Количество открытых сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_created`<br/>`RATE`, штуки | Количество созданных сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
@@ -108,23 +110,36 @@
 `table.query.compilation.cache_misses`<br/>`RATE`, штуки | Количество запросов в определенный период времени, для выполнения которых потребовалось компилировать запрос.
 `table.query.execution.latency_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество запросов, время выполнения которых попадает в определенный интервал.
 
-## Метрики партиций таблиц {#datashards}
+## Метрики партиций строковых таблиц {#datashards}
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`table.datashard.row_count`<br/>`GAUGE`, штуки | Количество строк в таблицах базы данных.
-`table.datashard.size_bytes`<br/>`GAUGE`, байты | Размер данных в таблицах базы.
-`table.datashard.used_core_percents`<br/>`HIST_GAUGE`, % | Гистограммный счетчик. Интервалы заданы в процентах. Показывает количество партиций таблиц, которые используют вычислительные ресурсы в доле, попадающей в определенный интервал.
-`table.datashard.read.rows`<br/>`RATE`, штуки | Количество строк, которые прочитаны всеми партициями всех таблиц в базе данных в определенный период времени.
-`table.datashard.read.bytes`<br/>`RATE`, байты | Размер данных, которые прочитаны всеми партициями всех таблиц в базе в определенный период времени.
-`table.datashard.write.rows`<br/>`RATE`, штуки | Количество строк, которые записаны всеми партициями всех таблиц в базе данных в определенный период времени.
-`table.datashard.write.bytes`<br/>`RATE`, байты | Размер данных, которые записаны всеми партициями всех таблиц в базе в определенный период времени.
-`table.datashard.scan.rows`<br/>`RATE`, штуки | Количество строк, которые прочитаны через вызовы gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех таблиц в базе данных в определенный период времени.
-`table.datashard.scan.bytes`<br/>`RATE`, байты | Размер данных, которые прочитаны через вызов gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех таблиц в базе в определенный период времени.
-`table.datashard.bulk_upsert.rows`<br/>`RATE`, штуки |  Количество строк, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех таблиц в базе данных в определенный период времени.
-`table.datashard.bulk_upsert.bytes`<br/>`RATE`, байты | Размер данных, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех таблиц в базе в определенный период времени.
-`table.datashard.erase.rows`<br/>`RATE`, штуки |  Количество строк, которые удалены в базе данных в определенный период времени.
-`table.datashard.erase.bytes`<br/>`RATE`, байты | Размер данных, которые удалены в базе в определенный период времени.
+`table.datashard.row_count`<br/>`GAUGE`, штуки | Количество строк во всех строковых таблицах базы данных.
+`table.datashard.size_bytes`<br/>`GAUGE`, байты | Размер данных во всех строковых таблицах базы.
+`table.datashard.used_core_percents`<br/>`HIST_GAUGE`, % | Гистограммный счетчик. Интервалы заданы в процентах. Показывает количество партиций строковых таблиц, которые используют вычислительные ресурсы в доле, попадающей в определенный интервал.
+`table.datashard.read.rows`<br/>`RATE`, штуки | Количество строк, которые прочитаны всеми партициями всех строковых таблиц в базе данных в определенный период времени.
+`table.datashard.read.bytes`<br/>`RATE`, байты | Размер данных, которые прочитаны всеми партициями всех строковых таблиц в базе в определенный период времени.
+`table.datashard.write.rows`<br/>`RATE`, штуки | Количество строк, которые записаны всеми партициями всех строковых таблиц в базе данных в определенный период времени.
+`table.datashard.write.bytes`<br/>`RATE`, байты | Размер данных, которые записаны всеми партициями всех строковых таблиц в базе в определенный период времени.
+`table.datashard.scan.rows`<br/>`RATE`, штуки | Количество строк, которые прочитаны через вызовы gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех строковых таблиц в базе данных в определенный период времени.
+`table.datashard.scan.bytes`<br/>`RATE`, байты | Размер данных, которые прочитаны через вызов gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех строковых таблиц в базе в определенный период времени.
+`table.datashard.bulk_upsert.rows`<br/>`RATE`, штуки |  Количество строк, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех строковых таблиц в базе данных в определенный период времени.
+`table.datashard.bulk_upsert.bytes`<br/>`RATE`, байты | Размер данных, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех строковых таблиц в базе в определенный период времени.
+`table.datashard.erase.rows`<br/>`RATE`, штуки |  Количество строк, которые удалены в базе данных из всех строковых таблиц в определенный период времени.
+`table.datashard.erase.bytes`<br/>`RATE`, байты | Размер данных, которые удалены в базе из всех строковых таблиц в определенный период времени.
+`table.datashard.cache_hit.bytes`<br/>`RATE`, байты | Общий объем данных строковых таблиц, успешно полученных из памяти (кэша). Больший объем данных, полученных из кэша, свидетельствует об эффективном использовании кэша без доступа к распределенному хранилищу.
+`table.datashard.cache_miss.bytes`<br/>`RATE`, байты | Общий объем данных строковых таблиц, которые были запрошены, но не найдены в памяти (кэше), и были прочитаны из распределенного хранилища.  Указывает на потенциальные области для оптимизации кэша.
+
+## Метрики партиций колоночных таблиц {#columnshards}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`table.columnshard.write.rows`<br/>`RATE`, штуки | Количество строк, которые записаны всеми партициями всех колоночных таблиц в базе данных в определенный период времени.
+`table.columnshard.write.bytes`<br/>`RATE`, байты | Размер данных, которые записаны всеми партициями всех колоночных таблиц в базе данных в определенный период времени.
+`table.columnshard.scan.rows`<br/>`RATE`, штуки | Количество строк, которые прочитаны через вызовы gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех колоночных таблиц в базе данных в определенный период времени.
+`table.columnshard.scan.bytes`<br/>`RATE`, байты | Размер данных, которые прочитаны через вызов gRPC API `StreamExecuteScanQuery` или `StreamReadTable` всеми партициями всех колоночных таблиц в базе данных в определенный период времени.
+`table.columnshard.bulk_upsert.rows`<br/>`RATE`, штуки |  Количество строк, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех колоночных таблиц в базе данных в определенный период времени.
+`table.columnshard.bulk_upsert.bytes`<br/>`RATE`, байты | Размер данных, которые добавлены через вызов gRPC API `BulkUpsert` во все партиции всех колоночных таблиц в базе данных в определенный период времени.
 
 ## Метрики использования ресурсов (только для режима Dedicated) {#ydb_dedicated_resources}
 
@@ -147,15 +162,17 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`topic.producers_count`<br/>`GAUGE`, штуки | Количество уникальных [источников](../../../concepts/topic#producer-id) топика.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.producers_count`<br/>`GAUGE`, штуки | Количество уникальных [источников](../../../concepts/datamodel/topic#producer-id) топика.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.storage_bytes`<br/>`GAUGE`, байты | Размер топика в байтах.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.read.bytes`<br/>`RATE`, байты | Количество байт, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.read.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.read.lag_messages`<br/>`RATE`, штуки | Суммарное по топику количество невычитанных данным читателем сообщений.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.read.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем чтения и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.write.bytes`<br/>`RATE`, байты | Размер записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.uncommited_bytes`<br/>`RATE`, байты | Размер данных, записанных в рамках ещё не завершённых транзакций.<br/>Метки:<br/>- _topic_ — название топика.
 `topic.write.uncompressed_bytes`<br/>`RATE`, байты | Размер разжатых записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.write.messages`<br/>`RATE`, штуки | Количество записанных сообщений.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных в рамках ещё не завершённых транзакций.<br/>Метки:<br/>- _topic_ — название топика.
 `topic.write.message_size_bytes`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в байтах. Показывает количество сообщений, размер которых соответствует границам интервала.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.write.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем записи и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.
 
@@ -168,7 +185,7 @@
 `topic.partition.init_duration_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная задержка инициализации партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.producers_count_max`<br/>`GAUGE`, штуки | Максимальное количество источников в партиции.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.storage_bytes_max`<br/>`GAUGE`, байты | Максимальный размер партиции в байтах.<br/>Метки:<br/>- _topic_ – название топика.
-`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br/>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.total_count`<br/>`GAUGE`, штуки | Общее количество партиций в топике.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.alive_count`<br/>`GAUGE`, штуки | Количество партиций, отправляющих свои метрики.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.committed_end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем создания последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
@@ -186,3 +203,13 @@
 `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последний час, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последнюю минуту, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальное время простоя партиции на запись.<br/>Метки:<br/>- _topic_ – название топика.
+
+## Метрики пулов ресурсов {#resource_pools}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, штуки | Средняя загрузка базы данных, по этой метрики работает `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, штуки | Лимит на число одновременно работающих запросов.
+`kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, штуки | Текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.
+`kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, штуки | Размер очереди запросов, ожидающих выполнения.
+`kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, штуки | Количество запросов, ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.

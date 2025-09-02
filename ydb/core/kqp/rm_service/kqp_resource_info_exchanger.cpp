@@ -632,7 +632,7 @@ private:
     }
 
     const TDuration& GetCurrentDelay(TDelayState& state) {
-        if (state.CurrentDelay == TDuration::Zero()) {
+        if (state.CurrentDelay < ExchangerSettings.StartDelayMs) {
             state.CurrentDelay = ExchangerSettings.StartDelayMs;
         }
         return state.CurrentDelay;

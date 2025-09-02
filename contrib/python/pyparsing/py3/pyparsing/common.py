@@ -210,14 +210,14 @@ class pyparsing_common:
     """any numeric expression, returns the corresponding Python type"""
 
     fnumber = (
-        Regex(r"[+-]?\d+\.?\d*([eE][+-]?\d+)?")
+        Regex(r"[+-]?\d+\.?\d*(?:[eE][+-]?\d+)?")
         .set_name("fnumber")
         .set_parse_action(convert_to_float)
     )
     """any int or real number, returned as float"""
 
     ieee_float = (
-        Regex(r"(?i)[+-]?((\d+\.?\d*(e[+-]?\d+)?)|nan|inf(inity)?)")
+        Regex(r"(?i:[+-]?(?:(?:\d+\.?\d*(?:e[+-]?\d+)?)|nan|inf(?:inity)?))")
         .set_name("ieee_float")
         .set_parse_action(convert_to_float)
     )
@@ -418,20 +418,15 @@ class pyparsing_common:
     # fmt: on
 
     # pre-PEP8 compatibility names
-    convertToInteger = convert_to_integer
-    """Deprecated - use :class:`convert_to_integer`"""
-    convertToFloat = convert_to_float
-    """Deprecated - use :class:`convert_to_float`"""
-    convertToDate = convert_to_date
-    """Deprecated - use :class:`convert_to_date`"""
-    convertToDatetime = convert_to_datetime
-    """Deprecated - use :class:`convert_to_datetime`"""
-    stripHTMLTags = strip_html_tags
-    """Deprecated - use :class:`strip_html_tags`"""
-    upcaseTokens = upcase_tokens
-    """Deprecated - use :class:`upcase_tokens`"""
-    downcaseTokens = downcase_tokens
-    """Deprecated - use :class:`downcase_tokens`"""
+    # fmt: off
+    convertToInteger = staticmethod(replaced_by_pep8("convertToInteger", convert_to_integer))
+    convertToFloat = staticmethod(replaced_by_pep8("convertToFloat", convert_to_float))
+    convertToDate = staticmethod(replaced_by_pep8("convertToDate", convert_to_date))
+    convertToDatetime = staticmethod(replaced_by_pep8("convertToDatetime", convert_to_datetime))
+    stripHTMLTags = staticmethod(replaced_by_pep8("stripHTMLTags", strip_html_tags))
+    upcaseTokens = staticmethod(replaced_by_pep8("upcaseTokens", upcase_tokens))
+    downcaseTokens = staticmethod(replaced_by_pep8("downcaseTokens", downcase_tokens))
+    # fmt: on
 
 
 _builtin_exprs = [

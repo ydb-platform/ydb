@@ -26,6 +26,11 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
             out << value.GetUint32();
             break;
         }
+        case NYdb::EPrimitiveType::Int32:
+        {
+            out << value.GetInt32();
+            break;
+        }
         case NYdb::EPrimitiveType::Uint64:
         {
             out << value.GetUint64();
@@ -34,6 +39,11 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
         case NYdb::EPrimitiveType::Int64:
         {
             out << value.GetInt64();
+            break;
+        }
+        case NYdb::EPrimitiveType::Uint8:
+        {
+            out << value.GetUint8();
             break;
         }
         case NYdb::EPrimitiveType::Utf8:
@@ -51,9 +61,24 @@ void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
             out << value.GetBool();
             break;
         }
+        case NYdb::EPrimitiveType::String:
+        {
+            out << value.GetString();
+            break;
+        }
+        case NYdb::EPrimitiveType::Json:
+        {
+            out << value.GetJson();
+            break;
+        }
+        case NYdb::EPrimitiveType::JsonDocument:
+        {
+            out << value.GetJsonDocument();
+            break;
+        }
         default:
         {
-            UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
+            UNIT_ASSERT_C(false, TStringBuilder() << "PrintValue not iplemented for this type: " << (ui64)value.GetPrimitiveType());
         }
     }
 }
@@ -67,6 +92,15 @@ ui64 GetUint32(const NYdb::TValue& v) {
     }
 }
 
+i64 GetInt32(const NYdb::TValue& v) {
+    NYdb::TValueParser value(v);
+    if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+        return *value.GetOptionalInt32();
+    } else {
+        return value.GetInt32();
+    }
+}
+
 ui64 GetUint64(const NYdb::TValue& v) {
     NYdb::TValueParser value(v);
     if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
@@ -76,12 +110,21 @@ ui64 GetUint64(const NYdb::TValue& v) {
     }
 }
 
+ui64 GetInt64(const NYdb::TValue& v) {
+    NYdb::TValueParser value(v);
+    if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+        return *value.GetOptionalInt64();
+    } else {
+        return value.GetInt64();
+    }
+}
+
 TString GetUtf8(const NYdb::TValue& v) {
     NYdb::TValueParser value(v);
     if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
         return *value.GetOptionalUtf8();
     } else {
-        return value.GetUtf8();
+        return TString{value.GetUtf8()};
     }
 }
 

@@ -44,11 +44,26 @@ public:
         TNodeInfo& node = Self->GetNode(Local.NodeId());
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToStop;
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToBoot;
+        const bool isLockedTabletsSendMetrics = Self->CurrentConfig.GetLockedTabletsSendMetrics();
         for (const auto& t : node.Tablets) {
             for (TTabletInfo* tablet : t.second) {
-                tabletsToStop.insert(tablet->GetFullTabletId());
+                if (!(isLockedTabletsSendMetrics && tablet->IsLeader() && tablet->AsLeader().IsLockedToActor())) {
+                    tabletsToStop.insert(tablet->GetFullTabletId());
+                }
             }
         }
+        auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
+            auto tabletId = tablet->GetFullTabletId();
+            if (node.MatchesFilter(tablet->NodeFilter)) {
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
+                tabletsToStop.erase(tabletId);
+            } else {
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
+            }
+            if (tablet->GetLeader().IsBootingSuppressed()) {
+                tablet->InitiateStop(SideEffects);
+            }
+        };
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetInbootTablets()) {
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
@@ -58,11 +73,7 @@ public:
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
                     tablet->BecomeStarting(node.Id);
-                    BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed starting tablet " << tabletId);
-                    tabletsToStop.erase(tabletId);
-                    if (tablet->GetLeader().IsBootingSuppressed()) {
-                        tablet->InitiateStop(SideEffects);
-                    }
+                    foundTablet(tablet, "starting");
                     continue;
                 }
             } else {
@@ -90,11 +101,7 @@ public:
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(tablet->NodeId));
                         }
                     }
-                    BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed running tablet " << tabletId);
-                    tabletsToStop.erase(tabletId);
-                    if (tablet->GetLeader().IsBootingSuppressed()) {
-                        tablet->InitiateStop(SideEffects);
-                    }
+                    foundTablet(tablet, "running");
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else

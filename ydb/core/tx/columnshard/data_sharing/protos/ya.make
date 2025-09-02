@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     data.proto
@@ -9,11 +10,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/protos
     ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/common/protos
     ydb/library/actors/protos
     ydb/core/tx/columnshard/blobs_action/protos
-
 )
 
 END()

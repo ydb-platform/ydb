@@ -11,7 +11,7 @@ select  ss_customer_sk
                                                                and sr_ticket_number = ss_ticket_number)
                 ,{{reason}}
             where sr_reason_sk = r_reason_sk
-              and r_reason_desc = 'reason 66') t
+              and r_reason_desc = 'reason 28') t
       group by ss_customer_sk
       order by sumsales, ss_customer_sk
 limit 100;

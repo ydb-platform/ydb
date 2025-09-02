@@ -117,10 +117,9 @@ private:
 
             LOG_D("KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
 
-            bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
+            Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                     Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
                     0, Cookie);
-            Y_DEBUG_ABORT_UNLESS(sent);
 
             PassAway();
         } else {
@@ -172,10 +171,9 @@ private:
 
             LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
 
-            bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
+            Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
                 0, Cookie);
-            Y_DEBUG_ABORT_UNLESS(sent);
 
             Become(&TThis::StateRefreshing);
             ScheduleRefresh();

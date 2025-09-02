@@ -40,7 +40,12 @@ public:
     int GetRefCount() const noexcept;
 
     //! Increments the strong reference counter.
+    //! The current strong RC must be positive.
     void Ref(int n = 1) const noexcept;
+
+    //! Increments the strong reference counter.
+    //! The current strong RC may be zero.
+    void DangerousRef(int n = 1) const noexcept;
 
     //! Increments the strong reference counter if it is not null.
     bool TryRef() const noexcept;
@@ -58,8 +63,10 @@ public:
     bool WeakUnref() const;
 
 private:
-    mutable std::atomic<int> StrongCount_ = 1;
-    mutable std::atomic<int> WeakCount_ = 1;
+    // NB: Must be 64 bit as TAtomicIntrusivePtr grabs refs in 64K batches.
+    using TRefCount = i64;
+    mutable std::atomic<TRefCount> StrongCount_ = 1;
+    mutable std::atomic<TRefCount> WeakCount_ = 1;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

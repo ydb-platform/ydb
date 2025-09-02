@@ -1,9 +1,8 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -18,6 +17,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -46,9 +48,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -115,7 +117,8 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "value", defaultValue, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(InvalidValue) {
+    // TODO: rename to InvalidValue and check invalid default value
+    Y_UNIT_TEST(ValidDefaultValue) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
@@ -123,6 +126,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -151,9 +157,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -215,10 +221,10 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         Ydb::TypedValue defaultValue;
         defaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        defaultValue.mutable_value()->set_text_value("1111");
+        defaultValue.mutable_value()->set_uint64_value(1111); // TODO: check invalid value
 
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "ColumnValue", defaultValue, Ydb::StatusIds::SUCCESS);
-    
+
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         Y_ASSERT(listing.EntriesSize() == 1);
 
@@ -236,6 +242,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -264,9 +273,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -378,7 +387,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         for (const auto& ev: delayedUpsertRows) {
             runtime.Send(ev);
         }
-    
+
         enabledCapture = false;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -387,7 +396,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE); 
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         for (ui32 delta = 50; delta < 101; ++delta) {
             UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::FakeHiveTablets + 6, "__user__Table", "key", 1 + delta));
@@ -406,6 +415,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -434,9 +446,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -523,6 +535,12 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table", {"key", "index", "value", "DefaultValue"}, {}, {"key"})});
 /*
         const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-101-1818-101-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
@@ -605,6 +623,70 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(6)});
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {"DefaultValue"}, {"key"})});
+    }
+
+    // Test with invalid default value
+    Y_UNIT_TEST(RejectBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+              UniformPartitionsCount: 10
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto fnWriteRow = [&] (ui64 tabletId, ui32 key, TString value, const char* table) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key   '( '('key   (Uint32 '%u ) ) ) )
+                    (let row   '( '('value (Utf8 '%s) ) ) )
+                    (return (AsList (UpdateRow '__user__%s key row) ))
+                )
+            )", key, value.c_str(), table);
+            NKikimrMiniKQL::TResult result;
+
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "");
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+        };
+
+        for (ui32 delta = 0; delta < 101; ++delta) {
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, "abcd", "Table");
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3)});
+
+        Ydb::TypedValue defaultValue;
+        defaultValue.mutable_type()->set_type_id(Ydb::Type::JSON);
+        defaultValue.mutable_value()->set_text_value("{not json]");
+
+        TestBuildColumn(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "DefaultValue", defaultValue, Ydb::StatusIds::SUCCESS);
+
+        ui64 buildIndexId = txId;
+
+        auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        Y_ASSERT(listing.EntriesSize() == 1);
+
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_REJECTED);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "value"}, {"DefaultValue"}, {"key"})});
     }
 }

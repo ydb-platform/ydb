@@ -9,7 +9,7 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
-    struct TEvHive {
+    namespace TEvHive {
         enum EEv {
             // requests
             EvBootTablet = EventSpaceBegin(TKikimrEvents::ES_HIVE),
@@ -49,6 +49,8 @@ namespace NKikimr {
             EvUpdateTabletsObject,
             EvUpdateDomain,
             EvRequestTabletDistribution,
+            EvRequestScaleRecommendation,
+            EvConfigureScaleRecommender,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -84,6 +86,8 @@ namespace NKikimr {
             EvUpdateTabletsObjectReply,
             EvUpdateDomainReply,
             EvResponseTabletDistribution,
+            EvResponseScaleRecommendation,
+            EvConfigureScaleRecommenderReply,
 
             EvEnd
         };
@@ -701,12 +705,26 @@ namespace NKikimr {
                 Record.SetStatus(status);
                 Record.SetStatusMessage(statusMessage);
             }
+
+            TString ToString() const override {
+                TStringStream str;
+                str << ToStringHeader() << "{Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << " TabletID: " << Record.GetTabletID();
+                str << " Message: " << Record.GetStatusMessage();
+                str << "}";
+                return str.Str();
+            }
         };
 
         struct TEvLockTabletExecutionLost : public TEventPB<TEvLockTabletExecutionLost,
                 NKikimrHive::TEvLockTabletExecutionLost, EvLockTabletExecutionLost>
         {
             TEvLockTabletExecutionLost() = default;
+
+            TEvLockTabletExecutionLost(ui64 tabletId, NKikimrHive::ELockLostReason reason) {
+                Record.SetTabletID(tabletId);
+                Record.SetReason(reason);
+            }
 
             explicit TEvLockTabletExecutionLost(ui64 tabletId) {
                 Record.SetTabletID(tabletId);
@@ -876,6 +894,25 @@ namespace NKikimr {
 
         struct TEvResponseTabletDistribution : TEventPB<TEvResponseTabletDistribution,
             NKikimrHive::TEvResponseTabletDistribution, EvResponseTabletDistribution> {};
+
+        struct TEvRequestScaleRecommendation : TEventPB<TEvRequestScaleRecommendation,
+            NKikimrHive::TEvRequestScaleRecommendation, EvRequestScaleRecommendation>
+        {
+            TEvRequestScaleRecommendation() = default;
+
+            TEvRequestScaleRecommendation(TSubDomainKey domainKey) {
+                Record.MutableDomainKey()->CopyFrom(domainKey);
+            }
+        };
+
+        struct TEvResponseScaleRecommendation : TEventPB<TEvResponseScaleRecommendation,
+            NKikimrHive::TEvResponseScaleRecommendation, EvResponseScaleRecommendation> {};
+        
+        struct TEvConfigureScaleRecommender : TEventPB<TEvConfigureScaleRecommender,
+            NKikimrHive::TEvConfigureScaleRecommender, EvConfigureScaleRecommender> {};
+        
+        struct TEvConfigureScaleRecommenderReply : TEventPB<TEvConfigureScaleRecommenderReply,
+            NKikimrHive::TEvConfigureScaleRecommenderReply, EvConfigureScaleRecommenderReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

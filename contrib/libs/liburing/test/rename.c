@@ -14,6 +14,51 @@
 
 #include "liburing.h"
 
+/* test using a bad address for either old or new path */
+static int test_rename_badaddr(struct io_uring *ring, bool bad_old)
+{
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	const char *path = ".foo.bar";
+	const char *old, *new;
+	int ret;
+
+	if (bad_old) {
+		old = (void *) (uintptr_t) 0x1234;
+		new = path;
+	} else {
+		old = path;
+		new = (void *) (uintptr_t) 0x1234;
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "get sqe failed\n");
+		goto err;
+	}
+
+	memset(sqe, 0, sizeof(*sqe));
+
+	io_uring_prep_rename(sqe, old, new);
+
+	ret = io_uring_submit(ring);
+	if (ret <= 0) {
+		fprintf(stderr, "sqe submit failed: %d\n", ret);
+		goto err;
+	}
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret < 0) {
+		fprintf(stderr, "wait completion %d\n", ret);
+		goto err;
+	}
+	ret = cqe->res;
+	io_uring_cqe_seen(ring, cqe);
+	return ret;
+err:
+	return 1;
+}
+
 static int test_rename(struct io_uring *ring, const char *old, const char *new)
 {
 	struct io_uring_cqe *cqe;
@@ -29,7 +74,7 @@ static int test_rename(struct io_uring *ring, const char *old, const char *new)
 	memset(sqe, 0, sizeof(*sqe));
 
 	io_uring_prep_rename(sqe, old, new);
-	
+
 	ret = io_uring_submit(ring);
 	if (ret <= 0) {
 		fprintf(stderr, "sqe submit failed: %d\n", ret);
@@ -123,6 +168,19 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "test_rename invalid failed: %d\n", ret);
 		return ret;
 	}
+
+	ret = test_rename_badaddr(&ring, 0);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_badaddr 0 failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = test_rename_badaddr(&ring, 1);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_badaddr 1 failed: %d\n", ret);
+		return ret;
+	}
+
 out:
 	unlink(dst);
 	return 0;

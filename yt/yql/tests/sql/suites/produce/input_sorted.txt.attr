@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+            ["key";["DataType";"String"]];
+            ["subkey";["DataType";"String"]];
+            ["value1";["DataType";"String"]];
+            ["value2";["DataType";"String"]];
+            ["value3";["DataType";"String"]]
+        ]];
+        "SortDirections"=[1;1;1;1;1];
+        "SortedBy"=["key";"subkey";"value1";"value2";"value3"];
+        "SortedByTypes"=[["DataType";"String"];["DataType";"String"];["DataType";"String"];["DataType";"String"];["DataType";"String"]];
+        "SortMembers"=["key";"subkey";"value1";"value2";"value3"];
+    }
+}

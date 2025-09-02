@@ -17,6 +17,7 @@ using namespace NActors;
 class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublishActor> {
     TIntrusivePtr<TGrpcEndpointDescription> Description;
     TString SelfDatacenter;
+    std::optional<TString> BridgePileName;
     TActorId PublishActor;
 
     void CreatePublishActor() {
@@ -48,8 +49,15 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (Description->TargetNameOverride) {
             entry.SetTargetNameOverride(Description->TargetNameOverride);
         }
-        for (const auto &service : Description->ServedServices)
+        if (Description->EndpointId) {
+            entry.SetEndpointId(Description->EndpointId);
+        }
+        for (const auto &service : Description->ServedServices) {
             entry.AddServices(service);
+        }
+        if (BridgePileName) {
+            entry.SetBridgePileName(*BridgePileName);
+        }
 
         Y_ABORT_UNLESS(entry.SerializeToString(&payload));
 
@@ -67,9 +75,12 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         auto *msg = ev->Get();
-        if (msg->Node && msg->Node->Location.GetDataCenterId())
+        if (msg->Node && msg->Node->Location.GetDataCenterId()) {
             SelfDatacenter = msg->Node->Location.GetDataCenterId();
-
+        }
+        if (msg->Node) {
+            BridgePileName = msg->Node->Location.GetBridgePileName();
+        }
         CreatePublishActor();
         Become(&TThis::StateWork);
     }

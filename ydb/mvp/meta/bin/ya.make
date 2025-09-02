@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/meta
+    library/cpp/getopt
 )
 
 YQL_LAST_ABI_VERSION()

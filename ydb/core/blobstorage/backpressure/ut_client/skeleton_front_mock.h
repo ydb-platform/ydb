@@ -62,7 +62,7 @@ public:
         auto& record = ev->Get()->Record;
 
         if (!Ready) {
-            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, record.GetVDiskID()));
+            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, VDiskIDFromVDiskID(record.GetVDiskID())));
             if (record.GetNotifyIfNotReady()) {
                 Notify.insert(ev->Sender);
             }
@@ -150,7 +150,7 @@ public:
         settings->SetWriteSpeedBps(60e6);
         settings->SetReadBlockSize(4096);
         settings->SetWriteBlockSize(4096);
-        settings->SetMinREALHugeBlobInBytes(512 << 10);
+        settings->SetMinHugeBlobInBytes(512 << 10);
     }
 
     STRICT_STFUNC(StateFunc, {

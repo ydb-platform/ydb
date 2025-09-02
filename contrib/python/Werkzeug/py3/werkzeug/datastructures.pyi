@@ -20,6 +20,7 @@ from typing import Tuple
 from typing import Type
 from typing import TypeVar
 from typing import Union
+from _typeshed import SupportsKeysAndGetItem
 from _typeshed.wsgi import WSGIEnvironment
 
 from typing_extensions import Literal
@@ -96,9 +97,12 @@ class UpdateDictMixin(Dict[K, V]):
     def __delitem__(self, key: K) -> None: ...
     def clear(self) -> None: ...
     def popitem(self) -> Tuple[K, V]: ...
-    def update(
-        self, *args: Union[Mapping[K, V], Iterable[Tuple[K, V]]], **kwargs: V
-    ) -> None: ...
+    @overload
+    def update(self, __m: SupportsKeysAndGetItem[K, V], **kwargs: V) -> None: ...
+    @overload
+    def update(self, __m: Iterable[Tuple[K, V]], **kwargs: V) -> None: ...
+    @overload
+    def update(self, **kwargs: V) -> None: ...
 
 class TypeConversionDict(Dict[K, V]):
     @overload
@@ -274,11 +278,16 @@ class Headers(Dict[str, str]):
     def __setitem__(self, key: int, value: Tuple[str, HV]) -> None: ...
     @overload
     def __setitem__(self, key: slice, value: Iterable[Tuple[str, HV]]) -> None: ...
+    @overload
     def update(
-        self,
-        *args: Union[Mapping[str, HV], Iterable[Tuple[str, HV]]],
-        **kwargs: Union[HV, Iterable[HV]],
+        self, __m: SupportsKeysAndGetItem[str, HV], **kwargs: Union[HV, Iterable[HV]]
     ) -> None: ...
+    @overload
+    def update(
+        self, __m: Iterable[Tuple[str, HV]], **kwargs: Union[HV, Iterable[HV]]
+    ) -> None: ...
+    @overload
+    def update(self, **kwargs: Union[HV, Iterable[HV]]) -> None: ...
     def to_wsgi_list(self) -> List[Tuple[str, str]]: ...
     def copy(self) -> Headers: ...
     def __copy__(self) -> Headers: ...
@@ -420,7 +429,7 @@ class CharsetAccept(Accept):
 _CPT = TypeVar("_CPT", str, int, bool)
 _OptCPT = Optional[_CPT]
 
-def cache_property(key: str, empty: _OptCPT, type: Type[_CPT]) -> property: ...
+def cache_control_property(key: str, empty: _OptCPT, type: Type[_CPT]) -> property: ...
 
 class _CacheControl(UpdateDictMixin[str, _OptCPT], Dict[str, _OptCPT]):
     provided: bool
@@ -887,7 +896,7 @@ class FileStorage:
     def __init__(
         self,
         stream: Optional[IO[bytes]] = None,
-        filename: Optional[str] = None,
+        filename: Union[str, PathLike, None] = None,
         name: Optional[str] = None,
         content_type: Optional[str] = None,
         content_length: Optional[int] = None,

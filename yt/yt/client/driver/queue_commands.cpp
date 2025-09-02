@@ -163,6 +163,11 @@ void TPullQueueCommand::Register(TRegistrar registrar)
 
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"pull_queue\" command (QueuePath: %v, Offset: %v, PartitionIndex: %v)",
+        QueuePath,
+        Offset,
+        PartitionIndex);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->PullQueue(
@@ -226,6 +231,12 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 
 void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"pull_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, Offset: %v, PartitionIndex: %v)",
+        ConsumerPath,
+        QueuePath,
+        Offset,
+        PartitionIndex);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->PullQueueConsumer(
@@ -263,6 +274,13 @@ void TAdvanceQueueConsumerCommand::Register(TRegistrar registrar)
 
 void TAdvanceQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"advance_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, PartitionIndex: %v, OldOffset: %v, NewOffset: %v)",
+        ConsumerPath,
+        QueuePath,
+        PartitionIndex,
+        OldOffset,
+        NewOffset);
+
     auto transaction = GetTransaction(context);
 
     if (ClientSide.value_or(false)) {
@@ -297,6 +315,11 @@ void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"create_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId);
+
     auto client = context->GetClient();
 
     auto result = WaitFor(client->CreateQueueProducerSession(
@@ -327,6 +350,11 @@ void TRemoveQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"remove_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId);
+
     auto client = context->GetClient();
 
     WaitFor(client->RemoveQueueProducerSession(
@@ -361,11 +389,22 @@ void TPushQueueProducerCommand::Register(TRegistrar registrar)
     registrar.Parameter("queue_path", &TThis::QueuePath);
     registrar.Parameter("session_id", &TThis::SessionId);
     registrar.Parameter("epoch", &TThis::Epoch);
-
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "require_sync_replica",
+        [] (TThis* command) -> auto& {
+            return command->Options.RequireSyncReplica;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
 {
+    YT_LOG_DEBUG("Executing \"push_queue_producer\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v)",
+        ProducerPath,
+        QueuePath,
+        SessionId,
+        Epoch);
+
     auto tableMountCache = context->GetClient()->GetTableMountCache();
 
     auto queueTableInfoFuture = tableMountCache->GetTableInfo(QueuePath.GetPath());

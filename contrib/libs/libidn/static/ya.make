@@ -3,10 +3,11 @@
 LIBRARY()
 
 LICENSE(
-    "(GPL-2.0-or-later OR LGPL-3.0-or-later OR GPL-3.0-or-later)" AND
     "(LGPL-3.0-or-later OR GPL-2.0-or-later)" AND
     Custom-punycode AND
     FSFAP AND
+    GFDL-1.2-only AND
+    GFDL-1.3-or-later AND
     LGPL-2.0-or-later AND
     LGPL-2.1-only AND
     LGPL-2.1-or-later AND
@@ -14,6 +15,8 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(1.43)
 
 PEERDIR(
     contrib/libs/libiconv
@@ -44,9 +47,11 @@ SRCS(
     gl/fd-hook.c
     gl/malloca.c
     gl/stat-time.c
+    gl/stdlib.c
     lib/gl/c-ctype.c
     lib/gl/c-strcasecmp.c
     lib/gl/c-strncasecmp.c
+    lib/gl/stdlib.c
     lib/gl/striconv.c
     lib/gl/unistr/u8-check.c
     lib/gl/unistr/u8-mbtoucr.c

@@ -1,14 +1,22 @@
 RESOURCES_LIBRARY()
 
-LICENSE(Service-Prebuilt-Tool)
+DEFAULT(LLD_VERSION ${COMPILER_VERSION})
 
-DEFAULT(LLD_VERSION ${CLANG_VER})
+TOOLCHAIN(lld)
+VERSION(${LLD_VERSION})
 
-IF (LLD_VERSION == 14)
-    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld14.json)
-ELSE()
-    # fallback on latest version
+# There is no backward compatibility between LLVM IR versions 16 and 18.
+# So, we need to select lld18 when using clang18 to compile src in LTO mode.
+IF (LLD_VERSION == 20)
+    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld20.json)
+ELSEIF (LLD_VERSION == 18)
+    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld18.json)
+ELSEIF (LLD_VERSION == 16)
     DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
+ELSEIF (LLD_VERSION == 14)
+    # Allow empty lld 14 for android
+ELSE()
+    MESSAGE(FATAL_ERROR "Unsupported LLD version ${LLD_VERSION} was required")
 ENDIF()
 
 IF (OS_ANDROID)
@@ -39,31 +47,26 @@ IF (OS_ANDROID)
 ELSEIF (OS_LINUX)
     LDFLAGS(
         -fuse-ld=lld
-        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/ld.lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld
 
         # dynlinker on auld ubuntu versions can not handle .rodata stored in standalone segment [citation needed]
         -Wl,--no-rosegment
         # add build-id to binaries to allow external tools check equality of binaries
         -Wl,--build-id=sha1
     )
+ELSEIF (OS_FREEBSD)
+    LDFLAGS(
+        -fuse-ld=lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld
+    )
 ELSEIF (OS_DARWIN OR OS_IOS)
-    IF (MAPSMOBI_BUILD_TARGET AND XCODE)
-        LDFLAGS(
-            -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/ld64.lld
-        )
-    ELSEIF (XCODE)
-        LDFLAGS(-DYA_XCODE)
-    ELSE()
-        LDFLAGS(
-            -fuse-ld=lld
-            --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/ld64.lld
-            # FIXME: Remove fake linker version flag when clang 16 version arrives
-            -mlinker-version=705
-        )
-    ENDIF()
+    LDFLAGS(
+        -fuse-ld=lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
+    )
 ELSEIF (OS_EMSCRIPTEN)
     LDFLAGS(
-        -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/wasm-ld
+        -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/wasm-ld
         # FIXME: Linker does not capture "ld-path" and therefore it can not find "wasm-ld"
     )
 ENDIF()

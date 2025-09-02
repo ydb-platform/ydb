@@ -16,7 +16,7 @@ namespace NYT::NRpc {
 
 inline TServiceMap ConvertToMap(const IServicePtr& service)
 {
-    return {std::make_pair(service->GetServiceId().ServiceName, service)};
+    return {std::pair(service->GetServiceId().ServiceName, service)};
 }
 
 inline TServiceMap ConvertToMap(const std::vector<IServicePtr>& services)
@@ -52,9 +52,9 @@ TRealmIdServiceMap ConvertToRealmIdMap(const TContainer& services)
 }
 
 template <class TContainer>
-THashMap<TString, TRealmIdServiceMap> ConvertToAddressMap(const THashMap<TString, TContainer>& addressToServices)
+THashMap<std::string, TRealmIdServiceMap> ConvertToAddressMap(const THashMap<std::string, TContainer>& addressToServices)
 {
-    THashMap<TString, TRealmIdServiceMap> result;
+    THashMap<std::string, TRealmIdServiceMap> result;
 
     for (const auto& [address, map] : addressToServices) {
         result[address] = ConvertToRealmIdMap(map);
@@ -65,7 +65,7 @@ THashMap<TString, TRealmIdServiceMap> ConvertToAddressMap(const THashMap<TString
 
 template <class TAddressContainer, class TDefaultContainer>
 IChannelFactoryPtr CreateTestChannelFactory(
-    const THashMap<TString, TAddressContainer>& addressToServices,
+    const THashMap<std::string, TAddressContainer>& addressToServices,
     const TDefaultContainer& defaultServices)
 {
     return New<TTestChannelFactory>(ConvertToAddressMap(addressToServices), ConvertToRealmIdMap(defaultServices));
@@ -74,7 +74,7 @@ IChannelFactoryPtr CreateTestChannelFactory(
 template <class TDefaultContainer>
 IChannelFactoryPtr CreateTestChannelFactoryWithDefaultServices(const TDefaultContainer& defaultServices)
 {
-    return CreateTestChannelFactory(THashMap<TString, TDefaultContainer>{}, defaultServices);
+    return CreateTestChannelFactory(THashMap<std::string, TDefaultContainer>{}, defaultServices);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,18 +2,12 @@ import responses
 import types
 from io import BytesIO
 from http.client import responses as http_responses
+from typing import Any, Dict, List, Tuple, Optional
 from urllib.parse import urlparse
 from werkzeug.wrappers import Request
+from .responses import TYPE_RESPONSE
 
-from moto.utilities.distutils_version import LooseVersion
-
-try:
-    from importlib.metadata import version
-except ImportError:
-    from importlib_metadata import version
-
-
-RESPONSES_VERSION = version("responses")
+from moto.core.versions import is_responses_0_17_x
 
 
 class CallbackResponse(responses.CallbackResponse):
@@ -21,7 +15,12 @@ class CallbackResponse(responses.CallbackResponse):
     Need to subclass so we can change a couple things
     """
 
-    def get_response(self, request):
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, CallbackResponse):
+            return self.method == other.method and self.url.pattern == other.url.pattern  # type: ignore
+        return super().__eq__(other)
+
+    def get_response(self, request: Any) -> responses.HTTPResponse:
         """
         Need to override this so we can pass decode_content=False
         """
@@ -30,44 +29,48 @@ class CallbackResponse(responses.CallbackResponse):
             if request.body is None:
                 body = None
             elif isinstance(request.body, str):
-                body = BytesIO(request.body.encode("UTF-8"))
+                body = request.body.encode("UTF-8")
             elif hasattr(request.body, "read"):
-                body = BytesIO(request.body.read())
+                body = request.body.read()
             else:
-                body = BytesIO(request.body)
+                body = request.body
             req = Request.from_values(
                 path="?".join([url.path, url.query]),
-                input_stream=body,
+                input_stream=BytesIO(body) if body else None,
                 content_length=request.headers.get("Content-Length"),
                 content_type=request.headers.get("Content-Type"),
                 method=request.method,
-                base_url="{scheme}://{netloc}".format(
-                    scheme=url.scheme, netloc=url.netloc
-                ),
+                base_url=f"{url.scheme}://{url.netloc}",
                 headers=[(k, v) for k, v in request.headers.items()],
             )
             request = req
         headers = self.get_headers()
+
+        from moto.moto_api import recorder
+
+        recorder._record_request(request, body)
 
         result = self.callback(request)
         if isinstance(result, Exception):
             raise result
 
         status, r_headers, body = result
-        body = responses._handle_body(body)
+        body_io = responses._handle_body(body)
         headers.update(r_headers)
 
         return responses.HTTPResponse(
             status=status,
             reason=http_responses.get(status),
-            body=body,
+            body=body_io,
             headers=headers,
             preload_content=False,
             # Need to not decode_content to mimic requests
             decode_content=False,
         )
 
-    def _url_matches(self, url, other, match_querystring=False):
+    def _url_matches(
+        self, url: Any, other: Any, match_querystring: bool = False
+    ) -> bool:
         """
         Need to override this so we can fix querystrings breaking regex matching
         """
@@ -79,49 +82,37 @@ class CallbackResponse(responses.CallbackResponse):
                 url = responses._clean_unicode(url)
                 if not isinstance(other, str):
                     other = other.encode("ascii").decode("utf8")
-            return self._url_matches_strict(url, other)
+            return self._url_matches_strict(url, other)  # type: ignore[attr-defined]
         elif isinstance(url, responses.Pattern) and url.match(other):
             return True
         else:
             return False
 
 
-def not_implemented_callback(request):  # pylint: disable=unused-argument
+def not_implemented_callback(
+    request: Any,  # pylint: disable=unused-argument
+) -> TYPE_RESPONSE:
     status = 400
-    headers = {}
+    headers: Dict[str, str] = {}
     response = "The method is not implemented"
 
     return status, headers, response
 
 
 # Modify behaviour of the matcher to only/always return the first match
-# Default behaviour is to return subsequent matches for subsequent requests, which leads to https://github.com/spulec/moto/issues/2567
+# Default behaviour is to return subsequent matches for subsequent requests, which leads to https://github.com/getmoto/moto/issues/2567
 #  - First request matches on the appropriate S3 URL
 #  - Same request, executed again, will be matched on the subsequent match, which happens to be the catch-all, not-yet-implemented, callback
 # Fix: Always return the first match
-def _find_first_match_legacy(self, request):
-    all_possibles = self._matches + responses._default_mock._matches
-    matches = [match for match in all_possibles if match.matches(request)]
-
-    # Look for implemented callbacks first
-    implemented_matches = [
-        m
-        for m in matches
-        if type(m) is not CallbackResponse or m.callback != not_implemented_callback
-    ]
-    if implemented_matches:
-        return implemented_matches[0]
-    elif matches:
-        # We had matches, but all were of type not_implemented_callback
-        return matches[0]
-    return None
-
-
-# Internal API changed: this method should be used for Responses 0.12.1 < .. < 0.17.0
-def _find_first_match(self, request):
+#
+# Note that, due to an outdated API we no longer support Responses <= 0.12.1
+# This method should be used for Responses 0.12.1 < .. < 0.17.0
+def _find_first_match(
+    self: Any, request: Any
+) -> Tuple[Optional[responses.BaseResponse], List[str]]:
     matches = []
     match_failed_reasons = []
-    all_possibles = self._matches + responses._default_mock._matches
+    all_possibles = self._matches + responses._default_mock._matches  # type: ignore[attr-defined]
     for match in all_possibles:
         match_result, reason = match.matches(request)
         if match_result:
@@ -144,7 +135,7 @@ def _find_first_match(self, request):
     return None, match_failed_reasons
 
 
-def get_response_mock():
+def get_response_mock() -> responses.RequestsMock:
     """
     The responses-library is crucial in ensuring that requests to AWS are intercepted, and routed to the right backend.
     However, as our usecase is different from a 'typical' responses-user, Moto always needs some custom logic to ensure responses behaves in a way that works for us.
@@ -156,12 +147,7 @@ def get_response_mock():
     """
     responses_mock = None
 
-    if LooseVersion(RESPONSES_VERSION) < LooseVersion("0.12.1"):
-        responses_mock = responses.RequestsMock(assert_all_requests_are_fired=False)
-        responses_mock._find_match = types.MethodType(
-            _find_first_match_legacy, responses_mock
-        )
-    elif LooseVersion(RESPONSES_VERSION) >= LooseVersion("0.17.0"):
+    if is_responses_0_17_x():
         from .responses_custom_registry import CustomRegistry
 
         responses_mock = responses.RequestsMock(
@@ -169,16 +155,14 @@ def get_response_mock():
         )
     else:
         responses_mock = responses.RequestsMock(assert_all_requests_are_fired=False)
-        responses_mock._find_match = types.MethodType(_find_first_match, responses_mock)
+        responses_mock._find_match = types.MethodType(_find_first_match, responses_mock)  # type: ignore[method-assign]
 
     responses_mock.add_passthru("http")
     return responses_mock
 
 
-def reset_responses_mock(responses_mock):
-    if LooseVersion(RESPONSES_VERSION) < LooseVersion("0.12.1"):
-        responses_mock.reset()
-    elif LooseVersion(RESPONSES_VERSION) >= LooseVersion("0.17.0"):
+def reset_responses_mock(responses_mock: responses.RequestsMock) -> None:
+    if is_responses_0_17_x():
         from .responses_custom_registry import CustomRegistry
 
         responses_mock.reset()

@@ -20,6 +20,58 @@ namespace {
             , Buf(rec.Len + 1)
         {
             Buf.Append(rec.Data, rec.Len);
+            if (rec.Len > 0 && rec.Data[rec.Len - 1] != '\n') {
+                *Buf.Proceed(1) = '\n';
+            }
+        }
+
+        operator TLogRecord() const {
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
+        }
+    };
+
+    struct TRecordWithColorsAndNewline {
+        ELogPriority Priority;
+        TTempBuf Buf;
+
+        TRecordWithColorsAndNewline(const TLogRecord& rec)
+            : Priority(rec.Priority)
+            , Buf(rec.Len + 16)
+        {
+            switch (rec.Priority) {
+                case ELogPriority::TLOG_EMERG:
+                    Buf.Append("\x1b[31m", 5); // Red color for emergencies
+                    break;
+                case ELogPriority::TLOG_ALERT:
+                    Buf.Append("\x1b[31;1m", 7); // Bright red
+                    break;
+                case ELogPriority::TLOG_CRIT:
+                    Buf.Append("\x1b[35m", 5); // Magenta color for critical logs
+                    break;
+                case ELogPriority::TLOG_ERR:
+                    Buf.Append("\x1b[31;1m", 7); // Bright red
+                    break;
+                case ELogPriority::TLOG_WARNING:
+                    Buf.Append("\x1b[33m", 5); // Yellow color for warnings
+                    break;
+                case ELogPriority::TLOG_NOTICE:
+                    Buf.Append("\x1b[36m", 5); // Cyan color for notices
+                    break;
+                case ELogPriority::TLOG_INFO:
+                    Buf.Append("\x1b[37m", 5); // White color for info
+                    break;
+                case ELogPriority::TLOG_DEBUG:
+                    Buf.Append("\x1b[38;5;248m", 11); // White-grey color for debug
+                    break;
+                case ELogPriority::TLOG_RESOURCES:
+                    Buf.Append("\x1b[38;5;242m", 11); // Gray color for trace
+                    break;
+                default:
+                    Buf.Append("\x1b[0m", 4); // Reset color for unknown
+                    break;
+            }
+            Buf.Append(rec.Data, rec.Len);
+            Buf.Append("\x1b[0m", 4); // Reset color
             *Buf.Proceed(1) = '\n';
         }
 
@@ -85,7 +137,14 @@ namespace NActors {
             TString formatted;
             vsprintf(formatted, c, params);
 
-            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
+            auto ok = OutputRecord(
+                time,
+                NLog::EPrio(priority),
+                component,
+                __FILE_NAME__,
+                __LINE__,
+                formatted,
+                false);
             Y_UNUSED(ok);
             va_end(params);
         }
@@ -115,7 +174,15 @@ namespace NActors {
         if (ignoredCount > 0) {
             NLog::EPrio prio = LogBuffer.GetIgnoredHighestPrio();
             TString message = Sprintf("Logger overflow! Ignored %" PRIu64 "  log records with priority [%s] or lower!", ignoredCount, PriorityToString(prio));
-            if (!OutputRecord(ctx.Now(), NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
+            if (!OutputRecord(
+                    ctx.Now(),
+                    NActors::NLog::EPrio::Error,
+                    Settings->LoggerComponent,
+                    __FILE_NAME__,
+                    __LINE__,
+                    message,
+                    false))
+            {
                 BecomeDefunct();
             }
             LogBuffer.ClearIgnoredCount();
@@ -205,7 +272,7 @@ namespace NActors {
                     }
                 }
                 TABLEBODY() {
-                    for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
+                    for (EComponent i = Settings->MinVal; i <= Settings->MaxVal; i++) {
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
@@ -447,11 +514,25 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        return OutputRecord(evLog->Stamp, evLog->Level.ToPrio(), evLog->Component, evLog->Line);
+        return OutputRecord(
+            evLog->Stamp,
+            evLog->Level.ToPrio(),
+            evLog->Component,
+            evLog->FileName,
+            evLog->LineNumber,
+            evLog->Line,
+            evLog->Json);
     }
 
-    bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
-                                    const TString& formatted) noexcept try {
+    bool TLoggerActor::OutputRecord(
+        TInstant time,
+        NLog::EPrio priority,
+        NLog::EComponent component,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& formatted,
+        bool json) noexcept
+    try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
@@ -463,11 +544,15 @@ namespace NActors {
                 } else {
                     logRecord << time;
                 }
-                logRecord
-                    << Settings->MessagePrefix
-                    << " :" << Settings->ComponentName(component)
-                    << " "  << PriorityToString(priority)
-                    << ": " << formatted;
+
+                logRecord << Settings->MessagePrefix << " :"
+                          << Settings->ComponentName(component) << " "
+                          << PriorityToString(priority);
+
+                if (fileName && Settings->LogSourceLocation) {
+                    logRecord << ": " << fileName << ":" << lineNumber;
+                }
+                logRecord << ": " << formatted;
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
@@ -482,16 +567,22 @@ namespace NActors {
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
-                NJsonWriter::TBuf json;
-                json.BeginObject()
+                NJsonWriter::TBuf j;
+                j.BeginObject()
                     .WriteKey("@timestamp")
                     .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data())
+                    .WriteKey("@log_type")
+                    .WriteString("debug")
                     .WriteKey("microseconds")
                     .WriteULongLong(time.MicroSeconds())
                     .WriteKey("host")
                     .WriteString(Settings->ShortHostName)
                     .WriteKey("cluster")
                     .WriteString(Settings->ClusterName)
+                    .WriteKey("database")
+                    .WriteString(Settings->TenantName ? Settings->TenantName : "static")
+                    .WriteKey("node_id")
+                    .WriteInt(Settings->NodeId)
                     .WriteKey("priority")
                     .WriteString(PriorityToString(priority))
                     .WriteKey("npriority")
@@ -501,11 +592,25 @@ namespace NActors {
                     .WriteKey("tag")
                     .WriteString("KIKIMR")
                     .WriteKey("revision")
-                    .WriteInt(GetProgramSvnRevision())
-                    .WriteKey("message")
-                    .WriteString(formatted)
-                    .EndObject();
-                auto logRecord = json.Str();
+                    .WriteInt(GetProgramSvnRevision());
+
+                if (fileName) {
+                    TStringBuilder location;
+                    location << fileName << ":" << lineNumber;
+                    j.WriteKey("location").WriteString(location);
+                }
+
+                if (json) {
+                    if (formatted && formatted.front() == '{' && formatted.back() == '}') {
+                        j.UnsafeWritePair(TStringBuf(formatted.data() + 1, formatted.size() - 2));
+                    } else {
+                        j.UnsafeWritePair(formatted);
+                    }
+                } else {
+                    j.WriteKey("message").WriteString(formatted);
+                }
+                j.EndObject();
+                auto logRecord = j.Str();
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
@@ -544,6 +649,7 @@ namespace NActors {
         return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags);
     }
 
+    template<typename TNewLineProcessor>
     class TStderrBackend: public TLogBackend {
     public:
         TStderrBackend() {
@@ -561,7 +667,7 @@ namespace NActors {
             bool isOk = false;
             do {
                 try {
-                    TRecordWithNewline r(rec);
+                    TNewLineProcessor r(rec);
                     Cerr.Write(r.Buf.Data(), r.Buf.Filled());
                     isOk = true;
                 } catch (TSystemError err) {
@@ -573,9 +679,6 @@ namespace NActors {
 
         void ReopenLog() override {
         }
-
-    private:
-        const TString Indent;
     };
 
     class TLineFileLogBackend: public TFileLogBackend {
@@ -611,8 +714,12 @@ namespace NActors {
         TVector<TAutoPtr<TLogBackend>> UnderlyingBackends;
     };
 
-    TAutoPtr<TLogBackend> CreateStderrBackend() {
-        return new TStderrBackend();
+    TAutoPtr<TLogBackend> CreateStderrBackend(bool useColors) {
+        if (useColors) {
+            return new TStderrBackend<TRecordWithColorsAndNewline>();
+        } else {
+            return new TStderrBackend<TRecordWithNewline>();
+        }
     }
 
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {
@@ -726,7 +833,13 @@ namespace NActors {
 
     TFormattedRecordWriter::~TFormattedRecordWriter() {
         if (ActorContext) {
-            ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
+            ::NActors::MemLogAdapter(
+                *ActorContext,
+                Priority,
+                Component,
+                __FILE_NAME__,
+                __LINE__,
+                TBase::GetResult());
         } else {
             Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
         }
@@ -754,7 +867,13 @@ namespace NActors {
     TEnsureFormattedRecordWriter::~TEnsureFormattedRecordWriter() noexcept(false) {
         const TString data = TBase::GetResult();
         if (NActors::TlsActivationContext) {
-            ::NActors::MemLogAdapter(NActors::TlsActivationContext->AsActorContext(), NLog::EPriority::PRI_ERROR, 0, data);
+            ::NActors::MemLogAdapter(
+                NActors::TlsActivationContext->AsActorContext(),
+                NLog::EPriority::PRI_ERROR,
+                0,
+                __FILE_NAME__,
+                __LINE__,
+                data);
         } else {
             Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << data << Endl;
         }

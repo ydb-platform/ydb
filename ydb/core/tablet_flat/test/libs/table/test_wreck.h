@@ -48,7 +48,7 @@ namespace NTest {
                 DoPointReads(wrap), DoRangedScans(wrap, make, true);
 
             } else if (cache == EWreck::Forward) {
-                Y_ABORT_UNLESS(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration");
+                Y_ENSURE(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration");
 
                 TWrap wrap(eggs, { nullptr, 10 /* worst case: main, next, groups, blobs, plus b-tree index */, false }, std::forward<TArgs>(args)...);
 

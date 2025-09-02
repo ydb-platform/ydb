@@ -22,6 +22,11 @@ namespace NActors {
         REQUIRED, // encryption is mandatory
     };
 
+    enum class ESocketSendOptimization {
+        DISABLED,
+        IC_MSG_ZEROCOPY,
+    };
+
     struct TInterconnectSettings {
         TDuration Handshake;
         TDuration DeadPeer;
@@ -43,53 +48,48 @@ namespace NActors {
         TString PrivateKey; // private key for the certificate in PEM format
         TString CaFilePath; // path to certificate authority file
         TString CipherList; // encryption algorithms
+        THashSet<TString> ForbiddenSignatureAlgorithms;
         TDuration MessagePendingTimeout = TDuration::Seconds(1); // timeout for which messages are queued while in PendingConnection state
         ui64 MessagePendingSize = Max<ui64>(); // size of the queue
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
-        bool EnableExternalDataChannel = false;
+        bool EnableExternalDataChannel = true;
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
         TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
         TDuration MaxErrorSleep = TDuration::Seconds(1);
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
-
-        ui32 GetSendBufferSize() const {
-            ui32 res = 512 * 1024; // 512 kb is the default value for send buffer
-            if (TCPSocketBufferSize) {
-                res = TCPSocketBufferSize;
-            }
-            return res;
-        }
+        ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
     };
 
     struct TWhiteboardSessionStatus {
-        TActorSystem* ActorSystem;
-        ui32 PeerId;
-        TString Peer;
-        bool Connected;
-        bool Green;
-        bool Yellow;
-        bool Orange;
-        bool Red;
-        i64 ClockSkew;
-        bool ReportClockSkew;
+        enum class EFlag {
+            GREEN,
+            YELLOW,
+            ORANGE,
+            RED,
+        };
 
-        TWhiteboardSessionStatus(TActorSystem* actorSystem, ui32 peerId, const TString& peer, bool connected,
-                                        bool green, bool yellow, bool orange, bool red, i64 clockSkew, bool reportClockSkew)
-            : ActorSystem(actorSystem)
-            , PeerId(peerId)
-            , Peer(peer)
-            , Connected(connected)
-            , Green(green)
-            , Yellow(yellow)
-            , Orange(orange)
-            , Red(red)
-            , ClockSkew(clockSkew)
-            , ReportClockSkew(reportClockSkew)
-            {}
+        TActorSystem* ActorSystem;
+        ui32 PeerNodeId;
+        TString PeerName;
+        bool Connected;
+        // oneof {
+        bool SessionClosed = false;
+        bool SessionPendingConnection = false;
+        bool SessionConnected = false;
+        // }
+        EFlag ConnectStatus;
+        i64 ClockSkewUs;
+        bool SameScope;
+        ui64 PingTimeUs;
+        NActors::TScopeId ScopeId;
+        double Utilization;
+        ui64 ConnectTime;
+        ui64 BytesWrittenToSocket;
+        TString PeerBridgePileName;
     };
 
     struct TChannelSettings {
@@ -128,6 +128,7 @@ namespace NActors {
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
+        std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

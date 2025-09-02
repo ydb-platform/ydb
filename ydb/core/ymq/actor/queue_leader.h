@@ -1,6 +1,5 @@
 #pragma once
-#include "defs.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "events.h"
 #include "local_rate_limiter_allocator.h"
 
@@ -198,6 +197,9 @@ private:
     TDuration QueueAttributesCacheTime_ = TDuration::Zero();
     TInstant AttributesUpdateTime_ = TInstant::Zero();
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
+
+    // tags cache
+    TMaybe<NJson::TJsonMap> QueueTags_;
 
     // counters
     TIntrusivePtr<TQueueCounters> Counters_;

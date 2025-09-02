@@ -1,0 +1,165 @@
+--
+-- Legal Notice
+--
+-- This document and associated source code (the "Work") is a part of a
+-- benchmark specification maintained by the TPC.
+--
+-- The TPC reserves all right, title, and interest to the Work as provided
+-- under U.S. and international laws, including without limitation all patent
+-- and trademark rights therein.
+--
+-- No Warranty
+--
+-- 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION
+--     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE
+--     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER
+--     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY,
+--     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES,
+--     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR
+--     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF
+--     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE.
+--     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT,
+--     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT
+--     WITH REGARD TO THE WORK.
+-- 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO
+--     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE
+--     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS
+--     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT,
+--     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+--     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT
+--     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD
+--     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES.
+--
+-- Contributors:
+-- Gradient Systems
+--
+--
+--
+--
+
+-- street_names
+-- from 1990 census
+-- second weighting adds empty entry 50% of the time
+------
+create street_names;
+set types = (varchar);
+set weights = 2;
+add ("": 0, 317000);
+add ("Church": 4031, 4031);
+add ("Central": 2450, 2450);
+add ("Center": 3402, 3402);
+add ("College": 2468, 2468);
+add ("Twelfth": 489, 489);
+add ("12th": 2957, 2957);
+add ("South": 3570, 3570);
+add ("Lakeview": 2487, 2487);
+add ("West": 3656, 3656);
+add ("Miller": 2488, 2488);
+add ("Cherry": 3669, 3669);
+add ("Broadway": 2511, 2511);
+add ("Jackson": 3725, 3725);
+add ("Sycamore": 2533, 2533);
+add ("Elevnth": 669, 669);
+add ("11th": 3109, 3109);
+add ("Hillcrest": 2547, 2547);
+add ("Railroad": 3853, 3853);
+add ("Fifteenth": 240, 240);
+add ("15th": 2317, 2317);
+add ("Sunset": 3929, 3929);
+add ("Madison": 2578, 2578);
+add ("Mill": 3975, 3975);
+add ("Ash": 2589, 2589);
+add ("Willow": 4017, 2613);
+add ("Woodland": 2615, 2615);
+add ("Lincoln": 4044, 4044);
+add ("Locust": 2618, 2618);
+add ("Ridge": 4048, 4048);
+add ("Poplar": 2645, 2645);
+add ("North": 4074, 4074);
+add ("Green": 2652, 2652);
+add ("Spring": 4165, 4165);
+add ("Dogwood": 2653, 2653);
+add ("Tenth": 879, 879);
+add ("10th": 3492, 3492);
+add ("Lee": 2669, 2669);
+add ("Walnut": 4799, 4799);
+add ("Williams": 2682, 2682);
+add ("Hill": 4877, 4877);
+add ("Birch": 2754, 2754);
+add ("Lake": 4901, 4901);
+add ("Davis": 2769, 2769);
+add ("9th": 3793, 3793);
+add ("Ninth": 1115, 1115);
+add ("Laurel": 2780, 2780);
+add ("Washington": 4974, 4974);
+add ("Spruce": 2821, 2821);
+add ("View": 5202, 5202);
+add ("14th": 2536, 2536);
+add ("Fourteenth": 315, 315);
+add ("Elm": 5233, 5233);
+add ("Adams": 2856, 2856);
+add ("8th": 4172, 4172);
+add ("Eigth": 1352, 1352);
+add ("Franklin": 2882, 2882);
+add ("Cedar": 5644, 5644);
+add ("13th": 2610, 2610);
+add ("Thirteenth": 367, 367);
+add ("Maple": 6103, 6103);
+add ("Chestnut": 2994, 2994);
+add ("Pine": 6170, 6170);
+add ("East": 3056, 3056);
+add ("7th": 4635, 4635);
+add ("Seventh": 1742, 1742);
+add ("Smith": 3076, 3076);
+add ("Oak": 6946, 6946);
+add ("Valley": 3082, 3082);
+add ("6th": 5097, 5097);
+add ("Sixth": 2186, 2186);
+add ("Meadow": 3193, 3193);
+add ("Main": 7664, 7664);
+add ("River": 3220, 3220);
+add ("5th": 5532, 5532);
+add ("Fifth": 2654, 2654);
+add ("Wilson": 3268, 3268);
+add ("Park": 8926, 8926);
+add ("Hickory": 3297, 3297);
+add ("4th": 6183, 6183);
+add ("Fourth": 3007, 3007);
+add ("Jefferson": 3306, 3306);
+add ("1st": 6047, 6047);
+add ("First": 3851, 3851);
+add ("Forest": 3309, 3309);
+add ("3rd": 6564, 6564);
+add ("Third": 3567, 3567);
+add ("Johnson": 3325, 3325);
+add ("2nd": 6907, 6907);
+add ("Second": 3959, 3959);
+add ("Highland": 3347, 3347);
+
+------
+-- street_type
+------
+create street_type;
+set types = (varchar);
+set weights = 1;
+add ("Street":1);
+add ("ST":1);
+add ("Avenue":1);
+add ("Ave":1);
+add ("Boulevard":1);
+add ("Blvd":1);
+add ("Road":1);
+add ("RD":1);
+add ("Parkway":1);
+add ("Pkwy":1);
+add ("Way":1);
+add ("Wy":1);
+add ("Drive":1);
+add ("Dr.":1);
+add ("Circle":1);
+add ("Cir.":1);
+add ("Lane":1);
+add ("Ln":1);
+add ("Court":1);
+add ("Ct.":1);
+

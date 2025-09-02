@@ -1,23 +1,21 @@
 #pragma once
+#include "wb_filter.h"
+#include "wb_group.h"
 #include <unordered_map>
 #include <util/string/vector.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include "wb_filter.h"
-#include "wb_group.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
 
-struct TWhiteboardDefaultInfo {
-};
+struct TWhiteboardDefaultInfo {};
 
-template <typename ResponseType>
+template<typename ResponseType>
 struct TWhiteboardInfo;
 
-template <typename ResponseType>
+template<typename ResponseType>
 struct TWhiteboardMergerComparator {
     bool operator ()(const ResponseType& a, const ResponseType& b) const {
         return a.GetChangeTime() < b.GetChangeTime();
@@ -303,5 +301,4 @@ void MergeWhiteboardResponses(ResponseType& result, TMap<ui32, ResponseType>& re
     TWhiteboardInfo<ResponseType>::MergeResponses(result, responses, fields);
 }
 
-}
 }

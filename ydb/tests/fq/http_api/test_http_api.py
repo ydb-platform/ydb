@@ -76,7 +76,7 @@ class TestHttpApi(TestBase):
             assert len(query_id) == 20
 
             status = client.get_query_status(query_id)
-            assert status in ["FAILED", "RUNNING", "COMPLETED"]
+            assert status in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)
@@ -94,6 +94,14 @@ class TestHttpApi(TestBase):
 
             results = client.get_query_result_set(query_id, 0)
             assert results == {'columns': [{'name': 'column0', 'type': 'Int32'}], 'rows': [[1]]}
+
+            response = client.stop_query(query_id)
+            assert response.status_code == 204
+
+            response = client.start_query(query_id)
+            assert response.status_code == 204
+
+            assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
             response = client.stop_query(query_id)
             assert response.status_code == 204
@@ -125,7 +133,7 @@ class TestHttpApi(TestBase):
                 "issues": {
                     "message": "{ <main>: Warning: Type annotation, code: 1030 subissue: { <main>:1:1: Warning: At function: "
                     "RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: "
-                    "OrderedSqlProject, At function: SqlProjectItem subissue: { <main>:1:28: Warning: At function: + "
+                    "OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda subissue: { <main>:1:28: Warning: At function: + "
                     "subissue: { <main>:1:28: Warning: Integral type implicit bitcast: Uint64 and Int32, code: 1107 } } } }",
                     "details": [
                         {
@@ -135,7 +143,7 @@ class TestHttpApi(TestBase):
                             "issues": [
                                 {
                                     "message": "At function: RemovePrefixMembers, At function: Unordered, At "
-                                    "function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem",
+                                    "function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
                                     "severity": "WARNING",
                                     "position": {"column": 1, "row": 1},
                                     "end_position": {"column": 1, "row": 1},
@@ -227,6 +235,28 @@ class TestHttpApi(TestBase):
 
         self.streaming_over_kikimr.compute_plane.start()
         c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+
+    def test_restart_idempotency(self):
+        c = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
+        self.streaming_over_kikimr.compute_plane.stop()
+        query_id = c.create_query("select1", "select 1").result.query_id
+        c.wait_query_status(query_id, fq.QueryMeta.STARTING)
+
+        with self.create_client() as client:
+            response1 = client.stop_query(query_id, idempotency_key="Z")
+            assert response1.status_code == 204
+
+            response2 = client.start_query(query_id, idempotency_key="Z")
+            assert response2.status_code == 204
+
+            response2 = client.start_query(query_id, idempotency_key="Z")
+            assert response2.status_code == 204
+
+            response1 = client.stop_query(query_id, idempotency_key="Z")
+            assert response1.status_code == 204
+
+        self.streaming_over_kikimr.compute_plane.start()
+        c.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
     def test_simple_streaming_query(self):
         self.init_topics("simple_streaming_query", create_output=False)

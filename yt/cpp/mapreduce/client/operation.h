@@ -1,6 +1,5 @@
 #pragma once
 
-#include "fwd.h"
 #include "structured_table_formats.h"
 #include "operation_preparer.h"
 
@@ -47,6 +46,7 @@ public:
     virtual TMaybe<TYtError> GetError() override;
     virtual TJobStatistics GetJobStatistics() override;
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() override;
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() override;
     virtual void AbortOperation() override;
     virtual void CompleteOperation() override;
     virtual void SuspendOperation(const TSuspendOperationOptions& options) override;
@@ -179,12 +179,13 @@ void ExecuteVanilla(
     const TOperationOptions& options);
 
 EOperationBriefState CheckOperation(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TOperationId& operationId);
 
 void WaitForOperation(
     const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TOperationId& operationId);
 

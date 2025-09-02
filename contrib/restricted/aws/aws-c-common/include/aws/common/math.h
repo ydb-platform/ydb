@@ -12,6 +12,8 @@
 #include <limits.h>
 #include <stdlib.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 /* The number of bits in a size_t variable */
 #if SIZE_MAX == UINT32_MAX
 #    define SIZE_BITS 32
@@ -26,63 +28,49 @@
 
 AWS_EXTERN_C_BEGIN
 
-#if defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS) && (defined(__clang__) || !defined(__cplusplus)) ||                 \
-    (defined(__x86_64__) || defined(__aarch64__)) && defined(AWS_HAVE_GCC_INLINE_ASM) ||                               \
-    defined(AWS_HAVE_MSVC_INTRINSICS_X64) || defined(CBMC) || !defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS)
-/* In all these cases, we can use fast static inline versions of this code */
-#    define AWS_COMMON_MATH_API AWS_STATIC_IMPL
-#else
-/*
- * We got here because we are building in C++ mode but we only support overflow extensions
- * in C mode. Because the fallback is _slow_ (involving a division), we'd prefer to make a
- * non-inline call to the fast C intrinsics.
- */
-#    define AWS_COMMON_MATH_API AWS_COMMON_API
-#endif
-
 /**
  * Multiplies a * b. If the result overflows, returns 2^64 - 1.
  */
-AWS_COMMON_MATH_API uint64_t aws_mul_u64_saturating(uint64_t a, uint64_t b);
+AWS_STATIC_IMPL uint64_t aws_mul_u64_saturating(uint64_t a, uint64_t b);
 
 /**
  * If a * b overflows, returns AWS_OP_ERR; otherwise multiplies
  * a * b, returns the result in *r, and returns AWS_OP_SUCCESS.
  */
-AWS_COMMON_MATH_API int aws_mul_u64_checked(uint64_t a, uint64_t b, uint64_t *r);
+AWS_STATIC_IMPL int aws_mul_u64_checked(uint64_t a, uint64_t b, uint64_t *r);
 
 /**
  * Multiplies a * b. If the result overflows, returns 2^32 - 1.
  */
-AWS_COMMON_MATH_API uint32_t aws_mul_u32_saturating(uint32_t a, uint32_t b);
+AWS_STATIC_IMPL uint32_t aws_mul_u32_saturating(uint32_t a, uint32_t b);
 
 /**
  * If a * b overflows, returns AWS_OP_ERR; otherwise multiplies
  * a * b, returns the result in *r, and returns AWS_OP_SUCCESS.
  */
-AWS_COMMON_MATH_API int aws_mul_u32_checked(uint32_t a, uint32_t b, uint32_t *r);
+AWS_STATIC_IMPL int aws_mul_u32_checked(uint32_t a, uint32_t b, uint32_t *r);
 
 /**
  * Adds a + b.  If the result overflows returns 2^64 - 1.
  */
-AWS_COMMON_MATH_API uint64_t aws_add_u64_saturating(uint64_t a, uint64_t b);
+AWS_STATIC_IMPL uint64_t aws_add_u64_saturating(uint64_t a, uint64_t b);
 
 /**
  * If a + b overflows, returns AWS_OP_ERR; otherwise adds
  * a + b, returns the result in *r, and returns AWS_OP_SUCCESS.
  */
-AWS_COMMON_MATH_API int aws_add_u64_checked(uint64_t a, uint64_t b, uint64_t *r);
+AWS_STATIC_IMPL int aws_add_u64_checked(uint64_t a, uint64_t b, uint64_t *r);
 
 /**
  * Adds a + b. If the result overflows returns 2^32 - 1.
  */
-AWS_COMMON_MATH_API uint32_t aws_add_u32_saturating(uint32_t a, uint32_t b);
+AWS_STATIC_IMPL uint32_t aws_add_u32_saturating(uint32_t a, uint32_t b);
 
 /**
  * If a + b overflows, returns AWS_OP_ERR; otherwise adds
  * a + b, returns the result in *r, and returns AWS_OP_SUCCESS.
  */
-AWS_COMMON_MATH_API int aws_add_u32_checked(uint32_t a, uint32_t b, uint32_t *r);
+AWS_STATIC_IMPL int aws_add_u32_checked(uint32_t a, uint32_t b, uint32_t *r);
 
 /**
  * Subtracts a - b. If the result overflows returns 0.
@@ -198,10 +186,11 @@ AWS_STATIC_IMPL float aws_max_float(float a, float b);
 AWS_STATIC_IMPL double aws_min_double(double a, double b);
 AWS_STATIC_IMPL double aws_max_double(double a, double b);
 
+AWS_EXTERN_C_END
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/math.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_MATH_H */

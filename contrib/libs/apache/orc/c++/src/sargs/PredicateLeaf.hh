@@ -127,7 +127,7 @@ namespace orc {
     bool operator==(const PredicateLeaf& r) const;
 
     size_t getHashCode() const {
-      return mHashCode;
+      return hashCode_;
     }
 
    private:
@@ -143,13 +143,13 @@ namespace orc {
     TruthValue evaluatePredicateBloomFiter(const BloomFilter* bloomFilter, bool hasNull) const;
 
    private:
-    Operator mOperator;
-    PredicateDataType mType;
-    std::string mColumnName;
-    bool mHasColumnName;
-    uint64_t mColumnId;
-    std::vector<Literal> mLiterals;
-    size_t mHashCode;
+    Operator operator_;
+    PredicateDataType type_;
+    std::string columnName_;
+    bool hasColumnName_;
+    uint64_t columnId_;
+    std::vector<Literal> literals_;
+    size_t hashCode_;
   };
 
   struct PredicateLeafHash {

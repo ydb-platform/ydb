@@ -2,14 +2,13 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_applicator_actor.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+
 #include <util/system/platform.h>
 #if defined(_linux_) || defined(_darwin_)
 #include "yql_s3_read_actor.h"
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 #endif
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-
 
 namespace NYql::NDq {
 
@@ -64,16 +63,17 @@ namespace NYql::NDq {
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg,
-            ::NMonitoring::TDynamicCounterPtr counters) override {
+            ::NMonitoring::TDynamicCounterPtr counters,
+            bool allowLocalFiles) override {
 
             #if defined(_linux_) || defined(_darwin_)
                 NDB::registerFormats();
                 factory.RegisterSource<NS3::TSource>("S3Source",
-                    [credentialsFactory, gateway, retryPolicy, cfg, counters](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+                    [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager);
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles);
                     });
             #else
                 Y_UNUSED(factory);

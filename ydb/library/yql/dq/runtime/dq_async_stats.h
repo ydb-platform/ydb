@@ -68,12 +68,21 @@ struct TDqAsyncStats {
     TDuration WaitTime;
     ui64 WaitPeriods = 0;
 
+    ui64 FilteredBytes = 0;
+    ui64 FilteredRows = 0;
+    ui64 QueuedBytes = 0;
+    ui64 QueuedRows = 0;
+
     void MergeData(const TDqAsyncStats& other) {
         Bytes += other.Bytes;
         DecompressedBytes += other.DecompressedBytes;
         Rows += other.Rows;
         Chunks += other.Chunks;
         Splits += other.Splits;
+        FilteredBytes += other.FilteredBytes;
+        FilteredRows += other.FilteredRows;
+        QueuedBytes += other.QueuedBytes;
+        QueuedRows += other.QueuedRows;
     }
 
     void MergeTime(const TDqAsyncStats& other) {
@@ -100,8 +109,9 @@ struct TDqAsyncStats {
 
     inline void TryPause() {
         if (CollectFull()) {
+            auto now = TInstant::Now();
+
             if (!CurrentPauseTs) {
-                auto now = TInstant::Now();
                 if (ResumeMessageTs) {
                     auto delta = now - ResumeMessageTs;
                     if (delta >= MinWaitDuration) {
@@ -113,6 +123,17 @@ struct TDqAsyncStats {
                 } else {
                     CurrentPauseTs = now;
                 }
+            }
+
+            // we want to report wait time asap (not on next message only)
+            // so we decrease wait period to minimal possible value of MinWaitDuration
+            // (used to filter out short periods) and report the rest
+
+            auto delta = now - *CurrentPauseTs;
+            if (delta >= MinWaitDuration * 2) {
+                WaitTime += delta;
+                WaitTime -= MinWaitDuration;
+                *CurrentPauseTs = now - MinWaitDuration;
             }
         }
     }

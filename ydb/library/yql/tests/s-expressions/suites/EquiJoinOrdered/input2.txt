@@ -1,3 +1,0 @@
-{"key1"=2;subkey1=".";"value2"="U"};
-{"key1"=4;subkey1=".";"value2"="Y"};
-{"key1"=4;subkey1=".";"value2"="W"};

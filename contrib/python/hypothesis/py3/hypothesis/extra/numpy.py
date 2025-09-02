@@ -10,20 +10,9 @@
 
 import importlib
 import math
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Literal,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
+import types
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar, Union, cast, overload
 
 import numpy as np
 
@@ -79,26 +68,26 @@ _SupportsArray = _try_import("numpy._typing._array_like", "_SupportsArray")
 
 __all__ = [
     "BroadcastableShapes",
-    "from_dtype",
-    "arrays",
+    "array_dtypes",
     "array_shapes",
-    "scalar_dtypes",
+    "arrays",
+    "basic_indices",
     "boolean_dtypes",
-    "unsigned_integer_dtypes",
-    "integer_dtypes",
-    "floating_dtypes",
+    "broadcastable_shapes",
+    "byte_string_dtypes",
     "complex_number_dtypes",
     "datetime64_dtypes",
-    "timedelta64_dtypes",
-    "byte_string_dtypes",
-    "unicode_string_dtypes",
-    "array_dtypes",
-    "nested_dtypes",
-    "valid_tuple_axes",
-    "broadcastable_shapes",
-    "mutually_broadcastable_shapes",
-    "basic_indices",
+    "floating_dtypes",
+    "from_dtype",
     "integer_array_indices",
+    "integer_dtypes",
+    "mutually_broadcastable_shapes",
+    "nested_dtypes",
+    "scalar_dtypes",
+    "timedelta64_dtypes",
+    "unicode_string_dtypes",
+    "unsigned_integer_dtypes",
+    "valid_tuple_axes",
 ]
 
 TIME_RESOLUTIONS = tuple("Y  M  D  h  m  s  ms  us  ns  ps  fs  as".split())
@@ -523,6 +512,11 @@ def arrays(
     hundreds or more elements, having a fill value is essential if you want
     your tests to run in reasonable time.
     """
+    # Our dtype argument might be a union, e.g. `np.float64 | np.complex64`; we handle
+    # that by turning it into a strategy up-front.
+    if type(dtype) in (getattr(types, "UnionType", object()), Union):
+        dtype = st.one_of(*(from_dtype(np.dtype(d)) for d in dtype.__args__))  # type: ignore
+
     # We support passing strategies as arguments for convenience, or at least
     # for legacy reasons, but don't want to pay the perf cost of a composite
     # strategy (i.e. repeated argument handling and validation) when it's not
@@ -537,7 +531,7 @@ def arrays(
             lambda s: arrays(dtype, s, elements=elements, fill=fill, unique=unique)
         )
     # From here on, we're only dealing with values and it's relatively simple.
-    dtype = np.dtype(dtype)  # type: ignore[arg-type,assignment]
+    dtype = np.dtype(dtype)  # type: ignore[arg-type]
     assert isinstance(dtype, np.dtype)  # help mypy out a bit...
     if elements is None or isinstance(elements, Mapping):
         if dtype.kind in ("m", "M") and "[" not in dtype.str:
@@ -596,6 +590,7 @@ def defines_dtype_strategy(strat: T) -> T:
 
 @defines_dtype_strategy
 def boolean_dtypes() -> st.SearchStrategy["np.dtype[np.bool_]"]:
+    """Return a strategy for boolean dtypes."""
     return st.just("?")  # type: ignore[arg-type]
 
 
@@ -1103,7 +1098,7 @@ def basic_indices(
     allow_newaxis: bool = False,
     allow_ellipsis: bool = True,
 ) -> st.SearchStrategy[BasicIndex]:
-    """Return a strategy for :doc:`basic indexes <numpy:reference/arrays.indexing>` of
+    """Return a strategy for :doc:`basic indexes <numpy:reference/routines.indexing>` of
     arrays with the specified shape, which may include dimensions of size zero.
 
     It generates tuples containing some mix of integers, :obj:`python:slice`
@@ -1184,7 +1179,7 @@ def integer_array_indices(
     shape: Shape,
     *,
     result_shape: st.SearchStrategy[Shape] = array_shapes(),
-) -> "st.SearchStrategy[Tuple[NDArray[np.signedinteger[Any]], ...]]": ...
+) -> "st.SearchStrategy[tuple[NDArray[np.signedinteger[Any]], ...]]": ...
 
 
 @overload
@@ -1194,7 +1189,7 @@ def integer_array_indices(
     *,
     result_shape: st.SearchStrategy[Shape] = array_shapes(),
     dtype: "np.dtype[I]",
-) -> "st.SearchStrategy[Tuple[NDArray[I], ...]]": ...
+) -> "st.SearchStrategy[tuple[NDArray[I], ...]]": ...
 
 
 @defines_strategy()
@@ -1202,8 +1197,10 @@ def integer_array_indices(
     shape: Shape,
     *,
     result_shape: st.SearchStrategy[Shape] = array_shapes(),
-    dtype: "np.dtype[I] | np.dtype[np.signedinteger[Any]]" = np.dtype(int),
-) -> "st.SearchStrategy[Tuple[NDArray[I], ...]]":
+    dtype: "np.dtype[I] | np.dtype[np.signedinteger[Any] | np.bool[bool]]" = np.dtype(
+        int
+    ),
+) -> "st.SearchStrategy[tuple[NDArray[I], ...]]":
     """Return a search strategy for tuples of integer-arrays that, when used
     to index into an array of shape ``shape``, given an array whose shape
     was drawn from ``result_shape``.
@@ -1279,7 +1276,7 @@ def _unpack_generic(thing):
 
 def _unpack_dtype(dtype):
     dtype_args = getattr(dtype, "__args__", ())
-    if dtype_args:
+    if dtype_args and type(dtype) not in (getattr(types, "UnionType", object()), Union):
         assert len(dtype_args) == 1
         if isinstance(dtype_args[0], TypeVar):
             # numpy.dtype[+ScalarType]
@@ -1291,25 +1288,24 @@ def _unpack_dtype(dtype):
     return dtype
 
 
-def _dtype_and_shape_from_args(args):
+def _dtype_from_args(args):
     if len(args) <= 1:
         # Zero args: ndarray, _SupportsArray
         # One arg: ndarray[type], _SupportsArray[type]
-        shape = Any
         dtype = _unpack_dtype(args[0]) if args else Any
     else:
         # Two args: ndarray[shape, type], NDArray[*]
         assert len(args) == 2
-        shape = args[0]
-        assert shape is Any
         dtype = _unpack_dtype(args[1])
-    return (
-        scalar_dtypes() if dtype is Any else np.dtype(dtype),
-        array_shapes(max_dims=2) if shape is Any else shape,
-    )
+
+    if dtype is Any:
+        return scalar_dtypes()
+    elif type(dtype) in (getattr(types, "UnionType", object()), Union):
+        return dtype
+    return np.dtype(dtype)
 
 
-def _from_type(thing: Type[Ex]) -> Optional[st.SearchStrategy[Ex]]:
+def _from_type(thing: type[Ex]) -> Optional[st.SearchStrategy[Ex]]:
     """Called by st.from_type to try to infer a strategy for thing using numpy.
 
     If we can infer a numpy-specific strategy for thing, we return that; otherwise,
@@ -1394,8 +1390,8 @@ def _from_type(thing: Type[Ex]) -> Optional[st.SearchStrategy[Ex]]:
         )
 
     if real_thing in [np.ndarray, _SupportsArray]:
-        dtype, shape = _dtype_and_shape_from_args(args)
-        return arrays(dtype, shape)  # type: ignore[return-value]
+        dtype = _dtype_from_args(args)
+        return arrays(dtype, array_shapes(max_dims=2))  # type: ignore[return-value]
 
     # We didn't find a type to resolve, continue
     return None

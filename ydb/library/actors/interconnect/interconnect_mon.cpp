@@ -35,7 +35,7 @@ namespace NInterconnect {
             }
 
             void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev, const TActorContext& ctx) {
-                TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
+                TActorSystem* const as = ctx.ActorSystem();
                 for (const auto& node : ev->Get()->Nodes) {
                     Send(as->InterconnectProxy(node.NodeId), new TInterconnectProxyTCP::TEvQueryStats, IEventHandle::FlagTrackDelivery);
                     ++PendingReplies;
@@ -130,7 +130,8 @@ namespace NInterconnect {
                                     }
                                     TABLED() { str << kv.second.TotalOutputQueueSize; }
                                     TABLED() { str << (kv.second.Connected ? "yes" : "<strong>no</strong>"); }
-                                    TABLED() { str << (kv.second.ExternalDataChannel ? "yes" : "no"); }
+                                    TABLED() { str << (kv.second.ExternalDataChannel ? "yes" : "no")
+                                        << " (" << (kv.second.XDCFlags & TInterconnectProxyTCP::TProxyStats::XDCFlags::MSG_ZERO_COPY_SEND ? "MSG_ZC_SEND" : "_")  << ")"; }
                                     TABLED() { str << kv.second.Host; }
                                     TABLED() { str << kv.second.Port; }
                                     TABLED() {

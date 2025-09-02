@@ -16,6 +16,8 @@ class TBlobManagerDb;
 class IBlobsGCAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
+    YDB_READONLY(TString, ActionGuid, TGUID::CreateTimebased().AsGuidString());
+
 protected:
     TBlobsCategories BlobsToRemove;
     std::shared_ptr<NBlobOperations::TRemoveGCCounters> Counters;
@@ -33,7 +35,7 @@ protected:
     virtual bool DoIsEmpty() const = 0;
 public:
     void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
-        BlobsToRemove.RemoveSharing(ownerTabletId, blobId);
+        AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
     }
 
     void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);

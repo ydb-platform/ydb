@@ -8,10 +8,9 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTableMountCacheConfig
+struct TTableMountCacheConfig
     : public TAsyncExpiringCacheConfig
 {
-public:
     //! If entry is requested for the first time then allow only client who requested the entry to wait for it.
     bool RejectIfEntryIsRequestedButNotReady;
 
@@ -26,10 +25,9 @@ DEFINE_REFCOUNTED_TYPE(TTableMountCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTableMountCacheDynamicConfig
+struct TTableMountCacheDynamicConfig
     : public TAsyncExpiringCacheDynamicConfig
 {
-public:
     std::optional<bool> RejectIfEntryIsRequestedButNotReady;
 
     REGISTER_YSON_STRUCT(TTableMountCacheDynamicConfig);
@@ -41,10 +39,9 @@ DEFINE_REFCOUNTED_TYPE(TTableMountCacheDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteDynamicStoreReaderConfig
+struct TRemoteDynamicStoreReaderConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     TDuration ClientReadTimeout;
     TDuration ServerReadTimeout;
     TDuration ClientWriteTimeout;
@@ -65,10 +62,9 @@ DEFINE_REFCOUNTED_TYPE(TRemoteDynamicStoreReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetryingRemoteDynamicStoreReaderConfig
+struct TRetryingRemoteDynamicStoreReaderConfig
     : public TRemoteDynamicStoreReaderConfig
 {
-public:
     //! Maximum number of locate requests.
     int RetryCount;
 
@@ -84,14 +80,30 @@ DEFINE_REFCOUNTED_TYPE(TRetryingRemoteDynamicStoreReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicatedTableOptions
+struct TReplicationCollocationOptions
     : public NYTree::TYsonStruct
 {
-public:
+    std::optional<std::vector<std::string>> PreferredSyncReplicaClusters;
+
+    REGISTER_YSON_STRUCT(TReplicationCollocationOptions);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TReplicationCollocationOptions)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicatedTableOptions
+    : public TReplicationCollocationOptions
+{
     bool EnableReplicatedTableTracker;
 
     std::optional<int> MaxSyncReplicaCount;
     std::optional<int> MinSyncReplicaCount;
+
+    std::optional<int> MaxSyncQueueReplicaCount;
+    std::optional<int> MinSyncQueueReplicaCount;
 
     TDuration SyncReplicaLagThreshold;
 
@@ -102,9 +114,7 @@ public:
     bool EnablePreloadStateCheck;
     TDuration IncompletePreloadGracePeriod;
 
-    std::optional<std::vector<TString>> PreferredSyncReplicaClusters;
-
-    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(int replicaCount) const;
+    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(ETableReplicaContentType contentType, int replicaCount) const;
 
     REGISTER_YSON_STRUCT(TReplicatedTableOptions);
 

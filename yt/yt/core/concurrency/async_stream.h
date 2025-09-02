@@ -31,7 +31,7 @@ DEFINE_REFCOUNTED_TYPE(IAsyncInputStream)
 
 //! Creates a synchronous adapter from a given asynchronous stream.
 /*!
- *  NB: in order to ensure memory safety with WaitFor strategy, data is read to an
+ *  NB: In order to ensure memory safety with WaitFor strategy, data is read to an
  *  intermediate shared buffer and then copied to the destination buffer.
  *  Do not use this wrapper in throughput-critical code, prefer using
  *  async or async zero-copy input stream interface instead.
@@ -160,7 +160,7 @@ struct IAsyncZeroCopyOutputStream
      *  the previous call is complete. The returned future, however, provides
      *  means to implement backpressure.
      *
-     *  NB: this shared ref should become unique ref.
+     *  NB: This shared ref should become unique ref.
      */
     [[nodiscard]] virtual TFuture<void> Write(const TSharedRef& data) = 0;
 

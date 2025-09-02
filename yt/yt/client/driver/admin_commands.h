@@ -104,7 +104,7 @@ public:
 
 private:
     NHydra::TCellId CellId_;
-    TString NewLeaderAddress_;
+    std::string NewLeaderAddress_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -136,7 +136,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Address_;
+    std::string Address_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -265,7 +265,7 @@ public:
 
 private:
     NApi::EMaintenanceComponent Component_;
-    TString Address_;
+    std::string Address_;
     NApi::EMaintenanceType Type_;
     TString Comment_;
     // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
@@ -286,10 +286,10 @@ public:
 
 private:
     NApi::EMaintenanceComponent Component_;
-    TString Address_;
+    std::string Address_;
     bool Mine_ = false;
     bool All_ = false;
-    std::optional<TString> User_;
+    std::optional<std::string> User_;
     std::optional<NApi::TMaintenanceId> Id_;
     std::optional<std::vector<NApi::TMaintenanceId>> Ids_;
     std::optional<NApi::EMaintenanceType> Type_;
@@ -310,7 +310,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString NodeAddress_;
+    std::string NodeAddress_;
     std::vector<TGuid> LocationUuids_;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -327,7 +327,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString NodeAddress_;
+    std::string NodeAddress_;
     bool RecoverUnlinkedDisks_;
     std::vector<TGuid> LocationUuids_;
 
@@ -345,7 +345,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString NodeAddress_;
+    std::string NodeAddress_;
     std::vector<TGuid> LocationUuids_;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -364,7 +364,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString NodeAddress_;
+    std::string NodeAddress_;
 
     void DoExecute(ICommandContextPtr context) override;
 };

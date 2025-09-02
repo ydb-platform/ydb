@@ -1,21 +1,20 @@
 import json
+import re
 import yaml
-from urllib.parse import urlparse
+from typing import Any, Dict, Tuple, List, Optional, Union
 from yaml.parser import ParserError  # pylint:disable=c-extension-no-member
 from yaml.scanner import ScannerError  # pylint:disable=c-extension-no-member
 
 from moto.core.responses import BaseResponse
-from moto.core.utils import amzn_request_id
-from moto.s3.models import s3_backend
 from moto.s3.exceptions import S3ClientError
-from moto.core import get_account_id
-from .models import cloudformation_backends
+from moto.utilities.aws_headers import amzn_request_id
+from .models import cloudformation_backends, CloudFormationBackend, FakeStack
 from .exceptions import ValidationError, MissingParameterError
-from .utils import yaml_tag_constructor
+from .utils import yaml_tag_constructor, get_stack_from_s3_url
 
 
-def get_template_summary_response_from_template(template_body):
-    def get_resource_types(template_dict):
+def get_template_summary_response_from_template(template_body: str) -> Dict[str, Any]:
+    def get_resource_types(template_dict: Dict[str, Any]) -> List[Any]:
         resources = {}
         for key, value in template_dict.items():
             if key == "Resources":
@@ -39,39 +38,25 @@ def get_template_summary_response_from_template(template_body):
 
 
 class CloudFormationResponse(BaseResponse):
+    def __init__(self) -> None:
+        super().__init__(service_name="cloudformation")
+
     @property
-    def cloudformation_backend(self):
-        return cloudformation_backends[self.region]
+    def cloudformation_backend(self) -> CloudFormationBackend:
+        return cloudformation_backends[self.current_account][self.region]
 
     @classmethod
-    def cfnresponse(cls, *args, **kwargs):  # pylint: disable=unused-argument
+    def cfnresponse(cls, *args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]  # pylint: disable=unused-argument
         request, full_url, headers = args
         full_url += "&Action=ProcessCfnResponse"
         return cls.dispatch(request=request, full_url=full_url, headers=headers)
 
-    def _get_stack_from_s3_url(self, template_url):
-        template_url_parts = urlparse(template_url)
-        if "localhost" in template_url:
-            bucket_name, key_name = template_url_parts.path.lstrip("/").split("/", 1)
-        else:
-            if template_url_parts.netloc.endswith(
-                "amazonaws.com"
-            ) and template_url_parts.netloc.startswith("s3"):
-                # Handle when S3 url uses amazon url with bucket in path
-                # Also handles getting region as technically s3 is region'd
+    def _get_stack_from_s3_url(self, template_url: str) -> str:
+        return get_stack_from_s3_url(template_url, account_id=self.current_account)
 
-                # region = template_url.netloc.split('.')[1]
-                bucket_name, key_name = template_url_parts.path.lstrip("/").split(
-                    "/", 1
-                )
-            else:
-                bucket_name = template_url_parts.netloc.split(".")[0]
-                key_name = template_url_parts.path.lstrip("/")
-
-        key = s3_backend.get_object(bucket_name, key_name)
-        return key.value.decode("utf-8")
-
-    def _get_params_from_list(self, parameters_list):
+    def _get_params_from_list(
+        self, parameters_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         # Hack dict-comprehension
         return dict(
             [
@@ -80,7 +65,9 @@ class CloudFormationResponse(BaseResponse):
             ]
         )
 
-    def _get_param_values(self, parameters_list, existing_params):
+    def _get_param_values(
+        self, parameters_list: List[Dict[str, str]], existing_params: Dict[str, str]
+    ) -> Dict[str, Any]:
         result = {}
         for parameter in parameters_list:
             if parameter.keys() >= {"parameter_key", "parameter_value"}:
@@ -96,7 +83,7 @@ class CloudFormationResponse(BaseResponse):
                 raise MissingParameterError(parameter["parameter_key"])
         return result
 
-    def process_cfn_response(self):
+    def process_cfn_response(self) -> Tuple[int, Dict[str, int], str]:
         status = self._get_param("Status")
         if status == "SUCCESS":
             stack_id = self._get_param("StackId")
@@ -109,11 +96,14 @@ class CloudFormationResponse(BaseResponse):
 
         return 200, {"status": 200}, json.dumps("{}")
 
-    def create_stack(self):
+    def create_stack(self) -> Union[str, Tuple[int, Dict[str, int], str]]:
         stack_name = self._get_param("StackName")
         stack_body = self._get_param("TemplateBody")
         template_url = self._get_param("TemplateURL")
         role_arn = self._get_param("RoleARN")
+        enable_termination_protection = self._get_param("EnableTerminationProtection")
+        timeout_in_mins = self._get_param("TimeoutInMinutes")
+        stack_policy_body = self._get_param("StackPolicyBody")
         parameters_list = self._get_list_prefix("Parameters.member")
         tags = dict(
             (item["key"], item["value"])
@@ -139,6 +129,9 @@ class CloudFormationResponse(BaseResponse):
             notification_arns=stack_notification_arns,
             tags=tags,
             role_arn=role_arn,
+            enable_termination_protection=enable_termination_protection,
+            timeout_in_mins=timeout_in_mins,
+            stack_policy_body=stack_policy_body,
         )
         if self.request_json:
             return json.dumps(
@@ -152,14 +145,14 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(CREATE_STACK_RESPONSE_TEMPLATE)
             return template.render(stack=stack)
 
-    def stack_name_exists(self, new_stack_name):
+    def stack_name_exists(self, new_stack_name: str) -> bool:
         for stack in self.cloudformation_backend.stacks.values():
             if stack.name == new_stack_name:
                 return True
         return False
 
     @amzn_request_id
-    def create_change_set(self):
+    def create_change_set(self) -> str:
         stack_name = self._get_param("StackName")
         change_set_name = self._get_param("ChangeSetName")
         stack_body = self._get_param("TemplateBody")
@@ -205,7 +198,7 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(CREATE_CHANGE_SET_RESPONSE_TEMPLATE)
             return template.render(stack_id=stack_id, change_set_id=change_set_id)
 
-    def delete_change_set(self):
+    def delete_change_set(self) -> str:
         change_set_name = self._get_param("ChangeSetName")
 
         self.cloudformation_backend.delete_change_set(change_set_name=change_set_name)
@@ -217,7 +210,7 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(DELETE_CHANGE_SET_RESPONSE_TEMPLATE)
             return template.render()
 
-    def describe_change_set(self):
+    def describe_change_set(self) -> str:
         change_set_name = self._get_param("ChangeSetName")
         change_set = self.cloudformation_backend.describe_change_set(
             change_set_name=change_set_name
@@ -226,7 +219,7 @@ class CloudFormationResponse(BaseResponse):
         return template.render(change_set=change_set)
 
     @amzn_request_id
-    def execute_change_set(self):
+    def execute_change_set(self) -> str:
         stack_name = self._get_param("StackName")
         change_set_name = self._get_param("ChangeSetName")
         self.cloudformation_backend.execute_change_set(
@@ -240,10 +233,8 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(EXECUTE_CHANGE_SET_RESPONSE_TEMPLATE)
             return template.render()
 
-    def describe_stacks(self):
-        stack_name_or_id = None
-        if self._get_param("StackName"):
-            stack_name_or_id = self.querystring.get("StackName")[0]
+    def describe_stacks(self) -> str:
+        stack_name_or_id = self._get_param("StackName")
         token = self._get_param("NextToken")
         stacks = self.cloudformation_backend.describe_stacks(stack_name_or_id)
         stack_ids = [stack.stack_id for stack in stacks]
@@ -259,68 +250,60 @@ class CloudFormationResponse(BaseResponse):
         template = self.response_template(DESCRIBE_STACKS_TEMPLATE)
         return template.render(stacks=stacks_resp, next_token=next_token)
 
-    def describe_stack_resource(self):
+    def describe_stack_resource(self) -> str:
         stack_name = self._get_param("StackName")
-        stack = self.cloudformation_backend.get_stack(stack_name)
         logical_resource_id = self._get_param("LogicalResourceId")
-
-        resource = None
-        for stack_resource in stack.stack_resources:
-            if stack_resource.logical_resource_id == logical_resource_id:
-                resource = stack_resource
-                break
-
-        if not resource:
-            message = "Resource {0} does not exist for stack {1}".format(
-                logical_resource_id, stack_name
-            )
-            raise ValidationError(stack_name, message)
+        stack, resource = self.cloudformation_backend.describe_stack_resource(
+            stack_name, logical_resource_id
+        )
 
         template = self.response_template(DESCRIBE_STACK_RESOURCE_RESPONSE_TEMPLATE)
         return template.render(stack=stack, resource=resource)
 
-    def describe_stack_resources(self):
+    def describe_stack_resources(self) -> str:
         stack_name = self._get_param("StackName")
-        stack = self.cloudformation_backend.get_stack(stack_name)
+        stack, resources = self.cloudformation_backend.describe_stack_resources(
+            stack_name
+        )
 
         template = self.response_template(DESCRIBE_STACK_RESOURCES_RESPONSE)
-        return template.render(stack=stack)
+        return template.render(stack=stack, resources=resources)
 
-    def describe_stack_events(self):
+    def describe_stack_events(self) -> str:
         stack_name = self._get_param("StackName")
-        stack = self.cloudformation_backend.get_stack(stack_name)
+        events = self.cloudformation_backend.describe_stack_events(stack_name)
 
         template = self.response_template(DESCRIBE_STACK_EVENTS_RESPONSE)
-        return template.render(stack=stack)
+        return template.render(events=events)
 
-    def list_change_sets(self):
+    def list_change_sets(self) -> str:
         change_sets = self.cloudformation_backend.list_change_sets()
         template = self.response_template(LIST_CHANGE_SETS_RESPONSE)
         return template.render(change_sets=change_sets)
 
-    def list_stacks(self):
+    def list_stacks(self) -> str:
         status_filter = self._get_multi_param("StackStatusFilter.member")
         stacks = self.cloudformation_backend.list_stacks(status_filter)
         template = self.response_template(LIST_STACKS_RESPONSE)
         return template.render(stacks=stacks)
 
-    def list_stack_resources(self):
+    def list_stack_resources(self) -> str:
         stack_name_or_id = self._get_param("StackName")
         resources = self.cloudformation_backend.list_stack_resources(stack_name_or_id)
 
         template = self.response_template(LIST_STACKS_RESOURCES_RESPONSE)
         return template.render(resources=resources)
 
-    def get_template(self):
-        name_or_stack_id = self.querystring.get("StackName")[0]
-        stack = self.cloudformation_backend.get_stack(name_or_stack_id)
+    def get_template(self) -> str:
+        name_or_stack_id = self.querystring.get("StackName")[0]  # type: ignore[index]
+        stack_template = self.cloudformation_backend.get_template(name_or_stack_id)
 
         if self.request_json:
             return json.dumps(
                 {
                     "GetTemplateResponse": {
                         "GetTemplateResult": {
-                            "TemplateBody": stack.template,
+                            "TemplateBody": stack_template,
                             "ResponseMetadata": {
                                 "RequestId": "2d06e36c-ac1d-11e0-a958-f9382b6eb86bEXAMPLE"
                             },
@@ -330,9 +313,9 @@ class CloudFormationResponse(BaseResponse):
             )
         else:
             template = self.response_template(GET_TEMPLATE_RESPONSE_TEMPLATE)
-            return template.render(stack=stack)
+            return template.render(stack_template=stack_template)
 
-    def get_template_summary(self):
+    def get_template_summary(self) -> str:
         stack_name = self._get_param("StackName")
         template_url = self._get_param("TemplateURL")
         stack_body = self._get_param("TemplateBody")
@@ -351,23 +334,27 @@ class CloudFormationResponse(BaseResponse):
         template = self.response_template(GET_TEMPLATE_SUMMARY_TEMPLATE)
         return template.render(template_summary=template_summary)
 
-    def _validate_different_update(self, incoming_params, stack_body, old_stack):
+    def _validate_different_update(
+        self,
+        incoming_params: Optional[List[Dict[str, Any]]],
+        stack_body: str,
+        old_stack: FakeStack,
+    ) -> None:
         if incoming_params and stack_body:
             new_params = self._get_param_values(incoming_params, old_stack.parameters)
             if old_stack.template == stack_body and old_stack.parameters == new_params:
                 raise ValidationError(
-                    old_stack.name, message=f"Stack [{old_stack.name}] already exists"
+                    old_stack.name, message="No updates are to be performed."
                 )
 
-    def _validate_status(self, stack):
+    def _validate_status(self, stack: FakeStack) -> None:
         if stack.status == "ROLLBACK_COMPLETE":
             raise ValidationError(
                 stack.stack_id,
-                message="Stack:{0} is in ROLLBACK_COMPLETE state and can not "
-                "be updated.".format(stack.stack_id),
+                message=f"Stack:{stack.stack_id} is in ROLLBACK_COMPLETE state and can not be updated.",
             )
 
-    def update_stack(self):
+    def update_stack(self) -> str:
         stack_name = self._get_param("StackName")
         role_arn = self._get_param("RoleARN")
         template_url = self._get_param("TemplateURL")
@@ -382,7 +369,7 @@ class CloudFormationResponse(BaseResponse):
         # boto3 is supposed to let you clear the tags by passing an empty value, but the request body doesn't
         # end up containing anything we can use to differentiate between passing an empty value versus not
         # passing anything. so until that changes, moto won't be able to clear tags, only update them.
-        tags = dict(
+        tags: Optional[Dict[str, str]] = dict(
             (item["key"], item["value"])
             for item in self._get_list_prefix("Tags.member")
         )
@@ -410,8 +397,8 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(UPDATE_STACK_RESPONSE_TEMPLATE)
             return template.render(stack=stack)
 
-    def delete_stack(self):
-        name_or_stack_id = self.querystring.get("StackName")[0]
+    def delete_stack(self) -> str:
+        name_or_stack_id = self.querystring.get("StackName")[0]  # type: ignore[index]
 
         self.cloudformation_backend.delete_stack(name_or_stack_id)
         if self.request_json:
@@ -420,13 +407,13 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(DELETE_STACK_RESPONSE_TEMPLATE)
             return template.render()
 
-    def list_exports(self):
+    def list_exports(self) -> str:
         token = self._get_param("NextToken")
-        exports, next_token = self.cloudformation_backend.list_exports(token=token)
+        exports, next_token = self.cloudformation_backend.list_exports(tokenstr=token)
         template = self.response_template(LIST_EXPORTS_RESPONSE)
         return template.render(exports=exports, next_token=next_token)
 
-    def validate_template(self):
+    def validate_template(self) -> str:
         template_body = self._get_param("TemplateBody")
         template_url = self._get_param("TemplateURL")
         if template_url:
@@ -447,11 +434,19 @@ class CloudFormationResponse(BaseResponse):
         template = self.response_template(VALIDATE_STACK_RESPONSE_TEMPLATE)
         return template.render(description=description)
 
-    def create_stack_set(self):
+    def create_stack_set(self) -> str:
         stackset_name = self._get_param("StackSetName")
+        if not re.match(r"^[a-zA-Z][-a-zA-Z0-9]*$", stackset_name):
+            raise ValidationError(
+                message=f"1 validation error detected: Value '{stackset_name}' at 'stackSetName' failed to satisfy constraint: Member must satisfy regular expression pattern: [a-zA-Z][-a-zA-Z0-9]*"
+            )
         stack_body = self._get_param("TemplateBody")
         template_url = self._get_param("TemplateURL")
+        permission_model = self._get_param("PermissionModel")
         parameters_list = self._get_list_prefix("Parameters.member")
+        admin_role = self._get_param("AdministrationRoleARN")
+        exec_role = self._get_param("ExecutionRoleName")
+        description = self._get_param("Description")
         tags = dict(
             (item["key"], item["value"])
             for item in self._get_list_prefix("Tags.member")
@@ -468,7 +463,14 @@ class CloudFormationResponse(BaseResponse):
             stack_body = self._get_stack_from_s3_url(template_url)
 
         stackset = self.cloudformation_backend.create_stack_set(
-            name=stackset_name, template=stack_body, parameters=parameters, tags=tags
+            name=stackset_name,
+            template=stack_body,
+            parameters=parameters,
+            tags=tags,
+            permission_model=permission_model,
+            admin_role=admin_role,
+            exec_role=exec_role,
+            description=description,
         )
         if self.request_json:
             return json.dumps(
@@ -482,24 +484,38 @@ class CloudFormationResponse(BaseResponse):
             template = self.response_template(CREATE_STACK_SET_RESPONSE_TEMPLATE)
             return template.render(stackset=stackset)
 
-    def create_stack_instances(self):
+    def create_stack_instances(self) -> str:
         stackset_name = self._get_param("StackSetName")
         accounts = self._get_multi_param("Accounts.member")
         regions = self._get_multi_param("Regions.member")
         parameters = self._get_multi_param("ParameterOverrides.member")
-        self.cloudformation_backend.create_stack_instances(
-            stackset_name, accounts, regions, parameters
+        deployment_targets = self._get_params().get("DeploymentTargets")
+        if deployment_targets and "OrganizationalUnitIds" in deployment_targets:
+            for ou_id in deployment_targets.get("OrganizationalUnitIds", []):
+                if not re.match(
+                    r"^(ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}|r-[a-z0-9]{4,32})$", ou_id
+                ):
+                    raise ValidationError(
+                        message=f"1 validation error detected: Value '[{ou_id}]' at 'deploymentTargets.organizationalUnitIds' failed to satisfy constraint: Member must satisfy constraint: [Member must have length less than or equal to 68, Member must have length greater than or equal to 6, Member must satisfy regular expression pattern: ^(ou-[a-z0-9]{{4,32}}-[a-z0-9]{{8,32}}|r-[a-z0-9]{{4,32}})$]"
+                    )
+
+        operation_id = self.cloudformation_backend.create_stack_instances(
+            stackset_name,
+            accounts,
+            regions,
+            parameters,
+            deployment_targets=deployment_targets,
         )
         template = self.response_template(CREATE_STACK_INSTANCES_TEMPLATE)
-        return template.render()
+        return template.render(operation_id=operation_id)
 
-    def delete_stack_set(self):
+    def delete_stack_set(self) -> str:
         stackset_name = self._get_param("StackSetName")
         self.cloudformation_backend.delete_stack_set(stackset_name)
         template = self.response_template(DELETE_STACK_SET_RESPONSE_TEMPLATE)
         return template.render()
 
-    def delete_stack_instances(self):
+    def delete_stack_instances(self) -> str:
         stackset_name = self._get_param("StackSetName")
         accounts = self._get_multi_param("Accounts.member")
         regions = self._get_multi_param("Regions.member")
@@ -510,76 +526,79 @@ class CloudFormationResponse(BaseResponse):
         template = self.response_template(DELETE_STACK_INSTANCES_TEMPLATE)
         return template.render(operation=operation)
 
-    def describe_stack_set(self):
+    def describe_stack_set(self) -> str:
         stackset_name = self._get_param("StackSetName")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
+        stackset = self.cloudformation_backend.describe_stack_set(stackset_name)
 
         if not stackset.admin_role:
-            stackset.admin_role = "arn:aws:iam::{AccountId}:role/AWSCloudFormationStackSetAdministrationRole".format(
-                AccountId=get_account_id()
-            )
+            stackset.admin_role = f"arn:aws:iam::{self.current_account}:role/AWSCloudFormationStackSetAdministrationRole"
         if not stackset.execution_role:
             stackset.execution_role = "AWSCloudFormationStackSetExecutionRole"
 
         template = self.response_template(DESCRIBE_STACK_SET_RESPONSE_TEMPLATE)
         return template.render(stackset=stackset)
 
-    def describe_stack_instance(self):
+    def describe_stack_instance(self) -> str:
         stackset_name = self._get_param("StackSetName")
         account = self._get_param("StackInstanceAccount")
         region = self._get_param("StackInstanceRegion")
 
-        instance = self.cloudformation_backend.get_stack_set(
-            stackset_name
-        ).instances.get_instance(account, region)
+        instance = self.cloudformation_backend.describe_stack_instance(
+            stackset_name, account, region
+        )
         template = self.response_template(DESCRIBE_STACK_INSTANCE_TEMPLATE)
         rendered = template.render(instance=instance)
         return rendered
 
-    def list_stack_sets(self):
-        stacksets = self.cloudformation_backend.stacksets
+    def list_stack_sets(self) -> str:
+        stacksets = self.cloudformation_backend.list_stack_sets()
         template = self.response_template(LIST_STACK_SETS_TEMPLATE)
         return template.render(stacksets=stacksets)
 
-    def list_stack_instances(self):
+    def list_stack_instances(self) -> str:
         stackset_name = self._get_param("StackSetName")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
+        instances = self.cloudformation_backend.list_stack_instances(stackset_name)
         template = self.response_template(LIST_STACK_INSTANCES_TEMPLATE)
-        return template.render(stackset=stackset)
+        return template.render(instances=instances)
 
-    def list_stack_set_operations(self):
+    def list_stack_set_operations(self) -> str:
         stackset_name = self._get_param("StackSetName")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
+        operations = self.cloudformation_backend.list_stack_set_operations(
+            stackset_name
+        )
         template = self.response_template(LIST_STACK_SET_OPERATIONS_RESPONSE_TEMPLATE)
-        return template.render(stackset=stackset)
+        return template.render(operations=operations)
 
-    def stop_stack_set_operation(self):
+    def stop_stack_set_operation(self) -> str:
         stackset_name = self._get_param("StackSetName")
         operation_id = self._get_param("OperationId")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
-        stackset.update_operation(operation_id, "STOPPED")
+        self.cloudformation_backend.stop_stack_set_operation(
+            stackset_name, operation_id
+        )
         template = self.response_template(STOP_STACK_SET_OPERATION_RESPONSE_TEMPLATE)
         return template.render()
 
-    def describe_stack_set_operation(self):
+    def describe_stack_set_operation(self) -> str:
         stackset_name = self._get_param("StackSetName")
         operation_id = self._get_param("OperationId")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
-        operation = stackset.get_operation(operation_id)
+        stackset, operation = self.cloudformation_backend.describe_stack_set_operation(
+            stackset_name, operation_id
+        )
         template = self.response_template(DESCRIBE_STACKSET_OPERATION_RESPONSE_TEMPLATE)
         return template.render(stackset=stackset, operation=operation)
 
-    def list_stack_set_operation_results(self):
+    def list_stack_set_operation_results(self) -> str:
         stackset_name = self._get_param("StackSetName")
         operation_id = self._get_param("OperationId")
-        stackset = self.cloudformation_backend.get_stack_set(stackset_name)
-        operation = stackset.get_operation(operation_id)
+        operation = self.cloudformation_backend.list_stack_set_operation_results(
+            stackset_name, operation_id
+        )
         template = self.response_template(
             LIST_STACK_SET_OPERATION_RESULTS_RESPONSE_TEMPLATE
         )
         return template.render(operation=operation)
 
-    def update_stack_set(self):
+    def update_stack_set(self) -> str:
         stackset_name = self._get_param("StackSetName")
         operation_id = self._get_param("OperationId")
         description = self._get_param("Description")
@@ -613,24 +632,24 @@ class CloudFormationResponse(BaseResponse):
         template = self.response_template(UPDATE_STACK_SET_RESPONSE_TEMPLATE)
         return template.render(operation=operation)
 
-    def update_stack_instances(self):
+    def update_stack_instances(self) -> str:
         stackset_name = self._get_param("StackSetName")
         accounts = self._get_multi_param("Accounts.member")
         regions = self._get_multi_param("Regions.member")
         parameters = self._get_multi_param("ParameterOverrides.member")
-        operation = self.cloudformation_backend.get_stack_set(
-            stackset_name
-        ).update_instances(accounts, regions, parameters)
+        operation = self.cloudformation_backend.update_stack_instances(
+            stackset_name, accounts, regions, parameters
+        )
         template = self.response_template(UPDATE_STACK_INSTANCES_RESPONSE_TEMPLATE)
         return template.render(operation=operation)
 
-    def get_stack_policy(self):
+    def get_stack_policy(self) -> str:
         stack_name = self._get_param("StackName")
         policy = self.cloudformation_backend.get_stack_policy(stack_name)
         template = self.response_template(GET_STACK_POLICY_RESPONSE)
         return template.render(policy=policy)
 
-    def set_stack_policy(self):
+    def set_stack_policy(self) -> str:
         stack_name = self._get_param("StackName")
         policy_url = self._get_param("StackPolicyURL")
         policy_body = self._get_param("StackPolicyBody")
@@ -779,7 +798,7 @@ DESCRIBE_STACKS_TEMPLATE = """<DescribeStacksResponse>
         <StackName>{{ stack.name }}</StackName>
         <StackId>{{ stack.stack_id }}</StackId>
         {% if stack.change_set_id %}
-        <ChangeSetId>{{ stack.change_set_id }}</ChangeSetId>
+        <ChangeSetId>{{ stack.change_set_id }}</stack.timeout_in_minsChangeSetId>
         {% endif %}
         <Description><![CDATA[{{ stack.description }}]]></Description>
         <CreationTime>{{ stack.creation_time_iso_8601 }}</CreationTime>
@@ -825,6 +844,10 @@ DESCRIBE_STACKS_TEMPLATE = """<DescribeStacksResponse>
             </member>
           {% endfor %}
         </Tags>
+        <EnableTerminationProtection>{{ stack.enable_termination_protection }}</EnableTerminationProtection>
+        {% if stack.timeout_in_mins %}
+        <TimeoutInMinutes>{{ stack.timeout_in_mins }}</TimeoutInMinutes>
+        {% endif %}
       </member>
       {% endfor %}
     </Stacks>
@@ -851,7 +874,7 @@ DESCRIBE_STACK_RESOURCE_RESPONSE_TEMPLATE = """<DescribeStackResourceResponse>
 DESCRIBE_STACK_RESOURCES_RESPONSE = """<DescribeStackResourcesResponse>
     <DescribeStackResourcesResult>
       <StackResources>
-        {% for resource in stack.stack_resources %}
+        {% for resource in resources %}
         <member>
           <StackId>{{ stack.stack_id }}</StackId>
           <StackName>{{ stack.name }}</StackName>
@@ -869,7 +892,7 @@ DESCRIBE_STACK_RESOURCES_RESPONSE = """<DescribeStackResourcesResponse>
 DESCRIBE_STACK_EVENTS_RESPONSE = """<DescribeStackEventsResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">
   <DescribeStackEventsResult>
     <StackEvents>
-      {% for event in stack.events[::-1] %}
+      {% for event in events[::-1] %}
       <member>
         <Timestamp>{{ event.timestamp.strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}</Timestamp>
         <ResourceStatus>{{ event.resource_status }}</ResourceStatus>
@@ -947,7 +970,7 @@ LIST_STACKS_RESOURCES_RESPONSE = """<ListStackResourcesResponse>
 
 GET_TEMPLATE_RESPONSE_TEMPLATE = """<GetTemplateResponse>
   <GetTemplateResult>
-    <TemplateBody>{{ stack.template }}</TemplateBody>
+    <TemplateBody>{{ stack_template }}</TemplateBody>
   </GetTemplateResult>
   <ResponseMetadata>
     <RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId>
@@ -1018,6 +1041,11 @@ DESCRIBE_STACK_SET_RESPONSE_TEMPLATE = """<DescribeStackSetResponse xmlns="http:
           {% endfor %}
         </Tags>
       <Status>{{ stackset.status }}</Status>
+      <PermissionModel>{{ stackset.permission_model }}</PermissionModel>
+      {% if stackset.description %}
+      <Description>{{ stackset.description }}</Description>
+      {% endif %}
+      <ManagedExecution><Active>false</Active></ManagedExecution>
     </StackSet>
   </DescribeStackSetResult>
   <ResponseMetadata>
@@ -1034,7 +1062,7 @@ DELETE_STACK_SET_RESPONSE_TEMPLATE = """<DeleteStackSetResponse xmlns="http://in
 
 CREATE_STACK_INSTANCES_TEMPLATE = """<CreateStackInstancesResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <CreateStackInstancesResult>
-    <OperationId>1459ad6d-63cc-4c96-a73e-example</OperationId>
+    <OperationId>{{ operation_id }}</OperationId>
   </CreateStackInstancesResult>
   <ResponseMetadata>
     <RequestId>6b29f7e3-69be-4d32-b374-example</RequestId>
@@ -1045,13 +1073,13 @@ CREATE_STACK_INSTANCES_TEMPLATE = """<CreateStackInstancesResponse xmlns="http:/
 LIST_STACK_INSTANCES_TEMPLATE = """<ListStackInstancesResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <ListStackInstancesResult>
     <Summaries>
-    {% for instance in stackset.stack_instances %}
+    {% for instance in instances %}
       <member>
-        <StackId>{{ instance.StackId }}</StackId>
-        <StackSetId>{{ instance.StackSetId }}</StackSetId>
-        <Region>{{ instance.Region }}</Region>
-        <Account>{{ instance.Account }}</Account>
-        <Status>{{ instance.Status }}</Status>
+        <StackId>{{ instance["StackId"] }}</StackId>
+        <StackSetId>{{ instance["StackSetId"] }}</StackSetId>
+        <Region>{{ instance["Region"] }}</Region>
+        <Account>{{ instance["Account"] }}</Account>
+        <Status>{{ instance["Status"] }}</Status>
       </member>
     {% endfor %}
     </Summaries>
@@ -1075,16 +1103,16 @@ DELETE_STACK_INSTANCES_TEMPLATE = """<DeleteStackInstancesResponse xmlns="http:/
 DESCRIBE_STACK_INSTANCE_TEMPLATE = """<DescribeStackInstanceResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <DescribeStackInstanceResult>
     <StackInstance>
-      <StackId>{{ instance.StackId }}</StackId>
-      <StackSetId>{{ instance.StackSetId }}</StackSetId>
-    {% if instance.ParameterOverrides %}
+      <StackId>{{ instance["StackId"] }}</StackId>
+      <StackSetId>{{ instance["StackSetId"] }}</StackSetId>
+    {% if instance["ParameterOverrides"] %}
       <ParameterOverrides>
-      {% for override in instance.ParameterOverrides %}
+      {% for override in instance["ParameterOverrides"] %}
       {% if override['ParameterKey'] or override['ParameterValue'] %}
         <member>
-          <ParameterKey>{{ override.ParameterKey }}</ParameterKey>
+          <ParameterKey>{{ override["ParameterKey"] }}</ParameterKey>
           <UsePreviousValue>false</UsePreviousValue>
-          <ParameterValue>{{ override.ParameterValue }}</ParameterValue>
+          <ParameterValue>{{ override["ParameterValue"] }}</ParameterValue>
         </member>
       {% endif %}
       {% endfor %}
@@ -1092,9 +1120,12 @@ DESCRIBE_STACK_INSTANCE_TEMPLATE = """<DescribeStackInstanceResponse xmlns="http
     {% else %}
       <ParameterOverrides/>
     {% endif %}
-      <Region>{{ instance.Region }}</Region>
-      <Account>{{ instance.Account }}</Account>
-      <Status>{{ instance.Status }}</Status>
+      <Region>{{ instance["Region"] }}</Region>
+      <Account>{{ instance["Account"] }}</Account>
+      <Status>{{ instance["Status"] }}</Status>
+      <StackInstanceStatus>
+          <DetailedStatus>{{ instance["StackInstanceStatus"]["DetailedStatus"] }}</DetailedStatus>
+      </StackInstanceStatus>
     </StackInstance>
   </DescribeStackInstanceResult>
   <ResponseMetadata>
@@ -1106,11 +1137,11 @@ DESCRIBE_STACK_INSTANCE_TEMPLATE = """<DescribeStackInstanceResponse xmlns="http
 LIST_STACK_SETS_TEMPLATE = """<ListStackSetsResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <ListStackSetsResult>
     <Summaries>
-    {% for key, value in stacksets.items() %}
+    {% for stackset in stacksets %}
       <member>
-        <StackSetName>{{ value.name }}</StackSetName>
-        <StackSetId>{{ value.id }}</StackSetId>
-        <Status>{{ value.status }}</Status>
+        <StackSetName>{{ stackset.name }}</StackSetName>
+        <StackSetId>{{ stackset.id }}</StackSetId>
+        <Status>{{ stackset.status }}</Status>
       </member>
     {% endfor %}
     </Summaries>
@@ -1144,7 +1175,7 @@ UPDATE_STACK_SET_RESPONSE_TEMPLATE = """<UpdateStackSetResponse xmlns="http://in
 LIST_STACK_SET_OPERATIONS_RESPONSE_TEMPLATE = """<ListStackSetOperationsResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <ListStackSetOperationsResult>
     <Summaries>
-    {% for operation in stackset.operations %}
+    {% for operation in operations %}
       <member>
         <CreationTimestamp>{{ operation.CreationTimestamp }}</CreationTimestamp>
         <OperationId>{{ operation.OperationId }}</OperationId>
@@ -1169,14 +1200,11 @@ STOP_STACK_SET_OPERATION_RESPONSE_TEMPLATE = """<StopStackSetOperationResponse x
 </StopStackSetOperationResponse>
 """
 
-DESCRIBE_STACKSET_OPERATION_RESPONSE_TEMPLATE = (
-    """<DescribeStackSetOperationResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
+DESCRIBE_STACKSET_OPERATION_RESPONSE_TEMPLATE = """<DescribeStackSetOperationResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <DescribeStackSetOperationResult>
     <StackSetOperation>
       <ExecutionRoleName>{{ stackset.execution_role }}</ExecutionRoleName>
-      <AdministrationRoleARN>arn:aws:iam::"""
-    + get_account_id()
-    + """:role/{{ stackset.admin_role }}</AdministrationRoleARN>
+      <AdministrationRoleARN>{{ stackset.admin_role_arn }}</AdministrationRoleARN>
       <StackSetId>{{ stackset.id }}</StackSetId>
       <CreationTimestamp>{{ operation.CreationTimestamp }}</CreationTimestamp>
       <OperationId>{{ operation.OperationId }}</OperationId>
@@ -1193,19 +1221,15 @@ DESCRIBE_STACKSET_OPERATION_RESPONSE_TEMPLATE = (
   </ResponseMetadata>
 </DescribeStackSetOperationResponse>
 """
-)
 
-LIST_STACK_SET_OPERATION_RESULTS_RESPONSE_TEMPLATE = (
-    """<ListStackSetOperationResultsResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
+LIST_STACK_SET_OPERATION_RESULTS_RESPONSE_TEMPLATE = """<ListStackSetOperationResultsResponse xmlns="http://internal.amazon.com/coral/com.amazonaws.maestro.service.v20160713/">
   <ListStackSetOperationResultsResult>
     <Summaries>
     {% for instance in operation.Instances %}
     {% for account, region in instance.items() %}
       <member>
         <AccountGateResult>
-          <StatusReason>Function not found: arn:aws:lambda:us-west-2:"""
-    + get_account_id()
-    + """:function:AWSCloudFormationStackSetAccountGate</StatusReason>
+          <StatusReason>Function not found: arn:aws:lambda:us-west-2:{{ account }}:function:AWSCloudFormationStackSetAccountGate</StatusReason>
           <Status>SKIPPED</Status>
         </AccountGateResult>
         <Region>{{ region }}</Region>
@@ -1221,7 +1245,6 @@ LIST_STACK_SET_OPERATION_RESULTS_RESPONSE_TEMPLATE = (
   </ResponseMetadata>
 </ListStackSetOperationResultsResponse>
 """
-)
 
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_GetTemplateSummary.html
 # TODO:implement fields: ResourceIdentifierSummaries, Capabilities, CapabilitiesReason

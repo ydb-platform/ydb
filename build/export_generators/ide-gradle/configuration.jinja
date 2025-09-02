@@ -1,0 +1,27 @@
+{#- empty string #}
+val arcadia_root = "{{ arcadia_root }}"
+val output_root = "{{ output_root }}"
+val project_root = "{{ project_root }}"
+
+{%  if mainClass -%}
+application {
+    mainClass.set("{{ mainClass }}")
+}
+
+{%  endif -%}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+configurations.api {
+    isTransitive = false
+}
+
+configurations.implementation {
+    isTransitive = false
+}
+
+configurations.testImplementation {
+    isTransitive = false
+}

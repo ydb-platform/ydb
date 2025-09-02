@@ -13,16 +13,14 @@ class TSplitterCounters;
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
-class TPortionInfoConstructor;
+class TPortionAccessorConstructor;
 class TSimpleColumnInfo;
-class TColumnSaver;
 
 class IPortionDataChunk {
 private:
     YDB_READONLY(ui32, EntityId, 0);
 
     std::optional<ui32> ChunkIdx;
-
 protected:
     ui64 DoGetPackedSize() const {
         return GetData().size();
@@ -32,10 +30,16 @@ protected:
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual bool DoIsSplittable() const = 0;
     virtual std::optional<ui32> DoGetRecordsCount() const = 0;
+    virtual std::optional<ui64> DoGetRawBytes() const = 0;
+
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const = 0;
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const = 0;
+    virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
+        AFL_VERIFY(false)("problem", "implemented only in index chunks");
+    }
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
+        TString&& /*data*/, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
         AFL_VERIFY(false);
         return nullptr;
     }
@@ -61,6 +65,12 @@ public:
 
     std::optional<ui32> GetRecordsCount() const {
         return DoGetRecordsCount();
+    }
+
+    ui64 GetRawBytesVerified() const {
+        auto result = DoGetRawBytes();
+        AFL_VERIFY(result);
+        return *result;
     }
 
     ui32 GetRecordsCountVerified() const {
@@ -90,8 +100,8 @@ public:
         ChunkIdx = value;
     }
 
-    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const {
-        return DoCopyWithAnotherBlob(std::move(data), columnInfo);
+    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const {
+        return DoCopyWithAnotherBlob(std::move(data), rawBytes, columnInfo);
     }
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
@@ -117,9 +127,13 @@ public:
         }
     }
 
-    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
+    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
         AFL_VERIFY(!bRange.IsValid());
         return DoAddIntoPortionBeforeBlob(bRange, portionInfo);
+    }
+
+    void AddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const {
+        return DoAddInplaceIntoPortion(portionInfo);
     }
 };
 

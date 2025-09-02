@@ -62,8 +62,8 @@ extern "C" {
 
 #if 1
 #  define NGHTTP2_EXTERN
-#elif defined(WIN32) || (__has_declspec_attribute(dllexport) &&                \
-                         __has_declspec_attribute(dllimport))
+#elif defined(WIN32) ||                                                        \
+  (__has_declspec_attribute(dllexport) && __has_declspec_attribute(dllimport))
 #  ifdef BUILDING_NGHTTP2
 #    define NGHTTP2_EXTERN __declspec(dllexport)
 #  else /* !BUILDING_NGHTTP2 */
@@ -76,6 +76,10 @@ extern "C" {
 #    define NGHTTP2_EXTERN
 #  endif /* !BUILDING_NGHTTP2 */
 #endif   /* !defined(WIN32) */
+
+#ifdef BUILDING_NGHTTP2
+#  undef NGHTTP2_NO_SSIZE_T
+#endif /* BUILDING_NGHTTP2 */
 
 /**
  * @typedef
@@ -978,8 +982,8 @@ typedef enum {
  * signal the entire session failure.
  */
 typedef ssize_t (*nghttp2_data_source_read_callback)(
-    nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length,
-    uint32_t *data_flags, nghttp2_data_source *source, void *user_data);
+  nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length,
+  uint32_t *data_flags, nghttp2_data_source *source, void *user_data);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -1047,8 +1051,8 @@ typedef ssize_t (*nghttp2_data_source_read_callback)(
  * signal the entire session failure.
  */
 typedef nghttp2_ssize (*nghttp2_data_source_read_callback2)(
-    nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length,
-    uint32_t *data_flags, nghttp2_data_source *source, void *user_data);
+  nghttp2_session *session, int32_t stream_id, uint8_t *buf, size_t length,
+  uint32_t *data_flags, nghttp2_data_source *source, void *user_data);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -1709,8 +1713,8 @@ typedef int (*nghttp2_on_frame_recv_callback)(nghttp2_session *session,
  * `nghttp2_session_callbacks_set_on_invalid_frame_recv_callback()`.
  */
 typedef int (*nghttp2_on_invalid_frame_recv_callback)(
-    nghttp2_session *session, const nghttp2_frame *frame, int lib_error_code,
-    void *user_data);
+  nghttp2_session *session, const nghttp2_frame *frame, int lib_error_code,
+  void *user_data);
 
 /**
  * @functypedef
@@ -2070,9 +2074,9 @@ typedef int (*nghttp2_on_header_callback2)(nghttp2_session *session,
  * not reset.
  */
 typedef int (*nghttp2_on_invalid_header_callback)(
-    nghttp2_session *session, const nghttp2_frame *frame, const uint8_t *name,
-    size_t namelen, const uint8_t *value, size_t valuelen, uint8_t flags,
-    void *user_data);
+  nghttp2_session *session, const nghttp2_frame *frame, const uint8_t *name,
+  size_t namelen, const uint8_t *value, size_t valuelen, uint8_t flags,
+  void *user_data);
 
 /**
  * @functypedef
@@ -2103,8 +2107,8 @@ typedef int (*nghttp2_on_invalid_header_callback)(
  * :enum:`nghttp2_error.NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE`.
  */
 typedef int (*nghttp2_on_invalid_header_callback2)(
-    nghttp2_session *session, const nghttp2_frame *frame, nghttp2_rcbuf *name,
-    nghttp2_rcbuf *value, uint8_t flags, void *user_data);
+  nghttp2_session *session, const nghttp2_frame *frame, nghttp2_rcbuf *name,
+  nghttp2_rcbuf *value, uint8_t flags, void *user_data);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2156,8 +2160,8 @@ typedef ssize_t (*nghttp2_select_padding_callback)(nghttp2_session *session,
  * `nghttp2_session_callbacks_set_select_padding_callback2()`.
  */
 typedef nghttp2_ssize (*nghttp2_select_padding_callback2)(
-    nghttp2_session *session, const nghttp2_frame *frame, size_t max_payloadlen,
-    void *user_data);
+  nghttp2_session *session, const nghttp2_frame *frame, size_t max_payloadlen,
+  void *user_data);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2191,9 +2195,9 @@ typedef nghttp2_ssize (*nghttp2_select_padding_callback2)(
  * `nghttp2_session_callbacks_set_data_source_read_length_callback()`.
  */
 typedef ssize_t (*nghttp2_data_source_read_length_callback)(
-    nghttp2_session *session, uint8_t frame_type, int32_t stream_id,
-    int32_t session_remote_window_size, int32_t stream_remote_window_size,
-    uint32_t remote_max_frame_size, void *user_data);
+  nghttp2_session *session, uint8_t frame_type, int32_t stream_id,
+  int32_t session_remote_window_size, int32_t stream_remote_window_size,
+  uint32_t remote_max_frame_size, void *user_data);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2223,9 +2227,9 @@ typedef ssize_t (*nghttp2_data_source_read_length_callback)(
  * `nghttp2_session_callbacks_set_data_source_read_length_callback2()`.
  */
 typedef nghttp2_ssize (*nghttp2_data_source_read_length_callback2)(
-    nghttp2_session *session, uint8_t frame_type, int32_t stream_id,
-    int32_t session_remote_window_size, int32_t stream_remote_window_size,
-    uint32_t remote_max_frame_size, void *user_data);
+  nghttp2_session *session, uint8_t frame_type, int32_t stream_id,
+  int32_t session_remote_window_size, int32_t stream_remote_window_size,
+  uint32_t remote_max_frame_size, void *user_data);
 
 /**
  * @functypedef
@@ -2275,8 +2279,8 @@ typedef int (*nghttp2_on_begin_frame_callback)(nghttp2_session *session,
  * :enum:`nghttp2_error.NGHTTP2_ERR_CALLBACK_FAILURE`.
  */
 typedef int (*nghttp2_on_extension_chunk_recv_callback)(
-    nghttp2_session *session, const nghttp2_frame_hd *hd, const uint8_t *data,
-    size_t len, void *user_data);
+  nghttp2_session *session, const nghttp2_frame_hd *hd, const uint8_t *data,
+  size_t len, void *user_data);
 
 /**
  * @functypedef
@@ -2387,8 +2391,8 @@ typedef ssize_t (*nghttp2_pack_extension_callback)(nghttp2_session *session,
  * :enum:`nghttp2_error.NGHTTP2_ERR_CALLBACK_FAILURE`.
  */
 typedef nghttp2_ssize (*nghttp2_pack_extension_callback2)(
-    nghttp2_session *session, uint8_t *buf, size_t len,
-    const nghttp2_frame *frame, void *user_data);
+  nghttp2_session *session, uint8_t *buf, size_t len,
+  const nghttp2_frame *frame, void *user_data);
 
 /**
  * @functypedef
@@ -2500,7 +2504,7 @@ nghttp2_session_callbacks_del(nghttp2_session_callbacks *callbacks);
  * transmit.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_callback(
-    nghttp2_session_callbacks *cbs, nghttp2_send_callback send_callback);
+  nghttp2_session_callbacks *cbs, nghttp2_send_callback send_callback);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2513,7 +2517,7 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_callback(
  * transmit.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_callback2(
-    nghttp2_session_callbacks *cbs, nghttp2_send_callback2 send_callback);
+  nghttp2_session_callbacks *cbs, nghttp2_send_callback2 send_callback);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2530,7 +2534,7 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_callback2(
  * received data.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_recv_callback(
-    nghttp2_session_callbacks *cbs, nghttp2_recv_callback recv_callback);
+  nghttp2_session_callbacks *cbs, nghttp2_recv_callback recv_callback);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2543,7 +2547,7 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_recv_callback(
  * received data.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_recv_callback2(
-    nghttp2_session_callbacks *cbs, nghttp2_recv_callback2 recv_callback);
+  nghttp2_session_callbacks *cbs, nghttp2_recv_callback2 recv_callback);
 
 /**
  * @function
@@ -2552,8 +2556,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_recv_callback2(
  * `nghttp2_session_mem_recv2()` when a frame is received.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_recv_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_frame_recv_callback on_frame_recv_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_frame_recv_callback on_frame_recv_callback);
 
 /**
  * @function
@@ -2564,8 +2568,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_recv_callback(
  */
 NGHTTP2_EXTERN void
 nghttp2_session_callbacks_set_on_invalid_frame_recv_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_invalid_frame_recv_callback on_invalid_frame_recv_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_invalid_frame_recv_callback on_invalid_frame_recv_callback);
 
 /**
  * @function
@@ -2574,8 +2578,8 @@ nghttp2_session_callbacks_set_on_invalid_frame_recv_callback(
  * is received.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_data_chunk_recv_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_data_chunk_recv_callback on_data_chunk_recv_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_data_chunk_recv_callback on_data_chunk_recv_callback);
 
 /**
  * @function
@@ -2583,8 +2587,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_data_chunk_recv_callback(
  * Sets callback function invoked before a non-DATA frame is sent.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_before_frame_send_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_before_frame_send_callback before_frame_send_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_before_frame_send_callback before_frame_send_callback);
 
 /**
  * @function
@@ -2592,8 +2596,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_before_frame_send_callback(
  * Sets callback function invoked after a frame is sent.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_send_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_frame_send_callback on_frame_send_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_frame_send_callback on_frame_send_callback);
 
 /**
  * @function
@@ -2602,8 +2606,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_send_callback(
  * because of an error.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_not_send_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_frame_not_send_callback on_frame_not_send_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_frame_not_send_callback on_frame_not_send_callback);
 
 /**
  * @function
@@ -2611,8 +2615,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_frame_not_send_callback(
  * Sets callback function invoked when the stream is closed.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_stream_close_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_stream_close_callback on_stream_close_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_stream_close_callback on_stream_close_callback);
 
 /**
  * @function
@@ -2621,8 +2625,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_stream_close_callback(
  * in HEADERS or PUSH_PROMISE is started.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_begin_headers_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_begin_headers_callback on_begin_headers_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_begin_headers_callback on_begin_headers_callback);
 
 /**
  * @function
@@ -2634,8 +2638,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_begin_headers_callback(
  * set callbacks, the latter has the precedence.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_header_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_header_callback on_header_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_header_callback on_header_callback);
 
 /**
  * @function
@@ -2644,8 +2648,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_header_callback(
  * received.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_header_callback2(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_header_callback2 on_header_callback2);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_header_callback2 on_header_callback2);
 
 /**
  * @function
@@ -2657,8 +2661,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_header_callback2(
  * used to set callbacks, the latter takes the precedence.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_invalid_header_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_invalid_header_callback on_invalid_header_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_invalid_header_callback on_invalid_header_callback);
 
 /**
  * @function
@@ -2667,8 +2671,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_invalid_header_callback(
  * pair is received.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_invalid_header_callback2(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_invalid_header_callback2 on_invalid_header_callback2);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_invalid_header_callback2 on_invalid_header_callback2);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2685,8 +2689,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_invalid_header_callback2(
  * given frame.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_select_padding_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_select_padding_callback select_padding_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_select_padding_callback select_padding_callback);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2698,8 +2702,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_select_padding_callback(
  * given frame.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_select_padding_callback2(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_select_padding_callback2 select_padding_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_select_padding_callback2 select_padding_callback);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2716,8 +2720,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_select_padding_callback2(
  */
 NGHTTP2_EXTERN void
 nghttp2_session_callbacks_set_data_source_read_length_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_data_source_read_length_callback data_source_read_length_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_data_source_read_length_callback data_source_read_length_callback);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2729,8 +2733,8 @@ nghttp2_session_callbacks_set_data_source_read_length_callback(
  */
 NGHTTP2_EXTERN void
 nghttp2_session_callbacks_set_data_source_read_length_callback2(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_data_source_read_length_callback2 data_source_read_length_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_data_source_read_length_callback2 data_source_read_length_callback);
 
 /**
  * @function
@@ -2738,8 +2742,8 @@ nghttp2_session_callbacks_set_data_source_read_length_callback2(
  * Sets callback function invoked when a frame header is received.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_begin_frame_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_begin_frame_callback on_begin_frame_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_begin_frame_callback on_begin_frame_callback);
 
 /**
  * @function
@@ -2749,8 +2753,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_on_begin_frame_callback(
  * :type:`nghttp2_data_source_read_callback2` to avoid data copy.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_data_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_send_data_callback send_data_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_send_data_callback send_data_callback);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -2766,8 +2770,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_send_data_callback(
  * application to pack extension frame payload in wire format.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_pack_extension_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_pack_extension_callback pack_extension_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_pack_extension_callback pack_extension_callback);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -2778,8 +2782,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_pack_extension_callback(
  * application to pack extension frame payload in wire format.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_pack_extension_callback2(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_pack_extension_callback2 pack_extension_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_pack_extension_callback2 pack_extension_callback);
 
 /**
  * @function
@@ -2788,8 +2792,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_pack_extension_callback2(
  * application to unpack extension frame payload from wire format.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_unpack_extension_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_unpack_extension_callback unpack_extension_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_unpack_extension_callback unpack_extension_callback);
 
 /**
  * @function
@@ -2799,8 +2803,8 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_unpack_extension_callback(
  */
 NGHTTP2_EXTERN void
 nghttp2_session_callbacks_set_on_extension_chunk_recv_callback(
-    nghttp2_session_callbacks *cbs,
-    nghttp2_on_extension_chunk_recv_callback on_extension_chunk_recv_callback);
+  nghttp2_session_callbacks *cbs,
+  nghttp2_on_extension_chunk_recv_callback on_extension_chunk_recv_callback);
 
 /**
  * @function
@@ -2819,7 +2823,7 @@ nghttp2_session_callbacks_set_on_extension_chunk_recv_callback(
  * precedence.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_error_callback(
-    nghttp2_session_callbacks *cbs, nghttp2_error_callback error_callback);
+  nghttp2_session_callbacks *cbs, nghttp2_error_callback error_callback);
 
 /**
  * @function
@@ -2832,7 +2836,7 @@ NGHTTP2_EXTERN void nghttp2_session_callbacks_set_error_callback(
  * precedence.
  */
 NGHTTP2_EXTERN void nghttp2_session_callbacks_set_error_callback2(
-    nghttp2_session_callbacks *cbs, nghttp2_error_callback2 error_callback2);
+  nghttp2_session_callbacks *cbs, nghttp2_error_callback2 error_callback2);
 
 /**
  * @functypedef
@@ -3134,14 +3138,12 @@ nghttp2_option_set_max_deflate_dynamic_table_size(nghttp2_option *option,
 /**
  * @function
  *
- * This option prevents the library from retaining closed streams to
- * maintain the priority tree.  If this option is set to nonzero,
- * applications can discard closed stream completely to save memory.
+ * .. warning::
  *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is submitted via `nghttp2_submit_settings()`, any
- * closed streams are not retained regardless of this option.
+ *   Deprecated.  Closed streams are not retained anymore.
+ *
+ * This function works as before, but it does not take any effect
+ * against :type:`nghttp2_session`.
  */
 NGHTTP2_EXTERN void nghttp2_option_set_no_closed_streams(nghttp2_option *option,
                                                          int val);
@@ -3171,16 +3173,11 @@ NGHTTP2_EXTERN void nghttp2_option_set_max_settings(nghttp2_option *option,
 /**
  * @function
  *
- * This option, if set to nonzero, allows server to fallback to
- * :rfc:`7540` priorities if SETTINGS_NO_RFC7540_PRIORITIES was not
- * received from client, and server submitted
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * = 1 via `nghttp2_submit_settings()`.  Most of the advanced
- * functionality for RFC 7540 priorities are still disabled.  This
- * fallback only enables the minimal feature set of RFC 7540
- * priorities to deal with priority signaling from client.
+ * .. warning::
+ *    Deprecated.  :rfc:`7540` priorities have been removed.
  *
- * Client session ignores this option.
+ * This function works as before, but it does not take any effect
+ * against :type:`nghttp2_session`.
  */
 NGHTTP2_EXTERN void
 nghttp2_option_set_server_fallback_rfc7540_priorities(nghttp2_option *option,
@@ -3196,7 +3193,7 @@ nghttp2_option_set_server_fallback_rfc7540_priorities(nghttp2_option *option,
  */
 NGHTTP2_EXTERN void
 nghttp2_option_set_no_rfc9113_leading_and_trailing_ws_validation(
-    nghttp2_option *option, int val);
+  nghttp2_option *option, int val);
 
 /**
  * @function
@@ -3352,8 +3349,8 @@ nghttp2_session_server_new2(nghttp2_session **session_ptr,
  *     Out of memory.
  */
 NGHTTP2_EXTERN int nghttp2_session_client_new3(
-    nghttp2_session **session_ptr, const nghttp2_session_callbacks *callbacks,
-    void *user_data, const nghttp2_option *option, nghttp2_mem *mem);
+  nghttp2_session **session_ptr, const nghttp2_session_callbacks *callbacks,
+  void *user_data, const nghttp2_option *option, nghttp2_mem *mem);
 
 /**
  * @function
@@ -3377,8 +3374,8 @@ NGHTTP2_EXTERN int nghttp2_session_client_new3(
  *     Out of memory.
  */
 NGHTTP2_EXTERN int nghttp2_session_server_new3(
-    nghttp2_session **session_ptr, const nghttp2_session_callbacks *callbacks,
-    void *user_data, const nghttp2_option *option, nghttp2_mem *mem);
+  nghttp2_session **session_ptr, const nghttp2_session_callbacks *callbacks,
+  void *user_data, const nghttp2_option *option, nghttp2_mem *mem);
 
 /**
  * @function
@@ -3808,7 +3805,7 @@ nghttp2_session_get_outbound_queue_size(nghttp2_session *session);
  * This function returns -1 if it fails.
  */
 NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_effective_recv_data_length(
-    nghttp2_session *session, int32_t stream_id);
+  nghttp2_session *session, int32_t stream_id);
 
 /**
  * @function
@@ -3828,7 +3825,7 @@ NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_effective_recv_data_length(
  * This function returns -1 if it fails.
  */
 NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_effective_local_window_size(
-    nghttp2_session *session, int32_t stream_id);
+  nghttp2_session *session, int32_t stream_id);
 
 /**
  * @function
@@ -3843,7 +3840,7 @@ NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_effective_local_window_size(
  * This function returns -1 if it fails.
  */
 NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_local_window_size(
-    nghttp2_session *session, int32_t stream_id);
+  nghttp2_session *session, int32_t stream_id);
 
 /**
  * @function
@@ -3911,7 +3908,7 @@ nghttp2_session_get_local_window_size(nghttp2_session *session);
  * This function returns -1 if it fails.
  */
 NGHTTP2_EXTERN int32_t nghttp2_session_get_stream_remote_window_size(
-    nghttp2_session *session, int32_t stream_id);
+  nghttp2_session *session, int32_t stream_id);
 
 /**
  * @function
@@ -4065,7 +4062,7 @@ NGHTTP2_EXTERN int nghttp2_submit_shutdown_notice(nghttp2_session *session);
  * :enum:`nghttp2_settings_id`.
  */
 NGHTTP2_EXTERN uint32_t nghttp2_session_get_remote_settings(
-    nghttp2_session *session, nghttp2_settings_id id);
+  nghttp2_session *session, nghttp2_settings_id id);
 
 /**
  * @function
@@ -4075,7 +4072,7 @@ NGHTTP2_EXTERN uint32_t nghttp2_session_get_remote_settings(
  * in :enum:`nghttp2_settings_id`.
  */
 NGHTTP2_EXTERN uint32_t nghttp2_session_get_local_settings(
-    nghttp2_session *session, nghttp2_settings_id id);
+  nghttp2_session *session, nghttp2_settings_id id);
 
 /**
  * @function
@@ -4180,39 +4177,9 @@ NGHTTP2_EXTERN int nghttp2_session_consume_stream(nghttp2_session *session,
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return 0 without doing anything.
+ *   prioritization scheme.
  *
- * Changes priority of existing stream denoted by |stream_id|.  The
- * new priority specification is |pri_spec|.
- *
- * The priority is changed silently and instantly, and no PRIORITY
- * frame will be sent to notify the peer of this change.  This
- * function may be useful for server to change the priority of pushed
- * stream.
- *
- * If |session| is initialized as server, and ``pri_spec->stream_id``
- * points to the idle stream, the idle stream is created if it does
- * not exist.  The created idle stream will depend on root stream
- * (stream 0) with weight 16.
- *
- * Otherwise, if stream denoted by ``pri_spec->stream_id`` is not
- * found, we use default priority instead of given |pri_spec|.  That
- * is make stream depend on root stream with weight 16.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is submitted via `nghttp2_submit_settings()`, this
- * function does nothing and returns 0.
- *
- * This function returns 0 if it succeeds, or one of the following
- * negative error codes:
- *
- * :enum:`nghttp2_error.NGHTTP2_ERR_NOMEM`
- *     Out of memory.
- * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     Attempted to depend on itself; or no stream exist for the given
- *     |stream_id|; or |stream_id| is 0
+ * This function is noop.  It always returns 0.
  */
 NGHTTP2_EXTERN int
 nghttp2_session_change_stream_priority(nghttp2_session *session,
@@ -4226,51 +4193,9 @@ nghttp2_session_change_stream_priority(nghttp2_session *session,
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return 0 without doing anything.
+ *   prioritization scheme.
  *
- * Creates idle stream with the given |stream_id|, and priority
- * |pri_spec|.
- *
- * The stream creation is done without sending PRIORITY frame, which
- * means that peer does not know about the existence of this idle
- * stream in the local endpoint.
- *
- * RFC 7540 does not disallow the use of creation of idle stream with
- * odd or even stream ID regardless of client or server.  So this
- * function can create odd or even stream ID regardless of client or
- * server.  But probably it is a bit safer to use the stream ID the
- * local endpoint can initiate (in other words, use odd stream ID for
- * client, and even stream ID for server), to avoid potential
- * collision from peer's instruction.  Also we can use
- * `nghttp2_session_set_next_stream_id()` to avoid to open created
- * idle streams accidentally if we follow this recommendation.
- *
- * If |session| is initialized as server, and ``pri_spec->stream_id``
- * points to the idle stream, the idle stream is created if it does
- * not exist.  The created idle stream will depend on root stream
- * (stream 0) with weight 16.
- *
- * Otherwise, if stream denoted by ``pri_spec->stream_id`` is not
- * found, we use default priority instead of given |pri_spec|.  That
- * is make stream depend on root stream with weight 16.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is submitted via `nghttp2_submit_settings()`, this
- * function does nothing and returns 0.
- *
- * This function returns 0 if it succeeds, or one of the following
- * negative error codes:
- *
- * :enum:`nghttp2_error.NGHTTP2_ERR_NOMEM`
- *     Out of memory.
- * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     Attempted to depend on itself; or stream denoted by |stream_id|
- *     already exists; or |stream_id| cannot be used to create idle
- *     stream (in other words, local endpoint has already opened
- *     stream ID greater than or equal to the given stream ID; or
- *     |stream_id| is 0
+ * This function is noop.  It always returns 0.
  */
 NGHTTP2_EXTERN int
 nghttp2_session_create_idle_stream(nghttp2_session *session, int32_t stream_id,
@@ -4400,7 +4325,7 @@ NGHTTP2_EXTERN int nghttp2_session_upgrade2(nghttp2_session *session,
  *     The provided |buflen| size is too small to hold the output.
  */
 NGHTTP2_EXTERN ssize_t nghttp2_pack_settings_payload(
-    uint8_t *buf, size_t buflen, const nghttp2_settings_entry *iv, size_t niv);
+  uint8_t *buf, size_t buflen, const nghttp2_settings_entry *iv, size_t niv);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -4426,7 +4351,7 @@ NGHTTP2_EXTERN ssize_t nghttp2_pack_settings_payload(
  *     The provided |buflen| size is too small to hold the output.
  */
 NGHTTP2_EXTERN nghttp2_ssize nghttp2_pack_settings_payload2(
-    uint8_t *buf, size_t buflen, const nghttp2_settings_entry *iv, size_t niv);
+  uint8_t *buf, size_t buflen, const nghttp2_settings_entry *iv, size_t niv);
 
 /**
  * @function
@@ -4506,23 +4431,7 @@ nghttp2_priority_spec_check_default(const nghttp2_priority_spec *pri_spec);
  *
  * Submits HEADERS frame and optionally one or more DATA frames.
  *
- * The |pri_spec| is a deprecated priority specification of this
- * request.  ``NULL`` means the default priority (see
- * `nghttp2_priority_spec_default_init()`).  To specify the priority,
- * use `nghttp2_priority_spec_init()`.  If |pri_spec| is not ``NULL``,
- * this function will copy its data members.
- *
- * The ``pri_spec->weight`` must be in [:macro:`NGHTTP2_MIN_WEIGHT`,
- * :macro:`NGHTTP2_MAX_WEIGHT`], inclusive.  If ``pri_spec->weight``
- * is strictly less than :macro:`NGHTTP2_MIN_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MIN_WEIGHT`.  If it is strictly greater than
- * :macro:`NGHTTP2_MAX_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MAX_WEIGHT`.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is received by a remote endpoint, |pri_spec| is
- * ignored, and treated as if ``NULL`` is specified.
+ * The |pri_spec| is ignored.
  *
  * The |nva| is an array of name/value pair :type:`nghttp2_nv` with
  * |nvlen| elements.  The application is responsible to include
@@ -4565,9 +4474,6 @@ nghttp2_priority_spec_check_default(const nghttp2_priority_spec *pri_spec);
  * :enum:`nghttp2_error.NGHTTP2_ERR_STREAM_ID_NOT_AVAILABLE`
  *     No stream ID is available because maximum stream ID was
  *     reached.
- * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     Trying to depend on itself (new stream ID equals
- *     ``pri_spec->stream_id``).
  * :enum:`nghttp2_error.NGHTTP2_ERR_PROTO`
  *     The |session| is server session.
  *
@@ -4584,9 +4490,9 @@ nghttp2_priority_spec_check_default(const nghttp2_priority_spec *pri_spec);
  *
  */
 NGHTTP2_EXTERN int32_t nghttp2_submit_request(
-    nghttp2_session *session, const nghttp2_priority_spec *pri_spec,
-    const nghttp2_nv *nva, size_t nvlen, const nghttp2_data_provider *data_prd,
-    void *stream_user_data);
+  nghttp2_session *session, const nghttp2_priority_spec *pri_spec,
+  const nghttp2_nv *nva, size_t nvlen, const nghttp2_data_provider *data_prd,
+  void *stream_user_data);
 
 #endif /* NGHTTP2_NO_SSIZE_T */
 
@@ -4595,25 +4501,7 @@ NGHTTP2_EXTERN int32_t nghttp2_submit_request(
  *
  * Submits HEADERS frame and optionally one or more DATA frames.
  *
- * The |pri_spec| is a deprecated priority specification of this
- * request.  ``NULL`` means the default priority (see
- * `nghttp2_priority_spec_default_init()`).  To specify the priority,
- * use `nghttp2_priority_spec_init()`.  If |pri_spec| is not ``NULL``,
- * this function will copy its data members.  In the future release
- * after the end of 2024, this function will ignore |pri_spec| and
- * behave as if ``NULL`` is given.
- *
- * The ``pri_spec->weight`` must be in [:macro:`NGHTTP2_MIN_WEIGHT`,
- * :macro:`NGHTTP2_MAX_WEIGHT`], inclusive.  If ``pri_spec->weight``
- * is strictly less than :macro:`NGHTTP2_MIN_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MIN_WEIGHT`.  If it is strictly greater than
- * :macro:`NGHTTP2_MAX_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MAX_WEIGHT`.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is received by a remote endpoint, |pri_spec| is
- * ignored, and treated as if ``NULL`` is specified.
+ * The |pri_spec| is ignored.
  *
  * The |nva| is an array of name/value pair :type:`nghttp2_nv` with
  * |nvlen| elements.  The application is responsible to include
@@ -4656,9 +4544,6 @@ NGHTTP2_EXTERN int32_t nghttp2_submit_request(
  * :enum:`nghttp2_error.NGHTTP2_ERR_STREAM_ID_NOT_AVAILABLE`
  *     No stream ID is available because maximum stream ID was
  *     reached.
- * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     Trying to depend on itself (new stream ID equals
- *     ``pri_spec->stream_id``).
  * :enum:`nghttp2_error.NGHTTP2_ERR_PROTO`
  *     The |session| is server session.
  *
@@ -4675,9 +4560,9 @@ NGHTTP2_EXTERN int32_t nghttp2_submit_request(
  *
  */
 NGHTTP2_EXTERN int32_t nghttp2_submit_request2(
-    nghttp2_session *session, const nghttp2_priority_spec *pri_spec,
-    const nghttp2_nv *nva, size_t nvlen, const nghttp2_data_provider2 *data_prd,
-    void *stream_user_data);
+  nghttp2_session *session, const nghttp2_priority_spec *pri_spec,
+  const nghttp2_nv *nva, size_t nvlen, const nghttp2_data_provider2 *data_prd,
+  void *stream_user_data);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -4900,24 +4785,7 @@ NGHTTP2_EXTERN int nghttp2_submit_trailer(nghttp2_session *session,
  * assigned stream ID will be returned.  Otherwise, specify stream ID
  * in |stream_id|.
  *
- * The |pri_spec| is a deprecated priority specification of this
- * request.  ``NULL`` means the default priority (see
- * `nghttp2_priority_spec_default_init()`).  To specify the priority,
- * use `nghttp2_priority_spec_init()`.  If |pri_spec| is not ``NULL``,
- * this function will copy its data members.  In the future release
- * after the end of 2024, this function will ignore |pri_spec| and
- * behave as if ``NULL`` is given.
- *
- * The ``pri_spec->weight`` must be in [:macro:`NGHTTP2_MIN_WEIGHT`,
- * :macro:`NGHTTP2_MAX_WEIGHT`], inclusive.  If ``pri_spec->weight``
- * is strictly less than :macro:`NGHTTP2_MIN_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MIN_WEIGHT`.  If it is strictly greater than
- * :macro:`NGHTTP2_MAX_WEIGHT`, it becomes :macro:`NGHTTP2_MAX_WEIGHT`.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is received by a remote endpoint, |pri_spec| is
- * ignored, and treated as if ``NULL`` is specified.
+ * The |pri_spec| is ignored.
  *
  * The |nva| is an array of name/value pair :type:`nghttp2_nv` with
  * |nvlen| elements.  The application is responsible to include
@@ -4957,8 +4825,7 @@ NGHTTP2_EXTERN int nghttp2_submit_trailer(nghttp2_session *session,
  *     No stream ID is available because maximum stream ID was
  *     reached.
  * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     The |stream_id| is 0; or trying to depend on itself (stream ID
- *     equals ``pri_spec->stream_id``).
+ *     The |stream_id| is 0.
  * :enum:`nghttp2_error.NGHTTP2_ERR_DATA_EXIST`
  *     DATA or HEADERS has been already submitted and not fully
  *     processed yet.  This happens if stream denoted by |stream_id|
@@ -4976,9 +4843,9 @@ NGHTTP2_EXTERN int nghttp2_submit_trailer(nghttp2_session *session,
  *
  */
 NGHTTP2_EXTERN int32_t nghttp2_submit_headers(
-    nghttp2_session *session, uint8_t flags, int32_t stream_id,
-    const nghttp2_priority_spec *pri_spec, const nghttp2_nv *nva, size_t nvlen,
-    void *stream_user_data);
+  nghttp2_session *session, uint8_t flags, int32_t stream_id,
+  const nghttp2_priority_spec *pri_spec, const nghttp2_nv *nva, size_t nvlen,
+  void *stream_user_data);
 
 #ifndef NGHTTP2_NO_SSIZE_T
 /**
@@ -5084,40 +4951,9 @@ NGHTTP2_EXTERN int nghttp2_submit_data2(nghttp2_session *session, uint8_t flags,
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return 0 without doing anything.
+ *   prioritization scheme.
  *
- * Submits PRIORITY frame to change the priority of stream |stream_id|
- * to the priority specification |pri_spec|.
- *
- * The |flags| is currently ignored and should be
- * :enum:`nghttp2_flag.NGHTTP2_FLAG_NONE`.
- *
- * The |pri_spec| is a deprecated priority specification of this
- * request.  ``NULL`` is not allowed for this function. To specify the
- * priority, use `nghttp2_priority_spec_init()`.  This function will
- * copy its data members.
- *
- * The ``pri_spec->weight`` must be in [:macro:`NGHTTP2_MIN_WEIGHT`,
- * :macro:`NGHTTP2_MAX_WEIGHT`], inclusive.  If ``pri_spec->weight``
- * is strictly less than :macro:`NGHTTP2_MIN_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MIN_WEIGHT`.  If it is strictly greater than
- * :macro:`NGHTTP2_MAX_WEIGHT`, it becomes
- * :macro:`NGHTTP2_MAX_WEIGHT`.
- *
- * If
- * :enum:`nghttp2_settings_id.NGHTTP2_SETTINGS_NO_RFC7540_PRIORITIES`
- * of value of 1 is received by a remote endpoint, this function does
- * nothing and returns 0.
- *
- * This function returns 0 if it succeeds, or one of the following
- * negative error codes:
- *
- * :enum:`nghttp2_error.NGHTTP2_ERR_NOMEM`
- *     Out of memory.
- * :enum:`nghttp2_error.NGHTTP2_ERR_INVALID_ARGUMENT`
- *     The |stream_id| is 0; or the |pri_spec| is NULL; or trying to
- *     depend on itself.
+ * This function is noop.  It always returns 0.
  */
 NGHTTP2_EXTERN int
 nghttp2_submit_priority(nghttp2_session *session, uint8_t flags,
@@ -5309,8 +5145,8 @@ NGHTTP2_EXTERN int nghttp2_submit_settings(nghttp2_session *session,
  *
  */
 NGHTTP2_EXTERN int32_t nghttp2_submit_push_promise(
-    nghttp2_session *session, uint8_t flags, int32_t stream_id,
-    const nghttp2_nv *nva, size_t nvlen, void *promised_stream_user_data);
+  nghttp2_session *session, uint8_t flags, int32_t stream_id,
+  const nghttp2_nv *nva, size_t nvlen, void *promised_stream_user_data);
 
 /**
  * @function
@@ -5803,8 +5639,8 @@ NGHTTP2_EXTERN int nghttp2_submit_priority_update(nghttp2_session *session,
  *     found.
  */
 NGHTTP2_EXTERN int nghttp2_session_change_extpri_stream_priority(
-    nghttp2_session *session, int32_t stream_id, const nghttp2_extpri *extpri,
-    int ignore_client_signal);
+  nghttp2_session *session, int32_t stream_id, const nghttp2_extpri *extpri,
+  int ignore_client_signal);
 
 /**
  * @function
@@ -5832,7 +5668,7 @@ NGHTTP2_EXTERN int nghttp2_session_change_extpri_stream_priority(
  *     found.
  */
 NGHTTP2_EXTERN int nghttp2_session_get_extpri_stream_priority(
-    nghttp2_session *session, nghttp2_extpri *extpri, int32_t stream_id);
+  nghttp2_session *session, nghttp2_extpri *extpri, int32_t stream_id);
 
 /**
  * @function
@@ -6074,6 +5910,12 @@ NGHTTP2_EXTERN int nghttp2_check_path(const uint8_t *value, size_t len);
  * :authority or host header field is valid according to
  * https://tools.ietf.org/html/rfc3986#section-3.2
  *
+ * Note that :authority and host field values are not authority.  They
+ * do not include userinfo in RFC 3986, see
+ * https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2, that
+ * is, it does not include '@'.  This function treats '@' as a valid
+ * character.
+ *
  * |value| is valid if it merely consists of the allowed characters.
  * In particular, it does not check whether |value| follows the syntax
  * of authority.
@@ -6305,8 +6147,8 @@ NGHTTP2_EXTERN ssize_t nghttp2_hd_deflate_hd_vec(nghttp2_hd_deflater *deflater,
  *     The provided |buflen| size is too small to hold the output.
  */
 NGHTTP2_EXTERN nghttp2_ssize nghttp2_hd_deflate_hd_vec2(
-    nghttp2_hd_deflater *deflater, const nghttp2_vec *vec, size_t veclen,
-    const nghttp2_nv *nva, size_t nvlen);
+  nghttp2_hd_deflater *deflater, const nghttp2_vec *vec, size_t veclen,
+  const nghttp2_nv *nva, size_t nvlen);
 
 /**
  * @function
@@ -6729,8 +6571,8 @@ NGHTTP2_EXTERN ssize_t nghttp2_hd_inflate_hd2(nghttp2_hd_inflater *inflater,
  *
  */
 NGHTTP2_EXTERN nghttp2_ssize nghttp2_hd_inflate_hd3(
-    nghttp2_hd_inflater *inflater, nghttp2_nv *nv_out, int *inflate_flags,
-    const uint8_t *in, size_t inlen, int in_final);
+  nghttp2_hd_inflater *inflater, nghttp2_nv *nv_out, int *inflate_flags,
+  const uint8_t *in, size_t inlen, int in_final);
 
 /**
  * @function
@@ -6880,11 +6722,9 @@ nghttp2_session_get_root_stream(nghttp2_session *session);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return NULL.
+ *   prioritization scheme.
  *
- * Returns the parent stream of |stream| in dependency tree.  Returns
- * NULL if there is no such stream.
+ * This function always returns NULL.
  */
 NGHTTP2_EXTERN nghttp2_stream *
 nghttp2_stream_get_parent(nghttp2_stream *stream);
@@ -6898,11 +6738,9 @@ NGHTTP2_EXTERN int32_t nghttp2_stream_get_stream_id(nghttp2_stream *stream);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return NULL.
+ *   prioritization scheme.
  *
- * Returns the next sibling stream of |stream| in dependency tree.
- * Returns NULL if there is no such stream.
+ * This function always returns NULL.
  */
 NGHTTP2_EXTERN nghttp2_stream *
 nghttp2_stream_get_next_sibling(nghttp2_stream *stream);
@@ -6914,11 +6752,9 @@ nghttp2_stream_get_next_sibling(nghttp2_stream *stream);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return NULL.
+ *   prioritization scheme.
  *
- * Returns the previous sibling stream of |stream| in dependency tree.
- * Returns NULL if there is no such stream.
+ * This function always returns NULL.
  */
 NGHTTP2_EXTERN nghttp2_stream *
 nghttp2_stream_get_previous_sibling(nghttp2_stream *stream);
@@ -6930,11 +6766,9 @@ nghttp2_stream_get_previous_sibling(nghttp2_stream *stream);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return NULL.
+ *   prioritization scheme.
  *
- * Returns the first child stream of |stream| in dependency tree.
- * Returns NULL if there is no such stream.
+ * This function always returns NULL.
  */
 NGHTTP2_EXTERN nghttp2_stream *
 nghttp2_stream_get_first_child(nghttp2_stream *stream);
@@ -6946,11 +6780,9 @@ nghttp2_stream_get_first_child(nghttp2_stream *stream);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return
- *   :macro:`NGHTTP2_DEFAULT_WEIGHT`.
+ *   prioritization scheme.
  *
- * Returns dependency weight to the parent stream of |stream|.
+ * This function always returns :macro:`NGHTTP2_DEFAULT_WEIGHT`.
  */
 NGHTTP2_EXTERN int32_t nghttp2_stream_get_weight(nghttp2_stream *stream);
 
@@ -6961,10 +6793,9 @@ NGHTTP2_EXTERN int32_t nghttp2_stream_get_weight(nghttp2_stream *stream);
  *
  *   Deprecated.  :rfc:`7540` priorities are deprecated by
  *   :rfc:`9113`.  Consider migrating to :rfc:`9218` extensible
- *   prioritization scheme.  In the future release after the end of
- *   2024, this function will always return 0.
+ *   prioritization scheme.
  *
- * Returns the sum of the weight for |stream|'s children.
+ * This function always returns 0.
  */
 NGHTTP2_EXTERN int32_t
 nghttp2_stream_get_sum_dependency_weight(nghttp2_stream *stream);
@@ -7003,7 +6834,7 @@ typedef void (*nghttp2_debug_vprintf_callback)(const char *format,
  *   this is important.
  */
 NGHTTP2_EXTERN void nghttp2_set_debug_vprintf_callback(
-    nghttp2_debug_vprintf_callback debug_vprintf_callback);
+  nghttp2_debug_vprintf_callback debug_vprintf_callback);
 
 #ifdef __cplusplus
 }

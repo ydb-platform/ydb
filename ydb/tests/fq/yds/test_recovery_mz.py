@@ -8,7 +8,7 @@ import random
 import os
 import yatest
 
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
@@ -22,7 +22,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 @pytest.fixture
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(8)}
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(2)}
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     # control
@@ -56,7 +56,7 @@ class TestRecovery(TestYdsBase):
                 return node_index
         assert False, "No active graphs found"
 
-    def dump_workers(self, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def dump_workers(self, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
             wcs = 0

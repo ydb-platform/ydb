@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -13,8 +13,12 @@
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <util/string/split.h>
+#include <util/system/fs.h>
 
 using namespace NActors;
 
@@ -41,6 +45,9 @@ class TQueryReplayMapper
 {
 
     THolder<NActors::TActorSystem> ActorSystem;
+    TAutoPtr<TLogBackend> LogBackend;
+    std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     THolder<NKikimr::TAppData> AppData;
     TIntrusivePtr<NKikimr::NScheme::TKikimrTypeRegistry> TypeRegistry;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
@@ -49,8 +56,12 @@ class TQueryReplayMapper
     NYql::IHTTPGateway::TPtr HttpGateway;
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
+    NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
+    bool EnableAntlr4Parser;
+    bool EnableOltpSinkSideBySinkCompare;
 
-    TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
+public:
+    static TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
         switch (status) {
             case TQueryReplayEvents::CompileError:
                 return "compile_error";
@@ -76,6 +87,8 @@ class TQueryReplayMapper
                 return "uncategorized_plan_mismatch";
             case TQueryReplayEvents::MissingTableMetadata:
                 return "missing_table_metadata";
+            case TQueryReplayEvents::UncategorizedFailure:
+                return "uncategorized_failure";
             default:
                 return "unspecified";
         }
@@ -84,23 +97,38 @@ class TQueryReplayMapper
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableAntlr4Parser, EnableOltpSinkSideBySinkCompare, YqlLogPriority);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount)
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableAntlr4Parser, bool enableOltpSinkSideBySinkCompare,
+        NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
+        , YqlLogPriority(yqlLogPriority)
+        , EnableAntlr4Parser(enableAntlr4Parser)
+        , EnableOltpSinkSideBySinkCompare(enableOltpSinkSideBySinkCompare)
     {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
+        YqlLogger = std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr);
+        NYql::NDq::SetYqlLogLevels(YqlLogPriority);
+
         TypeRegistry.Reset(new NKikimr::NScheme::TKikimrTypeRegistry());
         FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
         NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
         NKikimr::NMiniKQL::TUdfModuleRemappings remappings;
         THashSet<TString> usedUdfPaths;
 
-        for(const auto& [_, udfPath]: GetJobFiles(UdfFiles)) {
+        for(const auto& [realPath, udfPath]: GetJobFiles(UdfFiles)) {
             if (usedUdfPaths.insert(udfPath).second) {
-                FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+                if (NFs::Exists(udfPath)) {
+                    FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+                    continue;
+                }
+
+                if (NFs::Exists(realPath)) {
+                    FunctionRegistry->LoadUdfs(realPath, remappings, 0);
+                    continue;
+                }
             }
         }
 
@@ -115,6 +143,95 @@ public:
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
+    THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
+        TString queryType = json["query_type"].GetStringSafe();
+        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
+            return nullptr;
+        }
+
+        if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
+            return nullptr;
+        }
+
+        NJson::TJsonValue replayJson = std::move(json);
+
+        THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
+        {
+            NJson::TJsonValue firstCompileReplayJson = replayJson;
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, true));
+
+            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
+                compileActorId,
+                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
+                TDuration::Seconds(600));
+
+            replayResult.Reset(future.ExtractValueSync().Release());
+        }
+
+        THolder<TQueryReplayEvents::TEvCompileResponse> replayResultWithoutSink;
+
+        if (!EnableOltpSinkSideBySinkCompare)
+        {
+            return replayResult;
+        }
+
+        {
+            NJson::TJsonValue secondCompileReplayJson = replayJson;
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, false));
+
+            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
+                compileActorId,
+                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(secondCompileReplayJson))),
+                TDuration::Seconds(600));
+
+            replayResultWithoutSink.Reset(future.ExtractValueSync().Release());
+        }
+
+        THolder<TQueryReplayEvents::TEvCompileResponse> compareResult = MakeHolder<TQueryReplayEvents::TEvCompileResponse>(false);
+        if (!replayResult || !replayResultWithoutSink) {
+            compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+            compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
+                << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
+                << ", without:"
+                << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
+        } else {
+            if (!replayResult->Success || !replayResultWithoutSink->Success) {
+                compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+                compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
+                    << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
+                    << ", without:"
+                    << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
+            } else {
+                TStringBuilder builder;
+                bool differentReads = false;
+                for(const auto& [table, stats]: replayResult->EngineTableStats) {
+                    auto it = replayResultWithoutSink->EngineTableStats.find(table);
+                    if (it == replayResultWithoutSink->EngineTableStats.end()) {
+                        builder << "missing table read without sink " << table << ";" << Endl;
+                        differentReads = true;
+                        continue;
+                    }
+
+                    if (it->second.Reads.size() < stats.Reads.size()) {
+                        builder << "oltp sinks adds extra reading in table " << table
+                            << ", without sink " << it->second.Reads.size()
+                            << ", with it: " << stats.Reads.size() <<  Endl;
+                        differentReads = true;
+                        continue;
+                    }
+                }
+
+                if (differentReads) {
+                    compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+                    compareResult->Message = TString(builder);
+                    compareResult->Plan = replayResult->Plan;
+                }
+            }
+        }
+
+        return compareResult;
+    }
+
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
         for (; in->IsValid(); in->Next()) {
             const auto& row = in->GetRow();
@@ -125,23 +242,10 @@ public:
                 json.InsertValue(key, NJson::TJsonValue(child.AsString()));
             }
 
-            TString queryType = row["query_type"].AsString();
-            if (queryType == "QUERY_TYPE_AST_SCAN") {
+            auto response = RunReplay(std::move(json));
+            if (response == nullptr)
                 continue;
-            }
 
-            if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
-                continue;
-            }
-
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway));
-
-            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-                compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-                TDuration::Seconds(100));
-
-            auto response = future.ExtractValueSync();
             auto status = response.Get()->Status;
 
             TString failReason = GetFailReason(status);
@@ -202,28 +306,81 @@ static NYT::TTableSchema OutputSchema() {
 REGISTER_NAMED_MAPPER("Query replay mapper", TQueryReplayMapper);
 
 int main(int argc, const char** argv) {
+    NYT::TConfig::Get()->LogLevel = NYT::NLogLevel::Info;
     NYT::Initialize(argc, argv);
 
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
+    if (config.QueryFile) {
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
+        fakeMapper.Start(nullptr);
+        Y_DEFER {
+            fakeMapper.Finish(nullptr);
+        };
+
+        NJson::TJsonValue queryJson;
+        {
+            static NJson::TJsonReaderConfig readConfig;
+            TFileInput in(config.QueryFile);
+            NJson::ReadJsonTree(&in, &readConfig, &queryJson, false);
+        }
+
+        Cerr << "Running local replay of the query:" << Endl
+            << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
+            << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
+
+        auto TableMetadata = ExtractStaticMetadata(queryJson);
+        Cerr << "Tables: " << Endl;
+
+	    for(auto& [name, meta]: TableMetadata) {
+            Cerr << "TableName: " << name << Endl;
+            NKikimrKqp::TKqpTableMetadataProto protoDescription;
+            meta->ToMessage(&protoDescription);
+            Cerr << protoDescription.Utf8DebugString() << Endl;
+        }
+
+        auto result = fakeMapper.RunReplay(std::move(queryJson));
+
+        auto status = result.Get()->Status;
+        TString failReason = TQueryReplayMapper::GetFailReason(status);
+        Cerr << failReason << Endl;
+        Cerr << result.Get()->Message << Endl;
+        return 0;
+    }
+
+    if (config.Cluster.empty() || config.SrcPath.empty() || config.DstPath.empty()) {
+        Cerr << "Non local execution requires Cluster and SrcPath and DstPath options to be specified.";
+        return EXIT_FAILURE;
+    }
 
     auto client = NYT::CreateClient(config.Cluster);
-    NYT::SetLogger(NYT::CreateStdErrLogger(NYT::ILogger::ELevel::INFO));
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
     spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
 
     auto userJobSpec = NYT::TUserJobSpec();
-    userJobSpec.MemoryLimit(1_GB);
+    userJobSpec.MemoryLimit(5_GB);
 
     for(const auto& [udf, udfInJob]: GetJobFiles(config.UdfFiles)) {
         userJobSpec.AddLocalFile(udf, NYT::TAddLocalFileOptions().PathInJob(udfInJob));
     }
 
     spec.MapperSpec(userJobSpec);
+    if (!config.CoreTablePath.empty()) {
+        spec.CoreTablePath(config.CoreTablePath);
+    }
+    spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
+
+    auto mergeSpec = NYT::TMergeOperationSpec();
+    mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
+    mergeSpec.Output(NYT::TRichYPath(config.DstPath));
+    mergeSpec.CombineChunks(true);
+    mergeSpec.ForceTransform(true);
+
+    client->Merge(mergeSpec);
 
     return EXIT_SUCCESS;
 }

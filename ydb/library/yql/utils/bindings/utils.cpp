@@ -1,6 +1,6 @@
 #include "utils.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/yson/writer.h>

@@ -16,9 +16,10 @@
 #ifndef CROARING_INCLUDE_PORTABILITY_H_
 #define CROARING_INCLUDE_PORTABILITY_H_
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE 1
-#endif  // _GNU_SOURCE
+// Users who need _GNU_SOURCE should define it?
+// #ifndef _GNU_SOURCE
+// #define _GNU_SOURCE 1
+// #endif  // _GNU_SOURCE
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS 1
 #endif  // __STDC_FORMAT_MACROS
@@ -46,21 +47,6 @@
 #endif
 #ifndef CROARING_REGULAR_VISUAL_STUDIO
 #define CROARING_REGULAR_VISUAL_STUDIO 0
-#endif
-
-#if defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE < 200809L)
-#undef _POSIX_C_SOURCE
-#endif
-
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-#endif  // !(defined(_POSIX_C_SOURCE)) || (_POSIX_C_SOURCE < 200809L)
-#if !(defined(_XOPEN_SOURCE)) || (_XOPEN_SOURCE < 700)
-#define _XOPEN_SOURCE 700
-#endif  // !(defined(_XOPEN_SOURCE)) || (_XOPEN_SOURCE < 700)
-
-#ifdef __illumos__
-#define __EXTENSIONS__
 #endif
 
 #include <stdbool.h>
@@ -585,9 +571,27 @@ static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
 
 #if defined(__GNUC__) || defined(__clang__)
 #define CROARING_DEPRECATED __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#define CROARING_DEPRECATED __declspec(deprecated)
 #else
 #define CROARING_DEPRECATED
 #endif  // defined(__GNUC__) || defined(__clang__)
+
+// We want to initialize structs to zero portably (C and C++), without
+// warnings. We can do mystruct s = CROARING_ZERO_INITIALIZER;
+#if __cplusplus
+#define CROARING_ZERO_INITIALIZER \
+    {}
+#else
+#define CROARING_ZERO_INITIALIZER \
+    { 0 }
+#endif
+
+#if defined(__cplusplus)
+#define CROARING_STATIC_ASSERT(x, y) static_assert(x, y)
+#else
+#define CROARING_STATIC_ASSERT(x, y) _Static_assert(x, y)
+#endif
 
 // We need portability.h to be included first,
 // but we also always want isadetection.h to be

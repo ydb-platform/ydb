@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/library/yql/providers/common/proto/gateways_config.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
 ////////////////////////////////////////////////////////////
 

@@ -1,5 +1,5 @@
 #include "yql_s3_settings.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/generic/size_literals.h>
 
 namespace NYql {
@@ -19,6 +19,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, ParallelDownloadCount);
     REGISTER_SETTING(*this, UseBlocksSource);
+    REGISTER_SETTING(*this, UseBlocksSink);
     REGISTER_SETTING(*this, AtomicUploadCommit);
     REGISTER_SETTING(*this, UseConcurrentDirectoryLister);
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);
@@ -28,6 +29,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, FileQueuePrefetchSize);
     REGISTER_SETTING(*this, AsyncDecoding);
     REGISTER_SETTING(*this, UsePredicatePushdown);
+    REGISTER_SETTING(*this, AsyncDecompressing);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
@@ -35,7 +37,7 @@ TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
 }
 
 bool TS3Configuration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)
@@ -45,6 +47,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
             FormatSizeLimits.emplace(formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
         }
     }
+    S3ReadActorFactoryConfig = NDq::CreateReadActorFactoryConfig(config);
     FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 2_GB;
     BlockFileSizeLimit = config.HasBlockFileSizeLimit() ? config.GetBlockFileSizeLimit() : 50_GB;
     MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 7000;
@@ -58,19 +61,19 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         config.HasMinDesiredDirectoriesOfFilesPerQuery()
             ? config.GetMinDesiredDirectoriesOfFilesPerQuery()
             : 100;
-    MaxReadSizePerQuery =
-        config.HasMaxReadSizePerQuery() ? config.GetMaxReadSizePerQuery() : 4_GB;
     MaxInflightListsPerQuery =
         config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()
                                      ? config.GetListingCallbackThreadCount()
-                                     : 1;
+                                     : 0;
     ListingCallbackPerThreadQueueSize = config.HasListingCallbackPerThreadQueueSize()
                                             ? config.GetListingCallbackPerThreadQueueSize()
                                             : 100;
     RegexpCacheSize = config.HasRegexpCacheSize() ? config.GetRegexpCacheSize() : 100;
     AllowConcurrentListings =
         config.HasAllowConcurrentListings() ? config.GetAllowConcurrentListings() : false;
+    AllowLocalFiles =
+        config.HasAllowLocalFiles() ? config.GetAllowLocalFiles() : false;
     GeneratorPathsLimit =
         config.HasGeneratorPathsLimit() ? config.GetGeneratorPathsLimit() : 50'000;
     MaxListingResultSizePerPhysicalPartition =

@@ -126,8 +126,8 @@ private:
     TNode* const Head_;
     std::array<TNode*, MaxHeight> Prevs_;
 
-    std::atomic<int> Size_ = {0};
-    std::atomic<int> Height_ = {1};
+    std::atomic<int> Size_ = 0;
+    std::atomic<int> Height_ = 1;
 
 private:
     static int GenerateHeight();

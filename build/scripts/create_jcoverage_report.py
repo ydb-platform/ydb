@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import tarfile
 import zipfile
@@ -5,6 +6,7 @@ import os
 import sys
 import time
 import subprocess
+import platform
 
 
 def mkdir_p(path):
@@ -82,7 +84,7 @@ def main(
     timer.step("Jar files extracted")
 
     if not agent_disposition:
-        print >> sys.stderr, 'Can\'t find jacoco agent. Will not generate html report for java coverage.'
+        print('Can\'t find jacoco agent. Will not generate html report for java coverage.', file=sys.stderr)
 
     if tar_output:
         report_dir = 'java.report.temp'
@@ -112,9 +114,8 @@ def main(
 
 
 if __name__ == '__main__':
-    if 'LC_ALL' in os.environ:
-        if os.environ['LC_ALL'] == 'C':
-            os.environ['LC_ALL'] = 'en_GB.UTF-8'
+    if platform.system() == 'Linux' and os.getenv('LC_ALL', 'C') == 'C':
+        os.environ['LC_ALL'] = 'C.UTF-8'
 
     parser = argparse.ArgumentParser()
 

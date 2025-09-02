@@ -2,25 +2,13 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/draft/field_transformation.proto";
 
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/duration.proto";
 
 package Ydb.DataStreams.V1;
 option java_package = "com.yandex.ydb.datastreams.v1";
-
-// Extensions to simplify json <-> proto conversion
-enum EFieldTransformationType {
-    TRANSFORM_NONE = 0;
-    TRANSFORM_BASE64 = 1;
-    TRANSFORM_DOUBLE_S_TO_INT_MS = 2;
-    TRANSFORM_EMPTY_TO_NOTHING = 3;
-}
-
-
-extend google.protobuf.FieldOptions {
-    EFieldTransformationType FieldTransformer = 58123;
-}
 
 // Here and below: Kinesis data types mapped to protobuf
 
@@ -54,7 +42,7 @@ message ChildShard {
 // Represents details of consumer
 message Consumer {
     string consumer_arn = 1;
-    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 consumer_creation_timestamp = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     string consumer_name = 3;
     ConsumerDescription.ConsumerStatus consumer_status = 4;
 }
@@ -67,9 +55,9 @@ message HashKeyRange {
 
 message Record {
     // Timestamp that the record was inserted into the stream
-    int64 approximate_arrival_timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 approximate_arrival_timestamp = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Data blob
-    bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
+    bytes data = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record
     EncryptionType encryption_type = 3;
     // Identifies shard in the stream the record is assigned to
@@ -109,7 +97,7 @@ message StreamDescription {
     repeated Shard shards = 6;
     string stream_arn = 7;
     // Timestamp that the stream was created
-    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 stream_creation_timestamp = 8 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Current status of the stream
     StreamStatus stream_status = 9;
     // Name of the stream
@@ -130,17 +118,17 @@ message StreamDescription {
 // Represents range of possible sequence numbers for the shard
 message SequenceNumberRange {
     string starting_sequence_number = 1;
-    string ending_sequence_number = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string ending_sequence_number = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
 }
 
 // Represents shard details
 message Shard {
     // Id of the shard adjacent to the shard's parent
-    string adjacent_parent_shard_id = 1 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string adjacent_parent_shard_id = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible hash key values for the shard
     HashKeyRange hash_key_range = 2;
     // Id of the shard's parent
-    string parent_shard_id = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string parent_shard_id = 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible sequence numbers for the shard
     SequenceNumberRange sequence_number_range = 4;
     // Unique id of the shard within stream
@@ -158,7 +146,7 @@ message ConsumerDescription {
 
     string consumer_arn = 1;
     // Timestamp that the consumer was created
-    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 consumer_creation_timestamp = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the consumer
     string consumer_name = 3;
     ConsumerStatus consumer_status = 4;
@@ -201,14 +189,14 @@ message ShardFilter {
     // Exclusive id. Can only be used if AFTER_SHARD_ID is specified
     string shard_id = 1;
     // Can only be used if AT_TIMESTAMP or FROM_TIMESTAMP are specified.
-    int64 timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 timestamp = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     ShardFilterType type = 3;
 }
 
 // Represents starting position in the stream from which to start reading
 message StartingPosition {
     // Timestamp of the record from which to start reading
-    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 timestamp = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Sequence number of the record from which to start reading
     string sequence_number = 2;
     ShardIteratorType type = 3;
@@ -230,7 +218,7 @@ message StreamDescriptionSummary {
     // Stream ARN
     string stream_arn = 7;
     // Timestamp that the stream was created
-    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 stream_creation_timestamp = 8 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
     string stream_name = 9;
     // Current status of the stream
@@ -289,6 +277,8 @@ enum AutoPartitioningStrategy {
     AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
     // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
     AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 // Partitioning settings for stream.
@@ -403,7 +393,7 @@ message ListShardsRequest {
     // Filter out response
     ShardFilter shard_filter = 5;
     // Used to distinguish streams that have the same name
-    int64 stream_creation_timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 stream_creation_timestamp = 6 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
     string stream_name = 7;
 }
@@ -470,7 +460,7 @@ message ListStreamConsumersRequest {
     string next_token = 3;
     string stream_arn = 4;
     // Used to distinguish streams that have the same name
-    int64 stream_creation_timestamp = 5 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 stream_creation_timestamp = 5 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
 }
 
 message ListStreamConsumersResponse {
@@ -555,7 +545,7 @@ message DescribeStreamConsumerResult {
 
 message PutRecordsRequestEntry {
     // Data blob
-    bytes data = 1 [(FieldTransformer) = TRANSFORM_BASE64];
+    bytes data = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
     // Hash value used to explicitly determine the shard
     string explicit_hash_key = 2;
     // Used as input to hash function that maps partition key to a specific shard
@@ -564,8 +554,8 @@ message PutRecordsRequestEntry {
 
 // Represents result of an individual record
 message PutRecordsResultEntry {
-    string error_message = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
-    string error_code = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string error_message = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string error_code = 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string sequence_number = 4;
     string shard_id = 5;
 }
@@ -597,7 +587,7 @@ message GetRecordsResult {
 message PutRecordRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Data blob
-    bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
+    bytes data = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
     // Hash value used to explicitly determine the shard
     string explicit_hash_key = 3;
     // Used as input to hash function that maps partition key to a specific shard
@@ -653,7 +643,7 @@ message GetShardIteratorRequest {
     // Name of the stream
     string stream_name = 5;
     // Used with shard iterator type AT_TIMESTAMP
-    int64 timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 timestamp = 6 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
 }
 
 message GetShardIteratorResponse {
@@ -687,7 +677,7 @@ message AddTagsToStreamRequest {
     // Name of the stream
     string stream_name = 2;
     // List of tags to add to stream
-    repeated string tags = 3;
+    map<string, string> tags = 3;
 }
 
 message AddTagsToStreamResponse {

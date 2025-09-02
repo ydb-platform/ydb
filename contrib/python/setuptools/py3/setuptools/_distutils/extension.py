@@ -26,12 +26,14 @@ class Extension:
       name : string
         the full name of the extension, including any packages -- ie.
         *not* a filename or pathname, but Python dotted name
-      sources : [string]
-        list of source filenames, relative to the distribution root
-        (where the setup script lives), in Unix form (slash-separated)
-        for portability.  Source files may be C, C++, SWIG (.i),
-        platform-specific resource files, or whatever else is recognized
-        by the "build_ext" command as source for a Python extension.
+      sources : Iterable[string | os.PathLike]
+        iterable of source filenames (except strings, which could be misinterpreted
+        as a single filename), relative to the distribution root (where the setup
+        script lives), in Unix form (slash-separated) for portability. Can be any
+        non-string iterable (list, tuple, set, etc.) containing strings or
+        PathLike objects. Source files may be C, C++, SWIG (.i), platform-specific
+        resource files, or whatever else is recognized by the "build_ext" command
+        as source for a Python extension.
       include_dirs : [string]
         list of directories to search for C/C++ header files (in Unix
         form for portability)
@@ -105,12 +107,23 @@ class Extension:
         **kw,  # To catch unknown keywords
     ):
         if not isinstance(name, str):
-            raise AssertionError("'name' must be a string")
-        if not (isinstance(sources, list) and all(isinstance(v, str) for v in sources)):
-            raise AssertionError("'sources' must be a list of strings")
+            raise TypeError("'name' must be a string")
+
+        # handle the string case first; since strings are iterable, disallow them
+        if isinstance(sources, str):
+            raise TypeError(
+                "'sources' must be an iterable of strings or PathLike objects, not a string"
+            )
+
+        # now we check if it's iterable and contains valid types
+        try:
+            self.sources = list(map(os.fspath, sources))
+        except TypeError:
+            raise TypeError(
+                "'sources' must be an iterable of strings or PathLike objects"
+            )
 
         self.name = name
-        self.sources = sources
         self.include_dirs = include_dirs or []
         self.define_macros = define_macros or []
         self.undef_macros = undef_macros or []
@@ -130,7 +143,7 @@ class Extension:
         if len(kw) > 0:
             options = [repr(option) for option in kw]
             options = ', '.join(sorted(options))
-            msg = "Unknown Extension options: %s" % options
+            msg = f"Unknown Extension options: {options}"
             warnings.warn(msg)
 
     def __repr__(self):
@@ -150,11 +163,11 @@ def read_setup_file(filename):  # noqa: C901
     #   <module> ... [<sourcefile> ...] [<cpparg> ...] [<library> ...]
     file = TextFile(
         filename,
-        strip_comments=1,
-        skip_blanks=1,
-        join_lines=1,
-        lstrip_ws=1,
-        rstrip_ws=1,
+        strip_comments=True,
+        skip_blanks=True,
+        join_lines=True,
+        lstrip_ws=True,
+        rstrip_ws=True,
     )
     try:
         extensions = []
@@ -167,7 +180,7 @@ def read_setup_file(filename):  # noqa: C901
                 continue
 
             if line[0] == line[-1] == "*":
-                file.warn("'%s' lines not handled yet" % line)
+                file.warn(f"'{line}' lines not handled yet")
                 continue
 
             line = expand_makefile_vars(line, vars)
@@ -233,7 +246,7 @@ def read_setup_file(filename):  # noqa: C901
                     # and append it to sources.  Hmmmm.
                     ext.extra_objects.append(word)
                 else:
-                    file.warn("unrecognized argument '%s'" % word)
+                    file.warn(f"unrecognized argument '{word}'")
 
             extensions.append(ext)
     finally:

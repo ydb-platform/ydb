@@ -3,13 +3,15 @@
 
 #include <ydb/core/client/flat_ut_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -98,7 +100,8 @@ struct TRequestCreatePQ {
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     )
         : Topic(topic)
         , NumParts(numParts)
@@ -111,6 +114,7 @@ struct TRequestCreatePQ {
         , ReadRules(readRules)
         , Important(important)
         , MirrorFrom(mirrorFrom)
+        , PartitionStrategy(std::move(partitionStrategy))
         , SourceIdMaxCount(sourceIdMaxCount)
         , SourceIdLifetime(sourceIdLifetime)
     {}
@@ -130,6 +134,7 @@ struct TRequestCreatePQ {
     TVector<TString> Important;
 
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
+    std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> PartitionStrategy;
 
     ui64 SourceIdMaxCount;
     ui64 SourceIdLifetime;
@@ -159,22 +164,22 @@ struct TRequestCreatePQ {
         codec->AddIds(2);
         codec->AddCodecs("lzop");
 
-        for (auto& i : Important) {
-            config->MutablePartitionConfig()->AddImportantClientId(i);
-        }
-
         config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(WriteSpeed);
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
         for (auto& rr : ReadRules) {
-            config->AddReadRules(rr);
-            config->AddReadFromTimestampsMs(0);
-            config->AddConsumerFormatVersions(0);
-            config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs();
+            auto* consumer = config->AddConsumers();
+            consumer->SetName(rr);
+            consumer->SetReadFromTimestampsMs(0);
+            consumer->SetFormatVersion(0);
+            consumer->SetVersion(0);
         }
-//        if (!ReadRules.empty()) {
-//            config->SetRequireAuthRead(true);
-//        }
+
+        for (auto& i : Important) {
+            auto* consumer = NPQ::GetConsumer(*config, i);
+            UNIT_ASSERT(consumer);
+            consumer->SetImportant(true);
+        }
+
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -186,6 +191,12 @@ struct TRequestCreatePQ {
             auto mirrorFromConfig = config->MutablePartitionConfig()->MutableMirrorFrom();
             mirrorFromConfig->CopyFrom(MirrorFrom.value());
         }
+
+        if (PartitionStrategy) {
+            auto* partitionStrategy = config->MutablePartitionStrategy();
+            partitionStrategy->CopyFrom(PartitionStrategy.value());
+        }
+
         return request;
     }
 };
@@ -501,7 +512,7 @@ public:
     void RunYqlSchemeQuery(TString query, bool expectSuccess = true) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
 
-        NYdb::TStatus result(NYdb::EStatus::SUCCESS, NYql::TIssues());
+        NYdb::TStatus result(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
         for (size_t i = 0; i < 10; ++i) {
             result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
                 return session.ExecuteSchemeQuery(query).GetValueSync();
@@ -552,7 +563,7 @@ public:
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         if (databaseName)
             driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
@@ -860,6 +871,44 @@ public:
         }
     }
 
+    TVector<TString> GetPQTabletKeys(TTestActorRuntime* runtime, const TString& topic, ui32 partitionId) {
+        ui64 tabletId = Max<ui64>();
+
+        auto res = Ls("/Root/PQ/" + topic);
+        const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
+        for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
+            const auto& partition = pq.GetPartitions(i);
+            if (partition.GetPartitionId() == partitionId) {
+                tabletId = partition.GetTabletId();
+                break;
+            }
+        }
+
+        Y_ABORT_UNLESS(tabletId != Max<ui64>());
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto* cmd = request->Record.AddCmdReadRange();
+        auto* range = cmd->MutableRange();
+        range->SetFrom("\x00");
+        range->SetTo("\xFF");
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
+        auto response = runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+        TVector<TString> keys;
+
+        for (size_t i = 0; i < response->Record.ReadRangeResultSize(); ++i) {
+            const auto& result = response->Record.GetReadRangeResult(i);
+            for (size_t j = 0; j < result.PairSize(); ++j) {
+                const auto& pair = result.GetPair(j);
+                keys.push_back(pair.GetKey());
+            }
+        }
+
+        return keys;
+    }
+
     bool IsTopicDeleted(const TString& name) {
         auto response = RequestTopicMetadata(name);
 
@@ -895,12 +944,12 @@ public:
         auto pos = name.rfind("/");
         Y_ABORT_UNLESS(pos != TString::npos);
         auto pref = "/Root/PQ/" + name.substr(0, pos);
-        ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
+        ModifyACL(TString{pref}, name.substr(pos + 1), acl.SerializeAsString());
     }
 
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
-                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"},
-                             const TMaybe<TString>& account = Nothing(), bool expectFail = false)
+                             const std::optional<TString>& dc = std::nullopt, std::vector<TString> rr = {"user"},
+                             const std::optional<TString>& account = std::nullopt, bool expectFail = false)
     {
         CreateTopicNoLegacy({
             .Name = name,
@@ -959,14 +1008,15 @@ public:
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
 
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
         auto request = TRequestCreatePQ(
                 name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
-                sourceIdMaxCount, sourceIdLifetime
+                sourceIdMaxCount, sourceIdLifetime, partitionStrategy
         );
         return CreateTopic(request);
     }
@@ -1079,9 +1129,13 @@ public:
         return "";
     }
 
-    void ChooseProxy() {
+    void ChooseProxy(const TString& securityToken = {}) {
         NKikimrClient::TChooseProxyRequest request;
         NKikimrClient::TResponse response;
+
+        if (!securityToken.empty()) {
+            request.SetSecurityToken(securityToken);
+        }
 
         Cerr << "ChooseProxy request to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
                 << PrintToString(request) << Endl;
@@ -1371,7 +1425,7 @@ private:
     }
 
 public:
-    void AddTopic(const TString& topic, const TMaybe<TString>& dc = Nothing()) {
+    void AddTopic(const TString& topic, const std::optional<TString>& dc = std::nullopt) {
         Cerr << "AddTopic: " << topic << Endl;
         return AddOrRemoveTopic(topic, true, dc);
     }
@@ -1381,7 +1435,7 @@ public:
         return AddOrRemoveTopic(topic, false);
     }
 
-    void AddOrRemoveTopic(const TString& topic, bool add, const TMaybe<TString>& dc = Nothing()) {
+    void AddOrRemoveTopic(const TString& topic, bool add, const std::optional<TString>& dc = std::nullopt) {
         TStringBuilder query;
         query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
         if (add) {
@@ -1389,7 +1443,7 @@ public:
         } else {
             query << "DELETE FROM `/Root/PQ/Config/V2/Topics` WHERE path = $path AND dc = $cluster; ";
         }
-        TString cluster = dc.GetOrElse(NPersQueue::GetDC(topic));
+        TString cluster = dc.value_or(NPersQueue::GetDC(topic));
         query << GetAlterTopicsVersionQuery();
         NYdb::TParamsBuilder builder;
         auto params = builder
@@ -1416,13 +1470,14 @@ public:
     struct CreateTopicNoLegacyParams {
         TString Name;
         ui32 PartsCount;
+        TDuration RetentionPeriod = TDuration::Hours(18);
         bool DoWait = true;
         bool CanWrite = true;
-        TMaybe<TString> Dc = Nothing();
-        TVector<TString> ReadRules = {"user"};
-        TMaybe<TString> Account = Nothing();
+        std::optional<TString> Dc = std::nullopt;
+        std::vector<TString> ReadRules = {"user"};
+        std::optional<TString> Account = std::nullopt;
         bool ExpectFail = false;
-        TVector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
+        std::vector<NYdb::NPersQueue::ECodec> Codecs = NYdb::NPersQueue::GetDefaultCodecs();
     };
 
     void CreateTopicNoLegacy(const CreateTopicNoLegacyParams& params)
@@ -1430,7 +1485,7 @@ public:
         Cerr << "CreateTopicNoLegacy: " << params.Name << Endl;
 
         TString path = params.Name;
-        if (UseConfigTables && !path.StartsWith("/Root") && !params.Account.Defined()) {
+        if (UseConfigTables && !path.StartsWith("/Root") && !params.Account) {
             path = TStringBuilder() << "/Root/PQ/" << params.Name;
         }
 
@@ -1438,6 +1493,7 @@ public:
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);
+        settings.RetentionPeriod(params.RetentionPeriod);
         //settings.MaxPartitionWriteSpeed(50_MB);
         //settings.MaxPartitionWriteBurst(50_MB);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;

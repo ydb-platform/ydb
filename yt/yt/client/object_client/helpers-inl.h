@@ -29,6 +29,11 @@ inline ui64 CounterFromId(TObjectId id)
     return result;
 }
 
+inline NHydra::TRevision RevisionFromId(TObjectId id)
+{
+    return NHydra::TRevision(CounterFromId(id));
+}
+
 inline ui32 EntropyFromId(TObjectId id)
 {
     return id.Parts32[0];
@@ -37,7 +42,7 @@ inline ui32 EntropyFromId(TObjectId id)
 inline NHydra::TVersion VersionFromId(TObjectId id)
 {
     YT_ASSERT(!IsSequoiaId(id));
-    return NHydra::TVersion::FromRevision(CounterFromId(id));
+    return NHydra::TVersion::FromRevision(RevisionFromId(id));
 }
 
 inline NTransactionClient::TTimestamp TimestampFromId(TObjectId id)
@@ -93,6 +98,11 @@ inline bool IsSequoiaId(TObjectId id)
     return (CounterFromId(id) & SequoiaCounterMask) && !IsWellKnownId(id);
 }
 
+inline bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId)
+{
+    return IsCypressTransactionType(TypeFromId(transactionId)) && IsSequoiaId(transactionId);
+}
+
 inline TObjectId MakeRegularId(
     EObjectType type,
     TCellTag cellTag,
@@ -123,14 +133,14 @@ inline TObjectId MakeSequoiaId(
 inline TObjectId MakeWellKnownId(
     EObjectType type,
     TCellTag cellTag,
-    ui64 counter /*= 0xffffffffffffffff*/)
+    ui64 counter)
 {
     YT_VERIFY(counter & WellKnownCounterMask);
     return MakeId(
         type,
         cellTag,
         counter,
-        static_cast<ui32>(cellTag.Underlying() * 901517) ^ 0x140a8383);
+        static_cast<ui32>(static_cast<ui32>(cellTag.Underlying()) * 901517ULL ^ 0x140a8383ULL));
 }
 
 inline TObjectId MakeSchemaObjectId(

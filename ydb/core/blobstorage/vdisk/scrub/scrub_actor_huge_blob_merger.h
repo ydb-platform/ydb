@@ -29,8 +29,11 @@ namespace NKikimr {
 
         void Begin(const TLogoBlobID& /*id*/) {}
 
+        void Finish() {}
+
         // process on-disk data
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/) {
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/,
+                const void* /*sst*/) {
             switch (memRec.GetType()) {
                 // ignore non-huge blobs
                 case TBlobType::MemBlob:
@@ -42,7 +45,7 @@ namespace NKikimr {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
-                    Y_ABORT_UNLESS(extr.End - extr.Begin == local.CountBits());
+                    Y_VERIFY_S(extr.End - extr.Begin == local.CountBits(), LogPrefix);
                     const TDiskPart *part = extr.Begin;
                     for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++part) {
                         if (part->ChunkIdx && part->Size) {
@@ -64,7 +67,7 @@ namespace NKikimr {
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
-            AddFromSegment(memRec, nullptr, key, Max<ui64>());
+            AddFromSegment(memRec, nullptr, key, Max<ui64>(), nullptr);
         }
 
         void Clear() {
@@ -82,4 +85,58 @@ namespace NKikimr {
         }
     };
 
+    class TScrubCoroImpl::THugeBlobAndIndexMerger {
+    private:
+        THugeBlobMerger HugeBlobMerger;
+        TIndexRecordMerger IndexMerger;
+    public:
+        template<typename TRead>
+        THugeBlobAndIndexMerger(const TString& logPrefix, const TBlobStorageGroupType& gtype, TRead&& read, TScrubCoroImpl *impl)
+            : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
+            , IndexMerger(gtype)
+        {}
+
+        void AddFromFresh(const TMemRecLogoBlob &memRec, const TRope* data, const TKeyLogoBlob &key, ui64 lsn) {
+            HugeBlobMerger.AddFromFresh(memRec, data, key, lsn);
+            IndexMerger.AddFromFresh(memRec, data, key, lsn);
+        }
+
+        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn,
+                const auto *sst) {
+            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
+            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
+        }
+
+        static bool HaveToMergeData() { return true; }
+
+        void Finish() {
+            IndexMerger.Finish();
+            HugeBlobMerger.Finish();
+        }
+
+        void Clear() {
+            HugeBlobMerger.Clear();
+            IndexMerger.Clear();
+        }
+
+        const TMemRecLogoBlob &GetMemRec() const {
+            return IndexMerger.GetMemRec();
+        }
+
+        NMatrix::TVectorType GetPartsToRestore() const {
+            return HugeBlobMerger.GetPartsToRestore();
+        }
+
+        TDiskPart GetCorruptedPart() const {
+            return HugeBlobMerger.GetCorruptedPart();
+        }
+
+        const THugeBlobMerger &GetHugeBlobMerger() const {
+            return HugeBlobMerger;
+        }
+
+        const TIndexRecordMerger &GetIndexMerger() const {
+            return IndexMerger;
+        }
+    };
 } // NKikimr

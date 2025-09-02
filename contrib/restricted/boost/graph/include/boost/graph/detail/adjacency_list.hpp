@@ -2189,8 +2189,12 @@ public:
         }
         // Copy the edges by adding each edge and copying its
         // property object.
+#ifdef BOOST_NO_CXX17_STRUCTURED_BINDINGS
         edge_iterator ei, ei_end;
         for (boost::tie(ei, ei_end) = edges(x); ei != ei_end; ++ei)
+#else // Silences -Wmaybe-uninitialized in adj_list_edge_iterator::operator++().
+        for (auto [ei, ei_end] = edges(x); ei != ei_end; ++ei)
+#endif
         {
             edge_descriptor e;
             bool inserted;
@@ -2224,9 +2228,10 @@ inline typename Config::vertex_descriptor add_vertex(
     vec_adj_list_impl< Graph, Config, Base >& g_)
 {
     Graph& g = static_cast< Graph& >(g_);
-    g.m_vertices.resize(g.m_vertices.size() + 1);
-    g.added_vertex(g.m_vertices.size() - 1);
-    return g.m_vertices.size() - 1;
+    auto const added_descriptor = g.m_vertices.size();
+    g.m_vertices.emplace_back();
+    g.added_vertex(added_descriptor);
+    return added_descriptor;
 }
 
 template < class Graph, class Config, class Base >
@@ -2239,10 +2244,10 @@ inline typename Config::vertex_descriptor add_vertex(
     if (optional< vertex_descriptor > v
         = g.vertex_by_property(get_property_value(p, vertex_bundle)))
         return *v;
-    typedef typename Config::stored_vertex stored_vertex;
-    g.m_vertices.push_back(stored_vertex(p));
-    g.added_vertex(g.m_vertices.size() - 1);
-    return g.m_vertices.size() - 1;
+    auto const added_descriptor = g.m_vertices.size();
+    g.m_vertices.emplace_back(p);
+    g.added_vertex(added_descriptor);
+    return added_descriptor;
 }
 
 // Here we override the directed_graph_helper add_edge() function

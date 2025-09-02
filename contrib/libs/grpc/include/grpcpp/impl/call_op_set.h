@@ -283,6 +283,11 @@ class CallOpSendInitialMetadata {
   } maybe_compression_level_;
 };
 
+// win headers create macro SendMessage
+#if defined(_WIN32) && defined(SendMessage)
+#undef SendMessage
+#endif
+
 class CallOpSendMessage {
  public:
   CallOpSendMessage() : send_buf_() {}

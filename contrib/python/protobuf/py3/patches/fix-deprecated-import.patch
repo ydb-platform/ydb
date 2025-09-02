@@ -1,0 +1,10 @@
+diff --git a/python/google/__init__.py b/python/google/__init__.py
+index 5585614..69e3be5 100644
+--- a/python/google/__init__.py
++++ b/python/google/__init__.py
+@@ -1,4 +1 @@
+-try:
+-  __import__('pkg_resources').declare_namespace(__name__)
+-except ImportError:
+-  __path__ = __import__('pkgutil').extend_path(__path__, __name__)
++__path__ = __import__('pkgutil').extend_path(__path__, __name__)

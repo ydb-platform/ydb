@@ -1,3 +1,4 @@
+from __future__ import print_function
 # TODO prettyboy remove after ya-bin release
 
 import os
@@ -13,7 +14,7 @@ def main(args):
     with open(meta_path) as f:
         meta_info = json.loads(f.read())
         if meta_info["exit_code"] == timeout_code:
-            print >> sys.stderr, meta_info["project"], 'crashed by timeout, use --test-disable-timeout option'
+            print(meta_info["project"], 'crashed by timeout, use --test-disable-timeout option', file=sys.stderr)
             return 1
     return 0
 

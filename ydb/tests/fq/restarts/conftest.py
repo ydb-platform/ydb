@@ -66,9 +66,9 @@ def stats_mode():
 @pytest.fixture
 def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str):
     kikimr_extensions = [
+        AddFormatSizeLimitExtension(),
         AddInflightExtension(),
         AddDataInflightExtension(),
-        AddFormatSizeLimitExtension(),
         DefaultConfigExtension(s3.s3_url),
         YQv2Extension(yq_version),
         ComputeExtension(),

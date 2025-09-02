@@ -11,7 +11,7 @@ class Closable(ABC):
 
 
 class ByteSource(Closable):
-    last_message = None
+    last_message:bytes = None
 
     @abstractmethod
     def read_leb128(self) -> int:

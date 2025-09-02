@@ -32,7 +32,6 @@ static int s_get_credentials_from_process(
     };
 
     struct aws_run_command_result result;
-    int ret = AWS_OP_ERR;
     if (aws_run_command_result_init(provider->allocator, &result)) {
         goto on_finish;
     }
@@ -50,14 +49,14 @@ static int s_get_credentials_from_process(
     struct aws_parse_credentials_from_json_doc_options parse_options = {
         .access_key_id_name = "AccessKeyId",
         .secret_access_key_name = "SecretAccessKey",
-        .token_name = "Token",
+        .token_name = "SessionToken",
         .expiration_name = "Expiration",
         .token_required = false,
         .expiration_required = false,
     };
 
-    credentials =
-        aws_parse_credentials_from_json_document(provider->allocator, aws_string_c_str(result.std_out), &parse_options);
+    credentials = aws_parse_credentials_from_json_document(
+        provider->allocator, aws_byte_cursor_from_string(result.std_out), &parse_options);
     if (!credentials) {
         AWS_LOGF_INFO(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,
@@ -71,7 +70,6 @@ static int s_get_credentials_from_process(
         AWS_LS_AUTH_CREDENTIALS_PROVIDER,
         "(id=%p) Process credentials provider successfully sourced credentials.",
         (void *)provider);
-    ret = AWS_OP_SUCCESS;
 
 on_finish:
 
@@ -87,7 +85,7 @@ on_finish:
     callback(credentials, error_code, user_data);
     aws_run_command_result_cleanup(&result);
     aws_credentials_release(credentials);
-    return ret;
+    return AWS_OP_SUCCESS;
 }
 
 static void s_credentials_provider_process_destroy(struct aws_credentials_provider *provider) {
@@ -100,7 +98,6 @@ static void s_credentials_provider_process_destroy(struct aws_credentials_provid
 }
 
 AWS_STATIC_STRING_FROM_LITERAL(s_credentials_process, "credential_process");
-static struct aws_byte_cursor s_default_profile_name_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("default");
 
 static struct aws_profile_collection *s_load_profile(struct aws_allocator *allocator) {
 
@@ -156,7 +153,9 @@ static void s_check_or_get_with_profile_config(
 }
 
 static struct aws_byte_cursor s_stderr_redirect_to_stdout = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(" 2>&1");
-static struct aws_string *s_get_command(struct aws_allocator *allocator, struct aws_byte_cursor profile_cursor) {
+static struct aws_string *s_get_command(
+    struct aws_allocator *allocator,
+    const struct aws_credentials_provider_process_options *options) {
 
     struct aws_byte_buf command_buf;
     AWS_ZERO_STRUCT(command_buf);
@@ -164,13 +163,13 @@ static struct aws_string *s_get_command(struct aws_allocator *allocator, struct 
     struct aws_profile_collection *config_profiles = NULL;
     struct aws_string *profile_name = NULL;
     const struct aws_profile *profile = NULL;
-
-    config_profiles = s_load_profile(allocator);
-    if (profile_cursor.len == 0) {
-        profile_name = aws_get_profile_name(allocator, &s_default_profile_name_cursor);
+    if (options->config_profile_collection_cached) {
+        config_profiles = aws_profile_collection_acquire(options->config_profile_collection_cached);
     } else {
-        profile_name = aws_string_new_from_array(allocator, profile_cursor.ptr, profile_cursor.len);
+        config_profiles = s_load_profile(allocator);
     }
+    profile_name = aws_get_profile_name(allocator, &options->profile_to_use);
+
     if (config_profiles && profile_name) {
         profile = aws_profile_collection_get_profile(config_profiles, profile_name);
     }
@@ -206,7 +205,7 @@ static struct aws_string *s_get_command(struct aws_allocator *allocator, struct 
 
 on_finish:
     aws_string_destroy(profile_name);
-    aws_profile_collection_destroy(config_profiles);
+    aws_profile_collection_release(config_profiles);
     aws_byte_buf_clean_up_secure(&command_buf);
     return command;
 }
@@ -238,7 +237,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_process(
     AWS_ZERO_STRUCT(*provider);
     AWS_ZERO_STRUCT(*impl);
 
-    impl->command = s_get_command(allocator, options->profile_to_use);
+    impl->command = s_get_command(allocator, options);
     if (!impl->command) {
         goto on_error;
     }

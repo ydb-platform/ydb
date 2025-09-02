@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from hamcrest import assert_that, equal_to
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.common import msgbus_types
 
 
@@ -12,7 +12,7 @@ class TestPDiskInfo(object):
     """
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
     @classmethod

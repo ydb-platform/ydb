@@ -1,0 +1,4 @@
+title: Справочник YQL ядра
+href: index.md
+items:
+- include: { mode: link, path: toc_i.yaml }

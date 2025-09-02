@@ -7,7 +7,7 @@ from aiohttp import web
 
 import yatest.common as yat
 from library.python.testing.recipe import declare_recipe, set_env
-from library.recipes.common import find_free_ports, start_daemon
+from library.recipes.common import find_free_ports
 
 logger = logging.getLogger('mdb_mock.recipe')
 
@@ -18,17 +18,15 @@ async def clickhouse_handler(request):
     cluster_id = request.match_info['cluster_id']
 
     if cluster_id == 'clickhouse_cluster_id':
-        return web.Response(body=json.dumps(
-            {
-                'hosts': [
-                    {
-                        'name': 'clickhouse',
-                        'cluster_id': cluster_id,
-                        'health': 'ALIVE',
-                        'type': 'CLICKHOUSE'
-                    },
-                ]
-            }))
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {'name': 'clickhouse', 'cluster_id': cluster_id, 'health': 'ALIVE', 'type': 'CLICKHOUSE'},
+                    ]
+                }
+            )
+        )
 
     return web.Response(body=json.dumps({}))
 
@@ -37,19 +35,65 @@ async def postgresql_handler(request):
     cluster_id = request.match_info['cluster_id']
 
     if cluster_id == 'postgresql_cluster_id':
-        return web.Response(body=json.dumps(
-            {
-                'hosts': [
-                    {
-                        'name': 'postgresql',
-                        'services': [
-                            {
-                                'health': 'ALIVE',
-                            },
-                        ],
-                    }
-                ]
-            }))
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {
+                            'name': 'postgresql',
+                            'services': [
+                                {
+                                    'health': 'ALIVE',
+                                },
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
+    return web.Response(body=json.dumps({}))
+
+
+async def greenplum_handler(request):
+    cluster_id = request.match_info['cluster_id']
+
+    if cluster_id == 'greenplum_cluster_id':
+        return web.Response(
+            body=json.dumps(
+                {
+                    "hosts": [
+                        {
+                            "name": "greenplum",
+                            "type": "MASTER",
+                            "health": "ALIVE",
+                        }
+                    ]
+                }
+            )
+        )
+    return web.Response(body=json.dumps({}))
+
+
+async def mysql_handler(request):
+    cluster_id = request.match_info['cluster_id']
+
+    if cluster_id == 'mysql_cluster_id':
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {
+                            'name': 'mysql',
+                            'services': [
+                                {
+                                    'health': 'ALIVE',
+                                },
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
     return web.Response(body=json.dumps({}))
 
 
@@ -57,6 +101,8 @@ def serve(port: int):
     app = web.Application()
     app.add_routes([web.get('/managed-clickhouse/v1/clusters/{cluster_id}/hosts', clickhouse_handler)])
     app.add_routes([web.get('/managed-postgresql/v1/clusters/{cluster_id}/hosts', postgresql_handler)])
+    app.add_routes([web.get('/managed-greenplum/v1/clusters/{cluster_id}/master-hosts', greenplum_handler)])
+    app.add_routes([web.get('/managed-mysql/v1/clusters/{cluster_id}/hosts', mysql_handler)])
     web.run_app(app, port=port)
 
 

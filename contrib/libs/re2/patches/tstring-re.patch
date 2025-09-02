@@ -1,0 +1,80 @@
+--- a/re2/re2.h	(index)
++++ b/re2/re2.h	(working tree)
+@@ -210,6 +210,7 @@
+ #include <string>
+ #include <type_traits>
+ #include <vector>
++#include <util/generic/string.h>
+
+ #include "absl/base/call_once.h"
+ #include "absl/strings/string_view.h"
+@@ -461,6 +464,14 @@ class RE2 {
+   static bool Replace(std::string* str,
+                       const RE2& re,
+                       absl::string_view rewrite);
++  static bool Replace(TString* str,
++                      const RE2& pattern,
++                      absl::string_view rewrite) {
++    std::string tmp(*str);
++    bool res = Replace(&tmp, pattern, rewrite);
++    *str = tmp;
++    return res;
++  }
+ 
+   // Like Replace(), except replaces successive non-overlapping occurrences
+   // of the pattern in the string with the rewrite. E.g.
+@@ -479,6 +492,15 @@ class RE2 {
+                            const RE2& re,
+                            absl::string_view rewrite);
+ 
++  static int GlobalReplace(TString* str,
++                            const RE2& pattern,
++                            absl::string_view rewrite) {
++    std::string tmp(*str);
++    int res = GlobalReplace(&tmp, pattern, rewrite);
++    *str = tmp;
++    return res;
++  }
++
+   // Like Replace, except that if the pattern matches, "rewrite"
+   // is copied into "out" with substitutions.  The non-matching
+   // portions of "text" are ignored.
+@@ -492,6 +516,16 @@ class RE2 {
+                       absl::string_view rewrite,
+                       std::string* out);
+ 
++  static bool Extract(const StringPiece& text,
++                      const RE2& pattern,
++                      absl::string_view rewrite,
++                      TString *out) {
++    std::string tmp;
++    bool res = Extract(text, pattern, rewrite, &tmp);
++    *out = tmp;
++    return res;
++  }
++
+   // Escapes all potentially meaningful regexp characters in
+   // 'unquoted'.  The returned string, used as a regular expression,
+   // will match exactly the original string.  For example,
+@@ -581,6 +617,21 @@ class RE2 {
+   bool CheckRewriteString(absl::string_view rewrite,
+                           std::string* error) const;
+ 
++  bool CheckRewriteString(absl::string_view rewrite, std::nullptr_t error) const {
++    return CheckRewriteString(rewrite, static_cast<std::string*>(error));
++  }
++
++  bool CheckRewriteString(absl::string_view rewrite, TString* error) const {
++    if (error) {
++      std::string tmp;
++      bool res = CheckRewriteString(rewrite, &tmp);
++      error->assign(tmp.data(), tmp.size());
++      return res;
++    } else {
++      return CheckRewriteString(rewrite, nullptr);
++    }
++  }
++
+   // Returns the maximum submatch needed for the rewrite to be done by
+   // Replace(). E.g. if rewrite == "foo \\2,\\1", returns 2.
+   static int MaxSubmatch(const StringPiece& rewrite);

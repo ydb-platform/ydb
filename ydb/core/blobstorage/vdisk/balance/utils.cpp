@@ -18,7 +18,7 @@ namespace NBalancing {
     {
     }
 
-    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/) {
+    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/, const void* /*sst*/) {
         Ingress.Merge(memRec.GetIngress());
 
         const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
@@ -53,10 +53,11 @@ namespace NBalancing {
     }
 
     void TPartsCollectorMerger::AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* data, const TKeyLogoBlob& key, ui64 /*lsn*/) {
+        Ingress.Merge(memRec.GetIngress());
+
         if (!memRec.HasData()) {
             return;
         }
-        Ingress.Merge(memRec.GetIngress());
 
         const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
 
@@ -75,8 +76,8 @@ namespace NBalancing {
     }
 
     void TPartsCollectorMerger::Clear() {
+        Ingress = TIngress();
         Parts.clear();
-        Parts.resize(GType.TotalPartCount());
     }
 
 } // NBalancing

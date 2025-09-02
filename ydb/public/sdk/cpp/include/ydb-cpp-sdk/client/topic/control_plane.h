@@ -688,7 +688,7 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING_DEFAULT(bool, EnablePartitionCounters, false);
+    FLUENT_SETTING_OPTIONAL(bool, EnablePartitionCounters);
 
     TAlterTopicAttributesBuilder BeginAlterAttributes() {
         return TAlterTopicAttributesBuilder(*this);

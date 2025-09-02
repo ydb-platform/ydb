@@ -21,16 +21,16 @@ private:
     NColumnShard::TColumnShard& Owner;
     ui32 ReportBaseStatisticsPeriodMs;
     ui32 ReportExecutorStatisticsPeriodMs;
-    std::unique_ptr<NKikimr::NColumnShard::TCountersManager> CountersManager;
+    NKikimr::NColumnShard::TCountersManager& CountersManager;
+    ui64 StatsReportRound = 0;
 
     void BuildSSPipe(const TActorContext& ctx);
-    void UpdateSSId();
-    // void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    // void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void ReportBaseStatistics();
+    void ReportExecutorStatistics();
+    void SendPeriodicStats();
 
-class TEvReportBaseStatistics: public NActors::TEventLocal<TEvReportBaseStatistics, NColumnShard::TEvPrivate::EEv::EvReportBaseStatistics> {};
-class TEvReportExecutorStatistics: public NActors::TEventLocal<TEvReportExecutorStatistics, NColumnShard::TEvPrivate::EEv::EvReportExecutorStatistics> {};
-
+    class TEvReportBaseStatistics: public NActors::TEventLocal<TEvReportBaseStatistics, NColumnShard::TEvPrivate::EEv::EvReportBaseStatistics> {};
+    class TEvReportExecutorStatistics: public NActors::TEventLocal<TEvReportExecutorStatistics, NColumnShard::TEvPrivate::EEv::EvReportExecutorStatistics> {};
 
     STFUNC(StateFunc) {
         // TLogContextGuard gLogging(
@@ -38,30 +38,40 @@ class TEvReportExecutorStatistics: public NActors::TEventLocal<TEvReportExecutor
         switch (ev->GetTypeRewrite()) {
             // cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle)
             HFunc(TEvReportBaseStatistics, Handle);
             HFunc(TEvReportExecutorStatistics, Handle);
+            HFunc(TEvSetSSId, Handle);
             default:
-                AFL_VERIFY(false);
+                AFL_VERIFY(false)("ev", (ev->ToString()));
         }
     }
 
 public:
+
+    class TEvSetSSId: public NActors::TEventLocal<TEvSetSSId, NColumnShard::TEvPrivate::EEv::EvSetSSId> {
+    public:
+        ui64 SSId;
+        explicit TEvSetSSId(ui64 sSId) : SSId(sSId){}
+    };
+
     TColumnShardStatisticsReporter (
         NColumnShard::TColumnShard& owner,
         ui32 reportBaseStatisticsPeriodMs,
         ui32 reportExecutorStatisticsPeriodMs,
-        std::unique_ptr<NColumnShard::TCountersManager> countersManager)
+        NColumnShard::TCountersManager& countersManager)
         :
         Owner(owner),
         ReportBaseStatisticsPeriodMs(reportBaseStatisticsPeriodMs),
         ReportExecutorStatisticsPeriodMs(reportExecutorStatisticsPeriodMs),
-        CountersManager(std::move(countersManager)) {}
-    void Bootstrap(const NActors::TActorContext& /*ctx*/);
-    void SendPeriodicStats();
-    void SetSSId(ui64 sSId, const TActorContext& ctx);
+        CountersManager(countersManager) {}
+    void Bootstrap(const NActors::TActorContext&);
+    void SetSSId(ui64 sSId, const TActorContext&);
     void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext&);
-    void Handle(TEvReportBaseStatistics::TPtr& ev, const NActors::TActorContext&);
-    void Handle(TEvReportExecutorStatistics::TPtr& ev, const NActors::TActorContext&);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr&, const TActorContext&);
+    void Handle(TEvReportBaseStatistics::TPtr&, const NActors::TActorContext&);
+    void Handle(TEvReportExecutorStatistics::TPtr&, const NActors::TActorContext&);
+    void Handle(TEvSetSSId::TPtr&, const NActors::TActorContext&);
 
 };
 

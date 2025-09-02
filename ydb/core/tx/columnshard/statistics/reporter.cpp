@@ -22,38 +22,16 @@ void TColumnShardStatisticsReporter::BuildSSPipe(const TActorContext& ctx) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("pipe", "built");
 }
 
-void TColumnShardStatisticsReporter::SetSSId(ui64 sSId, const TActorContext& ctx) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("SSId", SSId);
-    if (!SSId) {
-        SSId = sSId;
-        BuildSSPipe(ctx);
-    }
-}
-
 void TColumnShardStatisticsReporter::SendPeriodicStats() {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-    // LOG_S_DEBUG("Send periodic stats.");
 
-    if (!StatsReportPipe) { //TODO CHECK IF PIPE VALID
+    if (!StatsReportPipe) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("no", "pipe");
-        // LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
     const auto& tabletSchemeShardLocalPathId = Owner.TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
 
     const TActorContext& ctx = ActorContext();
-    const TInstant now = TAppData::TimeProvider->Now();
-
-    if (Owner.LastStatsReport + Owner.StatsReportInterval > now) {
-        LOG_S_TRACE("Skip send periodic stats: report interval = " << Owner.StatsReportInterval);
-        return;
-    }
-    Owner.LastStatsReport = now;
-
-    if (!StatsReportPipe) {
-        LOG_S_DEBUG("Create periodic stats pipe to " << Owner.CurrentSchemeShardId << " at tablet " << Owner.TabletID());
-
-    }
 
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(Owner.TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
@@ -77,6 +55,17 @@ void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::T
     return;
 }
 
+void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientConnected::TPtr&, const TActorContext&) {
+    // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Client pipe reset to ", tabletId)(" at tablet ", TabletID());
+    return;
+}
+
+void TColumnShardStatisticsReporter::ReportBaseStatistics() {
+}
+
+void TColumnShardStatisticsReporter::ReportExecutorStatistics() {
+}
+
 void TColumnShardStatisticsReporter::Handle(TEvReportBaseStatistics::TPtr&, const NActors::TActorContext&) {
     SendPeriodicStats();
     // TDuration::Seconds(SendStatsIntervalMinSeconds
@@ -88,6 +77,14 @@ void TColumnShardStatisticsReporter::Handle(TEvReportExecutorStatistics::TPtr&, 
     SendPeriodicStats();
     // Schedule(TDuration::MilliSeconds(ReportExecutorStatisticsPeriodMs), new TEvReportExecutorStatistics);
     Schedule(TDuration::MilliSeconds(1000), new TEvReportExecutorStatistics);
+}
+
+void TColumnShardStatisticsReporter::Handle(TEvSetSSId::TPtr& ev, const NActors::TActorContext& ctx) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("SSId", SSId);
+    if (!SSId) {
+        SSId = ev->Get()->SSId;
+        BuildSSPipe(ctx);
+    }
 }
 
 }

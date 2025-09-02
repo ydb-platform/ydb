@@ -131,8 +131,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
 
     auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
-    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs(), std::make_unique<TTableStatsBuilder>(Counters, Executor()));
-    ColumnShardStatisticsReporter = ctx.Register(TmpColumnShardStatisticsReporter);
+    ColumnShardStatisticsReporter = ctx.Register(new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs(), Counters));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
@@ -251,8 +250,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
 
-        // TmpColumnShardStatisticsReporter->SendPeriodicStats();
-        // SendPeriodicStats();
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
@@ -425,8 +422,10 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     }
 }
 
-void TColumnShard::FillExecutorStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillExecutorStats(const TActorContext&, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
     ev->Record.SetGeneration(Executor()->Generation());
+    ev->Record.SetStartTime(StartTime().MilliSeconds());
+
     auto& tableStats = *ev->Record.MutableTableStats();
     auto& tableMetrics = *ev->Record.MutableTabletMetrics();
 

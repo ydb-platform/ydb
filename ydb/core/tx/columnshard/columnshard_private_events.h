@@ -83,6 +83,7 @@ struct TEvPrivate {
 
         EvReportBaseStatistics,
         EvReportExecutorStatistics,
+        EvSetSSId,
 
         EvEnd
     };

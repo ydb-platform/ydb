@@ -521,7 +521,6 @@ private:
 
     TActorId ResourceSubscribeActor;
     TActorId BufferizationPortionsWriteActorId;
-    NOlap::TColumnShardStatisticsReporter* TmpColumnShardStatisticsReporter;
     TActorId ColumnShardStatisticsReporter;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
@@ -600,6 +599,8 @@ private:
     void SendPeriodicStats();
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+
+    void FillExecutorStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
     ui64 TabletTxCounter = 0;

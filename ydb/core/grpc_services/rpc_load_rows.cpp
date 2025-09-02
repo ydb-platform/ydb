@@ -238,7 +238,7 @@ private:
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
         float cost = 0.0f;
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows;
+        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
 
         // TODO: check that value is a list of structs
 

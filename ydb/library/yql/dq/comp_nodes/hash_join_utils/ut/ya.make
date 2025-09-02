@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/minikql/comp_nodes/packed_tuple)
+UNITTEST_FOR(ydb/library/yql/dq/comp_nodes/hash_join_utils)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
     REQUIREMENTS(ram:32)
@@ -24,6 +24,7 @@ PEERDIR(
 )
 
 CFLAGS(
+    -mavx2
     -mprfchw
 )
 
@@ -34,6 +35,5 @@ IF (MKQL_RUNTIME_VERSION)
         -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
     )
 ENDIF()
-
 
 END()

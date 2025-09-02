@@ -16,7 +16,6 @@ PEERDIR(
 CFLAGS(
     -mprfchw
     -mavx2
-    -DMKQL_DISABLE_CODEGEN
 )
 
 YQL_LAST_ABI_VERSION()

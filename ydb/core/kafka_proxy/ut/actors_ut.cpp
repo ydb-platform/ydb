@@ -65,6 +65,7 @@ public:
         Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(CachedMessage), 0, ev->Cookie);
     }
 };
+
 struct TMetarequestTestParams {
     NPersQueue::TTestServer Server;
     ui64 KafkaPort;

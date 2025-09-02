@@ -1301,8 +1301,8 @@ message AlterTopicRequest {
     // Set metering mode for topic in serverless database.
     MeteringMode set_metering_mode = 14;
 
-    // Per partition counters (e.g. topic.partition.committed_read_lag_milliseconds).
-    optional bool enable_partition_counters = 15;
+    // Partition-level counters (e.g. topic.partition.committed_read_lag_milliseconds).
+    optional bool set_enable_partition_counters = 15;
 }
 
 // Update topic response sent from server to client.

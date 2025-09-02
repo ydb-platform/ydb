@@ -1754,7 +1754,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UnionDistinctTest) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION DISTINCT select subkey FROM plato.Input;");
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 3);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(
+            R"sql(SELECT key FROM plato.Input UNION DISTINCT SELECT subkey FROM plato.Input;)sql",
+            settings);
+
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Union"), 0}};

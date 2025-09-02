@@ -376,7 +376,7 @@ public:
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                ui64 closeBeforeIndex = watermarkIndex + 1 - IntervalHopCount;
+                ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops);
                 if (keyStateBecameEmpty) {
                     key.UnRef();

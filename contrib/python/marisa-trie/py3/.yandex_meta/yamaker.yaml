@@ -3,3 +3,5 @@ cython_directive:
 copy:
   - marisa-trie/*
   - src/*
+exclude:
+  - src/marisa_trie.egg-info/*

@@ -101,7 +101,9 @@ DEFINE_ENUM(EAccessControlObject,
 );
 
 DEFINE_ENUM(EInapplicableExpressionMode,
-    (Deny)
+    // Fail the read action (e.g. scheduler operation / read_table command / SPYT/CHYT query).
+    (Fail)
+    // Pretend that the RL ACE does not exist for the current read action.
     (Ignore)
 );
 

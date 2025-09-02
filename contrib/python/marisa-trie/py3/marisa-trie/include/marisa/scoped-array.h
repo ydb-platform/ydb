@@ -1,7 +1,8 @@
 #ifndef MARISA_SCOPED_ARRAY_H_
 #define MARISA_SCOPED_ARRAY_H_
 
-#include "marisa/base.h"
+// Please don't #include this header directly.
+// This header is #included from "marisa/base.h".
 
 namespace marisa {
 
@@ -16,7 +17,7 @@ class scoped_array {
   }
 
   void reset(T *array = NULL) {
-    MARISA_THROW_IF((array != NULL) && (array == array_), MARISA_RESET_ERROR);
+    MARISA_DEBUG_IF((array != NULL) && (array == array_), MARISA_RESET_ERROR);
     scoped_array(array).swap(*this);
   }
 

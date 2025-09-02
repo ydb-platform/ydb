@@ -173,7 +173,7 @@ class Slice:
             for tenant in domain.tenants:
                 opts = []
                 for storage in tenant.storage_units:
-                    opts.append(':'.join([storage.kind, storage.count]))
+                    opts.append(':'.join([storage.kind, str(storage.count)]))
                 if tenant.shared_database_path:
                     if serverless:
                         opts.append("--serverless")

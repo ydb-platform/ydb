@@ -113,7 +113,27 @@ namespace NKikimr {
         // returns true if allocated, false -- if no free slots
         bool TChain::Allocate(NPrivate::TChunkSlot *id) {
             if (FreeSpace.empty()) {
-                return false;
+                if (!ChunksSoftLocking) {
+                    Cerr << VDiskLogPrefix
+                        << "TChain::Allocate: no free slots in FreeSpace, strict mode, we can't steal a chunk from LockedChunks" << Endl;
+                    return false; // strict mode, we can't steal a chunk from LockedChunks
+                }
+                auto it = LockedChunks.begin();
+                while (it != LockedChunks.end() && it->second.NumFreeSlots == 0) {
+                    ++it;
+                }
+                if (it == LockedChunks.end()) {
+                    Cerr << VDiskLogPrefix
+                        << "TChain::Allocate: no free slots in LockedChunks" << Endl;
+                    return false;
+                }
+                TFreeSpaceItem item = it->second;
+                Cerr << VDiskLogPrefix
+                    << "TChain::Allocate: no free slots in FreeSpace, stealing chunk# " << it->first
+                    << " with " << item.NumFreeSlots << " free slots";
+                Y_VERIFY(it->second.NumFreeSlots);
+                FreeSpace.emplace(it->first, std::move(item));
+                LockedChunks.erase(it);
             }
 
             TFreeSpace::iterator it = FreeSpace.begin();
@@ -183,12 +203,15 @@ namespace NKikimr {
             return {0u, false}; // no chunk freed
         }
 
-        bool TChain::LockChunkForAllocation(TChunkID chunkId) {
+        void TChain::LockChunkForAllocation(TChunkID chunkId) {
             if (auto nh = FreeSpace.extract(chunkId)) {
                 LockedChunks.insert(std::move(nh));
-                return true;
             } else {
-                return LockedChunks.contains(chunkId);
+                auto [it, inserted] = LockedChunks.try_emplace(chunkId);
+                if (inserted) {
+                    // chunks was full
+                    it->second.FreeSlots.Reset(0, SlotsInChunk);
+                }
             }
         }
 
@@ -262,7 +285,7 @@ namespace NKikimr {
             });
         }
 
-        TChain TChain::Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk) {
+        TChain TChain::Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk, bool chunksSoftLocking) {
             ui32 slotsInChunk;
             ::Load(s, slotsInChunk);
 
@@ -276,6 +299,7 @@ namespace NKikimr {
                 std::move(vdiskLogPrefix),
                 slotsInChunk,
                 slotSize, // in bytes
+                chunksSoftLocking
             };
 
             ::Load(s, res.AllocatedSlots);
@@ -287,7 +311,11 @@ namespace NKikimr {
                 ::Load(s, item.FreeSlots);
                 item.NumFreeSlots = item.FreeSlots.Count();
                 res.FreeSlotsInFreeSpace += item.NumFreeSlots;
-                res.FreeSpace.emplace(chunkId, std::move(item));
+                if (item.NumFreeSlots == 0) {
+                    res.LockedChunks.emplace(chunkId, std::move(item));
+                } else {
+                    res.FreeSpace.emplace(chunkId, std::move(item));
+                }
             }
 
             return res;
@@ -408,7 +436,8 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead)
+                ui32 overhead,
+                TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -417,6 +446,7 @@ namespace NKikimr {
             , Overhead(overhead)
             , MinHugeBlobInBlocks(MinHugeBlobInBytes / AppendBlockSize)
             , MaxHugeBlobInBlocks(SizeToBlocks(maxBlobInBytes))
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             Y_VERIFY_S(MinHugeBlobInBytes &&
                     MinHugeBlobInBytes <= MilestoneBlobInBytes &&
@@ -503,7 +533,7 @@ namespace NKikimr {
             ui32 prevSlotSize = 0;
             ui32 numChains;
             for (::Load(s, numChains); numChains; --numChains) {
-                auto chain = TChain::Load(s, VDiskLogPrefix, AppendBlockSize, blocksInChunk);
+                auto chain = TChain::Load(s, VDiskLogPrefix, AppendBlockSize, blocksInChunk, ChunksSoftLocking);
 
                 // merge new item with originating ones from TChainLayoutBuilder -- we may have not every one of them
                 // serialized
@@ -624,7 +654,7 @@ namespace NKikimr {
                 const ui32 slotSizeInBlocks = x.Right;
                 const ui32 slotSize = slotSizeInBlocks * AppendBlockSize;
                 const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
-                Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
+                Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize, ChunksSoftLocking);
             }
 
             Y_ABORT_UNLESS(!Chains.empty());
@@ -690,12 +720,13 @@ namespace NKikimr {
                 ui32 mileStoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
-                ui32 freeChunksReservation)
+                ui32 freeChunksReservation,
+                TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , FreeChunks()
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                maxBlobInBytes, overhead)
+                maxBlobInBytes, overhead, chunksSoftLocking)
         {}
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -754,10 +785,10 @@ namespace NKikimr {
             }
         }
 
-        bool THeap::LockChunkForAllocation(ui32 chunkId, ui32 slotSize) {
+        void THeap::LockChunkForAllocation(ui32 chunkId, ui32 slotSize) {
             TChain *chain = Chains.GetChain(slotSize);
             Y_ABORT_UNLESS(chain);
-            return chain->LockChunkForAllocation(chunkId);
+            chain->LockChunkForAllocation(chunkId);
         }
 
         void THeap::FinishRecovery() {

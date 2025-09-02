@@ -62,6 +62,10 @@ namespace NKikimr {
             AtomicSet(LocalUsedChunks, static_cast<TAtomicBase>(usedChunks));
         }
 
+        void UpdateLocalTotalChunks(ui32 totalChunks) {
+            AtomicSet(LocalTotalChunks, static_cast<TAtomicBase>(totalChunks));
+        }
+
         NPDisk::TStatusFlags GetLocalStatusFlags() const {
             return static_cast<NPDisk::TStatusFlags>(AtomicGet(AllVDiskFlags[SelfOrderNum]));
         }
@@ -87,6 +91,10 @@ namespace NKikimr {
             return static_cast<ui32>(AtomicGet(LocalUsedChunks));
         }
 
+        ui32 GetLocalTotalChunks() const {
+            return static_cast<ui32>(AtomicGet(LocalTotalChunks));
+        }
+
     private:
         // Log space flags.
         TAtomic LogFlags = 0;
@@ -104,6 +112,8 @@ namespace NKikimr {
         const ui32 SelfOrderNum;
         // Chunks used locally by VDisk
         TAtomic LocalUsedChunks = 0;
+        // VDisk chunks limit in shared free space mode
+        TAtomic LocalTotalChunks = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////

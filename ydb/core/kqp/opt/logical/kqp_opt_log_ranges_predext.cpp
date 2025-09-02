@@ -242,6 +242,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         settings.MaxRanges = Nothing();
     }
 
+    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied) {
+        settings.ExternalParameterMaxSize = kqpCtx.Config->ExtractPredicateRangesLimit;
+    }
+
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(mainTableDesc.SchemeNode);
 

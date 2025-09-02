@@ -69,6 +69,15 @@ class StreamingImportTestBase(object):
         config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"]["endpoint"] = os.getenv("YDB_ENDPOINT")
         config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"]["database"] = os.getenv("YDB_DATABASE")
 
+        config.yaml_config["query_service_config"]["checkpoints_config"] = {}
+        config.yaml_config["query_service_config"]["checkpoints_config"]["enabled"] = True
+        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"] = {}
+        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["endpoint"] = os.getenv("YDB_ENDPOINT")
+        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["database"] = os.getenv("YDB_DATABASE")
+        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["table_prefix"] = "checkpoints"
+        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"] = {}
+        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"]["enabled"] = True
+        config.yaml_config["query_service_config"]["checkpoints_config"]["max_inflight"] = 1
         return config
 
     @classmethod

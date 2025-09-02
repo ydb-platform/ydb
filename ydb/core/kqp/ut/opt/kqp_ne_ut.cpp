@@ -4246,6 +4246,18 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         {
             auto extractor = DoQuery(R"(
                 SELECT * FROM `/Root/my_table`
+                WHERE a = '123'
+                ORDER BY c
+                LIMIT 10
+                OFFSET 30;
+            )");
+
+            extractor.HasLimit("/Root/my_table/idx_my_table_table_a_c/indexImplTable", "40");
+        }
+
+        {
+            auto extractor = DoQuery(R"(
+                SELECT * FROM `/Root/my_table`
                 WHERE a = '123' or a = '1123' or a = '13412'
                 ORDER BY c
                 LIMIT 10;

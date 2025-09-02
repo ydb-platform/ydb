@@ -406,31 +406,32 @@ DELETE FROM employee WHERE Id = ?;
 {% list tabs group=lang %}
 
 - C#
-```csharp
-var now  = DateTime.UtcNow;
-var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
-{
-    Id      = i,
-    IntVal  = i,
-    DecVal  = 0m,
-    StrVal  = $"Name {i}",
-    BoolVal = (i & 1) == 0,
-    DtVal   = now,
-}); 
-```
+
+  ```csharp
+  var now  = DateTime.UtcNow;
+  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+  {
+      Id      = i,
+      IntVal  = i,
+      DecVal  = 0m,
+      StrVal  = $"Name {i}",
+      BoolVal = (i & 1) == 0,
+      DtVal   = now,
+  }); 
+  ```
 
 - YQL
 
-```yql
-DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-SELECT
-	COUNT(*) as COUNT_1
-FROM
-	SimpleEntity t
-WHERE
-	t.Id IN $Gen_List_Primitive_1 AND
-	(t.DecVal <> Decimal('1.23', 22, 9) OR t.StrVal <> 'updated'u OR t.StrVal IS NULL OR t.BoolVal = false)
-```
+  ```yql
+  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+  SELECT
+      COUNT(*) as COUNT_1
+  FROM
+      SimpleEntity t
+  WHERE
+      t.Id IN $Gen_List_Primitive_1 AND
+      (t.DecVal <> Decimal('1.23', 22, 9) OR t.StrVal <> 'updated'u OR t.StrVal IS NULL OR t.BoolVal = false)
+  ```
 
 {% endlist %}
 
@@ -440,29 +441,29 @@ WHERE
 
 - C#
 
-```csharp
-var ids = Enumerable.Range(0, 15_000).ToArray();
-
-table.Where(t => ids.Contains(t.Id))
-     .Set(_ => _.DecVal,  _ => 1.23m)
-     .Set(_ => _.StrVal,  _ => "updated")
-     .Set(_ => _.BoolVal, _ => true)
-     .Update();
-```
+  ```csharp
+  var ids = Enumerable.Range(0, 15_000).ToArray();
+  
+  table.Where(t => ids.Contains(t.Id))
+      .Set(_ => _.DecVal,  _ => 1.23m)
+      .Set(_ => _.StrVal,  _ => "updated")
+      .Set(_ => _.BoolVal, _ => true)
+      .Update();
+  ```
 
 - YQL
 
-```yql
-DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-UPDATE
-	SimpleEntity
-SET
-	DecVal = Decimal('1.23', 22, 9),
-	StrVal = 'updated'u,
-	BoolVal = true
-WHERE
-	SimpleEntity.Id IN $Gen_List_Primitive_1
-```
+  ```yql
+  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+  UPDATE
+      SimpleEntity
+  SET
+      DecVal = Decimal('1.23', 22, 9),
+      StrVal = 'updated'u,
+      BoolVal = true
+  WHERE
+      SimpleEntity.Id IN $Gen_List_Primitive_1
+  ```
 
 {% endlist %}
 
@@ -472,19 +473,19 @@ WHERE
 
 - C#
 
-```csharp
-table.Delete(t => ids.Contains(t.Id));
-```
+  ```csharp
+  table.Delete(t => ids.Contains(t.Id));
+  ```
 
 - YQL
 
-```yql
-DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-DELETE FROM
-	SimpleEntity
-WHERE
-	SimpleEntity.Id IN $Gen_List_Primitive_1
-```
+  ```yql
+  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
+  DELETE FROM
+      SimpleEntity
+  WHERE
+      SimpleEntity.Id IN $Gen_List_Primitive_1
+  ```
 
 {% endlist %}
 

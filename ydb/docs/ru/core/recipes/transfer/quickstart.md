@@ -12,7 +12,7 @@
 
 ## Шаг 1. Создание топика {#step1}
 
-Сначала нужно создать [топик](../../concepts/topic.md) в {{ ydb-short-name }}, из которого трансфер будет читать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
+Сначала нужно создать [топик](../../concepts/datamodel/topic.md) в {{ ydb-short-name }}, из которого трансфер будет читать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
 
 ```yql
 CREATE TOPIC `transfer_recipe/source_topic`;

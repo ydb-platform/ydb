@@ -1,0 +1,1 @@
+{"component": "schemeshard", "database": "/Root", "detailed_status": "StatusAccepted", "operation": "DROP DATABASE", "paths": "[/Root/Database]", "remote_address": "{none}", "sanitized_token": "**** (B6C6F477)", "status": "SUCCESS", "subject": "root@builtin", "tx_id": "<canonized_tx_id>"}

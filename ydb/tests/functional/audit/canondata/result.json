@@ -5,6 +5,12 @@
         },
         {
             "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.1.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.2.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_and_drop_database/audit_log.3.json"
         }
     ],
     "test_canonical_records.test_create_and_drop_table": [

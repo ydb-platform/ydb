@@ -43,19 +43,51 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     return true;
 }
 
-TMaybeNode<TCoLambda> ExtractTopSortKeySelector(TExprBase node, const NYql::TParentsMap& parentsMap) {
-    auto it = parentsMap.find(node.Raw());
+const TExprNode* GetSingleConsumerParent(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
+    auto it = parentsMap.find(node);
     if (it != parentsMap.end()) {
         if (it->second.size() != 1) {
             return {};
         }
-        for (auto* node : it->second) {
-            if (TCoTopSort::Match(node)) {
-                TCoTopSort topSort(node);
-                return topSort.KeySelectorLambda();
+        for (auto* parentNode : it->second) {
+            if (TCoTopSort::Match(parentNode) || TCoSkip::Match(parentNode) || TCoTake::Match(parentNode) || TCoSort::Match(parentNode)) {
+                return parentNode;
             }
         }
     }
+
+    return nullptr;
+}
+
+TMaybeNode<TCoLambda> ExtractTopSortKeySelector(TExprBase node,  const NYql::TParentsMap& parentsMap) {
+    auto maybeSort = GetSingleConsumerParent(node.Raw(), parentsMap);
+    if (!maybeSort)
+        return {};
+
+    if (TCoTopSort::Match(maybeSort)) {
+        TCoTopSort res(maybeSort);
+        return res.KeySelectorLambda();
+    }
+
+    if (TCoSort::Match(maybeSort)) {
+        auto takeOrSkip = GetSingleConsumerParent(maybeSort, parentsMap);
+        if (!takeOrSkip)
+            return {};
+
+        if (TCoTake::Match(takeOrSkip)) {
+            TCoSort res(maybeSort);
+            return res.KeySelectorLambda();
+        }
+
+        if (TCoSkip::Match(takeOrSkip)) {
+            auto maybeTake = GetSingleConsumerParent(takeOrSkip, parentsMap);
+            if (maybeTake && TCoTake::Match(maybeTake)) {
+                TCoSort res(maybeSort);
+                return res.KeySelectorLambda();
+            }
+        }
+    }
+
     return {};
 }
 

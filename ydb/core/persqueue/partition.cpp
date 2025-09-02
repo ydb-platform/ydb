@@ -3928,6 +3928,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 
         if (!SubDomainOutOfSpace) {
             ProcessTxsAndUserActs(ctx);
+            ProcessReserveRequests(ctx);
         }
     }
 }

@@ -173,7 +173,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
             ->GetSubgroup("database_id", DbId)
-            ->GetSubgroup("topic", TopicConverter->GetPrimaryPath())  // TODO(qyryq) Is it a correct value?
+            ->GetSubgroup("topic", TopicConverter->GetClientsideName())
             ->GetSubgroup("partition_id", ToString(Partition));
     } else {
         return counters

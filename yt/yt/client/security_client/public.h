@@ -79,6 +79,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SafeModeEnabled)              (906))
     ((AlreadyPresentInGroup)        (908))
     ((IrreversibleAclModification)  (909))
+    ((NoSuchUser)                   (910))
 );
 
 DEFINE_ENUM(EAccessControlObjectNamespace,

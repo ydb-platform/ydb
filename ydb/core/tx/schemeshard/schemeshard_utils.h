@@ -190,8 +190,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             //We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
     
-            if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            if (indexKeys.KeyColumns.size() > 1) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "fulltext index can only have a single key text column";
                 return false;
             }
     

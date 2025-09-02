@@ -917,10 +917,10 @@ TCheckFunc SpecializedIndexDescription(const TString& proto) {
         TString actual;
         switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
         case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
-            actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings().DebugString();
+            actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings().ShortDebugString();
             break;
         case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
-            actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings().DebugString();
+            actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings().ShortDebugString();
             break;
         case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
             actual = "SPECIALIZEDINDEXDESCRIPTION_NOT_SET";

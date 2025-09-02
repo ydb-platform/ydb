@@ -9,14 +9,13 @@ TExtensionManager::TExtensionManager(const TActorId sender,
                                      const TOpenIdConnectSettings& settings,
                                      const TCrackedPage& protectedPage,
                                      const TString authHeader)
-    : Settings(settings)
+    : ExtensionCtx(MakeIntrusive<TExtensionContext>())
+    , Settings(settings)
     , AuthHeader(std::move(authHeader))
+    , Timeout(settings.DefaultRequestTimeout)
 {
-    ExtensionCtx = MakeIntrusive<TExtensionContext>();
-    ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
-    ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
+    ExtensionCtx->Params.ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
-    Timeout = settings.DefaultRequestTimeout;
 }
 
 void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
@@ -24,12 +23,28 @@ void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
 }
 
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
-    ExtensionCtx->Params->Request = std::move(request);
-}
+    ExtensionCtx->Params.Request = std::move(request);}
 
-void TExtensionManager::SetOriginalResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    ExtensionCtx->Params->ResponseError = event->Get()->GetError();
-    ExtensionCtx->Params->SetOriginalResponse(std::move(event->Get()->Response));
+void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+    if (!event) {
+        return;
+    }
+
+    auto& params = ExtensionCtx->Params;
+    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    params.ResponseError = event->Get()->GetError();
+
+    auto response = std::move(event->Get()->Response);
+    if (!response)
+        return;
+
+    params.StatusOverride = std::move(response->Status);
+    auto headers = NHttp::THeaders(response->Headers);
+    for (const auto& header : headers.Headers) {
+        params.HeadersOverride->Set(header.first, header.second);
+    }
+    params.MessageOverride = std::move(response->Message);
+    params.BodyOverride = std::move(response->Body);
 }
 
 void TExtensionManager::AddExtensionWhoami() {
@@ -72,7 +87,7 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     SetRequest(std::move(request));
-    SetOriginalResponse(std::move(event));
+    SetOverrideResponse(std::move(event));
 
     const auto step = ExtensionCtx->Steps.Next();
     step->Execute(std::move(ExtensionCtx));

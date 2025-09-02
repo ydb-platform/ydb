@@ -22,7 +22,7 @@ public:
 
 private:
     void SetRequest(NHttp::THttpIncomingRequestPtr request);
-    void SetOriginalResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
+    void SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
     void AddExtensionWhoami();
     void AddExtensionFinal();

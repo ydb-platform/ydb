@@ -45,8 +45,8 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     TString messageOverride;
     NJson::TJsonValue* outJson = nullptr;
 
-    SetCORS(Context->Params->Request, Context->Params->HeadersOverride.Get());
-    Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
+    SetCORS(Context->Params.Request, Context->Params.HeadersOverride.Get());
+    Context->Params.HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
 
     if (json.Has(USER_SID) && json.Has(ORIGINAL_USER_TOKEN)) {
         statusOverride = "200";
@@ -74,10 +74,9 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     });
 
     auto& params = Context->Params;
-    params->OverrideStatus(std::move(statusOverride));
-    params->OverrideMessage(std::move(messageOverride));
-    TString body = content.Str();
-    params->OverrideBody(std::move(body));
+    params.StatusOverride = statusOverride;
+    params.MessageOverride = messageOverride;
+    params.BodyOverride = content.Str();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
@@ -101,23 +100,22 @@ void TExtensionWhoamiWorker::ApplyIfReady() {
 }
 
 void TExtensionWhoamiWorker::ApplyExtension() {
-    if (Context->Params->GetStatusOverride().StartsWith("3") || Context->Params->GetStatusOverride() == "404") {
+    if (Context->Params.StatusOverride.StartsWith("3") || Context->Params.StatusOverride == "404") {
         return ContinueAndPassAway();
     }
     NJson::TJsonValue json;
     NJson::TJsonValue errorJson;
-    NHttp::THttpIncomingResponsePtr response;
     auto& params = Context->Params;
 
-    if (params->GetStatusOverride()) {
-        NJson::ReadJsonTree(params->GetBodyOverride(), &json);
-        if (!params->GetStatusOverride().StartsWith("2")) {
-            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params->GetStatusOverride());
-            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params->GetMessageOverride());
-            SetExtendedError(errorJson, "Ydb", "ResponseBody", params->GetBodyOverride());
+    if (!params.StatusOverride.empty()) {
+        NJson::ReadJsonTree(params.BodyOverride, &json);
+        if (!params.StatusOverride.StartsWith("2")) {
+            SetExtendedError(errorJson, "Ydb", "ResponseStatus", params.StatusOverride);
+            SetExtendedError(errorJson, "Ydb", "ResponseMessage", params.MessageOverride);
+            SetExtendedError(errorJson, "Ydb", "ResponseBody", params.BodyOverride);
         }
     } else {
-        TString& error = params->ResponseError;
+        TString& error = params.ResponseError;
         if (!error) {
             error = "Can not process request to protected resource";
         }

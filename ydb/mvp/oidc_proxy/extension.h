@@ -19,57 +19,11 @@ struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
     THolder<TCrackedPage> ProtectedPage;
     TString ResponseError;
+
+    TString StatusOverride;
+    TString MessageOverride;
+    TString BodyOverride;
     THolder<NHttp::THeadersBuilder> HeadersOverride;
-
-private:
-    std::optional<TString> StatusOverride;
-    std::optional<TString> MessageOverride;
-    std::optional<TString> BodyOverride;
-
-    NHttp::THttpIncomingResponsePtr OriginalResponse;
-
-    TStringBuf GetOverride(const std::optional<TString>& override, TStringBuf original) const {
-        if (override.has_value()) {
-            return TStringBuf(*override);
-        }
-        return original;
-    }
-
-public:
-    void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
-        OriginalResponse = std::move(response);
-        HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-        if (OriginalResponse) {
-            auto headers = NHttp::THeaders(OriginalResponse->Headers);
-            for (const auto& header : headers.Headers) {
-                HeadersOverride->Set(header.first, header.second);
-            }
-        }
-    }
-
-    void OverrideStatus(TString&& status) {
-        StatusOverride.emplace(std::move(status));
-    }
-
-    void OverrideMessage(TString&& message) {
-        MessageOverride.emplace(std::move(message));
-    }
-
-    void OverrideBody(TString&& body) {
-        BodyOverride.emplace(std::move(body));
-    }
-
-    TStringBuf GetStatusOverride() const {
-        return GetOverride(StatusOverride, OriginalResponse ? OriginalResponse->Status : TStringBuf());
-    }
-
-    TStringBuf GetMessageOverride() const {
-        return GetOverride(MessageOverride, OriginalResponse ? OriginalResponse->Message : TStringBuf());
-    }
-
-    TStringBuf GetBodyOverride() const {
-        return GetOverride(BodyOverride, OriginalResponse ? OriginalResponse->Body : TStringBuf());
-    }
 };
 
 struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
@@ -79,7 +33,7 @@ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
 struct TExtensionContext : public TThrRefBase {
     TActorId Sender;
     TExtensionsSteps Steps;
-    THolder<TProxiedResponseParams> Params;
+    TProxiedResponseParams Params;
 
     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
     void Reply();

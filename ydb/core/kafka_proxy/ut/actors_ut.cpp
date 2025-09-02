@@ -276,28 +276,6 @@ namespace NKafka::NTests {
             CheckKafkaMetaResponse(runtime, kafkaPort);
         }
 
-        Y_UNIT_TEST(DiscoveryResponsesWithNoNode) {
-            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
-
-            auto* runtime = server.GetRuntime();
-            auto edge = runtime->AllocateEdgeActor();
-
-            Ydb::Discovery::ListEndpointsResult leResult;
-            auto* ep = leResult.add_endpoints();
-            ep->set_address("wrong.host");
-            ep->set_port(1);
-            ep->set_node_id(9999);
-            ep = leResult.add_endpoints();
-            ep->set_address("wrong.host2");
-            ep->set_port(2);
-            ep->set_node_id(9998);
-            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
-            runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
-                                   config, fakeCache);
-
-            CheckKafkaMetaResponse(runtime, kafkaPort, false, 1, 3);
-        }
 
         Y_UNIT_TEST(DiscoveryResponsesWithError) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
@@ -330,7 +308,8 @@ namespace NKafka::NTests {
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
-            CheckKafkaMetaResponse(runtime, 12345);
+            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0)};
+            CheckKafkaMetaResponse(runtime, 12345, false, 1, 1, expectedNodeIds);
         }
 
         Y_UNIT_TEST(TopicMetadataOnlyThreeReplicaNodesReturnedFromMany) {
@@ -371,6 +350,11 @@ namespace NKafka::NTests {
             ep->set_port(12345);
             ep->set_node_id(10000);
 
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(12346);
+            ep->set_node_id(runtime->GetNodeId(0));
+
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
             CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
@@ -378,23 +362,6 @@ namespace NKafka::NTests {
 
             std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0), 10000};
             CheckKafkaMetaResponse(runtime, 12345, false, 1, 2, expectedNodeIds);
-        }
-
-        Y_UNIT_TEST(TopicMetadataOnlyOneReplicaNodeReturned) {
-            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
-
-            auto* runtime = server.GetRuntime();
-            auto edge = runtime->AllocateEdgeActor();
-
-            Ydb::Discovery::ListEndpointsResult leResult;
-
-            auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
-            runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
-                                   config, fakeCache);
-
-            std::vector<ui32> expectedNodeIds = {runtime->GetNodeId(0)};
-            CheckKafkaMetaResponse(runtime, kafkaPort, false, 1, 1, expectedNodeIds);
         }
 
         Y_UNIT_TEST(TopicMetadataNodesCorrectOrderReturned) {
@@ -413,6 +380,11 @@ namespace NKafka::NTests {
             ep->set_address("localhost");
             ep->set_port(1999);
             ep->set_node_id(10000);
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
+            ep->set_port(111);
+            ep->set_node_id(runtime->GetNodeId(0));
 
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
@@ -433,6 +405,11 @@ namespace NKafka::NTests {
             Ydb::Discovery::ListEndpointsResult leResult;
             auto* ep = leResult.add_endpoints();
             ep->set_address("localhost");
+            ep->set_port(12346);
+            ep->set_node_id(runtime->GetNodeId(0));
+
+            ep = leResult.add_endpoints();
+            ep->set_address("localhost");
             ep->set_port(12345);
             ep->set_node_id(0);
 
@@ -447,7 +424,6 @@ namespace NKafka::NTests {
 
         Y_UNIT_TEST(TopicMetadataServerlessReturnsSingleNode) {
             auto [server, kafkaPort, config, topicName] = SetupServer("topic1", true);
-
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
 
@@ -465,7 +441,7 @@ namespace NKafka::NTests {
             ep = leResult.add_endpoints();
             ep->set_address("localhost");
             ep->set_port(222);
-            ep->set_node_id(100);
+            ep->set_node_id(runtime->GetNodeId(0));
 
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);

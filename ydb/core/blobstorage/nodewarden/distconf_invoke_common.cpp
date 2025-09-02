@@ -360,7 +360,7 @@ namespace NKikimr::NStorage {
             [&](TCollectConfigsAndPropose&) {
                 if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
                     // reschedule operation
-                    TActivationContext::Schedule(TDuration::MilliSeconds(Self->CollectConfigsBackoffTimer.NextBackoffMs()),
+                    TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
                         new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
                             InvokePipelineGeneration));
                 }

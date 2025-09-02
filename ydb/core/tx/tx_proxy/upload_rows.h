@@ -24,8 +24,8 @@ using TUploadRows = TVector<std::pair<TSerializedCellVec, TString>>;
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  const TString& table,
-                                 std::shared_ptr<TUploadTypes> types,
-                                 std::shared_ptr<TUploadRows> rows,
+                                 std::shared_ptr<const TUploadTypes> types,
+                                 std::shared_ptr<const TUploadRows> rows,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,

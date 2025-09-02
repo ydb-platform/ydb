@@ -238,7 +238,7 @@ private:
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
         float cost = 0.0f;
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
+        TVector<std::pair<TSerializedCellVec, TString>> rows;
 
         // TODO: check that value is a list of structs
 
@@ -271,10 +271,10 @@ private:
             // Save serialized key and value
             TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            rows->emplace_back(std::move(serializedKey), std::move(serializedValue));
+            rows.emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
-        Rows = std::move(rows);
+        Rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(std::move(rows));
         RuCost = TUpsertCost::CostToRu(cost);
         return true;
     }

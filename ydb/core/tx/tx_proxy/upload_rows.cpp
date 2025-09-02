@@ -11,8 +11,8 @@ public:
     TUploadRowsInternal(
         TActorId sender,
         const TString& table,
-        std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
+        std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+        std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,
@@ -88,7 +88,7 @@ private:
 private:
     const TActorId Sender;
     const TString Table;
-    const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
+    const std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const ui64 Cookie;
 
     NYql::TIssues Issues;
@@ -96,8 +96,8 @@ private:
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
     const TString& table,
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+    std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+    std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
     bool writeToIndexImplTable,

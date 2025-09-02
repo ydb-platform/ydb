@@ -223,6 +223,9 @@ private:
         const auto& index = settings.index();
 
         switch (index.type_case()) {
+        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+            explain = "Invalid or unset index type";
+            return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
@@ -232,15 +235,18 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
-                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
-                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
-                break;
-            } else {
-                explain = "building global unique index is disabled";
+            if (!Self->EnableAddUniqueIndex) {
+                explain = "Adding a unique index to an existing table is disabled";
                 return false;
             }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            if (!Self->EnableVectorIndex) {
+                explain = "Vector index support is disabled";
+                return false;
+            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
@@ -257,9 +263,6 @@ private:
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
-            explain = "invalid or unset index type";
-            return false;
         };
 
         buildInfo.IndexName = index.name();

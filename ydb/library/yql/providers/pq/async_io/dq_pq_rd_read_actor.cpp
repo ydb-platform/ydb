@@ -835,6 +835,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 
     for (auto partition : ev->Get()->Record.GetPartition()) {
         auto partitionId = partition.GetPartitionId();
+        if (!partition.HasNextMessageOffset()) {
+            continue;
+        }
         auto offset = partition.GetNextMessageOffset();
         auto [itNextOffset, inserted] = NextOffsetFromRD.emplace(partitionId, offset);
         if (!inserted) {

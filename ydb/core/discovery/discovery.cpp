@@ -8,8 +8,6 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
-#include <ydb/library/actors/async/event.h>
-#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -268,14 +266,19 @@ namespace NDiscoveryPrivate {
         THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
         TBridgeInfo::TPtr BridgeInfo;
 
-        THashMap<TString, std::shared_ptr<TAsyncEvent>> Awaiters;
-
         struct TWaiter {
             TActorId ActorId;
             ui64 Cookie;
         };
 
+        struct TAwaitingRequest {
+            TString Database;
+
+            TWaiter Waiter;
+        };
+
         THashMap<TString, TVector<TWaiter>> Requested;
+        TVector<TAwaitingRequest> AwaitingRequests;
         bool Scheduled = false;
         TMaybe<TString> EndpointId;
         TMaybe<TActorId> NameserviceActorId;
@@ -302,57 +305,30 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
             NameserviceResponse.Reset(ev->Release().Release());
-        }
-
-        async<void> WaitForNameserviceAndBridgeInfo() {
-            if (!NameserviceResponse) {
-                auto nodeInfo = co_await ActorWaitForEvent<TEvInterconnect::TEvNodeInfo>(0);
-                NameserviceResponse.Reset(nodeInfo->Release().Release());
-            }
-
-            if (IsBridgeMode(ActorContext()) && !BridgeInfo) {
-                auto nodeWardenStorageConfig = co_await ActorWaitForEvent<TEvNodeWardenStorageConfig>(0);
-                BridgeInfo = nodeWardenStorageConfig->Get()->BridgeInfo;
-            }
-        }
-
-        async<std::reference_wrapper<std::shared_ptr<NDiscovery::TCachedMessageData>>> WaitForCachedMessage(const TString& path) {
-            auto& currentCachedMessage = CurrentCachedMessages[path];
-            if (currentCachedMessage) {
-                co_return currentCachedMessage;
-            }
-
-            auto awaiter = Awaiters[path];
-            if (awaiter == nullptr) {
-                awaiter = std::make_shared<TAsyncEvent>();
-                Awaiters[path] = awaiter;
-            }
-            co_await awaiter->Wait();
-
-            co_return CurrentCachedMessages[path];
+            TryFinishInitialization();
         }
 
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
             CLOG_T("Handle " << ev->Get()->ToString());
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
-                co_return;
+                return;
             }
             THolder<TEvStateStorage::TEvBoardInfoUpdate> msg = ev->Release();
             const auto& path = msg->Path;
 
             if (msg->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 CurrentCachedMessages.erase(path);
-                co_return;
+                return;
             }
 
-            auto currentCachedMessage = co_await WaitForCachedMessage(path);
-            Y_ABORT_UNLESS(currentCachedMessage.get());
+            auto& currentCachedMessage = CurrentCachedMessages[path];
+            Y_ABORT_UNLESS(currentCachedMessage);
+            Y_ABORT_UNLESS(NameserviceResponse);
+            Y_ABORT_UNLESS(!IsBridgeMode(ActorContext()) || BridgeInfo);
 
-            co_await WaitForNameserviceAndBridgeInfo();
-
-            currentCachedMessage.get() = std::make_shared<NDiscovery::TCachedMessageData>(
+            currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
-                    currentCachedMessage.get()->InfoEntries, std::move(msg->Updates),
+                    currentCachedMessage->InfoEntries, std::move(msg->Updates),
                     {}, EndpointId.GetOrElse({}), NameserviceResponse, BridgeInfo)
             );
 
@@ -366,7 +342,8 @@ namespace NDiscoveryPrivate {
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
             const auto& path = msg->Path;
 
-            co_await WaitForNameserviceAndBridgeInfo();
+            Y_ABORT_UNLESS(NameserviceResponse);
+            Y_ABORT_UNLESS(!IsBridgeMode(ActorContext()) || BridgeInfo);
 
             auto newCachedData = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries),
@@ -400,10 +377,6 @@ namespace NDiscoveryPrivate {
                 Scheduled = true;
                 Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
             }
-            if (auto it = Awaiters.find(path); it != Awaiters.end() && it->second != nullptr) {
-                it->second->NotifyAll();
-                Awaiters.erase(it);
-            }
         }
 
         void Wakeup() {
@@ -424,8 +397,16 @@ namespace NDiscoveryPrivate {
             }
         }
 
-        void Handle(TEvPrivate::TEvRequest::TPtr& ev) {
-            CLOG_T("Handle " << ev->Get()->ToString());
+        void HandleOnInitialization(TEvPrivate::TEvRequest::TPtr& ev) {
+            CLOG_T("Handle on initialization " << ev->Get()->ToString());
+
+            const auto* msg = ev->Get();
+
+            AwaitingRequests.push_back(TAwaitingRequest{msg->Database, {ev->Sender, ev->Cookie}});
+        }
+
+        void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
+            CLOG_T("Handle on work " << ev->Get()->ToString());
 
             const auto* msg = ev->Get();
 
@@ -452,8 +433,14 @@ namespace NDiscoveryPrivate {
             Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(*cachedData), 0, ev->Cookie);
         }
 
-        void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
-            CLOG_T("Handle " << ev->Get()->ToString());
+        void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
+            CLOG_T("Handle on initialization " << ev->Get()->ToString());
+            BridgeInfo = ev->Get()->BridgeInfo;
+            TryFinishInitialization();
+        }
+
+        void HandleOnWork(TEvNodeWardenStorageConfig::TPtr& ev) {
+            CLOG_T("Handle on work " << ev->Get()->ToString());
             BridgeInfo = ev->Get()->BridgeInfo;
         }
 
@@ -473,16 +460,41 @@ namespace NDiscoveryPrivate {
                 const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
             }
+            Become(&TThis::Initializing);
+        }
+
+        void TryFinishInitialization() {
+            if (!NameserviceResponse || (IsBridgeMode(ActorContext()) && !BridgeInfo)) {
+                return;
+            }
+
+            CLOG_D("Finish initialization"
+                << ": awaiting requests count# " << AwaitingRequests.size());
+
             Become(&TThis::StateWork);
+
+            for (const auto& request : AwaitingRequests) {
+                Request(request.Database, request.Waiter);
+            }
+
+            AwaitingRequests.clear();
+        }
+
+        STATEFN(Initializing) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvPrivate::TEvRequest, HandleOnInitialization);
+                hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+                hFunc(TEvNodeWardenStorageConfig, HandleOnInitialization);
+                sFunc(TEvents::TEvPoison, PassAway);
+            }
         }
 
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvPrivate::TEvRequest, Handle);
+                hFunc(TEvPrivate::TEvRequest, HandleOnWork);
                 hFunc(TEvStateStorage::TEvBoardInfo, Handle);
                 hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
-                hFunc(TEvInterconnect::TEvNodeInfo, Handle);
-                hFunc(TEvNodeWardenStorageConfig, Handle);
+                hFunc(TEvNodeWardenStorageConfig, HandleOnWork);
                 sFunc(TEvents::TEvWakeup, Wakeup);
                 sFunc(TEvents::TEvPoison, PassAway);
             }

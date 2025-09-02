@@ -260,6 +260,11 @@ namespace NKikimr::NStorage {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
             group.GroupResolver = {};
         }
+
+        for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = TGroupId::FromValue(groupId)});
+                it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
+            StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
+        }
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -330,35 +335,35 @@ namespace NKikimr::NStorage {
                 .TargetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId),
             });
             auto& syncer = const_cast<TWorkingSyncer&>(*it);
-
-            auto& group = Groups[item.GetBridgeProxyGroupId()];
-            Y_ABORT_UNLESS(group.Info); // we MUST have this group info in the very same messages as the syncer start cmd
-            Y_ABORT_UNLESS(group.Info->GroupGeneration == item.GetBridgeProxyGroupGeneration());
-
-            if (inserted) {
-                // new syncer started
-            } else if (syncer.BridgeProxyGroupGeneration < item.GetBridgeProxyGroupGeneration()) {
-                // we've got already running syncer, but group generation gets changed, we need to restart it
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
-                syncer.ActorId = {};
-                ++syncer.NumStop;
-            }
-            if (!syncer.ActorId) {
-                syncer.BridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
-                syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
-                syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
-                    syncer.SyncerDataStats));
-                syncer.Finished = false;
-                syncer.ErrorReason.reset();
-                ++syncer.NumStart;
-            }
-
+            syncer.PendingBridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
+            StartSyncerIfNeeded(syncer);
             toStop.erase(syncer);
         }
 
         for (const TWorkingSyncer& syncer : toStop) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            if (syncer.ActorId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            }
             WorkingSyncers.erase(syncer);
+        }
+    }
+
+    void TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
+        if (syncer.BridgeProxyGroupGeneration < syncer.PendingBridgeProxyGroupGeneration && syncer.ActorId) {
+            // we've got already running syncer, but group generation gets changed, we need to restart it
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            syncer.ActorId = {};
+            ++syncer.NumStop;
+        }
+        auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
+        if (!syncer.ActorId && group.Info && group.Info->GroupGeneration == syncer.PendingBridgeProxyGroupGeneration) {
+            syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
+            syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
+            syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
+                syncer.SyncerDataStats));
+            syncer.Finished = false;
+            syncer.ErrorReason.reset();
+            ++syncer.NumStart;
         }
     }
 

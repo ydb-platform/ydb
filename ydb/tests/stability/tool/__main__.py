@@ -1162,7 +1162,7 @@ done
 
         # Use cat with a heredoc approach for more reliable script generation
         cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n" + \
-              f"chmod +x {script_path} && screen -S {workload_name} -d -m -L -Logfile {log_file} {script_path}"
+              f"sudo chmod +x {script_path} && screen -S {workload_name} -d -m -L -Logfile {log_file} {script_path}"
 
         return cmd
 
@@ -1181,7 +1181,7 @@ done
             log_file = f'/tmp/{workload_name}.out.log'
 
         # Clean log file
-        node.ssh_command(['rm', '-f', log_file], raise_on_error=False)
+        node.ssh_command(['sudo', 'rm', '-f', log_file], raise_on_error=False)
 
         # Create and run command
         screen_command = self._create_workload_command(workload_name, command, log_file)

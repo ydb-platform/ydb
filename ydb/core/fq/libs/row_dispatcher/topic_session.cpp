@@ -920,7 +920,7 @@ void TTopicSession::SendStatistics() {
         clientStatistic.ReadActorId = readActorId;
         clientStatistic.QueuedRows = info.QueuedRows;
         clientStatistic.QueuedBytes = info.QueuedBytes;
-        clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
+        clientStatistic.Offset = info.ProcessedNextMessageOffset;
         clientStatistic.FilteredBytes = info.FilteredStat.Bytes;
         clientStatistic.FilteredRows = info.FilteredStat.Events;
         clientStatistic.ReadBytes = Statistics.Bytes;

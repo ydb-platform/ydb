@@ -2033,6 +2033,21 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsChaosRetriableError(const TError& error)
+{
+    return static_cast<bool>(error.FindMatching([] (const TError& error) {
+        auto code = error.GetCode();
+        return
+            code == NTransactionClient::EErrorCode::ChaosCoordinatorsAreNotAvailable ||
+            code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
+            code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NChaosClient::EErrorCode::ShortcutNotFound ||
+            code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
+            code == NChaosClient::EErrorCode::ShortcutRevoked;
+    }));
+}
+
 bool IsDynamicTableRetriableError(const TError& error)
 {
     return
@@ -2043,8 +2058,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
-        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
+        IsChaosRetriableError(error);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

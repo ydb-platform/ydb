@@ -649,6 +649,7 @@ public:
                     rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
                 }
                 ctx.AddError(rootIssue);
+                return false;
             }
         }
 

@@ -651,6 +651,7 @@ namespace NKikimr::NStorage {
         struct TWorkingSyncer {
             const TGroupId BridgeProxyGroupId;
             ui32 BridgeProxyGroupGeneration;
+            ui32 PendingBridgeProxyGroupGeneration = 0;
             const TGroupId SourceGroupId;
             const TGroupId TargetGroupId;
             TActorId ActorId;
@@ -679,6 +680,7 @@ namespace NKikimr::NStorage {
         std::set<TWorkingSyncer> WorkingSyncers;
 
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
+        void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
         void FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, bool forceProgress);
         void NotifySyncersProgress();

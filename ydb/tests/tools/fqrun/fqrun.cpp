@@ -44,6 +44,7 @@ struct TExecutionOptions {
     std::vector<EExecutionCase> ExecutionCases;
     std::vector<FederatedQuery::ExecuteMode> QueryActions;
     std::vector<TString> Scopes;
+    std::vector<TDuration> Timeouts;
 
     bool HasResults() const {
         for (size_t i = 0; i < Queries.size(); ++i) {
@@ -95,6 +96,7 @@ struct TExecutionOptions {
             .Action = GetQueryAction(index),
             .Type = isAnalytics ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
             .QueryId = queryId,
+            .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .FqOptions = {
                 .Scope = GetScope(index)
             }
@@ -291,17 +293,9 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 
 class TMain : public TMainBase {
     using TBase = TMainBase;
-    using EVerbose = TFqSetupSettings::EVerbose;
+    using EVerbosity = TFqSetupSettings::EVerbosity;
 
 protected:
-    void RegisterLogOptions(NLastGetopt::TOpts& options) override {
-        TBase::RegisterLogOptions(options);
-
-        options.AddLongOption("log-fq", "FQ components log priority")
-            .RequiredArgument("priority")
-            .StoreMappedResultT<TString>(&FqLogPriority, GetLogPrioritiesMap("log-fq"));
-    }
-
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("FqRun -- tool to execute stream queries through FQ proxy");
         options.AddHelpOption('h');
@@ -437,22 +431,22 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.FqSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbosity", TStringBuilder() << "Common verbosity level (min level 0, max level " << static_cast<ui32>(EVerbosity::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(EVerbose::Info))
-            .StoreMappedResultT<ui8>(&RunnerOptions.FqSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
+            .DefaultValue(static_cast<ui8>(EVerbosity::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.FqSettings.VerbosityLevel, [](ui8 value) {
+                return static_cast<EVerbosity>(std::min(value, static_cast<ui8>(EVerbosity::Max)));
             });
 
-        TChoices<TAsyncQueriesSettings::EVerbose> verbose({
-            {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
-            {"final", TAsyncQueriesSettings::EVerbose::Final}
+        TChoices<TAsyncQueriesSettings::EVerbosity> verbosity({
+            {"each-query", TAsyncQueriesSettings::EVerbosity::EachQuery},
+            {"final", TAsyncQueriesSettings::EVerbosity::Final}
         });
-        options.AddLongOption("async-verbose", "Verbose type for async queries")
+        options.AddLongOption("async-verbosity", "Verbosity type for async queries")
             .RequiredArgument("type")
             .DefaultValue("each-query")
-            .Choices(verbose.GetChoices())
-            .StoreMappedResultT<TString>(&RunnerOptions.FqSettings.AsyncQueriesSettings.Verbose, verbose);
+            .Choices(verbosity.GetChoices())
+            .StoreMappedResultT<TString>(&RunnerOptions.FqSettings.AsyncQueriesSettings.Verbosity, verbosity);
 
         options.AddLongOption("ping-period", "Query ping period in milliseconds")
             .RequiredArgument("uint")
@@ -473,6 +467,12 @@ protected:
             .Handler1([this, queryAction](const NLastGetopt::TOptsParser* option) {
                 TString choice(option->CurValOrDef());
                 ExecutionOptions.QueryActions.emplace_back(queryAction(choice));
+            });
+
+        options.AddLongOption("timeout", "Timeout in milliseconds for -p queries")
+            .RequiredArgument("uint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.Timeouts.emplace_back(TDuration::MilliSeconds<ui64>(FromString(option->CurValOrDef())));
             });
 
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")
@@ -536,7 +536,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
+        auto& singleComputeOpt = options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableYdbCompute = true;
@@ -545,13 +545,13 @@ protected:
                 }
             });
 
-        options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
+        auto& sharedComputeOpt = options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
             .RequiredArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableYdbCompute = true;
                 RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
             });
-        options.MutuallyExclusive("single-compute-db", "shared-compute-db");
+        options.MutuallyExclusiveOpt(singleComputeOpt, sharedComputeOpt);
 
         options.AddLongOption("hold", "Hold fqrun process after finishing all queries")
             .NoArgument()
@@ -592,7 +592,8 @@ protected:
         RunnerOptions.FqSettings.YqlToken = YqlToken;
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
-        auto& fqConfig = *RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig();
+        auto& appConfig = RunnerOptions.FqSettings.AppConfig;
+        auto& fqConfig = *appConfig.MutableFederatedQueryConfig();
         auto& gatewayConfig = *fqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
         FillTokens(gatewayConfig.mutable_s3());
@@ -602,7 +603,12 @@ protected:
 
         fqConfig.MutablePendingFetcher()->SetPendingFetchPeriodMs(RunnerOptions.PingPeriod.MilliSeconds());
 
-        SetupLogsConfig();
+        if (!DefaultLogPriority) {
+            DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.FqSettings.VerbosityLevel);
+        }
+        SetupLogsConfig(*appConfig.MutableLogConfig());
+
+        SetupActorSystemConfig(appConfig);
 
         if (!PqFilesMapping.empty()) {
             auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>();
@@ -620,7 +626,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.FqSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -633,7 +639,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.FqSettings.VerboseLevel >= EVerbose::Info) {
+        if (RunnerOptions.FqSettings.VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();
@@ -658,35 +664,6 @@ private:
         }
     }
 
-    void SetupLogsConfig() {
-        auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
-
-        if (DefaultLogPriority) {
-            logConfig.SetDefaultLevel(*DefaultLogPriority);
-        }
-
-        if (FqLogPriority) {
-            std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> fqLogPriorities;
-            std::unordered_set<TString> prefixes = {
-                "FQ_", "YQ_", "STREAMS", "PUBLIC_HTTP"
-            };
-            auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-            for (int i = 0; i < descriptor->value_count(); ++i) {
-                const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
-                const auto& servicceStr = NKikimrServices::EServiceKikimr_Name(service);
-                for (const auto& prefix : prefixes) {
-                    if (servicceStr.StartsWith(prefix)) {
-                        fqLogPriorities.emplace(service, *FqLogPriority);
-                        break;
-                    }
-                }
-            }
-            ModifyLogPriorities(fqLogPriorities, logConfig);
-        }
-
-        ModifyLogPriorities(LogPriorities, logConfig);
-    }
-
 private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
@@ -696,8 +673,6 @@ private:
     };
     std::unordered_map<TString, TTopicSettings> TopicsSettings;
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
-
-    std::optional<NActors::NLog::EPriority> FqLogPriority;
 
     struct TFileContent {
         TString FileName;

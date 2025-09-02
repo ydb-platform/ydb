@@ -841,6 +841,15 @@ message TStatusResponse {
     repeated TPartResult PartResult = 2;
 }
 
+
+message TBroadcastPartitionError {
+    message TMessageGroup {
+        repeated TStatusResponse.TErrorMessage Errors = 1;
+    }
+    repeated TMessageGroup MessageGroups = 1;
+};
+
+
 message THasDataInfo {
     optional int32 Partition = 1;
     optional uint64 Offset = 2;

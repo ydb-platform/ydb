@@ -72,13 +72,6 @@ struct TRobinHoodMapImplBase
         }
     }
 
-    /*
-    void AggregateBatch(result, itk, itv, blockSize)
-    {
-
-    }
-    */
-
     static size_t Size(const TMapType& map)
     {
         return map.GetSize();

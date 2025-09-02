@@ -211,20 +211,6 @@ size_t CountWideStreamOutputs(const NUdf::TUnboxedValue& wideStream)
     NUdf::EFetchStatus fetchStatus;
     while ((fetchStatus = wideStream.WideFetch(resultValues, Width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Ok) {
-            /*
-            for (size_t ii = 0; ii < Width; ++ii) {
-                if (!resultValues[ii].HasValue()) {
-                    Cerr << "empty";
-                } else {
-                    Cerr << UnboxedToNative<ui64>(resultValues[ii]);
-                }
-                //resultValues[ii].Dump(Cerr);
-                Cerr << "; ";
-            }
-            Cerr << Endl;
-            //<< UnboxedToNative<ui64>(resultValues[1]) << " " << UnboxedToNative<ui64>(resultValues[2]) << Endl;
-            */
-
             ++lineCount;
         }
     }

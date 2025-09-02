@@ -123,25 +123,8 @@ struct TUpdateMapFromBlocks<TMapImpl, ui64>
         for (size_t i = 0; i < length; ++i) {
             if constexpr (!TMapImpl::CustomOps) {
                 result[ui64keys->Value(i)] += ui64values->Value(i);
-                /*const size_t length = ui64keys->length();
-                for (size_t i = 0; i < length; ++i) {
-                    result[ui64keys->Value(i)] += ui64values->Value(i);
-                }*/
             } else {
                 TMapImpl::AggregateByKey(result, ui64keys->Value(i), ui64values->Value(i));
-                /*
-                auto itk = ui64keys->begin();
-                auto itv = ui64values->begin();
-                // TMapImpl::AggregateByKey(result, ui64keys->Value(i), ui64values->Value(i));
-                size_t remain = ui64values->length();
-                while (remain) {
-                    size_t blockSize = std::max<size_t>(remain, 64ul);
-                    TMapImpl::AggregateBatch(result, itk, itv, blockSize);
-                    itk += blockSize;
-                    itv += blockSize;
-                    remain -= blockSize;
-                }
-                */
             }
         }
     }

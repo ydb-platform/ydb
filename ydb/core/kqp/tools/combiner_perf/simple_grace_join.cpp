@@ -80,7 +80,7 @@ struct TJoinDataSampler: public IJoinDataSampler
         return GetVerySimpleDataType<K>(env);
     }
 
-    THolder<IWideStream> MakeStream(const THolderFactory& holderFactory, const TKVStream<K, V, true>::TSamples& samples) {
+    THolder<IWideStream> MakeStream(const THolderFactory& holderFactory, const TKVStream<K, V, true>::TSamples& samples) const {
         if (LongKeys) {
             return THolder(new TKVStream<K, ui64, false, 1>(holderFactory, samples, StreamNumIters));
         } else {

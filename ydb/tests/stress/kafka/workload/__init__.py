@@ -28,7 +28,7 @@ class Workload(unittest.TestCase):
         self.duration = duration
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
-        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-parametrisedl.jar"
+        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -46,7 +46,7 @@ class Workload(unittest.TestCase):
 
     def loop(self):
         TEST_FILES_DIRECTORY = "./test-files/"
-        JAR_FILE_NAME = "e2e-kafka-api-tests-parametrisedl.jar"
+        JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)

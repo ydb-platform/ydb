@@ -5,7 +5,7 @@
 * [tables](../concepts/datamodel/table.md)
 * [indexes](../concepts/secondary_indexes.md) of tables
 * [change data capture](../concepts/cdc.md) for tables
-* [topics](../concepts/topic.md)
+* [topics](../concepts/datamodel/topic.md)
 
 {% note warning %}
 
@@ -537,7 +537,7 @@ resource "ydb_table_index" "ydb_table_index" {
 
 ## Topic configuration management {{ ydb-short-name }} via Terraform
 
-The `ydb_topic` resource is used to work with [topics](../concepts/topic.md)
+The `ydb_topic` resource is used to work with [topics](../concepts/datamodel/topic.md)
 
 {% note info %}
 

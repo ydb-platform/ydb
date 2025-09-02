@@ -7,8 +7,8 @@ This section describes the integration options between {{ ydb-short-name }} and 
 [Logstash](https://www.elastic.co/logstash) dynamically ingests, transforms, and ships data regardless of format or complexity. A Logstash pipeline can contain different types of plugins: input, output, and filter. The {{ ydb-short-name }} Logstash plugins repository is hosted on [GitHub](https://github.com/ydb-platform/ydb-logstash-plugins) and contains the following plugins:
 
 * **Storage Plugin** for persisting Logstash events in [row-oriented](../../concepts/datamodel/table.md#row-oriented-table) or [column-oriented](../../concepts/datamodel/table.md#olap-data-types) {{ ydb-short-name }} tables;
-* **Input Topic Plugin** for reading Logstash events from {{ ydb-short-name }} [topics](../../concepts/topic.md);
-* **Output Topic Plugin** for sending Logstash events to {{ ydb-short-name }} [topics](../../concepts/topic.md).
+* **Input Topic Plugin** for reading Logstash events from {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md);
+* **Output Topic Plugin** for sending Logstash events to {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md).
 
  These plugins can be [built](https://github.com/ydb-platform/ydb-logstash-plugins/blob/main/BUILD.md) from the source code or downloaded as pre-built [artifacts](https://github.com/ydb-platform/ydb-logstash-plugins/releases) for the two latest versions of Logstash.
 
@@ -149,14 +149,14 @@ The query will return a list of written events:
 
 ## {{ ydb-short-name }} Topic Input Plugin
 
-This plugin allows reading messages from {{ ydb-short-name }} [topics](../../concepts/topic.md) and transforming them into `Logstash` events.
+This plugin allows reading messages from {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md) and transforming them into `Logstash` events.
 
 ### Configuration
 
 The plugin configuration is done by adding a `ydb_topic` block to the `input` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports the standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
 * `topic_path` — the required the full path of the topic for reading.
-* `consumer_name` — the required the name of the topic [consumer](../../concepts/topic.md#consumer).
+* `consumer_name` — the required the name of the topic [consumer](../../concepts/datamodel/topic.md#consumer).
 * `schema` — the optional mode for processing of the {{ ydb-short-name }} events. By default, the plugin reads and sends messages as binary data, but if you specify the `JSON` mode, each message will be parsed as a JSON object.
 
 ### Usage example
@@ -220,7 +220,7 @@ The `stdout` plugin writes the messages to the Logstash logs:
 
 ## {{ ydb-short-name }} Topic Output Plugin
 
-This plugin allows writing `Logstash` events to a {{ ydb-short-name }} [topic](../../concepts/topic.md).
+This plugin allows writing `Logstash` events to a {{ ydb-short-name }} [topic](../../concepts/datamodel/topic.md).
 
 ### Configuration
 

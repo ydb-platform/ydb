@@ -4,7 +4,7 @@ This article describes how to use the {{ ydb-short-name }} SDK to coordinate the
 
 ## Creating a coordination node
 
-Coordination nodes are created in {{ ydb-short-name }} databases in the same namespace as other schema objects, such as [tables](../../concepts/datamodel/table.md) and [topics](../../concepts/topic.md).
+Coordination nodes are created in {{ ydb-short-name }} databases in the same namespace as other schema objects, such as [tables](../../concepts/datamodel/table.md) and [topics](../../concepts/datamodel/topic.md).
 
 {% list tabs %}
 

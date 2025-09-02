@@ -28,13 +28,18 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) co
     return true;
 }
 
-void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx) const {
+void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status) const {
     LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-        owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, reason);
+        owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
     owner->UpdateOverloadsStatus();
     ctx.Send(SourceId, result.release(), 0, Cookie);
+    if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
+        const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
+        owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
+        owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());
+    }
 }
 
 bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
@@ -46,7 +51,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     std::set<TInternalPathId> overloaded;
     for (auto it = WriteTasks.begin(); it != WriteTasks.end();) {
         if (it->IsDeprecated(now)) {
-            it->Abort(Owner, "timeout", ctx);
+            it->Abort(Owner, "timeout", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
             Owner->Counters.GetCSCounters().WritingCounters->TimeoutRate->Inc();
             it = WriteTasks.erase(it);
         } else if (!overloaded.contains(it->GetInternalPathId())) {

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestTabletsMovement(object):
-    test_name = "order_by"
+    test_name = "tablets_movement"
 
     @classmethod
     def setup_class(cls):

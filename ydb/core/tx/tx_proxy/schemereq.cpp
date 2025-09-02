@@ -473,6 +473,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpCreateSecret:
             return true;
         default:
             return false;

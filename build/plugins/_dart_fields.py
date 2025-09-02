@@ -391,8 +391,7 @@ class CustomDependencies:
 
     @classmethod
     def depends_with_linter(cls, unit, flat_args, spec_args):
-        linter = Linter.value(unit, flat_args, spec_args)[Linter.KEY]
-        deps = spec_args.get('DEPENDS', []) + [os.path.dirname(linter)]
+        deps = spec_args.get('DEPENDS', [])
         for dep in deps:
             unit.ondepends(dep)
         return {cls.KEY: " ".join(deps)}
@@ -588,14 +587,6 @@ class KtlintBinary:
     def value(cls, unit, flat_args, spec_args):
         value = '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
         return {cls.KEY: value}
-
-
-class Linter:
-    KEY = 'LINTER'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return {cls.KEY: spec_args['LINTER'][0]}
 
 
 class LintWrapperScript:

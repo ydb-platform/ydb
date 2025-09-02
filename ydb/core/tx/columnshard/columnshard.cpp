@@ -129,7 +129,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this);
+    auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
+    TmpColumnShardStatisticsReporter = new NOlap::TColumnShardStatisticsReporter(*this, statistics.GetReportBaseStatisticsPeriodMs(), statistics.GetReportExecutorStatisticsPeriodMs());
     ColumnShardStatisticsReporter = ctx.Register(TmpColumnShardStatisticsReporter);
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
@@ -249,7 +250,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
 
-        TmpColumnShardStatisticsReporter->SendPeriodicStats();
+        // TmpColumnShardStatisticsReporter->SendPeriodicStats();
         // SendPeriodicStats();
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());

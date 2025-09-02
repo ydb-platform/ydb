@@ -81,6 +81,9 @@ struct TEvPrivate {
         EvDuplicateSourceCacheResult,
         EvFilterConstructionResult,
 
+        EvReportBaseStatistics,
+        EvReportExecutorStatistics,
+
         EvEnd
     };
 

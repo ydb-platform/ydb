@@ -7,6 +7,12 @@ namespace NKikimr::NOlap {
 
 void TColumnShardStatisticsReporter::Bootstrap(const TActorContext& /*ctx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("TColumnShardStatisticsReporter", "Bootstrapped");
+    // Schedule(TDuration::MilliSeconds(ReportBaseStatisticsPeriodMs), new TEvReportBaseStatistics);
+    // Schedule(TDuration::MilliSeconds(ReportExecutorStatisticsPeriodMs), new TEvReportExecutorStatistics);
+    Schedule(TDuration::MilliSeconds(1000), new TEvReportBaseStatistics);
+    Schedule(TDuration::MilliSeconds(1000), new TEvReportExecutorStatistics);
+
+    Become(&TThis::StateFunc);
 }
 
 void TColumnShardStatisticsReporter::BuildSSPipe(const TActorContext& ctx) {
@@ -69,6 +75,19 @@ void TColumnShardStatisticsReporter::Handle(TEvTabletPipe::TEvClientDestroyed::T
     StatsReportPipe = {};
     BuildSSPipe(ctx);
     return;
+}
+
+void TColumnShardStatisticsReporter::Handle(TEvReportBaseStatistics::TPtr&, const NActors::TActorContext&) {
+    SendPeriodicStats();
+    // TDuration::Seconds(SendStatsIntervalMinSeconds
+    //     + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds))
+    // Schedule(TDuration::MilliSeconds(ReportBaseStatisticsPeriodMs), new TEvReportBaseStatistics);
+    Schedule(TDuration::MilliSeconds(1000), new TEvReportBaseStatistics);
+}
+void TColumnShardStatisticsReporter::Handle(TEvReportExecutorStatistics::TPtr&, const NActors::TActorContext&) {
+    SendPeriodicStats();
+    // Schedule(TDuration::MilliSeconds(ReportExecutorStatisticsPeriodMs), new TEvReportExecutorStatistics);
+    Schedule(TDuration::MilliSeconds(1000), new TEvReportExecutorStatistics);
 }
 
 }

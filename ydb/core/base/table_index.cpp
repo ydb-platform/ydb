@@ -85,6 +85,10 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
     return result;
 }
 
+TString InvalidIndexType(NKikimrSchemeOp::EIndexType type) {
+    return TStringBuilder() << "Invalid index type " << static_cast<int>(type);
+}
+
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
     if (const auto* broken = IsContains(table.Keys, table.Columns)) {
         explain = TStringBuilder()

@@ -20,9 +20,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
-#include <util/string/hex.h>
-#include <cstring>
-
 namespace NKikimr::NOlap {
 struct TIndexInfo;
 }
@@ -537,24 +534,32 @@ public:
                     }
 
                     if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
-                        // For UUID convert hex string to binary data using GUID format (mixed endian)
+                        // For UUID convert hex string to binary data using YDB UUID format
                         Y_ABORT_UNLESS(data.size() == 32);
 
                         auto hexStr = data;
-                        ui32 time_low = std::stoul(hexStr.substr(0, 8), nullptr, 16);
-                        ui16 time_mid = std::stoul(hexStr.substr(8, 4), nullptr, 16);
-                        ui16 time_hi = std::stoul(hexStr.substr(12, 4), nullptr, 16);
+                        ui16 dw[8];
+                        for (int i = 0; i < 8; ++i) {
+                            dw[i] = std::stoul(hexStr.substr(i * 4, 4), nullptr, 16);
+                        }
 
-                        // Convert to GUID format (little endian for first 3 fields)
-                        char guidBytes[16];
-                        *reinterpret_cast<ui32*>(&guidBytes[0]) = time_low;
-                        *reinterpret_cast<ui16*>(&guidBytes[4]) = time_mid;
-                        *reinterpret_cast<ui16*>(&guidBytes[6]) = time_hi;
+                        char uuidBytes[16];
+                        ui16* out = reinterpret_cast<ui16*>(uuidBytes);
+                        out[0] = dw[1];
+                        out[1] = dw[0];
+                        out[2] = dw[2];
+                        out[3] = dw[3];
 
-                        // Last 8 bytes remain in big endian
-                        auto lastBytes = HexDecode(hexStr.substr(16, 16));
-                        memcpy(&guidBytes[8], lastBytes.data(), 8);
-                        Y_ABORT_UNLESS(typedBuilder.Append(guidBytes).ok());
+                        auto reverseBytes = [](ui16 val) -> ui16 {
+                            return ((val & 0xFF) << 8) | ((val >> 8) & 0xFF);
+                        };
+
+                        out[4] = reverseBytes(dw[4]);
+                        out[5] = reverseBytes(dw[5]);
+                        out[6] = reverseBytes(dw[6]);
+                        out[7] = reverseBytes(dw[7]);
+
+                        Y_ABORT_UNLESS(typedBuilder.Append(uuidBytes).ok());
                         return true;
                     }
                 }

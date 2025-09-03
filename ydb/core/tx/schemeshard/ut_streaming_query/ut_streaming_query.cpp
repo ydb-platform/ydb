@@ -59,10 +59,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
         const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
         TestDescribeResult(describeResult, {NLs::PathExist});
-        UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-        const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+        const auto& pathDescription = describeResult.GetPathDescription();
+        UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+        const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
         UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-        UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
         CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
     }
 
@@ -87,7 +88,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         TestDescribe(runtime, "/MyRoot/DirA/MyStreamingQuery1");
         TestDescribe(runtime, "/MyRoot/DirA/MyStreamingQuery2");
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"), {NLs::PathVersionEqual(7)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"), {NLs::PathVersionEqual(5)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/MyStreamingQuery1"), {NLs::PathVersionEqual(2)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/MyStreamingQuery2"), {NLs::PathVersionEqual(2)});
     }
@@ -170,14 +171,15 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
 
-        TestCreateStreamingQuery(runtime, ++txId, "/MyRoot", R"(
+        TestCreateStreamingQueryOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "MyStreamingQuery"
                 Properties {
                     Properties {
@@ -189,7 +191,6 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
                         value: "my_pool"
                     }
                 }
-                ReplaceIfExists: true
             )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
@@ -204,10 +205,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 2);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
     }
@@ -282,10 +284,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         {
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
 
@@ -308,10 +311,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         {
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
     }
@@ -343,7 +347,6 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
                         value: "true"
                     }
                 }
-                ReplaceIfExists: true
             )", {{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
 
         env.TestWaitNotification(runtime, txId);
@@ -390,10 +393,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
 
@@ -424,10 +428,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 2);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
     }
@@ -493,10 +498,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         {
             const auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
             TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-            const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+            const auto& pathDescription = describeResult.GetPathDescription();
+            UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+            const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
             UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-            UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), acceptedCount + 1);
+            UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), acceptedCount + 1);
             CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
         }
     }

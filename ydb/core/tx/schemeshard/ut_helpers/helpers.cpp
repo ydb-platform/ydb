@@ -1063,6 +1063,13 @@ namespace NSchemeShardUT_Private {
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
 
+    void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     ui64 TestCreateSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme,
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
     {

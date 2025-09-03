@@ -194,6 +194,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret>
     constexpr inline static bool CreateDirsFromName = true;
 };
 
+template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery>
     : public TSchemeTxTraitsFallback
 {

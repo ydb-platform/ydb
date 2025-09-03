@@ -46,11 +46,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
                 TInactiveZone inactive(activeZone);
                 auto describeResult =  DescribePath(runtime, "/MyRoot/DirStreamingQuery/MyStreamingQuery");
                 TestDescribeResult(describeResult, {NLs::Finished});
-
-                UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-                const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+                const auto& pathDescription = describeResult.GetPathDescription();
+                UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+                const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
                 UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-                UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
                 CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
             }
         });
@@ -261,11 +261,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
                 TInactiveZone inactive(activeZone);
                 auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
                 TestDescribeResult(describeResult, {NLs::Finished});
-
-                UNIT_ASSERT(describeResult.GetPathDescription().HasStreamingQueryDescription());
-                const auto& streamingQueryDescription = describeResult.GetPathDescription().GetStreamingQueryDescription();
+                const auto& pathDescription = describeResult.GetPathDescription();
+                UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
+                const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
                 UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
-                UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetVersion(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 2);
                 CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
             }
         });

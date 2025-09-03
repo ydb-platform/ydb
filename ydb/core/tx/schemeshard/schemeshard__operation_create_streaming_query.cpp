@@ -185,32 +185,30 @@ class TCreateStreamingQuery : public TSubOperation {
         return true;
     }
 
-    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner, TOperationContext& context) const {
+    void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TOperationContext& context) const {
         if (!ReplacePath) {
-            dstPath.MaterializeLeaf(owner);
+            context.MemChanges.GrabNewPath(context.SS, streamingQueryPathId);
+            context.MemChanges.GrabNewStreamingQuery(context.SS, streamingQueryPathId);
+        } else {
+            context.MemChanges.GrabStreamingQuery(context.SS, streamingQueryPathId);
+        }
+        context.MemChanges.GrabPath(context.SS, parentPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(streamingQueryPathId);
+        context.DbChanges.PersistPath(parentPathId);
+        context.DbChanges.PersistStreamingQuery(streamingQueryPathId);
+        context.DbChanges.PersistTxState(OperationId);
+    }
+
+    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TOperationContext& context) const {
+        if (!ReplacePath) {
+            dstPath.MaterializeLeaf(owner, newPathId);
             dstPath.DomainInfo()->IncPathsInside(context.SS);
             IncAliveChildrenSafeWithUndo(OperationId, dstPath.Parent(), context);
         }
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    void PersistCreateStreamingQuery(const TPath& dstPath, const TOperationContext& context) const {
-        const TPathId& pathId = dstPath.Base()->PathId;
-
-        if (!ReplacePath) {
-            context.MemChanges.GrabNewPath(context.SS, pathId);
-            context.MemChanges.GrabNewStreamingQuery(context.SS, pathId);
-        } else {
-            context.MemChanges.GrabStreamingQuery(context.SS, pathId);
-        }
-        context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
-        context.MemChanges.GrabNewTxState(context.SS, OperationId);
-
-        context.DbChanges.PersistPath(pathId);
-        context.DbChanges.PersistPath(dstPath->ParentPathId);
-        context.DbChanges.PersistStreamingQuery(pathId);
-        context.DbChanges.PersistTxState(OperationId);
     }
 
     void CreateTransaction(const TPath& dstPath, const TOperationContext& context) const {
@@ -274,8 +272,9 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result));
 
         const auto guard = context.DbGuard();
-        AddPathIntoSchemeShard(result, dstPath, owner, context);
-        PersistCreateStreamingQuery(dstPath, context);
+        const auto newPathId = ReplacePath ? dstPath.Base()->PathId : context.SS->AllocatePathId();
+        PersistCreateStreamingQuery(parentPath.Base()->PathId, newPathId, context);
+        AddPathIntoSchemeShard(result, dstPath, newPathId, owner, context);
         CreateTransaction(dstPath, context);
         CreateStreamingQueryPathElement(dstPath, alterVersion, context);
 

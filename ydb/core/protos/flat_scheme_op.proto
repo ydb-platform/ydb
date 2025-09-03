@@ -1793,7 +1793,7 @@ message TModifyScheme {
     optional EOperationType OperationType = 2;
     optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
-    optional bool ReplaceIfExists = 89 [default = false];
+    optional bool ReplaceIfExists = 91 [default = false];
     optional bool AllowAccessToPrivatePaths = 53 [default = false];
 
     optional TMkDir MkDir = 3;

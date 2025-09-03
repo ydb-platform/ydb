@@ -64,6 +64,8 @@ public:
         response->Content.clear();
         TString().swap(response->Content);
         static_cast<TBuffer&>(*response).Reset();
+        response->DataChunks.clear();
+        response->Sensors.reset();
         CleanupRequest(response->Request);
         // TODO: maybe recycle too?
         response = nullptr;

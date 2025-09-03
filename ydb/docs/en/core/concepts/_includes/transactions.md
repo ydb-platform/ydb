@@ -20,17 +20,16 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
-{% note info %}
+{% note warning %}
 
-Behavior with [column tables](../datamodel/table.md#column-tables): When reading from column tables in *Online Read-Only* and *Stale Read-Only* transaction modes, data is still read from a snapshot taken at the start of the transaction — the same way as in Snapshot Read-Only mode.
+Limitation for Online Read-Only and Stale Read-Only:  
+Reading from column tables is not supported in these modes. Attempts will fail with the following error:
 
-This means that:
+`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead`.
 
-* For column tables, all three Read-Only modes behave identically: all reads are consistent and reflect the state of the database at the transaction's start time. 
-* The actual transaction mode (e.g., Online Read-Only) is effectively ignored if the transaction reads only from column tables.
-* For transactions that read from both row-based and column tables, row-based tables are read according to the selected mode, while column tables are always read from a snapshot.
-
-This behavior is due to the current implementation of columnar tables and may change in future versions.
+For transactions that read column tables, use:
+* Serializable — the default mode;
+* Snapshot Read-Only — provides a read from consistent snapshot.
 
 {% endnote %}
 

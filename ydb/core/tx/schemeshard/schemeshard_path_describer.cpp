@@ -1461,7 +1461,8 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     switch (indexInfo->Type) {
         case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
+            // can't fill description
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:

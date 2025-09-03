@@ -2293,7 +2293,8 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 
     switch (IndexType) {
         case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
+            Y_ASSERT(false);
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:

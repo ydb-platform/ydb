@@ -216,7 +216,7 @@ struct TIndexComparisonKey {
     bool ReadCoversIndex = false;
 
     auto GetTuple() const {
-        return std::tie(SortingMatchAndIsLambda, PointPredicateCoversKey, PointPrefixLen, SortingMatch, UsedPrefixLenCoversKey, UsedPrefixLen, ReadCoversIndex);
+        return std::tie(SortingMatchAndIsLambda, PointPredicateCoversKey, PointPrefixLen, UsedPrefixLenCoversKey, UsedPrefixLen, ReadCoversIndex, SortingMatch);
     }
 
     bool operator<(const TIndexComparisonKey& other) const {

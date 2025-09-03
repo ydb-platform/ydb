@@ -1,6 +1,10 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Платформа
+  include:
+    path: platform/toc_p.yaml
+    mode: link
 - name: Архитектура
   href: architecture.md
 - name: Соединение с БД

@@ -3,10 +3,6 @@ items:
   href: index.yaml
 - name: Начало работы
   href: quickstart.md
-- name: Аналитическая платформа
-  include:
-    mode: link
-    path: olap/toc_p.yaml
 - name: Концепции
   href: concepts/index.md
   include:

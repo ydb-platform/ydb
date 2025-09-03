@@ -4518,7 +4518,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 WHERE Key1 = 2 and Key2 = 2;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
             AssertSuccessResult(result);
-            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 0);
         }
 
         {
@@ -4530,7 +4530,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 LIMIT 1;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
             AssertSuccessResult(result);
-            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 1);
+            AssertTableReads(result, "/Root/ComplexKey/Index/indexImplTable", 0);
         }
     }
 

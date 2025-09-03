@@ -3469,9 +3469,9 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     const auto streamingQuery = streamingQueryIt->second;
     Y_ABORT_UNLESS(streamingQuery);
 
-    db.Table<Schema::StreamingQuery>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::StreamingQuery::AlterVersion>{streamingQuery->AlterVersion},
-        NIceDb::TUpdate<Schema::StreamingQuery::Properties>{streamingQuery->Properties.SerializeAsString()}
+    db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::StreamingQueryState::AlterVersion>{streamingQuery->AlterVersion},
+        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()}
     );
 }
 
@@ -3482,7 +3482,7 @@ void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId path
         DecrementPathDbRefCount(pathId);
     }
 
-    db.Table<Schema::StreamingQuery>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {

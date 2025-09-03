@@ -1505,6 +1505,25 @@ private:
                     }
                 }
             });
+            AddPanel(str, "Probe base statistics", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+
+                            str << "<input type=\"hidden\" name=\"action\" value=\"probe_base_stats\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Probe\"/>";
+                            }
+                        }
+                    }
+                }
+            });
 
             PrintStatServiceState(str);
         }
@@ -1541,11 +1560,6 @@ private:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        if (!EnableColumnStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-            return;
-        }
-
         HttpRequestActorId = TActorId();
         MonitoringActorId = ev->Sender;
 
@@ -1570,10 +1584,20 @@ private:
         }
 
         if (action == "analyze") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
                 { THttpRequest::EParamType::PATH, path }
             }, SelfId()));
         } else if (action == "status") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             const auto operationId = getRequestParam("operation");
             if (operationId.empty()) {
                 ReplyToMonitoring("'OperationId' parameter is required");
@@ -1585,6 +1609,11 @@ private:
                 { THttpRequest::EParamType::OPERATION_ID, operationId }
             }, SelfId()));
         } else if (action == "probe") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             const auto column = getRequestParam("column");
             if (column.empty()) {
                 ReplyToMonitoring("'ColumnName' parameter is required");
@@ -1603,12 +1632,22 @@ private:
                 return;
             }
 
-            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::COUNT_MIN_SKETCH_PROBE, {
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
                 { THttpRequest::EParamType::DATABASE, database },
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::COLUMN_NAME, column },
                 { THttpRequest::EParamType::CELL_VALUE, cell }
             }, SelfId()));
+        } else if (action == "probe_base_stats") {
+            if (!EnableStatistics) {
+                ReplyToMonitoring("Base statistics is disabled");
+                return;
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(
+                THttpRequest::ERequestType::PROBE_BASE_STATS, {
+                    { THttpRequest::EParamType::PATH, path },
+                }, SelfId()));
         } else {
             ReplyToMonitoring("Wrong 'action' parameter value");
         }

@@ -7,6 +7,7 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <library/cpp/json/json_writer.h>
 
 
 namespace NKikimr {
@@ -43,7 +44,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     if (navigate->Cookie == SecondRoundCookie) {
         if (entry.Status != TNavigate::EStatus::Ok) {
-            HttpReply("Internal error");
+            HttpReply("Error navigating domain key: " + ToString(entry.Status));
             return;
         }
 
@@ -63,12 +64,13 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
             HttpReply("Path is not a table");
             return;
         default:
-            HttpReply("Internal error");
+            HttpReply("Error navigating path: " + ToString(entry.Status));
             return;
         }
     }
 
-    if (RequestType == ERequestType::COUNT_MIN_SKETCH_PROBE) {
+    if (RequestType == ERequestType::PROBE_COUNT_MIN_SKETCH
+        || RequestType == ERequestType::PROBE_BASE_STATS) {
         DoRequest(entry);
         return;
     }
@@ -120,30 +122,53 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
 }
 
 void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
-    const auto msg = ev->Get();
+    const auto* msg = ev->Get();
 
-    if (!msg->Success
+    switch (RequestType) {
+    case ERequestType::PROBE_COUNT_MIN_SKETCH: {
+        if (!msg->Success
             || msg->StatResponses.empty() || !msg->StatResponses[0].Success
             || msg->StatResponses[0].CountMinSketch.CountMin == nullptr) {
-        HttpReply("Error occurred while loading statistics.");
+            HttpReply("Error occurred while loading column statistics.");
+            return;
+        }
+
+        const auto typeId = static_cast<NScheme::TTypeId>(ev->Cookie);
+        const NScheme::TTypeInfo typeInfo(typeId);
+        const TStringBuf value(Params[EParamType::CELL_VALUE]);
+        TMemoryPool pool(64);
+
+        TCell cell;
+        TString error;
+        if (!NFormats::MakeCell(cell, value, typeInfo, pool, error)) {
+            HttpReply("Cell value parsing error: " + error);
+            return;
+        }
+
+        const auto countMinSketch = msg->StatResponses[0].CountMinSketch.CountMin.get();
+        const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
+        HttpReply(Params[EParamType::PATH] + "[" + Params[EParamType::COLUMN_NAME] + "]=" + std::to_string(probe));
         return;
     }
+    case ERequestType::PROBE_BASE_STATS: {
+        if (!msg->Success
+            || msg->StatResponses.empty() || !msg->StatResponses[0].Success) {
+            HttpReply("Error occurred while loading base statistics.");
+            return;
+        }
 
-    const auto typeId = static_cast<NScheme::TTypeId>(ev->Cookie);
-    const NScheme::TTypeInfo typeInfo(typeId);
-    const TStringBuf value(Params[EParamType::CELL_VALUE]);
-    TMemoryPool pool(64);
-
-    TCell cell;
-    TString error;
-    if (!NFormats::MakeCell(cell, value, typeInfo, pool, error)) {
-        HttpReply("Cell value parsing error: " + error);
+        const auto& stats = msg->StatResponses[0].Simple;
+        auto ret = NJson::WriteJson(NJson::TJsonMap{
+            {"row_count", stats.RowCount},
+            {"bytes_size", stats.BytesSize},
+        });
+        HttpReply(ret);
         return;
     }
-
-    const auto countMinSketch = msg->StatResponses[0].CountMinSketch.CountMin.get();
-    const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
-    HttpReply(Params[EParamType::PATH] + "[" + Params[EParamType::COLUMN_NAME] + "]=" + std::to_string(probe));
+    default:
+        HttpReply("Received unexpected TEvGetStatisticsResult msg");
+        return;
+    }
 }
 
 void THttpRequest::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
@@ -158,8 +183,11 @@ void THttpRequest::DoRequest(const TNavigate::TEntry& entry) {
         case ERequestType::STATUS:
             DoStatus(entry);
             return;
-        case ERequestType::COUNT_MIN_SKETCH_PROBE:
-            DoCountMinSketchProbe(entry);
+        case ERequestType::PROBE_COUNT_MIN_SKETCH:
+            DoProbeDoCountMinSketch(entry);
+            return;
+        case ERequestType::PROBE_BASE_STATS:
+            DoProbeBaseStats(entry);
             return;
     }
 }
@@ -206,7 +234,7 @@ void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(status.release(), statisticsAggregatorId, true));
 }
 
-void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
+void THttpRequest::DoProbeDoCountMinSketch(const TNavigate::TEntry& entry) {
     const auto& columnName = Params[EParamType::COLUMN_NAME];
     if (columnName.empty()) {
         HttpReply("Column is not set");
@@ -235,6 +263,16 @@ void THttpRequest::DoCountMinSketchProbe(const TNavigate::TEntry& entry) {
     }
 
     HttpReply("Column not found");
+}
+
+void THttpRequest::DoProbeBaseStats(const TNavigate::TEntry& entry) {
+    auto request = std::make_unique<TEvStatistics::TEvGetStatistics>();
+    request->StatType = EStatType::SIMPLE;
+    TRequest req;
+    req.PathId = entry.TableId.PathId;
+    request->StatRequests.emplace_back(std::move(req));
+    const auto statService = MakeStatServiceID(SelfId().NodeId());
+    Send(statService, request.release());
 }
 
 void THttpRequest::HttpReply(const TString& msg) {

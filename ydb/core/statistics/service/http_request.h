@@ -25,7 +25,8 @@ public:
     enum class ERequestType {
         ANALYZE,
         STATUS,
-        COUNT_MIN_SKETCH_PROBE
+        PROBE_COUNT_MIN_SKETCH,
+        PROBE_BASE_STATS,
     };
 
     enum class EParamType {
@@ -62,7 +63,8 @@ private:
     void DoRequest(const TNavigate::TEntry& entry);
     void DoAnalyze(const TNavigate::TEntry& entry);
     void DoStatus(const TNavigate::TEntry& entry);
-    void DoCountMinSketchProbe(const TNavigate::TEntry& entry);
+    void DoProbeDoCountMinSketch(const TNavigate::TEntry& entry);
+    void DoProbeBaseStats(const TNavigate::TEntry& entry);
 
     void HttpReply(const TString& msg);
 

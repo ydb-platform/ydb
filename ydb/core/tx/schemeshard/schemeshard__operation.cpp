@@ -1636,7 +1636,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     // StreamingQuery
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
-        return {CreateNewStreamingQuery(op.NextPartId(), tx, context)};
+        return {CreateNewStreamingQuery(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
         return {CreateDropStreamingQuery(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:

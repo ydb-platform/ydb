@@ -1143,8 +1143,6 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
 
     auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
     entry.SetName(pathEl->Name);
-    pathId.ToProto(entry.MutablePathId());
-    entry.SetVersion(streamingQueryInfo->AlterVersion);
     *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 

@@ -12,8 +12,9 @@ namespace {
 
 class TPropose : public TSubOperationState {
 public:
-    explicit TPropose(TOperationId id)
+    TPropose(TOperationId id, bool replacePath)
         : OperationId(std::move(id))
+        , ReplacePath(replacePath)
     {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -33,7 +34,9 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
+        if (!ReplacePath) {
+            context.SS->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
+        }
 
         IncParentDirAlterVersionWithRepublish(OperationId, path, context);
         context.SS->ClearDescribePathCaches(pathPtr);
@@ -61,6 +64,7 @@ private:
 
 private:
     const TOperationId OperationId;
+    const bool ReplacePath = false;
 };
 
 class TCreateStreamingQuery : public TSubOperation {
@@ -82,7 +86,7 @@ class TCreateStreamingQuery : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return MakeHolder<TPropose>(OperationId, ReplacePath);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -90,21 +94,45 @@ class TCreateStreamingQuery : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath, const TString& acl, bool acceptExisted) {
+    ui64 GetAlterVersion(const TPath& dstPath, const TOperationContext& context) {
+        ui64 alterVersion = 1;
+
+        if (Transaction.GetReplaceIfExists()) {
+            ReplacePath = static_cast<bool>(dstPath.Check()
+                .IsResolved()
+                .NotUnderDeleting());
+
+            if (ReplacePath) {
+                const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
+                Y_ABORT_UNLESS(oldStreamingQueryInfo);
+                alterVersion = oldStreamingQueryInfo->AlterVersion + 1;
+            }
+        }
+
+        return alterVersion;
+    }
+
+    bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath, const TString& acl, bool acceptExisted) const {
         const auto checks = dstPath.Check();
 
         checks.IsAtLocalSchemeShard();
 
         if (dstPath.IsResolved()) {
             checks.IsResolved()
-                .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeStreamingQuery, acceptExisted);
+                .NotUnderDeleting();
+
+            if (ReplacePath) {
+                checks.NotUnderOperation()
+                    .FailOnWrongType(TPathElement::EPathType::EPathTypeStreamingQuery);
+            } else {
+                checks.FailOnExist(TPathElement::EPathType::EPathTypeStreamingQuery, acceptExisted);
+            }
         } else {
             checks.NotEmpty()
                 .NotResolved();
         }
 
-        if (checks) {
+        if (!ReplacePath && checks) {
             checks.IsValidLeafName(context.UserToken.Get())
                 .DepthLimit()
                 .PathsLimit()
@@ -123,8 +151,11 @@ class TCreateStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
+    void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) const {
+        if (!ReplacePath) {
+            dstPath.MaterializeLeaf(owner);
+        }
+
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
@@ -137,6 +168,16 @@ class TCreateStreamingQuery : public TSubOperation {
         streamingQuery->LastTxId  = OperationId.GetTxId();
 
         return streamingQuery;
+    }
+
+    void IncPathCounters(const TPath& parentPath, const TPath& dstPath, TOperationContext& context) const {
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
+
+        if (!ReplacePath) {
+            dstPath.DomainInfo()->IncPathsInside(context.SS);
+        }
+
+        IncAliveChildrenDirect(OperationId, parentPath, context);
     }
 
 public:
@@ -156,12 +197,14 @@ public:
         RETURN_RESULT_UNLESS(IsParentPathValid(result, parentPath, /* isCreate */ true));
 
         TPath dstPath = parentPath.Child(name);
+        const ui64 alterVersion = GetAlterVersion(dstPath, context);
+
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, acl, !Transaction.GetFailOnExist()));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, Transaction, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, streamingQueryDescription));
 
-        const auto streamingQueryInfo = CreateNewStreamingQuery(streamingQueryDescription, 1);
+        const auto streamingQueryInfo = CreateNewStreamingQuery(streamingQueryDescription, alterVersion);
         Y_ABORT_UNLESS(streamingQueryInfo);
 
         AddPathInSchemeShard(result, dstPath, owner);
@@ -172,11 +215,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         AdvanceTransactionStateToPropose(OperationId, context, db);
         PersistStreamingQuery(OperationId, context, db, streamingQuery, streamingQueryInfo, acl);
-
-        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
-
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncPathCounters(parentPath, dstPath, context);
 
         SetState(NextState());
         return result;
@@ -191,6 +230,9 @@ public:
         LOG_N("TCreateStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
+
+private:
+    bool ReplacePath = false;
 };
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery>;
@@ -215,27 +257,7 @@ bool SetName<NStreamingQuery::TTag>(NStreamingQuery::TTag, TTxTransaction& tx, c
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
-
-    LOG_I("CreateNewStreamingQuery, opId# " << id  << ", tx# " << tx.ShortDebugString());
-
-    const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    if (const auto checks = NStreamingQuery::IsParentPathValid(parentPath, /* isCreate */ true); !checks) {
-        return CreateReject(id, checks.GetStatus(), TStringBuilder() << "Invalid CreateStreamingQuery request: " << checks.GetError());
-    }
-
-    if (const auto& operation = tx.GetCreateStreamingQuery(); operation.GetReplaceIfExists()) {
-        const TPath dstPath = parentPath.Child(operation.GetName());
-        const auto isAlreadyExists = dstPath.Check()
-            .IsResolved()
-            .NotUnderDeleting();
-
-        if (isAlreadyExists) {
-            return CreateAlterStreamingQuery(id, tx);
-        }
-    }
-
+ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<NStreamingQuery::TCreateStreamingQuery>(id, tx);
 }
 

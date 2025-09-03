@@ -1474,6 +1474,9 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
                         case NKikimrSchemeOp::EPathType::EPathTypeSecret:
                             actualVersion = pathVersion.GetSecretVersion();
                             break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
+                            actualVersion = pathVersion.GetStreamingQueryVersion();
+                            break;
                         default:
                             actualVersion = pathVersion.GetGeneralVersion();
                             break;

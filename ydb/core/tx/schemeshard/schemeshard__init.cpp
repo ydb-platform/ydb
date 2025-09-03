@@ -4401,6 +4401,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
                     }
+                    exportInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Exports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Exports::Items>();
                     exportInfo->Items.resize(items);
@@ -4510,6 +4511,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
+                    importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
@@ -5285,7 +5287,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         state.InvolvedShards.insert(shardIdx);
                     }
                     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                 "TTxInit loaded " << op.GetInvolvedShards().size() 
+                                 "TTxInit loaded " << op.GetInvolvedShards().size()
                                  << " involved shards for incremental restore operation " << txId);
                 }
 
@@ -5375,19 +5377,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
                 TTxId txId = opId.GetTxId();
                 bool controlOperationExists = false;
-                
+
                 for (const auto& [txOpId, txState] : Self->TxInFlight) {
                     if (txOpId.GetTxId() == txId) {
                         controlOperationExists = true;
                         break;
                     }
                 }
-                
+
                 if (!controlOperationExists) {
                     TPathId backupCollectionPathId;
                     backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
                     backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
-                    
+
                     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TTxInit detected orphaned incremental restore operation during recovery"
                             << ", operationId: " << opId
@@ -5395,7 +5397,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             << ", backupCollectionPathId: " << backupCollectionPathId
                             << ", scheduling TTxProgress to continue operation"
                             << ", at schemeshard: " << Self->TabletID());
-                    
+
                     OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
                 }
             }

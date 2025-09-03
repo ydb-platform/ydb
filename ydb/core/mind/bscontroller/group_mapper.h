@@ -8,7 +8,7 @@ namespace NKikimr {
 
         class TGroupGeometryInfo;
 
-        class TDiskSlotState {
+        class TPDiskSlotTracker {
             absl::flat_hash_map<ui32, ui16> ReplicatingVDisksByNode;
             absl::flat_hash_map<TPDiskId, ui8> ReplicatingVDisksByPDisk;
             absl::flat_hash_map<TString, i32> FreeSlotsPerRack;
@@ -106,13 +106,15 @@ namespace NKikimr {
             TGroupMapper(TGroupGeometryInfo geom, bool randomize = false, bool withAttentionToReplication = false);
             ~TGroupMapper();
 
-            void SetDiskSlotState(TDiskSlotState&& state);
+            void SetPDiskSlotTracker(TPDiskSlotTracker&& state);
+
+            TPDiskSlotTracker& GetPDiskSlotTracker();
 
             // Register PDisk inside mapper to use it in subsequent map operations
             bool RegisterPDisk(const TPDiskRecord& pdisk);
 
             // Remove PDisk from the table.
-            void UnregisterPDisk(TPDiskId pdiskId);
+            TPDiskRecord UnregisterPDisk(TPDiskId pdiskId);
 
             // Adjust VDisk space quota.
             void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment);

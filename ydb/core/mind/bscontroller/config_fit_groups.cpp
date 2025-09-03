@@ -545,14 +545,14 @@ namespace NKikimr {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.WithAttentionToReplication);
                     PopulateGroupMapper();
                 }
-                TDiskSlotState s;
+                TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
                 TStackVec<TPDiskId, 32> removeQ;
                 if (addExistingDisks) {
                     for (const auto& realm : group) {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, s, "X")) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, pdiskSlotTracker, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -561,14 +561,14 @@ namespace NKikimr {
                     }
                 }
                 struct TUnregister {
-                    TGroupMapper& Mapper;
+                    TBlobStorageController::TGroupFitter& Self;
                     TStackVec<TPDiskId, 32>& RemoveQ;
                     ~TUnregister() {
                         for (const TPDiskId pdiskId : RemoveQ) {
-                            Mapper.UnregisterPDisk(pdiskId);
+                            Self.UnregisterPDisk(pdiskId);
                         }
                     }
-                } unregister{*Mapper, removeQ};
+                } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
                     std::move(forbid), groupSizeInUnits, requiredSpace, bridgePileId);
             }
@@ -592,7 +592,7 @@ namespace NKikimr {
             void PopulateGroupMapper() {
                 const TBoxId boxId = std::get<0>(StoragePoolId);
 
-                TDiskSlotState diskSlotState;
+                TPDiskSlotTracker pdiskSlotTracker;
 
                 if (State.Fit.WithAttentionToReplication) {
                     State.VSlots.ForEach([&](const TVSlotId& id, const TVSlotInfo& info) {
@@ -601,7 +601,7 @@ namespace NKikimr {
                         }
                         if (info.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                             TPDiskId pdiskId = id.ComprisingPDiskId();
-                            diskSlotState.AddReplicatingVSlot(pdiskId);
+                            pdiskSlotTracker.AddReplicatingVSlot(pdiskId);
                         }
                     });
                 }
@@ -617,17 +617,17 @@ namespace NKikimr {
 
                     for (const auto& filter : StoragePool.PDiskFilters) {
                         if (filter.MatchPDisk(info)) {
-                            const bool inserted = RegisterPDisk(id, info, true, diskSlotState);
+                            const bool inserted = RegisterPDisk(id, info, true, pdiskSlotTracker);
                             Y_ABORT_UNLESS(inserted);
                             break;
                         }
                     }
                 });
 
-                Mapper->SetDiskSlotState(std::move(diskSlotState));
+                Mapper->SetPDiskSlotTracker(std::move(pdiskSlotTracker));
             }
 
-            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TDiskSlotState& diskSlotState, TString whyUnusable = {}) {
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TPDiskSlotTracker& pdiskSlotTracker, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
 
@@ -715,10 +715,18 @@ namespace NKikimr {
 
                 if (registered && State.Fit.WithAttentionToReplication) {
                     i32 freeSlots = i32(maxSlots) - numSlots;
-                    diskSlotState.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
+                    pdiskSlotTracker.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
                 }
 
                 return registered;
+            }
+
+            void UnregisterPDisk(TPDiskId id) {
+                TGroupMapper::TPDiskRecord rec = Mapper->UnregisterPDisk(id);
+                if (State.Fit.WithAttentionToReplication) {
+                    i32 freeSlots = i32(rec.MaxSlots) - rec.NumSlots;
+                    Mapper->GetPDiskSlotTracker().AddFreeSlotsForRack(rec.Location.GetRackId(), -freeSlots);
+                }
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

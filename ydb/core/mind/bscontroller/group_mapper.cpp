@@ -281,29 +281,29 @@ namespace NKikimr::NBsController {
                 auto pretenderNode = pretender.PDiskId.NodeId;
                 auto kingNode = king.PDiskId.NodeId;
 
-                Y_ABORT_UNLESS(Self.DiskSlotState.has_value());
+                Y_ABORT_UNLESS(Self.PDiskSlotTracker.has_value());
 
-                auto& diskSlotState = *Self.DiskSlotState;
+                auto& pdiskSlotTracker = *Self.PDiskSlotTracker;
 
                 // Compare by number of free slots in PDisk's rack.
-                i32 freeSlotsPretender = diskSlotState.GetFreeSlotsOnRack(pretender.Location.GetRackId());
-                i32 freeSlotsKing = diskSlotState.GetFreeSlotsOnRack(king.Location.GetRackId());
+                i32 freeSlotsPretender = pdiskSlotTracker.GetFreeSlotsOnRack(pretender.Location.GetRackId());
+                i32 freeSlotsKing = pdiskSlotTracker.GetFreeSlotsOnRack(king.Location.GetRackId());
 
                 if (freeSlotsPretender != freeSlotsKing) {
                     return freeSlotsPretender > freeSlotsKing;
                 }
 
                 // Compare by number of replicating VDisks on the PDisk's node.
-                auto pretenderNodeRepls = diskSlotState.GetReplicatingVDisksOnNode(pretenderNode);
-                auto kingNodeRepls = diskSlotState.GetReplicatingVDisksOnNode(kingNode);
+                auto pretenderNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(pretenderNode);
+                auto kingNodeRepls = pdiskSlotTracker.GetReplicatingVDisksOnNode(kingNode);
 
                 if (pretenderNodeRepls != kingNodeRepls) {
                     return pretenderNodeRepls < kingNodeRepls;
                 }
 
                 // Compare by number of replicating VDisks on the PDisk.
-                auto pretenderPDiskRepls = diskSlotState.GetReplicatingVDisksOnPDisk(pretender.PDiskId);
-                auto kingPDiskRepls = diskSlotState.GetReplicatingVDisksOnPDisk(king.PDiskId);
+                auto pretenderPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(pretender.PDiskId);
+                auto kingPDiskRepls = pdiskSlotTracker.GetReplicatingVDisksOnPDisk(king.PDiskId);
 
                 if (pretenderPDiskRepls != kingPDiskRepls) {
                     return pretenderPDiskRepls < kingPDiskRepls;
@@ -911,7 +911,7 @@ namespace NKikimr::NBsController {
         TPDiskByPosition PDiskByPosition;
         bool Dirty = false;
         bool WithAttentionToReplication;
-        std::optional<TDiskSlotState> DiskSlotState;
+        std::optional<TPDiskSlotTracker> PDiskSlotTracker;
 
     public:
         TImpl(TGroupGeometryInfo geom, bool randomize, bool withAttentionToReplication)
@@ -936,8 +936,12 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void SetDiskSlotState(TDiskSlotState&& state) {
-            DiskSlotState = std::move(state);
+        void SetPDiskSlotTracker(TPDiskSlotTracker&& tracker) {
+            PDiskSlotTracker = std::move(tracker);
+        }
+
+        TPDiskSlotTracker& GetPDiskSlotTracker() {
+            return PDiskSlotTracker.value();
         }
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
@@ -956,13 +960,15 @@ namespace NKikimr::NBsController {
             return inserted;
         }
 
-        void UnregisterPDisk(TPDiskId pdiskId) {
+        TPDiskRecord UnregisterPDisk(TPDiskId pdiskId) {
             const auto it = PDisks.find(pdiskId);
             Y_ABORT_UNLESS(it != PDisks.end());
             auto x = std::remove(PDiskByPosition.begin(), PDiskByPosition.end(), std::make_pair(it->second.Position, &it->second));
             Y_ABORT_UNLESS(x + 1 == PDiskByPosition.end());
             PDiskByPosition.pop_back();
+            TPDiskRecord ret = it->second;
             PDisks.erase(it);
+            return ret;
         }
 
         void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
@@ -1222,15 +1228,19 @@ namespace NKikimr::NBsController {
 
     TGroupMapper::~TGroupMapper() = default;
 
-    void TGroupMapper::SetDiskSlotState(TDiskSlotState&& state) {
-        Impl->SetDiskSlotState(std::move(state));
+    void TGroupMapper::SetPDiskSlotTracker(TPDiskSlotTracker&& tracker) {
+        Impl->SetPDiskSlotTracker(std::move(tracker));
+    }
+
+    TPDiskSlotTracker& TGroupMapper::GetPDiskSlotTracker() {
+        return Impl->GetPDiskSlotTracker();
     }
 
     bool TGroupMapper::RegisterPDisk(const TPDiskRecord& pdisk) {
         return Impl->RegisterPDisk(pdisk);
     }
 
-    void TGroupMapper::UnregisterPDisk(TPDiskId pdiskId) {
+    TGroupMapper::TPDiskRecord TGroupMapper::UnregisterPDisk(TPDiskId pdiskId) {
         return Impl->UnregisterPDisk(pdiskId);
     }
 

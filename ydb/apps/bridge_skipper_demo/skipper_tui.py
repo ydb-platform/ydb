@@ -23,6 +23,7 @@ import bridge
 
 logger = logging.getLogger(__name__)
 
+
 class MarkupFormatter:
     def __init__(self, fmt: str):
         self._fmt = fmt
@@ -30,10 +31,10 @@ class MarkupFormatter:
     def format(self, record: logging.LogRecord) -> str:
         try:
             message = self._fmt % {
-                'asctime': self._format_time(record),
-                'levelname': record.levelname,
-                'name': record.name,
-                'message': record.getMessage(),
+                "asctime": self._format_time(record),
+                "levelname": record.levelname,
+                "name": record.name,
+                "message": record.getMessage(),
             }
         except Exception:
             message = record.getMessage()
@@ -42,9 +43,9 @@ class MarkupFormatter:
         try:
             # Escape message except the level token we will colorize separately
             level_color = {
-                'CRITICAL': 'red',
-                'ERROR': '#ff0000',
-                'WARNING': '#ffff00',
+                "CRITICAL": "red",
+                "ERROR": "#ff0000",
+                "WARNING": "#ffff00",
             }.get(record.levelname)
             if level_color is None:
                 return escape(message)
@@ -111,7 +112,7 @@ class KeeperApp(App):
 
     def __init__(
         self,
-        keeper: bridge.Bridgekeeper,
+        keeper: bridge.BridgeSkipper,
         cluster_name: str,
         refresh_seconds: float,
         auto_failover: bool,
@@ -128,7 +129,6 @@ class KeeperApp(App):
         self._refresh_timer = None
 
         self.pile_widgets: Dict[str, PileWidget] = {}
-        self.prev_state = None
         self.prev_transitions = None
 
         self._keeper_thread = self.keeper.run_async()
@@ -178,34 +178,29 @@ class KeeperApp(App):
         if self.header:
             self.header.now_utc = now
 
-        if state != self.prev_state:
-            # Compute statuses and colors
-            current_status_color: Dict[str, [str, str]] = {}
-            if state:
-                for pile_name, pile_state in state.Piles.items():
-                    current_status_color[pile_name] = [pile_state.get_state(), pile_state.get_color(),]
+        # Compute statuses and colors
+        current_status_color: Dict[str, [str, str]] = {}
+        if state:
+            for pile_name, pile_state in state.piles.items():
+                current_status_color[pile_name] = [pile_state.get_state(), pile_state.get_color(),]
 
-                # Ensure widgets exist for all piles
-                # TODO: remove old piles?
-                for pile_name in current_status_color.keys():
-                    if pile_name not in self.pile_widgets:
-                        w = PileWidget(classes="pile")
-                        w.pile_name = pile_name
-                        self.pile_widgets[pile_name] = w
+            # Ensure widgets exist for all piles
+            widgets_to_mount = []
+            ordered_names = sorted(current_status_color.keys())
+            for pile_name in ordered_names:
+                if pile_name not in self.pile_widgets:
+                    w = PileWidget(classes="pile")
+                    w.pile_name = pile_name
+                    self.pile_widgets[pile_name] = w
+                    widgets_to_mount.append(w)
 
-                # Stable order by name; clear and mount all widgets
-                ordered_names = sorted(current_status_color.keys())
-                self.piles_group.remove_children()
-                widgets_to_mount = []
-                for name in ordered_names:
-                    widget = self.pile_widgets[name]
-                    widget.status = current_status_color[name][0]
-                    widget.color = current_status_color[name][1]
-                    widgets_to_mount.append(widget)
-                if widgets_to_mount:
-                    self.piles_group.mount(*widgets_to_mount)
+            if widgets_to_mount:
+                self.piles_group.mount(*widgets_to_mount)
 
-            self.prev_state = state
+            for name in ordered_names:
+                widget = self.pile_widgets[name]
+                widget.status = current_status_color[name][0]
+                widget.color = current_status_color[name][1]
 
         # Update transitions from history
 
@@ -221,5 +216,5 @@ class KeeperApp(App):
         if len(new_records) > 0:
             formatter = MarkupFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
             lines = [formatter.format(r) for r in new_records]
-            joined_lines = '\n'.join(lines)
+            joined_lines = "\n".join(lines)
             self.log_view.write(joined_lines)

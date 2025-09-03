@@ -1,39 +1,40 @@
 # {{ ydb-short-name }} Architecture Overview
 
-*{{ ydb-short-name }}* is a horizontally scalable, distributed, fault-tolerant DBMS. It is designed for high performance, with a typical server capable of handling tens of thousands of queries per second. The system is designed to handle hundreds of petabytes of data. {{ ydb-short-name }} can operate in both single data center and geo-distributed (cross data center) modes on a cluster of thousands of servers.
+## Introduction
 
-{{ ydb-short-name }} provides:
+{{ ydb-short-name }} is a horizontally scalable, distributed, and fault-tolerant database system designed for high performance and handling data volumes up to hundreds of petabytes. It supports both single-datacenter and geographically distributed (cross-datacenter) deployments across clusters of thousands of servers. A typical cluster node can process tens of thousands of queries per second.
 
-* [Strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_Consistency), which can be relaxed to increase performance.
-* Support for queries written in [YQL](../yql/reference/index.md), an SQL dialect for working with big data.
-* Automatic data replication.
-* High availability with automatic failover if a server, rack, or availability zone goes offline.
-* Automatic data partitioning as data or load grows.
+### Key Features and Capabilities of {{ ydb-short-name }}
 
-To interact with {{ ydb-short-name }}, you can use the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) and [SDK](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, Node.js, PHP, Python, and Rust.
+- **Horizontal scaling and automatic sharding**: data and workload are dynamically distributed as data volume or query intensity grows.
+- **Fault tolerance**: automatic recovery from failures of nodes, racks, or availability zones.
+- **Synchronous replication**: data is replicated synchronously within the cluster to ensure high availability and durability.
+- **Asynchronous replication**: near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
+- **Strong consistency and ACID transactions**: the system provides linearizability and [distributed transactions](transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
+- [**Query language YQL**](../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
+- **Relational data model**: supports both [row-based](datamodel/table.md#row-tables) and [column-based](datamodel/table.md#column-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
+- **Hierarchical namespace**: tables, topics, and other [objects](datamodel/index.md) are organized in a hierarchical namespace, similar to a filesystem.
+- **Streaming data processing and distribution**:
+  - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../reference/kafka-api/index.md).
+  - [**Change Data Capture (CDC)**](cdc.md): built-in streaming read of data changes from tables.
+  - **Transfers**: automated data delivery from topics to tables.
+- [**Federated queries**](federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data loading.
+- [**Vector indexes**](vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
+- [**Observability**](../reference/observability/index.md): built-in metrics, logs, and dashboards.
+- **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../security/index.md).
+- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for administration and debugging, and [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, Node.js, PHP, Python, and Rust. Integration with external systems is supported. Learn more in [Integrations](../integrations/index.md) and [Languages and APIs](../reference/languages-and-apis/).
+- **Open architecture**: [source code](https://github.com/ydb-platform/ydb) is available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The system uses the open [gRPC](https://grpc.io/) protocol, enabling client implementations in any programming language.
 
-{{ ydb-short-name }} supports a relational [data model](/datamodel/table.md) and manages [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables with a predefined schema. Directories can be created like in a file system to organize tables. In addition to tables, {{ ydb-short-name }} supports [topics](topic.md) for storing unstructured messages and delivering them to multiple subscribers.
+### Key Use Cases
 
-Database commands are mainly written in YQL, an SQL dialect, providing a powerful and familiar way to interact with the database.
+{{ ydb-short-name }} is a versatile platform suitable for a wide range of scenarios requiring scalability, reliability, and flexibility. It can serve as a standalone database or as part of a distributed architecture. Typical use cases include:
 
-{{ ydb-short-name }} supports high-performance distributed [ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) transactions that may affect multiple records in different tables. It provides the serializable isolation level, the strictest transaction isolation, with the option to reduce the isolation level to enhance performance.
-
-{{ ydb-short-name }} natively supports different processing options, such as [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing). The current version offers limited analytical query support, which is why {{ ydb-short-name }} is currently considered an OLTP database.
-
-{{ ydb-short-name }} is an open-source system. The source code is available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). Client applications interact with {{ ydb-short-name }} based on [gRPC](https://grpc.io/), which has an open specification, allowing for SDK implementation in any programming language.
-
-## Use Cases {#use-cases}
-
-{{ ydb-short-name }} can be used as an alternative solution in the following cases:
-
-* When using NoSQL systems, if strong data consistency is required.
-* When using NoSQL systems, if you need to make transactional updates to data stored in different rows of one or more tables.
-* In systems that need to process and store large amounts of data and allow for virtually unlimited horizontal scalability (using industrial clusters of 5000+ nodes, processing millions of RPS, and storing petabytes of data).
-* In low-load systems, when supporting a separate DB instance would be a waste of money (consider using {{ ydb-short-name }} in serverless mode instead).
-* In systems with unpredictable or seasonally fluctuating load (you can add/reduce computing resources on request and/or in serverless mode).
-* In high-load systems that shard load across relational DB instances.
-* When developing a new product with no reliable load forecast or with an expected high load beyond the capabilities of conventional relational databases.
-* In projects where the simultaneous handling of transactional and analytical workloads is required.
+- Replacing NoSQL systems when **strong consistency or multi-row/multi-table transactions** are required. {{ ydb-short-name }} combines the scalability of NoSQL with the consistency and integrity guarantees of relational databases.
+- Systems that store and process **very large datasets** and require nearly unlimited horizontal scaling (production clusters with thousands of nodes, handling millions of RPS and petabytes of data).
+- High-load systems relying on **manual sharding** of relational databases. {{ ydb-short-name }} simplifies architecture by eliminating complex sharding logic and manual orchestration.
+- Systems with **low or unpredictable workloads** — use the **serverless mode** with on-demand scaling, including scaling down to zero.
+- New product development with **uncertain load patterns** or expected scale beyond the limits of traditional RDBMS.
+- Projects requiring a **flexible platform** capable of handling diverse workloads and use cases — including transactional, streaming, and analytical.
 
 ## How It Works?
 

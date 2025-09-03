@@ -364,6 +364,7 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
         .Uid = info.Uid,
         .RemoteAddress = peerName,
         .UserSID = userSID,
+        .SanitizedToken = info.SanitizedToken,
         .DatabasePath = databasePath.PathString(),
         .Status = status,
         .DetailedStatus = detailedStatus,

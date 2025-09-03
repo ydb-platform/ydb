@@ -122,6 +122,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         Y_ABORT_UNLESS(importInfo != nullptr);
 
+        importInfo->SanitizedToken = request.GetSanitizedToken();
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateImport(db, importInfo);
 

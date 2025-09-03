@@ -2839,7 +2839,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             R"( USE plato;
                 CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
-                WITH ( STORE_EXTERNAL_BLOBS = ENABLED );)"
+                WITH ( STORE_EXTERNAL_BLOBS = "ENABLED" );)"
         );
         UNIT_ASSERT(res.Root);
 
@@ -8265,6 +8265,9 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
         )");
         TestQuery(R"(
             CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (partition_counters = "on");
         )");
     }
 

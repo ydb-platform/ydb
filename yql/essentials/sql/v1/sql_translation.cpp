@@ -2756,6 +2756,16 @@ static bool StoreTopicSettingsEntry(
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
         }
+    } else if (to_lower(id.Name) == "partition_counters") {
+        if (reset) {
+            settings.PartitionCounters.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be string";
+                return false;
+            }
+            settings.PartitionCounters.Set(valueExprNode);
+        }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
         return false;

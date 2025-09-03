@@ -540,7 +540,7 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    std::shared_ptr<TSpaceWatcher> SpaceWatcher;
+    std::unique_ptr<TSpaceWatcher> SpaceWatcher;
     TActorId SpaceWatcherId;
     NOverload::TOverloadSubscribers OverloadSubscribers;
 

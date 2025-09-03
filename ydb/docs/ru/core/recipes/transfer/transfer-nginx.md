@@ -28,7 +28,7 @@ $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$
 
 * Установленная БД {{ ydb-short-name }} версии 25-2 или выше. Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md?version=main).
 
-* Установленный http-сервер NGINX с ведением access логов.
+* Установленный http-сервер NGINX с ведением access логов или access логи NGINX доступные с другого сервера.
 
 * Настроенная поставка access логов NGINX из файла в топик `access_log_topic`, например, с помощью [kafka connect](../../reference/kafka-api/connect/index.md) с [конфигурацией](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) поставки данных из файла в топик.
 

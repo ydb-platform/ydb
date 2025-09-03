@@ -1146,11 +1146,13 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     if (!CanWrite()) {
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
                            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return false;
     }
     if (DiskIsFull) {
+        WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");

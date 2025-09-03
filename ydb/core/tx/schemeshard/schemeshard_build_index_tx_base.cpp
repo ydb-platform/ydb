@@ -305,7 +305,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
             break;
         default:
-            Y_ENSURE(false, InvalidIndexType(info.IndexType))
+            Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }
     } else if (info.IsBuildColumns()) {
         for(const auto& column : info.BuildColumns) {

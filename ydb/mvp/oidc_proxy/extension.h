@@ -19,12 +19,59 @@ struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
     THolder<TCrackedPage> ProtectedPage;
     TString ResponseError;
-
-    TString StatusOverride;
-    TString MessageOverride;
-    TString BodyOverride;
     THolder<NHttp::THeadersBuilder> HeadersOverride;
+
+private:
+    std::optional<TString> StatusOverride;
+    std::optional<TString> MessageOverride;
+    std::optional<TString> BodyOverride;
+
+    NHttp::THttpIncomingResponsePtr Response;
+
+    TStringBuf GetOverride(const std::optional<TString>& override, TStringBuf original) const {
+        if (override.has_value()) {
+            return TStringBuf(*override);
+        }
+        return original;
+    }
+
+public:
+    void SetOriginalResponse(NHttp::THttpIncomingResponsePtr response) {
+        Response = std::move(response);
+        HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+        if (Response) {
+            auto headers = NHttp::THeaders(Response->Headers);
+            for (const auto& header : headers.Headers) {
+                HeadersOverride->Set(header.first, header.second);
+            }
+        }
+    }
+
+    void OverrideStatus(TString&& status) {
+        StatusOverride.emplace(std::move(status));
+    }
+
+    void OverrideMessage(TString&& message) {
+        MessageOverride.emplace(std::move(message));
+    }
+
+    void OverrideBody(TString&& body) {
+        BodyOverride.emplace(std::move(body));
+    }
+
+    TStringBuf GetStatusOverride() const {
+        return GetOverride(StatusOverride, Response ? Response->Status : TStringBuf());
+    }
+
+    TStringBuf GetMessageOverride() const {
+        return GetOverride(MessageOverride, Response ? Response->Message : TStringBuf());
+    }
+
+    TStringBuf GetBodyOverride() const {
+        return GetOverride(BodyOverride, Response ? Response->Body : TStringBuf());
+    }
 };
+
 
 struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
     std::unique_ptr<IExtension> Next();

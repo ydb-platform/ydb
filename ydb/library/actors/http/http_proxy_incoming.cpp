@@ -59,6 +59,9 @@ public:
 
     void CleanupResponse(THttpOutgoingResponsePtr& response) {
         CleanupRequest(response->Request);
+        response->Body = {};
+        response->DataChunks.clear();
+        response->Sensors.reset();
         // TODO: maybe recycle too?
         response = nullptr;
     }

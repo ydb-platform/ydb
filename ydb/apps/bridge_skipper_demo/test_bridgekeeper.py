@@ -23,8 +23,9 @@
 # both piles must be not is_good().
 #
 # 9. pile1 returns generation 1 where pile1 is primary, pile2 returns generation 2 where it is primary.
-# Check that bridgekeeper accepts gen2 and pile2 as primary.
+# Check that BridgeSkipper accepts gen2 and pile2 as primary.
 
+import logging
 import unittest
 
 from unittest.mock import patch
@@ -33,6 +34,19 @@ import time
 
 import bridge
 import health
+
+
+# Add custom TRACE log level (lower than DEBUG)
+TRACE_LEVEL_NUM = 5
+if not hasattr(logging, "TRACE"):
+    logging.TRACE = TRACE_LEVEL_NUM
+    logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+
+    def trace(self, message, *args, **kws):
+        if self.isEnabledFor(TRACE_LEVEL_NUM):
+            self._log(TRACE_LEVEL_NUM, message, args, **kws)
+
+    logging.Logger.trace = trace
 
 
 def _mk_endpoint_result(self_check_result: str = "GOOD", bad_piles=None):
@@ -78,7 +92,7 @@ def _mk_admin_states(gen: int, primary: str):
     return health.PileAdminStates(gen, piles)
 
 
-class TestBridgekeeperDecisions(unittest.TestCase):
+class TestBridgeSkipperDecisions(unittest.TestCase):
     def setUp(self):
         self.initial_piles = {
             "pile1": ["p1a", "p1b", "p1c"],
@@ -91,7 +105,7 @@ class TestBridgekeeperDecisions(unittest.TestCase):
             runner_instance.start.return_value = None
             runner_instance.get_health_state.return_value = get_health_state_return
 
-            keeper = bridge.Bridgekeeper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True)
+            keeper = bridge.BridgeSkipper(path_to_cli="ydb", initial_piles=self.initial_piles, auto_failover=True)
             # Ensure our mocked get_health_state is used for this instance
             keeper.async_checker = runner_instance
             return keeper

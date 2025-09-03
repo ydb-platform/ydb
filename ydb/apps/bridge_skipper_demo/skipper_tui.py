@@ -112,7 +112,7 @@ class KeeperApp(App):
 
     def __init__(
         self,
-        keeper: bridge.Bridgekeeper,
+        keeper: bridge.BridgeSkipper,
         cluster_name: str,
         refresh_seconds: float,
         auto_failover: bool,

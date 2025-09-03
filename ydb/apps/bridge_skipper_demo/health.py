@@ -315,7 +315,7 @@ class AsyncHealthcheckRunner:
 
     - Constructor accepts pile to its endpoints map
     - start() begins asynchronous healthcheck a background thread
-    - get_health_state() is thread-safe and returns a snapshot for Bridgekeeper
+    - get_health_state() is thread-safe and returns a snapshot for BridgeSkipper
     """
 
     def __init__(self, path_to_cli, initial_piles, use_https=False):

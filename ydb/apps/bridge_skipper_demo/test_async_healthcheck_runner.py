@@ -1,11 +1,25 @@
 #! /usr/bin/python3
 
+import logging
 import unittest
 
 from unittest.mock import patch
 from concurrent.futures import Future
 
 import health as health_mod
+
+
+# Add custom TRACE log level (lower than DEBUG)
+TRACE_LEVEL_NUM = 5
+if not hasattr(logging, "TRACE"):
+    logging.TRACE = TRACE_LEVEL_NUM
+    logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+
+    def trace(self, message, *args, **kws):
+        if self.isEnabledFor(TRACE_LEVEL_NUM):
+            self._log(TRACE_LEVEL_NUM, message, args, **kws)
+
+    logging.Logger.trace = trace
 
 
 def make_completed_future(value):

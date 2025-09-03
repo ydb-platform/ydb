@@ -24,7 +24,7 @@ import threading
 
 import bridge
 import health
-import keeper_tui
+import skipper_tui
 
 
 logger = logging.getLogger(__name__)
@@ -217,14 +217,14 @@ def _parse_args():
 
 
 def _run_no_tui(path_to_cli, piles, use_https, auto_failover):
-    keeper = bridge.Bridgekeeper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=use_https, auto_failover=auto_failover)
     keeper.run()
 
 
 def _run_tui(args, path_to_cli, piles):
     auto_failover = not args.disable_auto_failover
-    keeper = bridge.Bridgekeeper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
-    app = keeper_tui.KeeperApp(
+    keeper = bridge.BridgeSkipper(path_to_cli, piles, use_https=args.https, auto_failover=auto_failover)
+    app = skipper_tui.KeeperApp(
         keeper=keeper,
         cluster_name=args.cluster,
         refresh_seconds=args.tui_refresh,

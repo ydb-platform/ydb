@@ -39,8 +39,8 @@ def get_body_content(body_input, github_token=None):
         print(f"Body content will be taken directly: '{body_input}.'")
         content = body_input
     
-    # GitHub has a 65,536 character limit for PR body
-    MAX_BODY_LENGTH = 65536
+    # GitHub has a 65,536 character limit for PR body, so we use half of it to leave some space for the summary and closed issues
+    MAX_BODY_LENGTH = 65536 // 2    
     
     if len(content) > MAX_BODY_LENGTH:
         print(f"Warning: PR body content is {len(content)} characters, exceeding GitHub's limit of {MAX_BODY_LENGTH}")

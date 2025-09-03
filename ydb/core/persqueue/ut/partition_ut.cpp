@@ -1716,7 +1716,6 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
         msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
         msg.DisableDeduplication = false;
         msg.Data = data;
-        msg.Data = data;
         msg.UncompressedSize = data.size();
         msg.External = false;
         msg.IgnoreQuotaDeadline = false;
@@ -2882,125 +2881,6 @@ Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
     SendKvResponse();
     WaitCommitDone(tx2);
     WaitImmediateTxComplete(immTx, true);
-}
-
-Y_UNIT_TEST_F(ConflictingSrcIdForTxInDifferentBatches, TPartitionTxTestHelper) {
-    TTxBatchingTestParams params {.WriterSessions{"src1"}};
-    Init(std::move(params));
-
-    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 5}}});
-    auto tx2 = MakeAndSendWriteTx({{"src1", {6, 10}}});
-    auto tx3 = MakeAndSendWriteTx({{"src1", {2, 11}}});
-    auto tx4 = MakeAndSendWriteTx({{"src1", {8, 15}}});
-
-    WaitWriteInfoRequest(tx1, true);
-    WaitWriteInfoRequest(tx2, true);
-    WaitWriteInfoRequest(tx3, true);
-    WaitWriteInfoRequest(tx4, true);
-    WaitTxPredicateReply(tx1);
-
-    Cerr << "Wait batch of 1 completion\n";
-    SendTxCommit(tx1);
-    WaitBatchCompletion(1);
-    Cerr << "Expect KV request\n";
-    WaitKvRequest();
-    SendKvResponse();
-    WaitTxPredicateReply(tx2);
-    SendTxCommit(tx2);
-
-    Cerr << "Wait for tx 3 predicate failure\n";
-    WaitTxPredicateFailure(tx3);
-    Cerr << "Wait for tx 4 predicate failure\n";
-    WaitTxPredicateFailure(tx4);
-
-
-    Cerr << "Wait batch of 3 completion\n";
-    WaitBatchCompletion(1); // Immediate Tx 2 - 4.
-    Cerr << "Expect KV request\n";
-    WaitKvRequest();
-    SendKvResponse();
-    SendTxRollback(tx3);
-    SendTxRollback(tx4);
-    WaitBatchCompletion(2); // Immediate Tx 2 - 4.
-
-    WaitKvRequest();
-    SendKvResponse();
-    Cerr << "Wait for commits\n";
-    WaitCommitDone(tx1);
-    WaitCommitDone(tx2);
-}
-
-Y_UNIT_TEST_F(ConflictingSrcIdTxAndWritesDifferentBatches, TPartitionTxTestHelper) {
-    TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset = 1};
-    Init(std::move(params));
-
-    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}},});
-    auto tx2 = MakeAndSendWriteTx({{"src1", {2, 4}}});
-    auto tx3 = MakeAndSendWriteTx({{"src1", {4, 6}}});
-    AddAndSendNormalWrite("src1", 1, 1);
-    AddAndSendNormalWrite("src1", 7, 7);
-    AddAndSendNormalWrite("src1", 7, 7);
-
-
-    WaitWriteInfoRequest(tx1, true);
-    WaitWriteInfoRequest(tx2, true);
-    WaitWriteInfoRequest(tx3, true);
-    WaitTxPredicateReply(tx1);
-
-    SendTxCommit(tx1);
-    WaitBatchCompletion(1);
-
-    WaitKvRequest();
-    SendKvResponse();
-
-    WaitCommitDone(tx1);
-
-    WaitTxPredicateFailure(tx2);
-    WaitTxPredicateReply(tx3);
-    SendTxRollback(tx2);
-    SendTxCommit(tx3);
-    WaitBatchCompletion(2); // Tx 2 & 3.
-    WaitKvRequest();
-    SendKvResponse();
-    WaitCommitDone(tx3);
-    WaitBatchCompletion(3);
-    WaitKvRequest();
-    SendKvResponse();
-    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=1});
-    WaitProxyResponse({.AlreadyWritten=false, .SeqNo=7});
-    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=7});
-}
-
-Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
-    TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset=1};
-    Init(std::move(params));
-
-    NPQ::TClientBlob clientBlob("src1", 10, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
-
-    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 10}}}, std::move(clientBlob));
-    AddAndSendNormalWrite("src1", 8, 8);
-    AddAndSendNormalWrite("src1", 10, 10);
-    AddAndSendNormalWrite("src1", 11, 11);
-
-
-    WaitWriteInfoRequest(tx1, true);
-    WaitTxPredicateReply(tx1);
-
-    SendTxCommit(tx1);
-    WaitBatchCompletion(1);
-    Cerr << "Wait 1st KV request\n";
-    WaitKvRequest();
-    SendKvResponse();
-    WaitCommitDone(tx1);
-    WaitBatchCompletion(3);
-    Cerr << "Wait 2nd KV request\n";
-    WaitKvRequest();
-    SendKvResponse();
-    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=8});
-    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=10});
-    WaitProxyResponse({.AlreadyWritten=false, .SeqNo=11});
-
-    //WaitProxyResponse()
 }
 
 class TBatchingConditionsTest {

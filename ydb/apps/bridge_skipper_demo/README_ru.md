@@ -16,7 +16,7 @@ YDB поддерживает работу в режиме [Bridge](https://ydb.t
 
 Установка зависимостей:
 ```
-pip3 install textual requests
+pip3 install textual requests yaml
 ```
 
 Для работы `skipper'a` требуется наличие YDB CLI. По умолчанию автоматически находит в `PATH`. Требуется установить YDB CLI из `main` или ветки `rc-bridge`. Также `ydbd` должен быть из `main` либо `rc-bridge`.
@@ -37,7 +37,7 @@ pip3 install textual requests
 | `--endpoint` | — | Хост YDB для получения информации о кластере. |
 | `--ydb` | из PATH | Путь к исполняемому файлу YDB CLI. |
 | `--disable-auto-failover` | false | Отключить автоматический failover. |
-| `--log-level` | INFO | Уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
+| `--log-level` | INFO | Уровень логирования: `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
 | `--cluster` | cluster | Имя кластера для отображения. |
 | `--tui` | false | Включить TUI. |
 | `--tui-refresh` | 1.0 | Интервал обновления TUI в секундах. |

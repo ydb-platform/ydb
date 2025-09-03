@@ -1093,6 +1093,8 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeInvalid:
+            // can't fill description
+ 
             break;
         };
 

@@ -40,6 +40,26 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& op = tx.GetInitiateIndexBuild();
     const auto& indexDesc = op.GetIndex();
 
+    switch (indexDesc.GetType()) {
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            // no feature flag, everything is fine
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            if (!context.SS->EnableInitialUniqueIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (!context.SS->EnableVectorIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+            }
+            break;
+        // no default section because proto2 enum can only have a valid value
+    }
+
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     const auto index = table.Child(indexDesc.GetName());
     {
@@ -72,26 +92,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
-    }
-
-    switch (indexDesc.GetType()) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            // no feature flag, everything is fine
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            if (!context.SS->EnableInitialUniqueIndex) {
-                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
-            }
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            if (!context.SS->EnableVectorIndex) {
-                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-            }
-            break;
-        // no default section because proto2 enum can only have a valid value
     }
 
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);

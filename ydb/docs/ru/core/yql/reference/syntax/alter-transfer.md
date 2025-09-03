@@ -18,7 +18,7 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 
 * `STATE` — [состояние](../../../concepts/transfer.md#pause-and-resume) трансфера. Возможные значения:
   * `PAUSED` — остановка трансфера.
-  * `STANDBY` — возобновление работы трансфера после приостановки.
+  * `ACTIVE` — возобновление работы трансфера после приостановки.
 
 * {% include [x](../_includes/transfer_flush.md) %}
 

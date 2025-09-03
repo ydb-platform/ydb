@@ -341,7 +341,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableRotateCdcStream()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpMoveTable:
-            Y_ABORT("no implementation for ESchemeOpMoveTable");
+            return *modifyScheme.MutableMoveTable()->MutableDstPath();
 
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
             Y_ABORT("no implementation for ESchemeOpMoveTableIndex");
@@ -466,6 +466,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpMoveTable:
             return true;
         default:
             return false;
@@ -480,6 +481,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         switch (scheme.GetOperationType()) {
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpMoveTable:
             return SplitPath(GetPathNameForScheme(scheme));
         default:
             return Merge(SplitPath(scheme.GetWorkingDir()), SplitPath(GetPathNameForScheme(scheme)));
@@ -984,8 +986,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
             {
                 auto toResolve = TPathToResolve(pbModifyScheme);
-                auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
-                toResolve.Path = SplitPath(dstDir);
+                toResolve.Path = workingDir;
                 toResolve.RequireAccess = NACLib::EAccessRights::CreateTable;
                 ResolveForACL.push_back(toResolve);
             }

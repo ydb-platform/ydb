@@ -129,8 +129,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         const auto& indexName = indexDescription.GetName();
         
         switch (indexDescription.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 // no feature flag, everything is fine
@@ -145,6 +143,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
                 }
                 break;
+            default:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDescription.GetType()))};
         }
 
         bool uniformIndexTable = false;

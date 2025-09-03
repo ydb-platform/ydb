@@ -41,8 +41,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& indexDesc = op.GetIndex();
 
     switch (indexDesc.GetType()) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             // no feature flag, everything is fine
@@ -57,6 +55,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
             }
             break;
+        default:
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);

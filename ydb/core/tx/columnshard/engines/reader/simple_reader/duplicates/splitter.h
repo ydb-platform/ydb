@@ -66,27 +66,16 @@ public:
             Borders.emplace_back(TBorder::Last(source->GetMeta().IndexKeyEnd(), id));
         }
         std::sort(Borders.begin(), Borders.end());
-        AFL_VERIFY(NumIntervals());
-    }
-
-    ui64 NumIntervals() const {
-        AFL_VERIFY(!Borders.empty());
-        return Borders.size() - 1;
-    }
-
-    const TBorder& GetIntervalFinish(const ui64 intervalIdx) const {
-        AFL_VERIFY(intervalIdx < NumIntervals());
-        return Borders[intervalIdx + 1];
     }
 
     template <class Callback>
     void ForEachInterval(Callback&& callback) const {
+        AFL_VERIFY(Borders.size());
         THashSet<ui64> currentPortions;
-        const TBorder* lastBorder = &Borders.front();
+        const TBorder* lastBorder = nullptr;
 
-        for (ui64 i = 1; i < Borders.size(); ++i) {
-            const auto& currentBorder = Borders[i];
-            if (!currentBorder.IsEquivalent(*lastBorder)) {
+        for (const auto& currentBorder : Borders) {
+            if (lastBorder && !currentBorder.IsEquivalent(*lastBorder)) {
                 if (!callback(TIntervalBordersView(lastBorder->MakeView(), currentBorder.MakeView()), currentPortions)) {
                     break;
                 }

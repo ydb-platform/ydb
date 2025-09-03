@@ -66,8 +66,7 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
 
 THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(
     const TIntervalBordersView& interval, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
-    NArrow::NMerger::TMergePartialStream merger(
-        Context.GetPKSchema(), nullptr, false, GetVersionColumnNames(), std::nullopt, GetMinUncommittedVersion());
+    NArrow::NMerger::TMergePartialStream merger(Context.GetPKSchema(), nullptr, false, GetVersionColumnNames(), std::nullopt, std::nullopt);
     merger.PutControlPoint(interval.GetEnd().GetIndexKeyVerified(Context.GetPortions()).BuildSortablePosition(), false);
     TFiltersBuilder filtersBuilder;
     THashMap<ui64, TRowRange> nonEmptySources;
@@ -81,7 +80,8 @@ THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInte
         };
 
         ui64 startOffset = findOffset(interval.GetBegin(), 0);
-        ui64 endOffsetExclusive = findOffset(interval.GetEnd(), startOffset);
+        ui64 endOffsetExclusive =
+            (startOffset != data->GetRecordsCount() ? findOffset(interval.GetEnd(), startOffset) : data->GetRecordsCount());
 
         merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(startOffset), portionId);
         filtersBuilder.AddSource(portionId);

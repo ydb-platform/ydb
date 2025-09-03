@@ -65,6 +65,7 @@ public:
         AFL_VERIFY(intervalIdx < Filters.size());
         AFL_VERIFY(!Filters[intervalIdx]);
         Filters[intervalIdx].emplace(filterExt);
+        ++FiltersAccumulated;
         if (IsReady()) {
             Complete();
         }

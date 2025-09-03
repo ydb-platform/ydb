@@ -73,14 +73,6 @@ private:
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }
-    NArrow::NMerger::TCursor GetMinUncommittedVersion() const {
-        return GetVersionBatch(TSnapshot::Max(), 0);
-    }
-    NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) const {
-        NArrow::TGeneralContainer batch(1);
-        IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
-    };
 
 public:
     TBuildDuplicateFilters(TBuildFilterContext&& context,

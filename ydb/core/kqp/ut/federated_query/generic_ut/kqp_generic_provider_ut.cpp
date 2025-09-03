@@ -692,5 +692,30 @@ namespace NKikimr::NKqp {
         Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {
             TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
+
+        Y_UNIT_TEST(TestConnectorNotConfigured) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
+            appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+
+            auto kikimr = std::make_shared<TKikimrRunner>(NKqp::TKikimrSettings(appConfig)
+                .SetEnableExternalDataSources(true)
+                .SetEnableScriptExecutionOperations(true)
+                .SetInitFederatedQuerySetupFactory(true));
+
+            CreateExternalDataSource(EProviderType::Ydb, kikimr);
+
+            const TString query = fmt::format(
+                R"(
+                SELECT * FROM {data_source_name}.{table_name};
+            )",
+                "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
+                "table_name"_a = DEFAULT_TABLE);
+
+            auto db = kikimr->GetQueryClient();
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/external_data_source.[example_1] data source generic doesn't exist, please contact internal support");
+        }
     }
 }

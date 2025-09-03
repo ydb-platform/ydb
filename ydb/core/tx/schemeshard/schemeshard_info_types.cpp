@@ -2087,23 +2087,34 @@ bool TTableInfo::CheckSplitByLoad(
         const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
-    if (IsBackup)
+    if (IsBackup) {
+        reason = "IsBackup";
         return false;
+    }
 
     // Don't split/merge restore tables
-    if (IsRestore)
+    if (IsRestore) {
+        reason = "IsRestore";
         return false;
+    }
 
-    if (!splitSettings.SplitByLoadEnabled)
+    if (!splitSettings.SplitByLoadEnabled) {
+        reason = "SplitByLoadDisabled";
         return false;
+    }
 
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
+    if (!Stats.PartitionStats.contains(shardIdx)) {
+        reason = "UnknownDataShard";
         return false;
-    if (!Shard2PartitionIdx.contains(shardIdx))
+    }
+    if (!Shard2PartitionIdx.contains(shardIdx)) {
+        reason = "ShardNotInIndex";
         return false;
+    }
 
     if (!IsSplitByLoadEnabled(mainTableForIndex)) {
+        reason = "SplitByLoadNotEnabledForTable";
         return false;
     }
 
@@ -2135,6 +2146,11 @@ bool TTableInfo::CheckSplitByLoad(
         Stats.PartitionStats.size() >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
+        reason = TStringBuilder() << "ConditionsNotMet"
+            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 

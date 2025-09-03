@@ -3457,8 +3457,17 @@ void TSchemeShard::PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
     db.Table<Schema::SecretsAlterData>().Key(pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId, TStreamingQueryInfo::TPtr streamingQuery) {
+void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    const auto path = PathsById.find(pathId);
+    Y_ABORT_UNLESS(path != PathsById.end());
+    Y_ABORT_UNLESS(path->second && path->second->IsStreamingQuery());
+
+    const auto streamingQueryIt = StreamingQueries.find(pathId);
+    Y_ABORT_UNLESS(streamingQueryIt != StreamingQueries.end());
+    const auto streamingQuery = streamingQueryIt->second;
+    Y_ABORT_UNLESS(streamingQuery);
 
     db.Table<Schema::StreamingQuery>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::StreamingQuery::AlterVersion>{streamingQuery->AlterVersion},

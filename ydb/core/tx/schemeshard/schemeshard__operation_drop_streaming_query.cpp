@@ -1,6 +1,9 @@
 #include "schemeshard__operation_common.h"
-#include "schemeshard__operation_common_streaming_query.h"
 #include "schemeshard_impl.h"
+
+#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard {
 
@@ -22,10 +25,11 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropStreamingQuery);
 
-        const TPathId& pathId = txState->TargetPathId;
-        const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
-        const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
 
+        const TPathId& pathId = txState->TargetPathId;
+        const auto pathPtr = context.SS->PathsById.at(pathId);
+        const auto parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());
@@ -33,10 +37,8 @@ public:
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistRemoveStreamingQuery(db, pathId);
 
-        auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside(context.SS);
-        DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
-        context.SS->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDirPtr, context);
 
         ++parentDirPtr->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDirPtr);
@@ -97,10 +99,9 @@ class TDropStreamingQuery : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath) {
-        auto checks = dstPath.Check();
-        checks
-            .NotEmpty()
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TOperationContext& context) {
+        const auto checks = dstPath.Check();
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -129,6 +130,15 @@ class TDropStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
+    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+        if (TString errorStr; !context.SS->CheckApplyIf(Transaction, errorStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
+            return false;
+        }
+
+        return true;
+    }
+
     void PersistDropStreamingQuery(const TOperationContext& context, const TPath& dstPath) const {
         const TPathId& pathId = dstPath.Base()->PathId;
 
@@ -143,9 +153,13 @@ class TDropStreamingQuery : public TSubOperation {
     }
 
     void CreateTransaction(const TOperationContext& context, const TPathId& streamingQueryPathId) const {
-        TTxState& txState = NStreamingQuery::CreateTransaction(OperationId, context, streamingQueryPathId, TTxState::TxDropStreamingQuery);
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropStreamingQuery, streamingQueryPathId);
+        txState.Shards.clear();
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
+        context.OnComplete.ActivateTx(OperationId);
     }
 
     void DropStreamingQueryPathElement(const TPath& dstPath) const {
@@ -174,17 +188,15 @@ public:
         const TPath& dstPath = dropDescription.HasId()
             ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
-        RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, Transaction, context));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, context));
+        RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
-        auto guard = context.DbGuard();
+        const auto guard = context.DbGuard();
         PersistDropStreamingQuery(context, dstPath);
         CreateTransaction(context, dstPath.Base()->PathId);
         DropStreamingQueryPathElement(dstPath);
-
-        context.OnComplete.ActivateTx(OperationId);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 

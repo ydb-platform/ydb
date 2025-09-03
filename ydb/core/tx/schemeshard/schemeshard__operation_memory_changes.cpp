@@ -152,6 +152,10 @@ void TMemoryChanges::GrabSecret(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TSecretInfo>(pathId, ss->Secrets, Secrets);
 }
 
+void TMemoryChanges::GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->StreamingQueries, StreamingQueries);
+}
+
 void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
 }

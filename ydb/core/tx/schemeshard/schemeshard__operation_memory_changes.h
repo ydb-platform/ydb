@@ -130,6 +130,7 @@ public:
     void GrabNewSecret(TSchemeShard* ss, const TPathId& pathId);
     void GrabSecret(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
     void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);

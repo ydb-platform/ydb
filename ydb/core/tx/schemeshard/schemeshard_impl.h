@@ -899,7 +899,7 @@ public:
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
     // StreamingQuery
-    void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId, TStreamingQueryInfo::TPtr streamingQuery);
+    void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);

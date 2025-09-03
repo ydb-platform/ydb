@@ -43,6 +43,8 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
+TString InvalidIndexType(NKikimrSchemeOp::EIndexType type);
+
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);

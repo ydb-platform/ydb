@@ -113,11 +113,13 @@ namespace {
         // FIXME: specify action_uid
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
         actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
-        actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
+        actionState.set_details(cmsAction.GetIssue().GetMessage());
 
         switch (cmsAction.GetType()) {
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
+        case NKikimrCms::TAction::CORDON_NODE:
+            return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_cordon_action());
         default:
             return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         }
@@ -231,6 +233,10 @@ protected:
 
     void Close(const TActorId& self) {
         NTabletPipe::CloseAndForgetClient(TActorIdentity(self), HivePipeActor);
+    }
+
+    void Shutdown(const TActorContext& ctx) {
+        NTabletPipe::ShutdownClient(ctx, HivePipeActor);
     }
 
     ui64 NewCookie() {
@@ -469,6 +475,13 @@ class TCreateMaintenanceTask
         };
     }
 
+    template <>
+    std::vector<EScopeCase> SupportedScopes<EActionCase::kCordonAction>() {
+        return {
+            EScopeCase::kNodeId,
+        };
+    }
+
     template <EActionCase Action>
     bool ValidateScope(const Ydb::Maintenance::ActionScope& scope) {
         const auto supportedScopes = SupportedScopes<Action>();
@@ -486,6 +499,8 @@ class TCreateMaintenanceTask
             return ValidateScope<EActionCase::kLockAction>(action.lock_action().scope());
         case EActionCase::kDrainAction:
             return ValidateScope<EActionCase::kDrainAction>(action.drain_action().scope());
+        case EActionCase::kCordonAction:
+            return ValidateScope<EActionCase::kCordonAction>(action.cordon_action().scope());
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown action");
             return false;
@@ -575,6 +590,12 @@ class TCreateMaintenanceTask
         ConvertScope(action.scope(), cmsAction);
     }
 
+    static void ConvertAction(const Ydb::Maintenance::CordonAction& action, NKikimrCms::TAction& cmsAction) {
+        cmsAction.SetType(NKikimrCms::TAction::CORDON_NODE);
+
+        ConvertScope(action.scope(), cmsAction);
+    }
+
     void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
             NKikimrCms::TPermissionRequest& cmsRequest)
     {
@@ -605,8 +626,12 @@ class TCreateMaintenanceTask
                     const int actionNo = cmsRequest.ActionsSize();
                     ConvertAction(action.drain_action(), *cmsRequest.AddActions());
                     const auto nodeId = action.drain_action().scope().node_id();
-                    Send(HivePipe(SelfId()), new TEvHive::TEvDrainNode(nodeId), 0, actionNo);
+                    NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvDrainNode(nodeId), actionNo);
                     PendingDrainActions.insert(actionNo);
+                } else if (action.has_cordon_action()) {
+                    ConvertAction(action.cordon_action(), *cmsRequest.AddActions());
+                    const auto nodeId = action.cordon_action().scope().node_id();
+                    NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId));
                 } else {
                     Y_ABORT("unreachable");
                 }
@@ -680,7 +705,7 @@ public:
     }
 
     void PassAway() override {
-        THiveInteractor::Close(SelfId());
+        THiveInteractor::Shutdown(TActivationContext::AsActorContext());
         TBase::PassAway();
     }
 
@@ -827,7 +852,7 @@ public:
                 PendingDrainActions[cookie] = actionIdx;
                 ui32 nodeId = FromString(permission.Action.GetHost());
 
-                Send(HivePipe(SelfId()), new TEvHive::TEvRequestDrainInfo(nodeId), 0, cookie);
+                NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvRequestDrainInfo(nodeId), cookie);
             }
         }
     }
@@ -915,6 +940,9 @@ public:
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
         } else if (seqNo == expectedSeqNo && record.GetDrainInProgress()) {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_IN_PROGRESS);
+            if (record.HasProgress()) {
+                actionInfo.set_details(Sprintf("Progress: %.2f%%", record.GetProgress()));
+            }
         } else {
             actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_UNSPECIFIED);
         }
@@ -970,10 +998,12 @@ public:
 
 }; // TListMaintenanceTasks
 
-class TDropMaintenanceTask: public TAdapterActor<
+class TDropMaintenanceTask
+    : public TAdapterActor<
         TDropMaintenanceTask,
         TEvCms::TEvDropMaintenanceTaskRequest,
         TEvCms::TEvManageMaintenanceTaskResponse>
+    , THiveInteractor
 {
     void DropRequest(const TTaskInfo& task) {
         auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
@@ -991,13 +1021,23 @@ class TDropMaintenanceTask: public TAdapterActor<
 
         for (const auto& id : task.Permissions) {
             cmsRequest->Record.AddPermissions(id);
+            const auto& permission = GetCmsState()->Permissions.at(id);
+            if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
+                permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) {
+                ui32 nodeId = FromString(permission.Action.GetHost());
+                NTabletPipe::SendData(SelfId(), HivePipe(SelfId()), new TEvHive::TEvSetDown(nodeId, false));
+            }
         }
 
         Send(CmsActorId, std::move(cmsRequest));
     }
 
 public:
-    using TBase::TBase;
+    TDropMaintenanceTask(TEvCms::TEvDropMaintenanceTaskRequest::TPtr& ev, const TActorId& cmsActorId, TCmsStatePtr cmsState = nullptr)
+        : TBase(ev, cmsActorId, cmsState)
+        , THiveInteractor(this)
+    {
+    }
 
     void Bootstrap() {
         auto cmsState = GetCmsState();
@@ -1049,6 +1089,22 @@ public:
         default:
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetStatus().GetReason());
         }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        THiveInteractor::Close(SelfId());
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
+        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
+        if (msg->Status != NKikimrProto::OK) {
+            THiveInteractor::Close(SelfId());
+        }
+    }
+
+    void PassAway() override {
+        THiveInteractor::Shutdown(TActivationContext::AsActorContext());
+        TBase::PassAway();
     }
 
 }; // TDropMaintenanceTask

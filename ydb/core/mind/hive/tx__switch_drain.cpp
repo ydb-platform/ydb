@@ -71,7 +71,10 @@ public:
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (ShouldStartDrain) {
-            Self->StartHiveDrain(NodeId, std::move(Settings));
+            auto* node = Self->FindNode(NodeId);
+            if (node) {
+                node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
+            }
             if (Initiator) {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeAck(SeqNo), 0, Cookie);
             }

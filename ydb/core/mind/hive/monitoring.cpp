@@ -9,6 +9,7 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
+#include "tx__set_down.cpp"
 
 namespace NKikimr {
 namespace NHive {
@@ -2585,7 +2586,7 @@ public:
     }
 };
 
-class TTxMonEvent_SetDown : public TTransactionBase<THive>, public TLoggedMonTransaction {
+class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
     const TActorId Source;
     const TNodeId NodeId;
@@ -2593,7 +2594,7 @@ public:
     TString Response;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
-        : TBase(hive)
+        : TTxSetDown(nodeId, down, hive)
         , TLoggedMonTransaction(ev, hive)
         , Source(source)
         , NodeId(nodeId)
@@ -2604,10 +2605,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        TNodeInfo* node = Self->FindNode(NodeId);
-        if (node != nullptr) {
-            node->SetDown(Down);
-            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
+        if (SetDown(db)) {
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;

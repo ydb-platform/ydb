@@ -651,4 +651,10 @@ message TEvResponseDrainInfo {
     optional uint32 NodeId = 1;
     optional uint64 DrainSeqNo = 2;
     optional bool DrainInProgress = 3;
+    optional float Progress = 4;
+}
+
+message TEvSetDown {
+    optional uint32 NodeId = 1;
+    optional bool Down = 2;
 }

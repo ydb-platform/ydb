@@ -123,13 +123,13 @@ message LockAction {
     google.protobuf.Duration duration = 2;
 }
 
-// Draining load away
+// Moving tablets away.
 message DrainAction {
     ActionScope scope = 1;
 }
 
-// Marking as down so that no new load runs there
-message DownAction {
+// Ensuring no new tablets run there.
+message CordonAction {
     ActionScope scope = 1;
 }
 
@@ -137,7 +137,7 @@ message Action {
     oneof action {
         LockAction lock_action = 1;
         DrainAction drain_action = 2;
-        DownAction down_action = 3;
+        CordonAction cordon_action = 3;
     }
 }
 
@@ -198,7 +198,7 @@ message ActionState {
     ActionUid action_uid = 2;
     ActionStatus status = 3;
     ActionReason reason = 4;
-    string reason_details = 6;
+    string details = 6;
     google.protobuf.Timestamp deadline = 5;
 }
 

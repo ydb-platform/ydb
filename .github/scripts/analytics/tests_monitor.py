@@ -381,13 +381,34 @@ def main():
                             branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
                             print(f"Converted from microseconds: {branch_creation_date}")
                         else:  # Seconds or milliseconds
-                            if earliest_run > 1000000000000:  # Milliseconds
+                        if earliest_run > MICROSECONDS_THRESHOLD:  # Microseconds
+                            timestamp_seconds = earliest_run / 1000000
+                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                            print(f"Converted from microseconds: {branch_creation_date}")
+                        else:  # Seconds or milliseconds
+                            if earliest_run > MILLISECONDS_THRESHOLD:  # Milliseconds
                                 timestamp_seconds = earliest_run / 1000
                                 branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
                                 print(f"Converted from milliseconds: {branch_creation_date}")
                             else:  # Seconds
                                 branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
-                                print(f"Converted from seconds: {branch_creation_date}")
+                        # Convert timestamp to datetime with error handling
+                        try:
+                            if earliest_run > 1000000000000000:  # Microseconds
+                                timestamp_seconds = earliest_run / 1000000
+                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                print(f"Converted from microseconds: {branch_creation_date}")
+                            else:  # Seconds or milliseconds
+                                if earliest_run > 1000000000000:  # Milliseconds
+                                    timestamp_seconds = earliest_run / 1000
+                                    branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                    print(f"Converted from milliseconds: {branch_creation_date}")
+                                else:  # Seconds
+                                    branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                                    print(f"Converted from seconds: {branch_creation_date}")
+                        except (OSError, OverflowError, ValueError) as e:
+                            print(f"Error converting timestamp {earliest_run} to datetime: {e}")
+                            branch_creation_date = None
                         break
                 except StopIteration:
                     break

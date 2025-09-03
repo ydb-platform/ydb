@@ -16,9 +16,14 @@ namespace NStat {
 static constexpr ui64 FirstRoundCookie = 1;
 static constexpr ui64 SecondRoundCookie = 2;
 
-THttpRequest::THttpRequest(ERequestType requestType, const std::unordered_map<EParamType, TString>& params, const TActorId& replyToActorId)
+THttpRequest::THttpRequest(
+    ERequestType requestType,
+    const std::unordered_map<EParamType, TString>& params,
+    EResponseContentType contentType,
+    const TActorId& replyToActorId)
     : RequestType(requestType)
     , Params(params)
+    , ContentType(contentType)
     , ReplyToActorId(replyToActorId)
 {}
 
@@ -44,7 +49,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     if (navigate->Cookie == SecondRoundCookie) {
         if (entry.Status != TNavigate::EStatus::Ok) {
-            HttpReply("Error navigating domain key: " + ToString(entry.Status));
+            HttpReplyError("Error navigating domain key: " + ToString(entry.Status));
             return;
         }
 
@@ -55,16 +60,16 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
     if (entry.Status != TNavigate::EStatus::Ok) {
         switch (entry.Status) {
         case TNavigate::EStatus::PathErrorUnknown:
-            HttpReply("Path does not exist");
+            HttpReplyError("Path does not exist");
             return;
         case TNavigate::EStatus::PathNotPath:
-            HttpReply("Invalid path");
+            HttpReplyError("Invalid path");
             return;
         case TNavigate::EStatus::PathNotTable:
-            HttpReply("Path is not a table");
+            HttpReplyError("Path is not a table");
             return;
         default:
-            HttpReply("Error navigating path: " + ToString(entry.Status));
+            HttpReplyError("Error navigating path: " + ToString(entry.Status));
             return;
         }
     }
@@ -107,7 +112,7 @@ void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
 
     switch (record.GetStatus()) {
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED:
-        HttpReply("Status is unspecified");
+        HttpReplyError("Status is unspecified");
         break;
     case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION:
         HttpReply("No analyze operation");
@@ -129,7 +134,7 @@ void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
         if (!msg->Success
             || msg->StatResponses.empty() || !msg->StatResponses[0].Success
             || msg->StatResponses[0].CountMinSketch.CountMin == nullptr) {
-            HttpReply("Error occurred while loading column statistics.");
+            HttpReplyError("Error occurred while loading column statistics.");
             return;
         }
 
@@ -141,7 +146,7 @@ void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
         TCell cell;
         TString error;
         if (!NFormats::MakeCell(cell, value, typeInfo, pool, error)) {
-            HttpReply("Cell value parsing error: " + error);
+            HttpReplyError("Cell value parsing error: " + error);
             return;
         }
 
@@ -153,7 +158,7 @@ void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
     case ERequestType::PROBE_BASE_STATS: {
         if (!msg->Success
             || msg->StatResponses.empty() || !msg->StatResponses[0].Success) {
-            HttpReply("Error occurred while loading base statistics.");
+            HttpReplyError("Error occurred while loading base statistics.");
             return;
         }
 
@@ -166,13 +171,13 @@ void THttpRequest::Handle(TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
         return;
     }
     default:
-        HttpReply("Received unexpected TEvGetStatisticsResult msg");
+        HttpReplyError("Received unexpected TEvGetStatisticsResult msg");
         return;
     }
 }
 
 void THttpRequest::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    HttpReply("Delivery problem");
+    HttpReplyError("Delivery problem");
 }
 
 void THttpRequest::DoRequest(const TNavigate::TEntry& entry) {
@@ -194,7 +199,7 @@ void THttpRequest::DoRequest(const TNavigate::TEntry& entry) {
 
 void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
     if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
-        HttpReply("No statistics aggregator");
+        HttpReplyError("No statistics aggregator");
         return;
     }
 
@@ -214,7 +219,7 @@ void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
 
 void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
     if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
-        HttpReply("No statistics aggregator");
+        HttpReplyError("No statistics aggregator");
         return;
     }
 
@@ -224,7 +229,7 @@ void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
     TULID operationId;
 
     if (operationIdParam.empty() || !operationId.ParseString(operationIdParam)) {
-        HttpReply(TString("Wrong OperationId: ") + (operationIdParam.empty() ? "Empty" : operationIdParam));
+        HttpReplyError(TString("Wrong OperationId: ") + (operationIdParam.empty() ? "Empty" : operationIdParam));
     }
 
     auto status = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
@@ -237,12 +242,12 @@ void THttpRequest::DoStatus(const TNavigate::TEntry& entry) {
 void THttpRequest::DoProbeDoCountMinSketch(const TNavigate::TEntry& entry) {
     const auto& columnName = Params[EParamType::COLUMN_NAME];
     if (columnName.empty()) {
-        HttpReply("Column is not set");
+        HttpReplyError("Column is not set");
         return;
     }
 
     if (Params[EParamType::CELL_VALUE].empty()) {
-        HttpReply("Value is not set");
+        HttpReplyError("Value is not set");
         return;
     }
 
@@ -262,7 +267,7 @@ void THttpRequest::DoProbeDoCountMinSketch(const TNavigate::TEntry& entry) {
         }
     }
 
-    HttpReply("Column not found");
+    HttpReplyError("Column not found");
 }
 
 void THttpRequest::DoProbeBaseStats(const TNavigate::TEntry& entry) {
@@ -276,7 +281,35 @@ void THttpRequest::DoProbeBaseStats(const TNavigate::TEntry& entry) {
 }
 
 void THttpRequest::HttpReply(const TString& msg) {
-    Send(ReplyToActorId, new NMon::TEvHttpInfoRes(msg));
+    switch (ContentType) {
+    case EResponseContentType::HTML:
+        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(msg));
+        break;
+    case EResponseContentType::JSON: {
+        TStringStream out;
+        out << NMonitoring::HTTPOKJSON << msg;
+        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(out.Str(), 0, NMon::IEvHttpInfoRes::Custom));
+        break;
+    }
+    }
+    PassAway();
+}
+
+void THttpRequest::HttpReplyError(const TString& msg) {
+    switch (ContentType) {
+    case EResponseContentType::HTML:
+        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(msg));
+        break;
+    case EResponseContentType::JSON: {
+        TStringStream out;
+        out << "HTTP/1.1 500 Internal Server Error\r\n"
+            << "Content-Type: application/json\r\nConnection: Close\r\n\r\n";
+        auto json = NJson::TJsonMap({{"error", msg}});
+        NJson::WriteJson(&out, &json);
+        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(out.Str(), 0, NMon::IEvHttpInfoRes::Custom));
+        break;
+    }
+    }
     PassAway();
 }
 

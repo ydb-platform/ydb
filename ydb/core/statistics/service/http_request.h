@@ -37,7 +37,16 @@ public:
         CELL_VALUE
     };
 
-    THttpRequest(ERequestType requestType, const std::unordered_map<EParamType, TString>& params, const TActorId& replyToActorId);
+    enum class EResponseContentType {
+        HTML,
+        JSON,
+    };
+
+    THttpRequest(
+        ERequestType requestType,
+        const std::unordered_map<EParamType, TString>& params,
+        EResponseContentType contentType,
+        const TActorId& replyToActorId);
 
 private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -67,12 +76,14 @@ private:
     void DoProbeBaseStats(const TNavigate::TEntry& entry);
 
     void HttpReply(const TString& msg);
+    void HttpReplyError(const TString& msg);
 
     void PassAway();
 
 private:
     const ERequestType RequestType;
     std::unordered_map<EParamType, TString> Params;
+    const EResponseContentType ContentType;
     const TActorId ReplyToActorId;
 };
 

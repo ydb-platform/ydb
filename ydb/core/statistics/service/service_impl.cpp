@@ -1538,7 +1538,11 @@ private:
 
         const auto* msg = ev->CastAsLocal<NMon::TEvHttpInfoRes>();
         if (msg != nullptr) {
-            ReplyToMonitoring(msg->Answer);
+            if (msg->ContentType == NMon::IEvHttpInfoRes::Html) {
+                ReplyToMonitoring(msg->Answer);
+            } else {
+                Send(MonitoringActorId, ev->Release());
+            }
         }
     }
 
@@ -1566,7 +1570,7 @@ private:
         const auto& request = ev->Get()->Request;
         const auto& params = request.GetParams();
 
-        auto getRequestParam = [&params](const TString& name){
+        auto getRequestParam = [&params](const TStringBuf name) {
             auto it = params.find(name);
             return it != params.end() ? it->second : TString();
         };
@@ -1591,7 +1595,9 @@ private:
 
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
                 { THttpRequest::EParamType::PATH, path }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
         } else if (action == "status") {
             if (!EnableColumnStatistics) {
                 ReplyToMonitoring("Column statistics is disabled");
@@ -1607,7 +1613,9 @@ private:
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::STATUS, {
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::OPERATION_ID, operationId }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
         } else if (action == "probe") {
             if (!EnableColumnStatistics) {
                 ReplyToMonitoring("Column statistics is disabled");
@@ -1637,17 +1645,32 @@ private:
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::COLUMN_NAME, column },
                 { THttpRequest::EParamType::CELL_VALUE, cell }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
         } else if (action == "probe_base_stats") {
             if (!EnableStatistics) {
                 ReplyToMonitoring("Base statistics is disabled");
                 return;
             }
 
+            auto respContentType = THttpRequest::EResponseContentType::HTML;
+            if (params.Has("json")) {
+                ui32 json = 0;
+                if (!TryFromString(params.Get("json"), json)) {
+                    return ReplyToMonitoring("Failed to parse json parameter -- must be an integer");
+                }
+                if (json) {
+                    respContentType = THttpRequest::EResponseContentType::JSON;
+                }
+            }
+
             HttpRequestActorId = Register(new THttpRequest(
                 THttpRequest::ERequestType::PROBE_BASE_STATS, {
                     { THttpRequest::EParamType::PATH, path },
-                }, SelfId()));
+                },
+                respContentType,
+                SelfId()));
         } else {
             ReplyToMonitoring("Wrong 'action' parameter value");
         }

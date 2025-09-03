@@ -17,8 +17,10 @@ void AnalyzeTest(bool isServerless) {
     const auto sender = runtime.AllocateEdgeActor();
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
-        { THttpRequest::EParamType::PATH, tableInfo.Path }
-    }, sender));
+            { THttpRequest::EParamType::PATH, tableInfo.Path }
+        },
+        THttpRequest::EResponseContentType::HTML,
+        sender));
 
     auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
     auto msg = static_cast<NMon::TEvHttpInfoRes*>(res->Get());
@@ -60,7 +62,9 @@ void ProbeTest(bool isServerless) {
             { THttpRequest::EParamType::PATH, tableInfo.Path },
             { THttpRequest::EParamType::COLUMN_NAME, columnName },
             { THttpRequest::EParamType::CELL_VALUE, "1" }
-        }, sender));
+        },
+        THttpRequest::EResponseContentType::HTML,
+        sender));
     auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
     auto msg = static_cast<NMon::TEvHttpInfoRes*>(res->Get());
 
@@ -87,9 +91,11 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
         const auto sender = runtime.AllocateEdgeActor();
         const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToString();
         runtime.Register(new THttpRequest(THttpRequest::ERequestType::STATUS, {
-            { THttpRequest::EParamType::PATH, tableInfo.Path },
-            { THttpRequest::EParamType::OPERATION_ID, operationId }
-        }, sender));
+                { THttpRequest::EParamType::PATH, tableInfo.Path },
+                { THttpRequest::EParamType::OPERATION_ID, operationId }
+            },
+            THttpRequest::EResponseContentType::HTML,
+            sender));
 
         auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
         auto msg = static_cast<NMon::TEvHttpInfoRes*>(res->Get());

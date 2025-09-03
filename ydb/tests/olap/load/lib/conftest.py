@@ -380,7 +380,8 @@ class LoadSuiteBase:
         result.iterations[0].time = time() - cls._setup_start_time
         query_name = '_Verification'
         result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
-        nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+        cls.nodes_on_start = YdbCluster.get_cluster_nodes(db_only=False)
+        nodes_start_time = [n.start_time for n in cls.nodes_on_start]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)

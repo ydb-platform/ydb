@@ -161,7 +161,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         try:
             # Получаем все уникальные хосты кластера
-            nodes = YdbCluster.get_cluster_nodes()
+            nodes = cls.nodes_on_start
             unique_hosts = set(node.host for node in nodes)
 
             if enable_nemesis:
@@ -945,6 +945,9 @@ class WorkloadTestBase(LoadSuiteBase):
             preparation_result,
             nemesis,
         )
+
+        self._stop_nemesis()
+        YdbCluster.wait_ydb_alive(30)
 
         # ФАЗА 3: РЕЗУЛЬТАТЫ
         final_result = self._finalize_workload_results(

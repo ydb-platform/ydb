@@ -560,7 +560,7 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
 
     auto resultStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TVector<TExprNode::TPtr> nulls(resultStructType->GetSize());
-    auto remapList = [&ctx, &nulls, resultStructType](TExprNode::TPtr input, const TTypeAnnotationNode* inputType) -> TExprNode::TPtr {
+    auto remapList = [&ctx, &optCtx, &nulls, resultStructType](TExprNode::TPtr input, const TTypeAnnotationNode* inputType) -> TExprNode::TPtr {
         auto pos = input->Pos();
         auto arg = ctx.NewArgument(pos, "item");
         auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -588,7 +588,7 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
                 else {
                     auto myType = inputStructType->GetItems()[*myPos]->GetItemType();
                     member = ctx.NewCallable(pos, "Member", { arg, name });
-                    if (TrySilentConvertTo(member, *myType, *resultType, ctx) == IGraphTransformer::TStatus::Error) {
+                    if (TrySilentConvertTo(member, *myType, *resultType, ctx, *optCtx.Types) == IGraphTransformer::TStatus::Error) {
                         err = TIssue(
                             ctx.GetPosition(pos),
                             TStringBuilder()

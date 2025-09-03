@@ -3060,7 +3060,7 @@ struct TBuiltinFuncData {
             {"parsetype", {"ParseType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlParseType>()}},
             {"ensuretype", {"EnsureType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<true>>()}},
             {"ensureconvertibleto", {"EnsureConvertibleTo", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<false>>()}},
-            {"ensure", {"Ensure", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Ensure", 2, 3)}},
+            {"ensure", {"Ensure", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EnsureWarn", 2, 3)}},
             {"evaluateexpr", {"EvaluateExpr", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1)}},
             {"evaluateatom", {"EvaluateAtom", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1)}},
             {"evaluatetype", {"EvaluateType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1)}},

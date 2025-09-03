@@ -95,7 +95,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
-    SpaceWatcher = new TSpaceWatcher(this);
+    SpaceWatcher = std::make_shared<TSpaceWatcher>(this);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

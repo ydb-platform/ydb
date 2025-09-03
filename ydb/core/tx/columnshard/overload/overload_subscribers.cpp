@@ -8,7 +8,7 @@ namespace NKikimr::NColumnShard::NOverload {
 
 namespace {
 
-void SendViaSession(const TActorId& sessionId,
+[[maybe_unused]] void SendViaSession(const TActorId& sessionId,
     const TActorId& target,
     const TActorId& src,
     IEventBase* event,
@@ -26,26 +26,58 @@ void SendViaSession(const TActorId& sessionId,
 
 } // namespace
 
-void TOverloadSubscribers::AddPipeServer(const NActors::TActorId& serverId, const NActors::TActorId& interconnectSession) {
-    auto res = PipeServers.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(serverId),
-        std::forward_as_tuple());
-    AFL_VERIFY(res.second)("serverId", serverId);
+// void TOverloadSubscribers::AddPipeServer(const NActors::TActorId& serverId, const NActors::TActorId& interconnectSession) {
+//     auto res = PipeServers.emplace(
+//         std::piecewise_construct,
+//         std::forward_as_tuple(serverId),
+//         std::forward_as_tuple());
+//     AFL_VERIFY(res.second)("serverId", serverId);
 
-    res.first->second.InterconnectSession = interconnectSession;
+// res.first->second.InterconnectSession = interconnectSession;
+// }
+
+// void TOverloadSubscribers::RemovePipeServer(const NActors::TActorId& serverId) {
+//     auto it = PipeServers.find(serverId);
+//     AFL_VERIFY(it != PipeServers.end())("serverId", serverId);
+
+// DiscardOverloadSubscribers(it->second);
+
+// PipeServers.erase(it);
+// }
+
+void TOverloadSubscribers::AddOverloadSubscriber(const TColumnShardInfo& columnShardInfo,
+    const TPipeServerInfo& pipeServerInfo,
+    const TOverloadSubscriberInfo& overloadSubscriberInfo) {
+    AFL_VERIFY(pipeServerInfo.PipeServerId == overloadSubscriberInfo.PipeServerId);
+
+    auto& columnShardSubscriber = ColumnShardsOverloadSubscribers[columnShardInfo.ColumnShardId];
+    auto subscriberInfoIt = columnShardSubscriber.find(pipeServerInfo.PipeServerId);
+    if (subscriberInfoIt == columnShardSubscriber.end()) {
+        subscriberInfoIt = columnShardSubscriber.emplace(pipeServerInfo.PipeServerId, TInfo{
+            .InterconnectSessionId = pipeServerInfo.InterconnectSessionId,
+            .ColumnShardTabletId = columnShardInfo.TabletId,
+        }).first;
+    } else {
+        auto& info = subscriberInfoIt->second;
+        AFL_VERIFY(info.InterconnectSessionId == pipeServerInfo.InterconnectSessionId);
+        AFL_VERIFY(info.ColumnShardTabletId == columnShardInfo.TabletId);
+    }
+    auto& info = subscriberInfoIt->second;
+    info.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId] = overloadSubscriberInfo.SeqNo;
 }
 
-void TOverloadSubscribers::RemovePipeServer(const NActors::TActorId& serverId) {
-    auto it = PipeServers.find(serverId);
-    AFL_VERIFY(it != PipeServers.end())("serverId", serverId);
-
-    DiscardOverloadSubscribers(it->second);
-
-    PipeServers.erase(it);
+void TOverloadSubscribers::RemoveOverloadSubscriber(const TColumnShardInfo& columnShardInfo, const TOverloadSubscriberInfo& overloadSubscriberInfo) {
+    Y_UNUSED(columnShardInfo, overloadSubscriberInfo);
 }
 
-void TOverloadSubscribers::DiscardOverloadSubscribers(TPipeServerInfo& pipeServer) {
+void TOverloadSubscribers::RemovePipeServer(const TColumnShardInfo& columnShardInfo, const TPipeServerInfo& pipeServerInfo) {
+    Y_UNUSED(columnShardInfo, pipeServerInfo);
+}
+
+void TOverloadSubscribers::NotifyAllOverloadSubscribers() {
+}
+
+void TOverloadSubscribers::DiscardOverloadSubscribers(TPipeServerInfo1& pipeServer) {
     for (auto it = pipeServer.OverloadSubscribers.begin(); it != pipeServer.OverloadSubscribers.end(); ++it) {
         TOverloadSubscriber& entry = it->second;
         EnumerateRejectReasons(entry.Reasons, [&](ERejectReason reason) {
@@ -84,82 +116,81 @@ bool TOverloadSubscribers::HasPipeServer(const TActorId& pipeServerId) {
     return PipeServers.contains(pipeServerId);
 }
 
-void TOverloadSubscribers::NotifyOverloadSubscribers(ERejectReason reason, const TActorId& sourceActorId, ui64 sourceTabletId) {
-    if (OverloadSubscribersByReason[RejectReasonIndex(reason)] == 0) {
-        // Avoid spending time when we know it is pointless
-        return;
-    }
-    ERejectReasons reasons = MakeRejectReasons(reason);
+// void TOverloadSubscribers::NotifyOverloadSubscribers(ERejectReason reason, const TActorId& sourceActorId, ui64 sourceTabletId) {
+//     if (OverloadSubscribersByReason[RejectReasonIndex(reason)] == 0) {
+//         // Avoid spending time when we know it is pointless
+//         return;
+//     }
+//     ERejectReasons reasons = MakeRejectReasons(reason);
 
-    TPipeServersWithOverloadSubscribers left;
-    while (!PipeServersWithOverloadSubscribers.Empty()) {
-        TPipeServerInfo* pipeServer = PipeServersWithOverloadSubscribers.PopFront();
-        for (auto it = pipeServer->OverloadSubscribers.begin(); it != pipeServer->OverloadSubscribers.end();) {
-            auto current = it++;
-            const TActorId& actorId = current->first;
-            TOverloadSubscriber& entry = current->second;
-            if ((entry.Reasons & reasons) != reasons) {
-                // Reasons don't match
-                continue;
-            }
-            entry.Reasons -= reasons;
-            OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
-            if (entry.Reasons == ERejectReasons::None) {
-                SendViaSession(
-                    pipeServer->InterconnectSession,
-                    actorId,
-                    sourceActorId,
-                    new TEvColumnShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
-                pipeServer->OverloadSubscribers.erase(current);
-            }
-        }
-        if (!pipeServer->OverloadSubscribers.empty()) {
-            left.PushBack(pipeServer);
-        }
-    }
-    PipeServersWithOverloadSubscribers.Append(left);
-}
+//     TPipeServersWithOverloadSubscribers left;
+//     while (!PipeServersWithOverloadSubscribers.Empty()) {
+//         TPipeServerInfo* pipeServer = PipeServersWithOverloadSubscribers.PopFront();
+//         for (auto current = pipeServer->OverloadSubscribers.begin(); current != pipeServer->OverloadSubscribers.end(); ++current) {
+//             const TActorId& actorId = current->first;
+//             TOverloadSubscriber& entry = current->second;
+//             if ((entry.Reasons & reasons) != reasons) {
+//                 // Reasons don't match
+//                 continue;
+//             }
+//             entry.Reasons -= reasons;
+//             OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
+//             if (entry.Reasons == ERejectReasons::None) {
+//                 SendViaSession(
+//                     pipeServer->InterconnectSession,
+//                     actorId,
+//                     sourceActorId,
+//                     new TEvColumnShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
+//                 pipeServer->OverloadSubscribers.erase(current);
+//             }
+//         }
+//         if (!pipeServer->OverloadSubscribers.empty()) {
+//             left.PushBack(pipeServer);
+//         }
+//     }
+//     PipeServersWithOverloadSubscribers.Append(left);
+// }
 
-void TOverloadSubscribers::NotifyAllOverloadSubscribers(const TActorId& sourceActorId, ui64 sourceTabletId) {
-    bool clearedSubscribers = false;
-    while (!PipeServersWithOverloadSubscribers.Empty()) {
-        TPipeServerInfo* pipeServer = PipeServersWithOverloadSubscribers.PopFront();
-        for (auto it = pipeServer->OverloadSubscribers.begin(); it != pipeServer->OverloadSubscribers.end(); ++it) {
-            const TActorId& actorId = it->first;
-            TOverloadSubscriber& entry = it->second;
-            SendViaSession(
-                pipeServer->InterconnectSession,
-                actorId,
-                sourceActorId,
-                new TEvColumnShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
-        }
-        pipeServer->OverloadSubscribers.clear();
-        clearedSubscribers = true;
-    }
+// void TOverloadSubscribers::NotifyAllOverloadSubscribers(const TActorId& sourceActorId, ui64 sourceTabletId) {
+//     bool clearedSubscribers = false;
+//     while (!PipeServersWithOverloadSubscribers.Empty()) {
+//         TPipeServerInfo* pipeServer = PipeServersWithOverloadSubscribers.PopFront();
+//         for (auto it = pipeServer->OverloadSubscribers.begin(); it != pipeServer->OverloadSubscribers.end(); ++it) {
+//             const TActorId& actorId = it->first;
+//             TOverloadSubscriber& entry = it->second;
+//             SendViaSession(
+//                 pipeServer->InterconnectSession,
+//                 actorId,
+//                 sourceActorId,
+//                 new TEvColumnShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
+//         }
+//         pipeServer->OverloadSubscribers.clear();
+//         clearedSubscribers = true;
+//     }
 
-    if (clearedSubscribers) {
-        for (int i = 0; i < RejectReasonCount; ++i) {
-            OverloadSubscribersByReason[i] = 0;
-        }
-    }
-}
+// if (clearedSubscribers) {
+//     for (int i = 0; i < RejectReasonCount; ++i) {
+//         OverloadSubscribersByReason[i] = 0;
+//     }
+// }
+// }
 
-void TOverloadSubscribers::RemoveOverloadSubscriber(TSeqNo seqNo, const TActorId& recipient, const TActorId& sender) {
-    if (auto* pipeServer = PipeServers.FindPtr(recipient)) {
-        auto it = pipeServer->OverloadSubscribers.find(sender);
-        if (it != pipeServer->OverloadSubscribers.end()) {
-            if (it->second.SeqNo == seqNo) {
-                EnumerateRejectReasons(it->second.Reasons, [&](ERejectReason reason) {
-                    OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
-                });
-                pipeServer->OverloadSubscribers.erase(it);
-                if (pipeServer->OverloadSubscribers.empty()) {
-                    PipeServersWithOverloadSubscribers.Remove(pipeServer);
-                }
-            }
-        }
-    }
-}
+// void TOverloadSubscribers::RemoveOverloadSubscriber(TSeqNo seqNo, const TActorId& recipient, const TActorId& sender) {
+//     if (auto* pipeServer = PipeServers.FindPtr(recipient)) {
+//         auto it = pipeServer->OverloadSubscribers.find(sender);
+//         if (it != pipeServer->OverloadSubscribers.end()) {
+//             if (it->second.SeqNo == seqNo) {
+//                 EnumerateRejectReasons(it->second.Reasons, [&](ERejectReason reason) {
+//                     OverloadSubscribersByReason[RejectReasonIndex(reason)]--;
+//                 });
+//                 pipeServer->OverloadSubscribers.erase(it);
+//                 if (pipeServer->OverloadSubscribers.empty()) {
+//                     PipeServersWithOverloadSubscribers.Remove(pipeServer);
+//                 }
+//             }
+//         }
+//     }
+// }
 
 void TOverloadSubscribers::ScheduleNotification(const TActorId& actorId) {
     if (InFlightNotification) {

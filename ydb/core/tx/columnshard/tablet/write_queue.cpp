@@ -36,9 +36,9 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     owner->UpdateOverloadsStatus();
     ctx.Send(SourceId, result.release(), 0, Cookie);
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
-        const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
-        owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
-        owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());
+        // const auto rejectReasons = NOverload::MakeRejectReasons(EOverloadStatus::ShardWritesInFly);
+        // owner->OverloadSubscribers.SetOverloadSubscribed(*OverloadSubscribeSeqNo, owner->SelfId(), SourceId, rejectReasons, result->Record);
+        // owner->OverloadSubscribers.ScheduleNotification(owner->SelfId());
     }
 }
 

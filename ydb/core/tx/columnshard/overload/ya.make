@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    manager.cpp
     overload_subscribers.cpp
 )
 

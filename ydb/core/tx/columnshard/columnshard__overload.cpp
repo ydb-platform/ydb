@@ -11,7 +11,7 @@ constexpr ui64 DEFAULT_WRITES_SIZE_IN_FLY_LIMIT = 2 * (((ui64)1) << 30);
 
 void TColumnShard::OnYellowChannelsChanged() {
     if (!IsAnyChannelYellowStop()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::YellowChannels, SelfId(), TabletID());
+        // OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::YellowChannels, SelfId(), TabletID());
     }
 }
 
@@ -50,15 +50,15 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInte
 
 void TColumnShard::UpdateOverloadsStatus() {
     if (Counters.GetWritesMonitor()->GetWritesInFlight() < GetShardWritesInFlyLimit()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesInFly, SelfId(), TabletID());
+        // OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesInFly, SelfId(), TabletID());
     }
     if (Counters.GetWritesMonitor()->GetWritesSizeInFlight() < GetShardWritesSizeInFlyLimit()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesSizeInFly, SelfId(), TabletID());
+        // OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesSizeInFly, SelfId(), TabletID());
     }
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext&) {
-    OverloadSubscribers.RemoveOverloadSubscriber(ev->Get()->Record.GetSeqNo(), ev->Recipient, ev->Sender);
+    // OverloadSubscribers.RemoveOverloadSubscriber(ev->Get()->Record.GetSeqNo(), ev->Recipient, ev->Sender);
 }
 
 } // namespace NKikimr::NColumnShard

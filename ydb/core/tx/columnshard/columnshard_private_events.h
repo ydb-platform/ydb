@@ -81,6 +81,11 @@ struct TEvPrivate {
         EvDuplicateSourceCacheResult,
         EvFilterConstructionResult,
 
+        EvOverloadSubscribe,
+        EvOverloadUnsubscribe,
+        EvOverloadPipeServerDisconnected,
+        EvOverloadResourcesReleased,
+
         EvEnd
     };
 

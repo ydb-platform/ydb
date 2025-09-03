@@ -542,7 +542,7 @@ private:
     NDataShard::TSysLocks SysLocks;
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
-    NOverload::TOverloadSubscribers OverloadSubscribers;
+    // NOverload::TOverloadSubscribers OverloadSubscribers;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

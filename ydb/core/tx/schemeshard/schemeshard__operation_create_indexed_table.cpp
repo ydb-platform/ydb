@@ -151,7 +151,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             default:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(GetIndexType(indexDescription)))};
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDescription.GetType()))};
         }
 
         bool uniformIndexTable = false;
@@ -296,7 +296,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
-        switch (indexDescription.GetType()) {
+        switch (GetIndexType(indexDescription)) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {

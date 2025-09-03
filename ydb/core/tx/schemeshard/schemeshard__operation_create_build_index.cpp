@@ -61,7 +61,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         default:
-            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(GetIndexType(indexDesc)))};
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
@@ -152,7 +152,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };
 
-    switch (indexDesc.GetType()) {
+    switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique: {

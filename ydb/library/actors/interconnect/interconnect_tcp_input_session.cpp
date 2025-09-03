@@ -99,8 +99,7 @@ namespace NActors {
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
         std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
-        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel
-    ) {
+        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel) {
         using namespace NInterconnect::NRdma;
 
         Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize(),
@@ -129,29 +128,25 @@ namespace NActors {
             Y_UNUSED(qp);
         };
 
-        auto allocResult = cq->AllocWr(cb);
+        auto wrTask = [memReg, qp, offset, cred](ICq::IWr* wr) {
+            void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
+            qp->SendRdmaReadWr(wr->GetId(),
+                addr, memReg.GetLKey(qp->GetCtx()->GetDeviceIndex()),
+                reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
+            );
+        };
 
-        if (auto *busy = std::get_if<NInterconnect::NRdma::ICq::TBusy>(&allocResult)) {
-            return *busy;
-        } else if (auto *err = std::get_if<NInterconnect::NRdma::ICq::TErr>(&allocResult)) {
-            return *err;
+        auto allocResult = cq->AllocWrAsync(wrTask, cb);
+        if (allocResult) {
+            return *allocResult;
+        } else {
+            return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
         }
-
-        auto* wr = std::get<ICq::IWr*>(allocResult);
-
-        void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-        qp->SendRdmaReadWr(wr->GetId(),
-            addr, memReg.GetLKey(qp->GetCtx()->GetDeviceIndex()),
-            reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
-        );
-
-        return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
         const NActorsInterconnect::TRdmaCreds& creds, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
-        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel
-    ) {
+        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
         auto& pendingEvent = PendingEvents.back();
 
         ui32 mrOffset = 0;

@@ -55,6 +55,7 @@ public:
     // returns TBusy in case of no prepare requests
     // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
     virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept = 0;
+    virtual std::optional<TErr> AllocWrAsync(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept  = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
 
     static bool IsWrSuccess(const TAllocResult& ar) {

@@ -111,6 +111,15 @@ private:
 };
 
 class TSimpleCqBase : public TCqCommon {
+protected:
+    struct TWaiterCtx {
+        TWaiterCtx(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+            : WrCb(std::move(wrCb))
+            , IoCb(std::move(ioCb))
+        {}
+        std::function<void(ICq::IWr*)> WrCb;
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
+    };
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz) noexcept
         : TCqCommon(as)
@@ -156,7 +165,34 @@ public:
         };
     }
 
+    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx) noexcept {
+        if (ctx) {
+            TWr* wr = nullptr;
+            Queue.Dequeue(&wr);
+            if (wr) {
+                wr->AttachCb(std::move(ctx->IoCb));
+                if (Err.load(std::memory_order_relaxed)) {
+                    wr->ReplyErr(As);
+                } else {
+                    Allocated.fetch_add(1);
+                    ctx->WrCb(wr);
+                }
+                ctx.reset();
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            TWaiterCtx* p = nullptr;
+            Waiters.Dequeue(&p);
+            ctx.reset(p);
+            return true;
+        }
+        return false;
+    }
+
     void Loop() noexcept {
+        std::unique_ptr<TWaiterCtx> curCtx;
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
             std::array<ibv_wc, wcBatchSize> wcs;
@@ -169,7 +205,9 @@ public:
                     //TODO: Is it correct err handling?
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
-                    Idle();
+                    if (!ProcessWr(curCtx)) {
+                        Idle();
+                    }
                 } else {
                     Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");
                     HandleWc(wcs.data(), rv);
@@ -216,6 +254,8 @@ protected:
     // It is possible to use Single Producer Multiple Consumer queue here but in this case
     // imlementation of Release() methos on IWr* will be musch more difficult
     TLockFreeQueue<TWr*> Queue;
+
+    TLockFreeQueue<TWaiterCtx*> Waiters;
     std::atomic<bool> Err;
     std::atomic<ui64> Allocated;
     alignas(64) std::atomic<ui64> Returned; 
@@ -242,6 +282,14 @@ public:
             return  TBusy();
         }
     }
+
+    std::optional<TErr> AllocWrAsync(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        Waiters.Enqueue(new TWaiterCtx(std::move(wrCb), std::move(ioCb)));
+        return {};
+    }
 };
 
 class TSimpleCqMock: public TSimpleCqBase, public ICqMockControl {
@@ -267,6 +315,14 @@ public:
         } else {
             return  TBusy();
         }
+    }
+
+    std::optional<TErr> AllocWrAsync(std::function<void(ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        Waiters.Enqueue(new TWaiterCtx(std::move(wrCb), std::move(ioCb)));
+        return {};
     }
 
     void SetBusy(bool busy) noexcept override {

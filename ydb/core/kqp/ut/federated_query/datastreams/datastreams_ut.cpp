@@ -907,6 +907,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         value String  NOT NULL
                     )
                 )
+                WHERE value REGEXP ".*v.*a.*l.*"
             END DO;)",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,

@@ -145,7 +145,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
                 }
                 break;
-            // no default section because proto2 enum can only have a valid value
         }
 
         bool uniformIndexTable = false;

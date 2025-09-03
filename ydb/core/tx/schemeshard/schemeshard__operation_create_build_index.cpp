@@ -57,7 +57,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
             }
             break;
-        // no default section because proto2 enum can only have a valid value
     }
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);

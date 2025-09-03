@@ -169,8 +169,8 @@ private:
             compileHandler->AbortCompilation();
             const auto cookie = compileHandler->GetCookie();
             InFlightCompilations_.erase(cookie);
-            CompileHandlers_.erase(iter);
         }
+        CompileHandlers_.erase(iter);
     }
 
     TValueStatus<IProgramCompileHandler::TPtr> RemoveCompileProgram(ui64 cookie) {

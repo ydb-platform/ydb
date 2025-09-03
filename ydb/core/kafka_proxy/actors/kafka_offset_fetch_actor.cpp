@@ -207,7 +207,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (!GroupsToFetch.empty()) {
         // if topics were not specified for some groups,
         // topics for such groups will be retrieved from the table
-        Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
+        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
         Kqp->SendCreateSessionRequest(ctx);
         KAFKA_LOG_D("Creating KQP Session");
     } else {

@@ -167,6 +167,7 @@ struct TPDiskConfig : public TThrRefBase {
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     ui32 CompletionThreadsCount = 1;
+    ui32 EncryptionThreadsCount = 1;
     bool UseNoopScheduler = false;
 
     bool PlainDataChunks = false;
@@ -421,6 +422,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasCompletionThreadsCount()) {
             CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
+        if (cfg->HasEncryptionThreadsCount()) {
+            EncryptionThreadsCount = cfg->GetEncryptionThreadsCount();
         }
 
         if (cfg->HasUseNoopScheduler()) {

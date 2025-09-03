@@ -12,6 +12,52 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Chunk write completion actions
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
+    : TCompletionAction()
+    , PDisk(piece->PDisk)
+    , PieceShift(piece->PieceShift)
+    , PieceSize(piece->PieceSize)
+    , CumulativeCompletion(cumulativeCompletion)
+    , Span(piece->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece.CompletionPart"))
+{
+}
+
+TCompletionChunkWritePiece::~TCompletionChunkWritePiece() {
+    if (CumulativeCompletion) {
+        CumulativeCompletion->RemovePart(PDisk->PCtx->ActorSystem);
+    }
+}
+
+void TCompletionChunkWritePiece::Exec(TActorSystem *actorSystem) {
+    Span.Event("PDisk.CompletionChunkWritePart.Exec");
+    Y_VERIFY(actorSystem);
+    Y_VERIFY(CumulativeCompletion);
+    if (TCompletionAction::Result != EIoResult::Ok) {
+        Release(actorSystem);
+        return;
+    }
+
+    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    LWTRACK(PDiskChunkWritePieceComplete, Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
+
+    CumulativeCompletion->CompletePart(actorSystem);
+    CumulativeCompletion = nullptr;
+
+    Span.Event("PDisk.CompletionChunkWritePart.ExecStop");
+    delete this;
+}
+
+void TCompletionChunkWritePiece::Release(TActorSystem *actorSystem) {
+    Y_UNUSED(actorSystem);
+    Span.EndError("PDisk.CompletionChunkWritePart.Release");
+    delete this;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Log write completion action
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {

@@ -5,3 +5,4 @@
 Содержание:
 
 * [{#T}](transfer-quickstart.md)
+* [{#T}](transfer-nginx.md)

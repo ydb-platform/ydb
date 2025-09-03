@@ -3,6 +3,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/ulid.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -73,6 +74,51 @@ void ProbeTest(bool isServerless) {
     UNIT_ASSERT_STRING_CONTAINS(msg->Answer, expected);
 }
 
+void ProbeBaseStatsTest(bool isServerless) {
+    TTestEnv env(1, 1);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+
+    // Create a database and a table
+    if (isServerless) {
+        CreateDatabase(env, "Shared");
+        CreateServerlessDatabase(env, "Database", "/Root/Shared");
+    } else {
+        CreateDatabase(env, "Database");
+    }
+    CreateColumnStoreTable(env, "Database", "Table", 5);
+    const TString path = "/Root/Database/Table";
+    const ui32 nodeIdx = 1;
+
+    // Wait until the SchemeShard sends out the stats to the StatisticsAggregator.
+    bool statsToSA = false;
+    auto statsObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */) {
+        statsToSA = true;
+    });
+    runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsToSA; });
+
+    // Issue the probe_base_stats request and verify that the result makes sense.
+    const auto sender = runtime.AllocateEdgeActor(nodeIdx);
+    runtime.Register(
+        new THttpRequest(THttpRequest::ERequestType::PROBE_BASE_STATS, {
+                { THttpRequest::EParamType::PATH, path },
+            },
+            THttpRequest::EResponseContentType::JSON,
+            sender),
+        nodeIdx);
+    auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
+    auto msg = static_cast<NMon::TEvHttpInfoRes*>(res->Get());
+
+    TStringBuf answer(msg->Answer);
+    Cerr << "Answer: '" << answer << "'" << Endl;
+    auto jsonStart = answer.find('{');
+    UNIT_ASSERT(jsonStart != TStringBuf::npos);
+    TStringBuf jsonStr = answer.SubStr(jsonStart);
+    NJson::TJsonValue json;
+    UNIT_ASSERT(NJson::ReadJsonTree(jsonStr, &json));
+    UNIT_ASSERT_VALUES_EQUAL(json["row_count"].GetIntegerSafe(), ColumnTableRowsNumber);
+}
+
 Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Analyze) {
         AnalyzeTest(false);
@@ -110,6 +156,14 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
 
     Y_UNIT_TEST(ProbeServerless) {
         ProbeTest(true);
+    }
+
+    Y_UNIT_TEST(ProbeBaseStats) {
+        ProbeBaseStatsTest(false);
+    }
+
+    Y_UNIT_TEST(ProbeBaseStatsServerless) {
+        ProbeBaseStatsTest(false);
     }
 }
 

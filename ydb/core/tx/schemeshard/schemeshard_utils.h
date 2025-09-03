@@ -185,6 +185,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
                 return false;
             }
+            break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
             //We have already checked this in IsCompatibleIndex
@@ -206,6 +207,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
                 return false;
             }
+            break;
         }
     }
 

@@ -428,9 +428,29 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             const TString value(Token(node.GetAlt_literal_value3().GetToken1()));
             return BuildLiteralTypedSmartStringOrId(Ctx_, value);
         }
+        case TRule_literal_value::kAltLiteralValue4: {
+            Error() << Token(node.GetAlt_literal_value4().GetToken1())
+                    << " literal is not supported yet";
+            break;
+        }
         case TRule_literal_value::kAltLiteralValue5: {
             Token(node.GetAlt_literal_value5().GetToken1());
             result.Expr = BuildLiteralNull(Ctx_.Pos());
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue6: {
+            Error() << Token(node.GetAlt_literal_value6().GetToken1())
+                    << " literal is not supported yet";
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue7: {
+            Error() << Token(node.GetAlt_literal_value7().GetToken1())
+                    << " literal is not supported yet";
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue8: {
+            Error() << Token(node.GetAlt_literal_value8().GetToken1())
+                    << " literal is not supported yet";
             break;
         }
         case TRule_literal_value::kAltLiteralValue9: {
@@ -442,12 +462,8 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             result.Expr = BuildEmptyAction(Ctx_.Pos());
             break;
         }
-        case TRule_literal_value::kAltLiteralValue4:
-        case TRule_literal_value::kAltLiteralValue6:
-        case TRule_literal_value::kAltLiteralValue7:
-        case TRule_literal_value::kAltLiteralValue8:
         case TRule_literal_value::ALT_NOT_SET:
-            AltNotImplemented("literal_value", node);
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     if (!result.Expr) {
         return {};

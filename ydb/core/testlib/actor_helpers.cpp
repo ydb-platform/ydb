@@ -2,7 +2,8 @@
 
 namespace NKikimr {
 
-TActorSystemStub::TActorSystemStub() : AppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr) {
+TActorSystemStub::TActorSystemStub()
+    : AppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr) {
     THolder<NActors::TActorSystemSetup> setup(new NActors::TActorSystemSetup);
     System.Reset(new NActors::TActorSystem(setup, &AppData));
     Mailbox.Reset(new NActors::TMailbox());

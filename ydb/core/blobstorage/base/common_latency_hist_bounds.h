@@ -36,7 +36,7 @@ static inline NMonitoring::TBucketBounds GetCommonLatencyHistBounds(NPDisk::EDev
         case NPDisk::DEVICE_TYPE_NVME:
             return metricsConfig->GetCommonLatencyHistBounds().Nvme;
         default:
-            Y_ABORT_S("unknown device type " << ui8(type));
+            return metricsConfig->GetCommonLatencyHistBounds().Unknown;
     }
 }
 

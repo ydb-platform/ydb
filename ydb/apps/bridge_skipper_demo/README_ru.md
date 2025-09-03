@@ -16,7 +16,7 @@ YDB поддерживает работу в режиме [Bridge](https://ydb.t
 
 Установка зависимостей:
 ```
-pip3 install textual requests yaml
+pip3 install textual requests pyyaml
 ```
 
 Для работы `skipper'a` требуется наличие YDB CLI. По умолчанию автоматически находит в `PATH`. Требуется установить YDB CLI из `main` или ветки `rc-bridge`. Также `ydbd` должен быть из `main` либо `rc-bridge`.

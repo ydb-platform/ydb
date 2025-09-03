@@ -22,7 +22,15 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 {% note info %}
 
-For [column tables](../datamodel/table.md#column-tables), both *Online Read-Only* and *Stale Read-Only* transaction modes currently use a database snapshot taken at the start of the transaction. As a result, their behavior is effectively the same as *Snapshot Read-Only*.
+Behavior with [column tables](../datamodel/table.md#column-tables): When reading from column tables in *Online Read-Only* and *Stale Read-Only* transaction modes, data is still read from a snapshot taken at the start of the transaction — the same way as in Snapshot Read-Only mode.
+
+This means that:
+
+* For column tables, all three Read-Only modes behave identically: all reads are consistent and reflect the state of the database at the transaction's start time. 
+* The actual transaction mode (e.g., Online Read-Only) is effectively ignored if the transaction reads only from column tables.
+* For transactions that read from both row-based and column tables, row-based tables are read according to the selected mode, while column tables are always read from a snapshot.
+
+This behavior is due to the current implementation of columnar tables and may change in future versions.
 
 {% endnote %}
 

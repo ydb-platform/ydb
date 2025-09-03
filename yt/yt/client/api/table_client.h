@@ -38,6 +38,7 @@ struct TTableReaderOptions
     bool EnableRowIndex = false;
     bool EnableRangeIndex = false;
     bool EnableTabletIndex = false;
+    bool EnableAnyUnpacking = true;
     NTableClient::TTableReaderConfigPtr Config;
 };
 

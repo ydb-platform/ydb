@@ -157,10 +157,6 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
     implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
 
     switch (indexDesc.GetType()) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = "Invalid index type";
-            return false;
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -211,6 +207,10 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             }
             break;
         }
+        default:
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = InvalidIndexType(indexDesc.GetType());
+            return false;
     }
 
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {

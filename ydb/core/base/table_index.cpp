@@ -1,5 +1,6 @@
 #include "table_index.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
@@ -68,8 +69,6 @@ static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(Glob
 
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -77,6 +76,8 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
             return false;
+        default:
+            Y_ENSURE(false, InvalidIndexType(indexType));
     }
 }
 
@@ -202,22 +203,21 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
 
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
-    case NKikimrSchemeOp::EIndexTypeInvalid:
-        Y_ENSURE(false, "Invalid index type");
-    case NKikimrSchemeOp::EIndexTypeGlobal:
-    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-        return true;
-    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-    case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-        return false;
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            return false;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(indexType));
+            return false;
     }
 }
 
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
     switch (indexType) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -230,6 +230,8 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
             }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
             return GlobalFulltextImplTables;
+        default:
+            Y_ENSURE(false, InvalidIndexType(indexType));
     }
 }
 

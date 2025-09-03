@@ -2292,9 +2292,6 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     };
 
     switch (IndexType) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ASSERT(false);
-            break;
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -2306,6 +2303,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
             *index.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
             break;
     }
 }

@@ -219,8 +219,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
                 return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable; 
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                Y_ASSERT("Invalid index type");
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;
         }
     } else if (parentPath.IsCdcStream()) {
@@ -1460,9 +1460,6 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     entry.SetDataSize(dataSize);
 
     switch (indexInfo->Type) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            // can't fill description
-            break;
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -1474,6 +1471,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
             *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
             break;
     }
 }

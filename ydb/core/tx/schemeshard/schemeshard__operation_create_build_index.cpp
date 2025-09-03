@@ -130,8 +130,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     };
 
     switch (indexDesc.GetType()) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
@@ -178,6 +176,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
+        default:
+            Y_ENSURE(false, InvalidIndexType(indexDesc.GetType()));
     }
 
     return result;

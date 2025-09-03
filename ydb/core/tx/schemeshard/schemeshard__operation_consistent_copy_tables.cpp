@@ -31,7 +31,7 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     return scheme;
 }
 
-static NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -51,8 +51,6 @@ static NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTa
     }
 
     switch (indexInfo->Type) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -67,6 +65,9 @@ static NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTa
             *operation->MutableFulltextIndexDescription() =
                 std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(indexInfo->Type));
+            return {};
     }
 
     return scheme;
@@ -212,7 +213,12 @@ bool CreateConsistentCopyTables(
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
+            if (!scheme) {
+                result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                       TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
+                return false;
+            }
+            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
                 TPath srcImplTable = srcIndexPath.Child(srcImplTableName);

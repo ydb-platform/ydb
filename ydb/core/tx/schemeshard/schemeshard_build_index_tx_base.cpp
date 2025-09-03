@@ -291,8 +291,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         };
 
         switch (info.IndexType) {
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            Y_ENSURE(false, "Invalid index type");
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
@@ -306,6 +304,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
             *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
             break;
+        default:
+            Y_ENSURE(false, InvalidIndexType(info.IndexType))
         }
     } else if (info.IsBuildColumns()) {
         for(const auto& column : info.BuildColumns) {

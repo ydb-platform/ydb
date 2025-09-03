@@ -298,8 +298,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         switch (indexDescription.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                Y_ENSURE(false, "Invalid index type");
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
@@ -341,6 +339,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
                 break;
             }
+            default:
+                Y_ENSURE(false, InvalidIndexType(indexDescription.GetType()));
         }
     }
 

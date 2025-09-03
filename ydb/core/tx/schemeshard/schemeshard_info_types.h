@@ -2446,8 +2446,6 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         , State(state)
     {
         switch (type) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                Y_ENSURE(false, "Invalid index type");
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -2468,6 +2466,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            default:
+                Y_ENSURE(false, InvalidIndexType(type));
         }
     }
 
@@ -2517,9 +2517,6 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
         switch (config.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                errMsg += "Invalid index type";
-                return nullptr;
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -2531,6 +2528,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
+            default:
+                errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
         }
 
         return result;

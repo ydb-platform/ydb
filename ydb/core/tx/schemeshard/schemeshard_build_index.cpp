@@ -97,8 +97,6 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         }
 
         switch (info.IndexType) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                Y_ENSURE(false, "Invalid index type");
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -113,6 +111,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 *serializableRepresentation.MutableFulltextIndexDescription() =
                     std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
                 break;
+            default:
+                Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }
 
         persistedBuildIndex.Update(

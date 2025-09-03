@@ -27,25 +27,8 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
 }
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    auto& params = ExtensionCtx->Params;
-    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    params.ResponseError = event->Get()->GetError();
-
-    auto response = std::move(event->Get()->Response);
-    if (!response)
-        return;
-
-    params.StatusOverride = response->Status;
-    auto headers = NHttp::THeaders(response->Headers);
-    for (const auto& header : headers.Headers) {
-        params.HeadersOverride->Set(header.first, header.second);
-    }
-    params.MessageOverride = response->Message;
-    if (params.BodyOverride.length() > 1000000) {
-        params.BodyOverride = "{ \"message\": \"Response body is too large to include\" }";
-    } else {
-        params.BodyOverride = response->Body;
-    }
+    ExtensionCtx->Params.ResponseError = event->Get()->GetError();
+    ExtensionCtx->Params.SetOriginalResponse(std::move(event->Get()->Response));
 }
 
 void TExtensionManager::AddExtensionWhoami() {

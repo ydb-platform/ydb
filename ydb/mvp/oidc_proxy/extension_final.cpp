@@ -59,7 +59,7 @@ void TExtensionFinal::SetProxyResponseBody() {
 
     TStringBuf contentType = params.HeadersOverride->Get("Content-Type").NextTok(';');
     if (contentType == "text/html") {
-        params.BodyOverride = FixReferenceInHtml(params.BodyOverride, params.ProtectedPage->Host);
+        params.OverrideBody(FixReferenceInHtml(params.GetBodyOverride(), params.ProtectedPage->Host));
     }
 }
 
@@ -83,7 +83,7 @@ TString TExtensionFinal::GetFixedLocationHeader(TStringBuf location) {
 
 void TExtensionFinal::Execute(TIntrusivePtr<TExtensionContext> ctx) {
     Context = std::move(ctx);
-    if (!Context->Params.StatusOverride.empty()) {
+    if (!Context->Params.GetStatusOverride().empty()) {
         SetProxyResponseHeaders();
         SetProxyResponseBody();
     }

@@ -41,7 +41,7 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
         params.HeadersOverride->Set(header.first, header.second);
     }
     params.MessageOverride = response->Message;
-    if (params.BodyOverride.length() > 1000000) {
+    if (response->Body.size() > 1000000) {
         params.BodyOverride = "{ \"message\": \"Response body is too large to include\" }";
     } else {
         params.BodyOverride = response->Body;

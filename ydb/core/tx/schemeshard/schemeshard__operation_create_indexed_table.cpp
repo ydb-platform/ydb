@@ -127,6 +127,33 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+
+        switch (GetIndexType(indexDescription)) {
+            case NKikimrSchemeOp::EIndexTypeInvalid:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                // no feature flag, everything is fine
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                if (!context.SS->EnableInitialUniqueIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
+                }
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                if (!context.SS->EnableVectorIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+                }
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                if (!context.SS->EnableFulltextIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
+                }
+                break;
+            default:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(GetIndexType(indexDescription)))};
+        }
+
         bool uniformIndexTable = false;
         if (indexDescription.IndexImplTableDescriptionsSize()) {
             if (indexDescription.GetIndexImplTableDescriptions(0).HasUniformPartitionsCount()) {
@@ -241,34 +268,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
-        const auto indexType = indexDescription.HasType()
-            ? indexDescription.GetType()
-            : NKikimrSchemeOp::EIndexTypeGlobal;
-
-        switch (indexType) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
-            case NKikimrSchemeOp::EIndexTypeGlobal:
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                // no feature flag, everything is fine
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                if (!context.SS->EnableInitialUniqueIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
-                }
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-                if (!context.SS->EnableVectorIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-                }
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-                if (!context.SS->EnableFulltextIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
-                }
-                break;
-        }
-
         {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
@@ -278,7 +277,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.SetInternal(tx.GetInternal());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
-            scheme.MutableCreateTableIndex()->SetType(indexType);
+            scheme.MutableCreateTableIndex()->SetType(GetIndexType(indexDescription));
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }

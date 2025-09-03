@@ -113,8 +113,16 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     return result;
 }
 
-TString InvalidIndexType(NKikimrSchemeOp::EIndexType type) {
-    return TStringBuilder() << "Invalid index type " << static_cast<int>(type);
+NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation) {
+    // TODO: always provide EIndexTypeGlobal value instead of null
+    // TODO: do not cast unknown index types to EIndexTypeGlobal (proto2 specific)
+    return indexCreation.HasType()
+        ? indexCreation.GetType()
+        : NKikimrSchemeOp::EIndexTypeGlobal;
+}
+
+TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
+    return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {

@@ -40,6 +40,30 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& op = tx.GetInitiateIndexBuild();
     const auto& indexDesc = op.GetIndex();
 
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            // no feature flag, everything is fine
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            if (!context.SS->EnableInitialUniqueIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (!context.SS->EnableVectorIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            if (!context.SS->EnableFulltextIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
+            }
+            break;
+        default:
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(GetIndexType(indexDesc)))};
+    }
+
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     const auto index = table.Child(indexDesc.GetName());
     {
@@ -93,15 +117,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     TVector<ISubOperation::TPtr> result;
-    const NKikimrSchemeOp::EIndexType indexType = indexDesc.HasType() ? indexDesc.GetType() : NKikimrSchemeOp::EIndexTypeGlobal;
 
     {
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
+        outTx.MutableCreateTableIndex()->SetType(GetIndexType(indexDesc));
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
-        outTx.MutableCreateTableIndex()->SetType(indexType);
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
     }
@@ -118,7 +141,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
 

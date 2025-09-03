@@ -212,7 +212,7 @@ private:
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/,
-            0,
+            0 /*cookie*/,
             TBackoff(ScanSettings.GetMaxBatchRetries(), TDuration::MilliSeconds(500), TDuration::Seconds(5)));
 
         UploaderId = TlsActivationContext->Register(actor);
